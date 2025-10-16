@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 
-// 🔹 Extend NextAuth types
+// Extend NextAuth types
 declare module "next-auth" {
   interface User {
     id: string;
@@ -15,7 +15,7 @@ declare module "next-auth" {
     user: {
       id: string;
       role?: string;
-      selectedRole?: string; // ✅ added
+      selectedRole?: string;
       name?: string | null;
       email?: string | null;
       image?: string | null;
@@ -27,14 +27,14 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
     role?: string;
-    selectedRole?: string; // ✅ added
+    selectedRole?: string;
     name?: string | null;
     email?: string | null;
     image?: string | null;
   }
 }
 
-// ✅ Ensure required env vars exist
+// Ensure required env vars exist
 const requiredEnv = [
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
@@ -42,7 +42,7 @@ const requiredEnv = [
 ];
 for (const key of requiredEnv) {
   if (!process.env[key])
-    throw new Error(`❌ Missing environment variable: ${key}`);
+    throw new Error(`Missing environment variable: ${key}`);
 }
 
 const handler = NextAuth({
@@ -66,7 +66,7 @@ const handler = NextAuth({
 
       const allowedDomain = "@gmail.com"; // temporary, allow any gmail
       if (!user.email.endsWith(allowedDomain)) {
-        console.warn(`❌ Unauthorized domain: ${user.email}`);
+        console.warn(`Unauthorized domain: ${user.email}`);
         return false;
       }
 
@@ -76,12 +76,12 @@ const handler = NextAuth({
         });
 
         if (!dbUser) {
-          console.warn(`⚠️ User not found in DB: ${user.email}`);
+          console.warn(`User not found in DB: ${user.email}`);
           return false;
         }
 
         if (dbUser.permission !== "GRANTED") {
-          console.warn(`⛔ Permission denied for user: ${user.email}`);
+          console.warn(`Permission denied for user: ${user.email}`);
           return false;
         }
 
@@ -115,10 +115,10 @@ const handler = NextAuth({
           }
         }
 
-        console.info(`✅ Sign-in success for ${user.email}`);
+        console.info(`Sign-in success for ${user.email}`);
         return true;
       } catch (err) {
-        console.error("❌ Sign-in error:", err);
+        console.error("Sign-in error:", err);
         return false;
       }
     },
@@ -149,14 +149,14 @@ const handler = NextAuth({
             token.image = dbUser.image;
           }
         } catch (err) {
-          console.error("❌ JWT DB fetch error:", err);
+          console.error("JWT DB fetch error:", err);
         }
       }
 
       return token;
     },
 
-    /** 🔹 Session callback — include selectedRole */
+    /** Session callback — include selectedRole */
     async session({ session, token }) {
       if (session.user && token) {
         session.user.id = token.id as string;
@@ -170,7 +170,7 @@ const handler = NextAuth({
       return session;
     },
 
-    /** 🔹 Safe redirect handling */
+    /** Safe redirect handling */
     async redirect({ url, baseUrl }) {
       const safeUrls = [
         baseUrl,
