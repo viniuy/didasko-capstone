@@ -31,25 +31,24 @@ async function getUserIdByEmail(email: string) {
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    console.log("Processing DELETE request for note with ID:", params.id);
+  const { id } = await params;
 
-    if (!params.id) {
-      console.log("Error: Note ID is missing from request");
+  try {
+    console.log("Processing DELETE request for note with ID:", id);
+
+    if (!id) {
       return NextResponse.json(
         { error: "Note ID is required" },
         { status: 400 }
       );
     }
 
-    // Get session
     const session = await getServerSession(authOptions);
     const email = session?.user?.email;
     console.log("Session email:", email);
 
-    // Get user ID from email
     const userId = await getUserIdByEmail(email || "admin@example.com");
     console.log("Resolved user ID:", userId);
 
@@ -57,39 +56,22 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Find the note first to check if it exists
-    const noteToDelete = await prisma.note.findUnique({
-      where: {
-        id: params.id,
-      },
-    });
+    const noteToDelete = await prisma.note.findUnique({ where: { id } });
 
     if (!noteToDelete) {
-      console.log(`Note with ID ${params.id} not found`);
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
 
-    console.log(
-      `Found note to delete: ${noteToDelete.id}, owner: ${noteToDelete.userId}`
-    );
-
-    // Check if the note belongs to the user
     if (noteToDelete.userId !== userId) {
-      console.log(`Note belongs to user ${noteToDelete.userId}, not ${userId}`);
       return NextResponse.json(
         { error: "Not authorized to delete this note" },
         { status: 403 }
       );
     }
 
-    // Delete the note
-    await prisma.note.delete({
-      where: {
-        id: params.id,
-      },
-    });
+    await prisma.note.delete({ where: { id } });
 
-    console.log(`Successfully deleted note with ID ${params.id}`);
+    console.log(`Successfully deleted note with ID ${id}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting note:", error);
