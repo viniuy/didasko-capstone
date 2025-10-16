@@ -25,7 +25,7 @@ export async function handleSaveNewNote(
       return { success: false, error: "User ID is required" };
     }
 
-    await axiosInstance.post("/notes", {
+    await axiosInstance.post("/api/notes", {
       title: noteData.title,
       description: noteData.description,
       userId,
@@ -53,7 +53,7 @@ export async function handleUpdateNote(
       return { success: false, error: "Title is required" };
     }
 
-    const response = await axiosInstance.put("/notes", {
+    const response = await axiosInstance.put("/api/notes", {
       id: noteData.id,
       title: noteData.title,
       description: noteData.description,

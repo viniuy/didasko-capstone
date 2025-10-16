@@ -122,7 +122,7 @@ export default function Notes() {
   async function fetchNotes() {
     try {
       setIsLoading(true);
-      const response = await axiosInstance.get("/notes");
+      const response = await axiosInstance.get("/api/notes");
       const data = response.data;
 
       if (Array.isArray(data.notes)) {
@@ -273,7 +273,7 @@ export default function Notes() {
         },
       });
 
-      const response = await axiosInstance.delete(`/notes/${noteToDelete}`);
+      const response = await axiosInstance.delete(`/api/notes/${noteToDelete}`);
 
       if (response.status === 200) {
         setOpenDelete(false);

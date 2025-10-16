@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client/edge";
+import { PrismaClient } from "@prisma/client";
 
 // Create the base Prisma client
 const prismaClient = globalThis.prisma || new PrismaClient();
