@@ -35,7 +35,7 @@ const StatCard = ({ icon, count, label, isLoading = false }: StatCardProps) => {
 
 async function getFacultyStats() {
   try {
-    const response = await axiosInstance.get("/users/faculty-stats");
+    const response = await axiosInstance.get("/api/stats/faculty-stats");
     return response.data;
   } catch (error) {
     console.error("Error fetching faculty stats:", error);
@@ -45,7 +45,7 @@ async function getFacultyStats() {
 
 async function getFacultyCount() {
   try {
-    const response = await axiosInstance.get("/users/faculty-count");
+    const response = await axiosInstance.get("/api/stats/faculty-count");
     return response.data;
   } catch (error) {
     console.error("Error fetching faculty count:", error);

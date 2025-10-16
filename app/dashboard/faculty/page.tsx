@@ -5,7 +5,7 @@ import Stats from "@/features/dashboard/components/stats";
 // import Greet from "@/components/greeting";
 // import AllCourses from "@/components/shared/all-courses";
 // import WeeklySchedule from "@/components/weekly-schedule";
-// import Header from "@/components/shared/layout/header";
+import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import React from "react";
 import { useSession } from "next-auth/react";
@@ -23,7 +23,7 @@ export default function FacultyDashboard() {
           <div className="flex-1 px-4">
             <div className="flex flex-col flex-grow">
               <div className="px-4">
-                {/* <Header /> */}
+                <Header />
                 {/* <Greet /> */}
                 <Stats />
                 <div className="space-y-4">
