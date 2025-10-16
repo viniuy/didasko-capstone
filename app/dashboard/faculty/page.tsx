@@ -1,7 +1,7 @@
 "use client";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
-// import Stats from "@/components/stats";
+import Stats from "@/features/dashboard/components/stats";
 // import Greet from "@/components/greeting";
 // import AllCourses from "@/components/shared/all-courses";
 // import WeeklySchedule from "@/components/weekly-schedule";
@@ -21,27 +21,27 @@ export default function FacultyDashboard() {
 
         <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
           <div className="flex-1 px-4">
-            {/* <div className="flex flex-col flex-grow">
+            <div className="flex flex-col flex-grow">
               <div className="px-4">
-                <Header />
-                <Greet />
+                {/* <Header /> */}
+                {/* <Greet /> */}
                 <Stats />
                 <div className="space-y-4">
                   <h2 className="pl-2 pb-1 text-2xl font-bold text-muted-foreground">
                     My Courses
                   </h2>
-                  <AllCourses type="attendance" />
+                  {/* <AllCourses type="attendance" /> */}
                 </div>
               </div>
 
-              {session?.user?.id && (
+              {/* {session?.user?.id && (
                 <WeeklySchedule
                   teacherInfo={{
                     id: session.user.id,
                   }}
                 />
-              )}
-            </div> */}
+              )} */}
+            </div>
           </div>
 
           <div className="hidden lg:block">
