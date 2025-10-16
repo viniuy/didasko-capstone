@@ -2,8 +2,8 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Stats from "@/features/dashboard/components/stats";
-// import Greet from "@/components/greeting";
-// import AllCourses from "@/components/shared/all-courses";
+import Greet from "@/features/dashboard/components/greeting";
+import AllCourses from "@/features/courses/components/all-courses";
 // import WeeklySchedule from "@/components/weekly-schedule";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
@@ -24,13 +24,13 @@ export default function FacultyDashboard() {
             <div className="flex flex-col flex-grow">
               <div className="px-4">
                 <Header />
-                {/* <Greet /> */}
+                <Greet />
                 <Stats />
                 <div className="space-y-4">
                   <h2 className="pl-2 pb-1 text-2xl font-bold text-muted-foreground">
                     My Courses
                   </h2>
-                  {/* <AllCourses type="attendance" /> */}
+                  <AllCourses type="attendance" />
                 </div>
               </div>
 
