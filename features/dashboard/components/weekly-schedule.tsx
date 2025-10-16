@@ -1,0 +1,254 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
+import { CourseSchedule } from "@prisma/client";
+import axiosInstance from "@/lib/axios";
+import { ScheduleResponse } from "@/shared/types/schedule";
+
+const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+interface ScheduleWithCourse extends CourseSchedule {
+  course: {
+    id: string;
+    code: string;
+    title: string;
+    room: string;
+    semester: string;
+    section: string;
+  };
+}
+
+interface Teacher {
+  id: string;
+}
+
+interface WeeklyScheduleProps {
+  teacherInfo: Teacher;
+}
+
+export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
+  const { data: session, status } = useSession();
+  const [schedules, setSchedules] = useState<ScheduleWithCourse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const currentDay = new Date().toLocaleDateString("en-US", {
+    weekday: "short",
+  });
+
+  const fetchSchedules = async () => {
+    console.log("Fetching schedules for teacher:", teacherInfo?.id);
+
+    if (!teacherInfo?.id) {
+      console.log("No teacher ID provided");
+      setLoading(false);
+      return;
+    }
+
+    if (status === "loading") {
+      console.log("Session is still loading");
+      return;
+    }
+
+    if (status === "unauthenticated") {
+      console.log("User is not authenticated");
+      setError("Please sign in to view schedules");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      console.log("Making API request to fetch schedules");
+      const response = await axiosInstance.get<ScheduleResponse>(
+        "/courses/schedules",
+        {
+          params: {
+            facultyId: teacherInfo.id,
+            limit: 100,
+          },
+        }
+      );
+
+      console.log("API Response:", response.data);
+
+      if (response.data && Array.isArray(response.data.schedules)) {
+        console.log("Schedules found:", response.data.schedules.length);
+        setSchedules(
+          response.data.schedules as unknown as ScheduleWithCourse[]
+        );
+        setError(null);
+      } else {
+        console.error("Error fetching schedules: Invalid response format");
+        setError("Failed to load schedules");
+        setSchedules([]);
+      }
+    } catch (error) {
+      console.error("Error in fetchSchedules:", error);
+      setError("Failed to load schedules");
+      setSchedules([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log("WeeklySchedule mounted/updated");
+    console.log("Teacher Info:", teacherInfo);
+    console.log("Session Status:", status);
+    setLoading(true);
+    fetchSchedules();
+  }, [teacherInfo?.id, status]);
+
+  const getSchedulesForDay = (dayName: string) => {
+    // Map abbreviated day names to full day names for comparison
+    const dayMap: { [key: string]: string } = {
+      Sun: "Sunday",
+      Mon: "Monday",
+      Tue: "Tuesday",
+      Wed: "Wednesday",
+      Thu: "Thursday",
+      Fri: "Friday",
+      Sat: "Saturday",
+    };
+
+    const fullDayName = dayMap[dayName];
+
+    const daySchedules = schedules
+      .filter(
+        (schedule) => schedule.day.toLowerCase() === fullDayName.toLowerCase()
+      )
+      .sort((a, b) => {
+        return a.fromTime.localeCompare(b.fromTime);
+      });
+    console.log(`Schedules for ${dayName}:`, daySchedules);
+    return daySchedules;
+  };
+
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(":");
+    const hour = parseInt(hours);
+    const period = hour >= 12 ? "PM" : "AM";
+    const formattedHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    return `${formattedHour}:${minutes} ${period}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="border-b pb-4 mb-4">
+          <h2 className="text-xl font-bold text-center text-[#124A69]">
+            MY WEEKLY SCHEDULE
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-7 gap-4 animate-pulse">
+          {days.map((day) => (
+            <div key={day}>
+              {/* Day title skeleton */}
+              <div className="h-4 w-10 bg-gray-200 mx-auto mb-4 rounded"></div>
+
+              {/* Simulate a few schedule cards */}
+              <div className="space-y-3">
+                <div className="h-[80px] bg-gray-200 rounded-lg"></div>
+                <div className="h-[80px] bg-gray-200 rounded-lg"></div>
+                <div className="h-[80px] bg-gray-200 rounded-lg"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="text-red-500 text-center">{error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm">
+      <div className="p-4 border-b">
+        <h2 className="text-xl font-bold text-center text-[#124A69]">
+          MY WEEKLY SCHEDULE
+        </h2>
+      </div>
+      {schedules.length === 0 ? (
+        <div className="p-8 flex items-center justify-center min-h-[400px]">
+          <div className="text-center space-y-4">
+            <div className="text-6xl text-[#124A69] opacity-20">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-24 h-24 mx-auto"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"
+                />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold text-[#124A69]">
+              No Schedule Found
+            </h3>
+            <p className="text-gray-500 max-w-md mx-auto">
+              You don't have any scheduled classes for this week. Check back
+              later for updates.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 gap-4 p-4">
+          {days.map((day) => (
+            <div
+              key={day}
+              className={`${day === currentDay ? "bg-blue-50 rounded-lg" : ""}`}
+            >
+              <div className="text-center font-semibold mb-4 text-[#124A69] text-sm">
+                {day}
+              </div>
+              <div className="space-y-2">
+                {getSchedulesForDay(day).map((schedule) => (
+                  <div key={schedule.id} className="group perspective">
+                    <div className="preserve-3d">
+                      {/* Front of card */}
+                      <div className="backface-hidden">
+                        <div className="bg-[#FAEDCB] rounded-lg p-2 text-[#124A69] shadow-sm text-center h-[80px] flex flex-col justify-center">
+                          <div className="font-bold text-sm">
+                            {schedule.course.title}
+                          </div>
+                          <div className="text-xs mt-1">
+                            {formatTime(schedule.fromTime)} -{" "}
+                            {formatTime(schedule.toTime)}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Back of card */}
+                      <div className="backface-hidden rotate-y-180">
+                        <div className="bg-[#124A69] rounded-lg p-2 text-white shadow-sm text-center h-[80px] flex flex-col justify-center">
+                          <div className="text-xs space-y-1">
+                            <div className="font-semibold">
+                              {schedule.course.code}
+                            </div>
+                            <div>Section: {schedule.course.section}</div>
+                            <div>{schedule.course.room}</div>
+                            <div>{schedule.course.semester}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -4,7 +4,7 @@ import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Stats from "@/features/dashboard/components/stats";
 import Greet from "@/features/dashboard/components/greeting";
 import AllCourses from "@/features/courses/components/all-courses";
-// import WeeklySchedule from "@/components/weekly-schedule";
+import WeeklySchedule from "@/features/dashboard/components/weekly-schedule";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import React from "react";
@@ -34,13 +34,13 @@ export default function FacultyDashboard() {
                 </div>
               </div>
 
-              {/* {session?.user?.id && (
+              {session?.user?.id && (
                 <WeeklySchedule
                   teacherInfo={{
                     id: session.user.id,
                   }}
                 />
-              )} */}
+              )}
             </div>
           </div>
 
