@@ -117,70 +117,17 @@ export default function AllCourses({ type }: AllCoursesProps) {
     }
 
     try {
-      console.log("Fetching courses for faculty ID:", session.user.id);
-      const response = await axiosInstance.get("/courses", {
-        params: {
-          facultyId: session.user.id,
-        },
+      const response = await axiosInstance.get("/courses/attendance/stats", {
+        params: { facultyId: session.user.id },
       });
-      console.log("Raw API Response:", response.data);
-      const courses = response.data.courses || [];
-      console.log(
-        "Courses before stats:",
-        courses.map((c: Course) => ({ id: c.id, title: c.title }))
-      );
 
-      const coursesWithStats = await Promise.all(
-        courses.map(async (course: Course) => {
-          try {
-            const stats = await fetchAttendanceStats(course.slug);
-            return {
-              ...course,
-              attendanceStats: stats,
-            };
-          } catch (error) {
-            console.error(
-              `Failed to fetch stats for course ${course.slug}:`,
-              error
-            );
-            return {
-              ...course,
-              attendanceStats: null,
-            };
-          }
-        })
-      );
-      console.log(
-        "Final courses with stats:",
-        coursesWithStats.map((c) => ({ id: c.id, title: c.title }))
-      );
-      setCourses(coursesWithStats);
+      const courses = response.data.courses || [];
+      setCourses(courses);
     } catch (error) {
-      console.error("Error in fetchSchedules:", error);
-      if (axios.isAxiosError(error)) {
-        console.error("API Error Details:", {
-          status: error.response?.status,
-          data: error.response?.data,
-          message: error.message,
-        });
-      }
+      console.error("Error fetching courses:", error);
       setCourses([]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchAttendanceStats = async (courseSlug: string) => {
-    try {
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/attendance/stats`
-      );
-      if (response.status !== 200 || !response.data)
-        throw new Error("Failed to fetch attendance stats");
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching attendance stats:", error);
-      return null;
     }
   };
 
