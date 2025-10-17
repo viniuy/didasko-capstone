@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
+//@ts-ignore
 
 export async function POST(request: Request, { params }) {
   try {

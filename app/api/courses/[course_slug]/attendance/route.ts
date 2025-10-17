@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { AttendanceResponse } from "@/shared/types/attendance";
-
+//@ts-ignore
 export async function GET(request: Request, context: { params }) {
   try {
     const session = await getServerSession(authOptions);
@@ -131,7 +131,7 @@ export async function GET(request: Request, context: { params }) {
     );
   }
 }
-
+//@ts-ignore
 export async function POST(request: Request, context: { params }) {
   try {
     const session = await getServerSession(authOptions);

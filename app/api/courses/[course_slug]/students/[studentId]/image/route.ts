@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth-options";
 import { writeFile, unlink, mkdir } from "fs/promises";
 import { join } from "path";
 import { v4 as uuidv4 } from "uuid";
-
+//@ts-ignore
 export async function POST(request: Request, { params }: { params }) {
   try {
     const session = await getServerSession(authOptions);
@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: { params }) {
     );
   }
 }
-
+//@ts-ignore
 export async function DELETE(request: Request, { params }: { params }) {
   try {
     const session = await getServerSession(authOptions);

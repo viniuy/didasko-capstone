@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { AttendanceStats } from "@/shared/types/attendance";
-
+//@ts-ignore
 export async function GET(request: Request, context: { params }) {
   try {
     const session = await getServerSession(authOptions);

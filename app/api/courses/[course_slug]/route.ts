@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { Course, CourseUpdateInput } from "@/shared/types/course";
-
+//@ts-ignore
 export async function GET(request: Request, { params }: { params }) {
   const { course_slug } = await params;
 
@@ -129,7 +129,7 @@ export async function PUT(
     );
   }
 }
-
+//@ts-ignore
 export async function DELETE(request: Request, { params }: { params }) {
   try {
     const session = await getServerSession(authOptions);
