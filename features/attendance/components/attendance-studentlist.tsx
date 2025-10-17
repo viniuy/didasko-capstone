@@ -124,6 +124,7 @@ interface Course {
 
 export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [studentList, setStudentList] = useState<Student[]>([]);
+  const [open, setOpen] = useState(false);
   const [courseInfo, setCourseInfo] = useState<Course | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -1814,8 +1815,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         ...remainingNotSet,
       });
     }
-
-    toast.success("Attendance session ended");
   };
 
   const markAllAsPresent = async () => {
@@ -2158,7 +2157,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </button>
               )}
             </div>
-            <Popover>
+            <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -2179,71 +2178,58 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   )}
                 </Button>
               </PopoverTrigger>
+
               <PopoverContent
                 className="w-auto p-0"
                 align="start"
-                onInteractOutside={(e) => {
-                  if (
-                    e.target instanceof HTMLElement &&
-                    e.target.closest(".rdp")
-                  ) {
-                    e.preventDefault();
-                  }
-                }}
+                side="bottom"
+                sideOffset={8}
               >
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => {
-                    if (date) {
-                      setSelectedDate(date);
-                      const popover = document.querySelector('[role="dialog"]');
-                      if (popover) {
-                        (popover as HTMLElement).style.display = "none";
+                <div className="[&_button.rdp-day]:transition-colors [&_button.rdp-day]:duration-200 [&_button.rdp-day:hover]:bg-[#124A69]/10 [&_button.rdp-day:focus]:bg-[#124A69]/10">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => {
+                      if (date) {
+                        setSelectedDate(date);
+                        setOpen(false);
                       }
-                    }
-                  }}
-                  disabled={(date) => {
-                    // Disable future dates
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-
-                    // Set January 2025 as the earliest date
-                    const jan2025 = new Date(2025, 0, 1);
-
-                    // Disable dates before Jan 2025 and after today
-                    return date < jan2025 || date > today;
-                  }}
-                  modifiers={{
-                    hasAttendance: (date) => {
-                      const hasAttendance = attendanceDates.some(
-                        (attendanceDate) =>
-                          attendanceDate.getFullYear() === date.getFullYear() &&
-                          attendanceDate.getMonth() === date.getMonth() &&
-                          attendanceDate.getDate() === date.getDate()
-                      );
-                      console.log(
-                        "Checking date:",
-                        date,
-                        "Has attendance:",
-                        hasAttendance
-                      );
-                      return hasAttendance;
-                    },
-                  }}
-                  modifiersStyles={{
-                    hasAttendance: {
-                      border: "1px solid #124A69",
-                      color: "#000000",
-                      borderRadius: "50%",
-                    },
-                    selected: {
-                      backgroundColor: "#124A69",
-                      color: "#ffffff",
-                    },
-                  }}
-                  initialFocus
-                />
+                    }}
+                    disabled={(date) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const jan2025 = new Date(2025, 0, 1);
+                      return date < jan2025 || date > today;
+                    }}
+                    modifiers={{
+                      hasAttendance: (date) =>
+                        attendanceDates.some(
+                          (attDate) =>
+                            attDate.getFullYear() === date.getFullYear() &&
+                            attDate.getMonth() === date.getMonth() &&
+                            attDate.getDate() === date.getDate()
+                        ),
+                    }}
+                    modifiersStyles={{
+                      hasAttendance: {
+                        border: "1px solid #124A69",
+                        color: "#000000",
+                        borderRadius: "50%",
+                      },
+                      selected: {
+                        backgroundColor: "#124A69",
+                        color: "#ffffff",
+                      },
+                    }}
+                    modifiersClassNames={{
+                      selected:
+                        "bg-[#124A69] text-white hover:bg-[#124A69] focus:bg-[#124A69]",
+                      hasAttendance:
+                        "border border-[#124A69] rounded-full text-black",
+                    }}
+                    initialFocus
+                  />
+                </div>
               </PopoverContent>
             </Popover>
           </div>
