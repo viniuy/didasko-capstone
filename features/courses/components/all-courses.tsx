@@ -50,7 +50,7 @@ const CourseCard = ({
       : `/grading/reporting/${course.slug}`;
 
   return (
-    <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between h-45">
+    <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between h-38">
       <div>
         <CardHeader className="-mt-4 flex justify-between items-center">
           <CardTitle className="text-2xl font-bold">{course.title}</CardTitle>
@@ -68,16 +68,16 @@ const CourseCard = ({
                 ).toLocaleDateString()}`
               : "No attendance yet"}
           </p>
+          <div className="flex justify-end -mt-4">
+            <Button
+              asChild
+              variant="secondary"
+              className="bg-[#FAEDCB] text-black text-sm"
+            >
+              <Link href={href}>View Details</Link>
+            </Button>
+          </div>
         </CardContent>
-      </div>
-      <div className="flex justify-end -mt-4 p-2">
-        <Button
-          asChild
-          variant="secondary"
-          className="bg-[#FAEDCB] text-black text-sm"
-        >
-          <Link href={href}>View Details</Link>
-        </Button>
       </div>
     </Card>
   );

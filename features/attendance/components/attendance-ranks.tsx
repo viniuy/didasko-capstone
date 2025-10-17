@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -38,12 +39,9 @@ export default function AttendanceLeaderboard() {
       try {
         const response = await axiosInstance.get(
           "/courses/attendance-ranking",
-          {
-            params: { facultyId: session.user.id },
-          }
+          { params: { facultyId: session.user.id } }
         );
 
-        // Defensive: Try all possible shapes
         let data: ClassStat[] = [];
         if (Array.isArray(response.data)) {
           data = response.data;
@@ -54,8 +52,6 @@ export default function AttendanceLeaderboard() {
         }
 
         setClassStats(data);
-        console.log("Fetched class stats:", data);
-        console.log("Full API responsonse:", response.data);
         setIsLoading(false);
       } catch (error) {
         console.error("Error fetching attendance stats:", error);
@@ -69,16 +65,44 @@ export default function AttendanceLeaderboard() {
     }
   }, [status, session?.user?.id]);
 
-  // Defensive: Don't render if loading or not authenticated
+  // ✅ Skeleton Loader (Shadcn)
   if (isLoading || status === "loading") {
     return (
-      <Card className="w-full p-4 flex justify-center items-center">
-        <p className="text-gray-500">Loading attendance ranking...</p>
+      <Card className="w-full p-4 -mb-5 shadow-md rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <Card
+              key={i}
+              className="rounded-lg shadow-md p-4 flex flex-col justify-between space-y-3"
+            >
+              <div className="space-y-3">
+                <Skeleton className="h-6 w-1/2" /> {/* title */}
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-5 w-1/4" /> {/* section */}
+                  <div className="relative">
+                    <Skeleton className="h-9 w-9 rounded-full" /> {/* trophy */}
+                    <Skeleton className="absolute inset-0 h-5 w-5 rounded-full opacity-50" />
+                  </div>
+                </div>
+              </div>
+              <Skeleton className="h-4 w-2/3" /> {/* attendance rate */}
+            </Card>
+          ))}
+        </div>
+
+        <div className="flex justify-between items-center px-2 -mt-5 -mb-1">
+          <Skeleton className="h-4 w-1/3" />
+          <div className="flex gap-2">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-8 rounded-md" />
+            ))}
+          </div>
+        </div>
       </Card>
     );
   }
 
-  // Defensive: Show message if no data
+  // ✅ No Data
   if (!classStats || classStats.length === 0) {
     return (
       <Card className="w-full p-4 flex justify-center items-center">
@@ -87,6 +111,7 @@ export default function AttendanceLeaderboard() {
     );
   }
 
+  // ✅ Actual Display
   const totalPages = Math.ceil(classStats.length / itemsPerPage);
   const currentClasses = classStats.slice(
     (currentPage - 1) * itemsPerPage,
@@ -99,9 +124,9 @@ export default function AttendanceLeaderboard() {
         {currentClasses.map((cls, index) => {
           const rank = (currentPage - 1) * itemsPerPage + index + 1;
           const bgColors = [
-            "bg-[#F5C542]", // 1st gold
-            "bg-[#D1D1D1]", // 2nd silver
-            "bg-[#CD7F32]", // 3rd bronze
+            "bg-[#F5C542]", // Gold
+            "bg-[#D1D1D1]", // Silver
+            "bg-[#CD7F32]", // Bronze
           ];
           const bgColor = bgColors[rank - 1] || "bg-[#E1E1E1]";
 
@@ -112,22 +137,20 @@ export default function AttendanceLeaderboard() {
             >
               <div>
                 <h2 className="text-2xl font-bold uppercase">{cls.title}</h2>
-
                 <div className="flex items-center justify-between">
                   <p className="text-xl font-medium opacity-90">
                     {cls.section}
                   </p>
-
                   <div className="relative">
                     <Trophy size={36} className="opacity-90 -ml-15 scale-300" />
-                    <span className="absolute inset-0 flex mb-10 -ml-21 items-center justify-center text-4xl  text-shadow-lg text-white pointer-events-none">
+                    <span className="absolute inset-0 flex mb-10 -ml-21 items-center justify-center text-4xl text-white pointer-events-none">
                       {rank}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <p className="text-sm -mt-3 text-gray-500 font-semibold opacity-90">
+              <p className="text-sm -mt-3 text-gray-100 font-semibold opacity-90">
                 {cls.attendanceRate}% attendance rate
               </p>
             </Card>

@@ -133,7 +133,7 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-4">
+      <div className="bg-white rounded-lg shadow-sm p-4 min-h-[430px]">
         <div className="border-b pb-4 mb-4">
           <h2 className="text-xl font-bold text-center text-[#124A69]">
             MY WEEKLY SCHEDULE
@@ -168,7 +168,7 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm">
+    <div className="bg-white rounded-lg shadow-sm min-h-[430px]">
       <div className="p-4 border-b">
         <h2 className="text-xl font-bold text-center text-[#124A69]">
           MY WEEKLY SCHEDULE
