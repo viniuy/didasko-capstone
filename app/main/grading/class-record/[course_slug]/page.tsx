@@ -8,14 +8,7 @@ import { format } from "date-fns";
 import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
-import { ClassRecordTable } from "@/features/grading/class-record";
-
-interface GradeComponents {
-  reportingScore: number;
-  recitationScore: number;
-  quiz: number;
-  passingThreshold: number;
-}
+import { ClassRecordTable } from "@/features/grading/components/class-record";
 
 export default function GradebookCoursePage({
   params,
