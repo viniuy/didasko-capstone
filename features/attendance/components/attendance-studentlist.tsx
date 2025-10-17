@@ -2022,7 +2022,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return (
       <div className="flex flex-col h-screen">
         <div className="flex items-center gap-4 p-4 border-b bg-white ">
-          <Link href="/attendance">
+          <Link href="/main/attendance">
             <Button variant="ghost" size="icon" className="hover:bg-gray-100">
               <ChevronLeft className="h-5 w-5" />
             </Button>
@@ -2042,7 +2042,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return (
       <div className="flex flex-col h-screen">
         <div className="flex items-center gap-4 p-4 border-b bg-white">
-          <Link href="/attendance">
+          <Link href="/main/attendance">
             <Button variant="ghost" size="icon" className="hover:bg-gray-100">
               <ChevronLeft className="h-5 w-5" />
             </Button>
@@ -2108,7 +2108,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }}
       />
       <div className="flex items-center gap-4 p-4 border-b bg-white">
-        <Link href="/attendance">
+        <Link href="/main/attendance">
           <Button variant="ghost" size="icon" className="hover:bg-gray-100">
             <ChevronLeft className="h-5 w-5" />
           </Button>

@@ -51,26 +51,26 @@ import { toast } from "react-hot-toast";
 
 const adminItems = [
   { title: "Home", url: "/dashboard/admin", icon: Home },
-  { title: "Courses", url: "/courses", icon: BookOpen },
-  { title: "Students", url: "/students", icon: Users },
+  { title: "Courses", url: "/main/courses", icon: BookOpen },
+  { title: "Students", url: "/main/students", icon: Users },
 ];
 
 const academicHeadItems = [
   { title: "Dashboard", url: "/dashboard/academic-head", icon: Home },
-  { title: "Attendance", url: "/attendance", icon: CalendarCheck },
-  { title: "Faculty Load", url: "/faculty-load", icon: CalendarClock },
+  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
+  { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
 ];
 
 const facultyItems = [
   { title: "Dashboard", url: "/dashboard/faculty", icon: Home },
-  { title: "Attendance", url: "/attendance", icon: CalendarCheck },
+  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
 ];
 
 const gradingSubItems = [
-  { title: "Class Record", url: "/grading/gradebook", icon: BookUser },
-  { title: "Reporting", url: "/grading/reporting", icon: Presentation },
-  { title: "Recitation", url: "/grading/recitation", icon: BookCheck },
-  { title: "Quiz", url: "/grading/quiz", icon: NotebookPen },
+  { title: "Class Record", url: "/main/grading/gradebook", icon: BookUser },
+  { title: "Reporting", url: "/main/grading/reporting", icon: Presentation },
+  { title: "Recitation", url: "/main/grading/recitation", icon: BookCheck },
+  { title: "Quiz", url: "/main/grading/quiz", icon: NotebookPen },
 ];
 
 function SidebarSkeleton() {
