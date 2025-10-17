@@ -39,7 +39,7 @@ interface Course {
 
 interface SemesterCoursesProps {
   semester: "1st Semester" | "2nd Semester";
-  type: "attendance" | "recitation" | "quiz" | "gradebook" | "reporting";
+  type: "attendance" | "recitation" | "quiz" | "class-record" | "reporting";
 }
 
 const CourseCard = ({
@@ -47,7 +47,7 @@ const CourseCard = ({
   type,
 }: {
   course: Course;
-  type: "attendance" | "recitation" | "quiz" | "gradebook" | "reporting";
+  type: "attendance" | "recitation" | "quiz" | "class-record" | "reporting";
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -62,9 +62,9 @@ const CourseCard = ({
       ? `/main/grading/quiz/${course.slug}`
       : type === "reporting"
       ? `/main/grading/reporting/${course.slug}`
-      : type === "gradebook"
-      ? `/main/grading/gradebook/${course.slug}`
-      : `/main/grading/gradebook`;
+      : type === "class-record"
+      ? `/main/grading/class-record/${course.slug}`
+      : `/main/grading/class-record`;
 
   useEffect(() => {
     console.log("CourseCard - course prop updated:", course);

@@ -67,7 +67,7 @@ const facultyItems = [
 ];
 
 const gradingSubItems = [
-  { title: "Class Record", url: "/main/grading/gradebook", icon: BookUser },
+  { title: "Class Record", url: "/main/grading/class-record", icon: BookUser },
   { title: "Reporting", url: "/main/grading/reporting", icon: Presentation },
   { title: "Recitation", url: "/main/grading/recitation", icon: BookCheck },
   { title: "Quiz", url: "/main/grading/quiz", icon: NotebookPen },
@@ -134,7 +134,7 @@ export function AppSidebar() {
       "/dashboard/academic-head",
       "/main/attendance",
       "/main/faculty-load",
-      "/main/grading/gradebook",
+      "/main/grading/class-record",
       "/main/grading/reporting",
       "/main/grading/recitation",
       "/main/grading/quiz",
@@ -142,7 +142,7 @@ export function AppSidebar() {
     FACULTY: [
       "/dashboard/faculty",
       "/main/attendance",
-      "/main/grading/gradebook",
+      "/main/grading/class-record",
       "/main/grading/reporting",
       "/main/grading/recitation",
       "/main/grading/quiz",
