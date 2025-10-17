@@ -63,7 +63,7 @@ const CourseCard = ({ schedule }: { schedule: Schedule }) => {
   )}`;
 
   const handleClick = () => {
-    router.push(`/attendance/class/${schedule.course.slug}`);
+    router.push(`/main/attendance/class/${schedule.course.slug}`);
   };
 
   return (
