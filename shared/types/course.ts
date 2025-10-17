@@ -37,6 +37,7 @@ export interface CourseCreateInput {
   semester: string;
   section: string;
   facultyId: string;
+  academicYear: string;
 }
 
 export interface CourseUpdateInput extends Partial<CourseCreateInput> {}

@@ -46,7 +46,7 @@ const CourseCard = ({
 }) => {
   const href =
     type === "attendance"
-      ? `/attendance/class/${course.slug}`
+      ? `/main/attendance/class/${course.slug}`
       : `/grading/reporting/${course.slug}`;
 
   return (
