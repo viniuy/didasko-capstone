@@ -515,11 +515,13 @@ export function GradingTable({
       setShowCriteriaDialog(true); // Always show dialog to let user select
       try {
         // Fetch all criteria for this course
-        let endpoint = `/courses/${courseSlug}/criteria`;
+        let endpoint;
         if (isGroupView && groupId) {
           endpoint = `/courses/${courseSlug}/groups/${groupId}/criteria`;
         } else if (isRecitationCriteria) {
           endpoint = `/courses/${courseSlug}/recitation-criteria`;
+        } else {
+          endpoint = `/courses/${courseSlug}/criteria`;
         }
         const response = await axiosInstance.get(endpoint);
         const allReports = response.data;
@@ -553,38 +555,6 @@ export function GradingTable({
   useEffect(() => {
     setScores({});
   }, [selectedDate]);
-
-  // Fetch saved criteria on mount
-  useEffect(() => {
-    const fetchCriteria = async () => {
-      if (!session?.user?.id) {
-        console.error("No user ID found in session");
-        return;
-      }
-
-      try {
-        let endpoint = `/courses/${courseSlug}/criteria`;
-        if (isRecitationCriteria) {
-          endpoint = `/courses/${courseSlug}/recitation-criteria`;
-        }
-        const response = await axiosInstance.get(endpoint);
-        setSavedReports(response.data);
-      } catch (error: any) {
-        console.error("Error fetching criteria:", {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status,
-        });
-        toast.error(
-          error.response?.data?.error || "Failed to load saved criteria"
-        );
-      }
-    };
-
-    if (session?.user?.id) {
-      fetchCriteria();
-    }
-  }, [courseId, session?.user?.id, isRecitationCriteria]);
 
   // Update originalScores when scores are first loaded
   useEffect(() => {
@@ -1194,10 +1164,14 @@ export function GradingTable({
     const fetchReports = async () => {
       if (selectedDate) {
         try {
-          const endpoint =
-            isGroupView && groupId
-              ? `/courses/${courseSlug}/groups/${groupId}/criteria`
-              : `/courses/${courseSlug}/criteria`;
+          let endpoint;
+          if (isGroupView && groupId) {
+            endpoint = `/courses/${courseSlug}/groups/${groupId}/criteria`;
+          } else if (isRecitationCriteria) {
+            endpoint = `/courses/${courseSlug}/recitation-criteria`;
+          } else {
+            endpoint = `/courses/${courseSlug}/criteria`;
+          }
 
           const response = await axiosInstance.get(endpoint);
           setSavedReports(response.data);
