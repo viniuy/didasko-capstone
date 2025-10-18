@@ -3,14 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 //@ts-ignore
-export async function GET(request: Request, { context }: { params }) {
+export async function GET(request: Request, { params }: { params }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const params = await Promise.resolve(context.params);
     const { course_slug, group_id } = params;
 
     // Find the course using the slug
