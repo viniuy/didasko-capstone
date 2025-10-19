@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { writeFile, unlink, mkdir } from "fs/promises";
-import { join } from "path";
+import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
 import {
   UploadResponse,
   DeleteImageInput,
   DeleteImageResponse,
 } from "@/shared/types/upload";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(request: Request) {
   try {
@@ -27,7 +31,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       return NextResponse.json(
         { error: "File must be an image" },
@@ -35,23 +38,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate unique filename
     const ext = file.name.split(".").pop();
     const filename = `${uuidv4()}.${ext}`;
 
-    // Create uploads directory if it doesn't exist
-    const uploadDir = join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from("user-images")
+      .upload(filename, file, { upsert: false });
 
-    // Convert file to buffer and write to disk
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const fullPath = join(uploadDir, filename);
-    await writeFile(fullPath, buffer);
+    if (uploadError) throw uploadError;
 
-    // Return the URL for the uploaded image
-    const response: UploadResponse = {
-      imageUrl: `/uploads/${filename}`,
-    };
+    // Get the public URL for the uploaded file
+    const { data } = supabase.storage
+      .from("user-images")
+      .getPublicUrl(filename);
+    const response: UploadResponse = { imageUrl: data.publicUrl };
 
     return NextResponse.json(response);
   } catch (error) {
@@ -79,29 +80,24 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Extract filename from the URL
-    const filename = imageUrl.split("/uploads/")[1];
+    // Extract filename from the image URL
+    const parts = imageUrl.split("/");
+    const filename = parts[parts.length - 1];
+
     if (!filename) {
       return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
     }
 
-    // Construct the full path to the file
-    const filePath = join(process.cwd(), "public/uploads", filename);
+    const { error: deleteError } = await supabase.storage
+      .from("user-images")
+      .remove([filename]);
 
-    // Delete the file
-    try {
-      await unlink(filePath);
-      const response: DeleteImageResponse = {
-        message: "File deleted successfully",
-      };
-      return NextResponse.json(response);
-    } catch (error) {
-      console.error("Error deleting file:", error);
-      return NextResponse.json(
-        { error: "File not found or could not be deleted" },
-        { status: 404 }
-      );
-    }
+    if (deleteError) throw deleteError;
+
+    const response: DeleteImageResponse = {
+      message: "File deleted successfully",
+    };
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Error deleting image:", error);
     return NextResponse.json(

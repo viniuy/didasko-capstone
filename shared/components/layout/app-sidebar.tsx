@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
+import { supabase } from "@/lib/supabaseClient";
 
 const adminItems = [
   { title: "Home", url: "/dashboard/admin", icon: Home },
@@ -223,6 +224,25 @@ export function AppSidebar() {
     return <SidebarSkeleton />;
   }
 
+  useEffect(() => {
+    const fetchUserImage = async () => {
+      if (!session?.user?.id) return;
+
+      // try to get the image from your Supabase bucket
+      const { data } = supabase.storage
+        .from("user-images")
+        .getPublicUrl(`${session.user.id}.jpg`);
+
+      if (data?.publicUrl) {
+        setUserImage(data.publicUrl);
+      } else {
+        setUserImage(session?.user?.image || undefined);
+      }
+    };
+
+    fetchUserImage();
+  }, [session?.user?.id]);
+
   const displayName = session?.user?.name || "Loading...";
   const displayDepartment = isAdmin
     ? "Administrator"
@@ -232,7 +252,7 @@ export function AppSidebar() {
     ? "Faculty"
     : "";
   const avatarInitial = displayName.charAt(0);
-  const userImage = session?.user?.image || undefined;
+  const [userImage, setUserImage] = useState<string | undefined>(undefined);
   const user = {
     name: session?.user?.name || "Unknown User",
     role: session?.user?.role || "",
