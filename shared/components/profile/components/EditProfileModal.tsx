@@ -32,23 +32,19 @@ export default function EditProfileModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const displayName = user.name || "Loading...";
   const initial = displayName.charAt(0).toUpperCase();
 
-  // Handle selecting a new image with validation
+  // Image select handler
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
-
-    if (!selected) {
-      toast.error("Please upload an image file.");
-      return;
-    }
+    if (!selected) return;
 
     if (!selected.type.startsWith("image/")) {
       toast.error("Only image files are allowed!");
       return;
     }
-
     if (selected.size > 2 * 1024 * 1024) {
       toast.error("File size exceeds 2MB limit.");
       return;
@@ -58,67 +54,76 @@ export default function EditProfileModal({
     setImage(URL.createObjectURL(selected));
   };
 
-  // Handle removing image
+  // Delete image (from both file system and database)
   const handleRemoveImage = async () => {
-    if (!image || image === "/default-avatar.png") return;
+    if (image === "/default-avatar.png") return;
 
+    setIsRemoving(true);
     try {
-      setIsRemoving(true);
-      await fetch("/api/upload", {
+      // Delete from uploads folder
+      const res = await fetch("/api/upload", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageUrl: image }),
       });
+      if (!res.ok) throw new Error("Failed to delete image file.");
+
+      // Update user record to remove image
+      const update = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: null }),
+      });
+      if (!update.ok) throw new Error("Failed to update profile.");
+
       setImage("/default-avatar.png");
       setFile(null);
-      toast.success("Profile image removed.");
+      toast.success("Profile image removed successfully!");
     } catch (error) {
-      console.error("Error removing image:", error);
+      console.error("Remove error:", error);
       toast.error("Failed to remove image.");
     } finally {
       setIsRemoving(false);
     }
   };
 
-  // Handle saving the profile picture with validation
+  // Save uploaded image and update profile
   const handleSave = async () => {
-    if (image === "/default-avatar.png" && !file) {
-      toast.error("Please upload a profile image before saving.");
+    if (!file) {
+      toast.error("Please select an image before saving.");
       return;
     }
 
     setIsSaving(true);
     try {
-      let uploadedImageUrl = image;
+      const formData = new FormData();
+      formData.append("image", file);
 
-      if (file) {
-        const formData = new FormData();
-        formData.append("image", file);
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error("Failed to upload image.");
 
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!uploadRes.ok) throw new Error("Failed to upload image");
-
-        const uploadData = await uploadRes.json();
-        uploadedImageUrl = uploadData.imageUrl;
-      }
+      const uploadData = await uploadRes.json();
+      const uploadedUrl = uploadData.imageUrl;
 
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: uploadedImageUrl }),
+        body: JSON.stringify({ image: uploadedUrl }),
       });
 
-      if (!res.ok) throw new Error("Failed to update profile");
+      if (!res.ok) throw new Error("Failed to update profile.");
 
-      toast.success("Profile updated successfully!");
+      toast.success(
+        "Profile updated successfully! Please log out and back in to see changes."
+      );
+      setFile(null);
       onClose();
-    } catch (err) {
-      console.error(err);
-      toast.error("Something went wrong while saving.");
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Failed to save profile changes.");
     } finally {
       setIsSaving(false);
     }
@@ -133,8 +138,7 @@ export default function EditProfileModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative w-55 h-55 group mx-auto mb-4 ">
-          {/* Avatar */}
+        <div className="relative w-55 h-55 group mx-auto mb-4">
           <Avatar className="w-55 h-55 border-4 border-gray-200">
             <AvatarImage src={image} alt="Profile" className="object-cover" />
             <AvatarFallback className="text-2xl bg-gray-100 text-gray-600 font-medium">
@@ -142,7 +146,6 @@ export default function EditProfileModal({
             </AvatarFallback>
           </Avatar>
 
-          {/* Hidden file input */}
           <input
             type="file"
             accept="image/*"
@@ -151,7 +154,6 @@ export default function EditProfileModal({
             className="hidden"
           />
 
-          {/* Hover overlay with Save icon (opens file picker) */}
           <div
             className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-full cursor-pointer"
             onClick={() => fileInputRef.current?.click()}
@@ -159,7 +161,6 @@ export default function EditProfileModal({
             <Save className="w-6 h-6 text-white" />
           </div>
 
-          {/* Remove button */}
           {image !== "/default-avatar.png" && (
             <button
               type="button"
@@ -172,13 +173,11 @@ export default function EditProfileModal({
           )}
         </div>
 
-        {/* Name & Role */}
         <div>
           <p className="font-semibold text-xl text-[#124A69]">{user.name}</p>
           <p className="text-sm text-gray-500">{user.role}</p>
         </div>
 
-        {/* Buttons */}
         <div className="flex justify-between mt-4">
           <Button
             variant="outline"
