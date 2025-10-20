@@ -47,7 +47,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -78,7 +78,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
 } from "@tanstack/react-table";
-
+import { supabase } from "@/lib/supabaseClient";
 interface User {
   id: string;
   name: string;
@@ -138,6 +138,62 @@ const getInitials = (name: string) => {
   return parts[0][0].toUpperCase();
 };
 
+export function useUserImages() {
+  const [imageMap, setImageMap] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchAllImages = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const bucket = supabase.storage.from("user-images");
+
+        // ✅ List all files in the bucket root
+        const { data: files, error } = await bucket.list("", { limit: 1000 });
+        if (error) throw error;
+
+        if (!files || files.length === 0) {
+          console.warn("⚠️ No files found in user-images bucket.");
+          if (!cancelled) setImageMap({});
+          return;
+        }
+
+        console.log(
+          "✅ Found files:",
+          files.map((f) => f.name)
+        );
+
+        // ✅ Map files to { userId: imageUrl }
+        const entries = files.map((file) => {
+          const userId = file.name.replace(/\.(png|jpg|jpeg)$/i, "");
+          const { data } = bucket.getPublicUrl(file.name);
+          return [userId, `${data.publicUrl}?t=${Date.now()}`];
+        });
+
+        if (!cancelled) setImageMap(Object.fromEntries(entries));
+      } catch (err: any) {
+        console.error("❌ Error fetching user images:", err.message);
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchAllImages();
+
+    // Cleanup if component unmounts
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  console.log("User Images Map:", imageMap);
+  return { imageMap, loading, error };
+}
 const formatEnumValue = (value: string) =>
   value
     .split("_")
@@ -312,6 +368,7 @@ export function AdminDataTable({
 
       const userRows = tableData.map((user: User) => {
         return [
+          user.id,
           user.name || "",
           user.email || "",
           user.department || "",
@@ -685,20 +742,27 @@ export function AdminDataTable({
       });
     }
   }, [selectedFile, isValidFile, previewData, refreshTableData, onUserAdded]);
+  const { imageMap } = useUserImages();
 
   const columns = useMemo<ColumnDef<User>[]>(
     () => [
       {
         accessorKey: "name",
         header: "Name",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Avatar>
-              <AvatarFallback>{getInitials(row.original.name)}</AvatarFallback>
-            </Avatar>
-            <div>{row.original.name}</div>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const { id, name } = row.original;
+          const imageUrl = imageMap[id];
+          console.log("🖼️ Row:", id, "→", imageUrl);
+          return (
+            <div className="flex items-center gap-2">
+              <Avatar>
+                <AvatarImage src={imageUrl} alt={name} />
+                <AvatarFallback>{getInitials(name)}</AvatarFallback>
+              </Avatar>
+              <div>{name}</div>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "email",
@@ -862,6 +926,7 @@ export function AdminDataTable({
       isPermissionUpdating,
       handleRoleChange,
       handlePermissionChange,
+      imageMap,
     ]
   );
 
