@@ -153,7 +153,6 @@ export function useUserImages() {
       try {
         const bucket = supabase.storage.from("user-images");
 
-        // ✅ List all files in the bucket root
         const { data: files, error } = await bucket.list("", { limit: 1000 });
         if (error) throw error;
 
@@ -163,12 +162,8 @@ export function useUserImages() {
           return;
         }
 
-        console.log(
-          "✅ Found files:",
-          files.map((f) => f.name)
-        );
+        console.log(files.map((f) => f.name));
 
-        // ✅ Map files to { userId: imageUrl }
         const entries = files.map((file) => {
           const userId = file.name.replace(/\.(png|jpg|jpeg)$/i, "");
           const { data } = bucket.getPublicUrl(file.name);
@@ -177,7 +172,7 @@ export function useUserImages() {
 
         if (!cancelled) setImageMap(Object.fromEntries(entries));
       } catch (err: any) {
-        console.error("❌ Error fetching user images:", err.message);
+        console.error("Error fetching user images:", err.message);
         if (!cancelled) setError(err.message);
       } finally {
         if (!cancelled) setLoading(false);
