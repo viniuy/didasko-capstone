@@ -228,16 +228,24 @@ export function AppSidebar() {
     const fetchUserImage = async () => {
       if (!session?.user?.id) return;
 
-      // try to get the image from your Supabase bucket
-      const { data } = supabase.storage
-        .from("user-images")
-        .getPublicUrl(`${session.user.id}.jpg`);
+      const bucket = supabase.storage.from("user-images");
+      const possibleFiles = [`${session.user.id}.png`];
 
-      if (data?.publicUrl) {
-        setUserImage(data.publicUrl);
-      } else {
-        setUserImage(session?.user?.image || undefined);
+      for (const filename of possibleFiles) {
+        const { data } = bucket.getPublicUrl(filename);
+        try {
+          const res = await fetch(data.publicUrl, { method: "HEAD" });
+          if (res.ok) {
+            setUserImage(`${data.publicUrl}?t=${Date.now()}`);
+            return;
+          }
+        } catch (err) {
+          console.error("Error checking image:", err);
+        }
       }
+
+      // fallback
+      setUserImage(session?.user?.image || undefined);
     };
 
     fetchUserImage();
@@ -256,6 +264,7 @@ export function AppSidebar() {
   const user = {
     name: session?.user?.name || "Unknown User",
     role: session?.user?.role || "",
+    id: session?.user?.id || "",
     department: displayDepartment,
     image: userImage,
   };

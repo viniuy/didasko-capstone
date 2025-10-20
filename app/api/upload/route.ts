@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { createClient } from "@supabase/supabase-js";
-import { v4 as uuidv4 } from "uuid";
-import {
-  UploadResponse,
-  DeleteImageInput,
-  DeleteImageResponse,
-} from "@/shared/types/upload";
+import { UploadResponse } from "@/shared/types/upload";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,7 +12,7 @@ const supabase = createClient(
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -25,33 +20,33 @@ export async function POST(request: Request) {
     const file = formData.get("image") as File;
 
     if (!file) {
-      return NextResponse.json(
-        { error: "No image file provided" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
     if (!file.type.startsWith("image/")) {
-      return NextResponse.json(
-        { error: "File must be an image" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
     }
 
-    const ext = file.name.split(".").pop();
-    const filename = `${uuidv4()}.${ext}`;
+    const ext = file.name.split(".").pop() || "jpg";
+    const filename = `${session.user.id}.${ext}`;
+    const bucket = supabase.storage.from("user-images");
 
-    // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from("user-images")
-      .upload(filename, file, { upsert: false });
+    // Remove existing images before uploading new one
+    await bucket.remove([
+      `${session.user.id}.jpg`,
+      `${session.user.id}.png`,
+      `${session.user.id}.jpeg`,
+    ]);
+
+    const { error: uploadError } = await bucket.upload(filename, file, {
+      cacheControl: "0",
+      upsert: true,
+      contentType: file.type,
+    });
 
     if (uploadError) throw uploadError;
 
-    // Get the public URL for the uploaded file
-    const { data } = supabase.storage
-      .from("user-images")
-      .getPublicUrl(filename);
+    const { data } = bucket.getPublicUrl(filename);
     const response: UploadResponse = { imageUrl: data.publicUrl };
 
     return NextResponse.json(response);
@@ -64,14 +59,14 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
-  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
-}
-
 export async function DELETE(request: Request) {
   try {
-    const body = await request.json();
-    const { imageUrl } = body as DeleteImageInput;
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { imageUrl } = await request.json();
 
     if (!imageUrl) {
       return NextResponse.json(
@@ -80,24 +75,18 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Extract filename from the image URL
-    const parts = imageUrl.split("/");
-    const filename = parts[parts.length - 1];
+    const bucket = supabase.storage.from("user-images");
 
-    if (!filename) {
-      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
-    }
+    // Remove all possible image formats for the user
+    await bucket.remove([
+      `${session.user.id}.jpg`,
+      `${session.user.id}.png`,
+      `${session.user.id}.jpeg`,
+      `${session.user.id}.webp`,
+      `${session.user.id}.gif`,
+    ]);
 
-    const { error: deleteError } = await supabase.storage
-      .from("user-images")
-      .remove([filename]);
-
-    if (deleteError) throw deleteError;
-
-    const response: DeleteImageResponse = {
-      message: "File deleted successfully",
-    };
-    return NextResponse.json(response);
+    return NextResponse.json({ message: "Image deleted successfully" });
   } catch (error) {
     console.error("Error deleting image:", error);
     return NextResponse.json(

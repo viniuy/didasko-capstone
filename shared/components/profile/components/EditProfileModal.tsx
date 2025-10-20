@@ -16,6 +16,7 @@ interface EditProfileModalProps {
   open: boolean;
   onClose: () => void;
   user: {
+    id: string;
     name: string;
     role: string;
     image?: string | null;
@@ -27,7 +28,7 @@ export default function EditProfileModal({
   onClose,
   user,
 }: EditProfileModalProps) {
-  const [image, setImage] = useState(user.image || "/default-avatar.png");
+  const [image, setImage] = useState(user.image || "");
   const [file, setFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -56,7 +57,7 @@ export default function EditProfileModal({
 
   // Delete image (from both file system and database)
   const handleRemoveImage = async () => {
-    if (image === "/default-avatar.png") return;
+    if (!image) return;
 
     setIsRemoving(true);
     try {
@@ -76,9 +77,11 @@ export default function EditProfileModal({
       });
       if (!update.ok) throw new Error("Failed to update profile.");
 
-      setImage("/default-avatar.png");
+      setImage("");
       setFile(null);
-      toast.success("Profile image removed successfully!");
+      toast.success(
+        "Profile image removed successfully! Refresh to see changes."
+      );
     } catch (error) {
       console.error("Remove error:", error);
       toast.error("Failed to remove image.");
@@ -98,27 +101,25 @@ export default function EditProfileModal({
     try {
       const formData = new FormData();
       formData.append("image", file);
+      formData.append("userId", user.id);
 
       const uploadRes = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
-      if (!uploadRes.ok) throw new Error("Failed to upload image.");
 
-      const uploadData = await uploadRes.json();
-      const uploadedUrl = uploadData.imageUrl;
+      if (!uploadRes.ok) throw new Error("Failed to upload image.");
+      const { imageUrl } = await uploadRes.json();
 
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: uploadedUrl }),
+        body: JSON.stringify({ image: imageUrl }),
       });
 
       if (!res.ok) throw new Error("Failed to update profile.");
 
-      toast.success(
-        "Profile updated successfully! Please log out and back in to see changes."
-      );
+      toast.success("Profile updated successfully! Refresh to see changes.");
       setFile(null);
       onClose();
     } catch (error) {
@@ -140,7 +141,12 @@ export default function EditProfileModal({
 
         <div className="relative w-55 h-55 group mx-auto mb-4">
           <Avatar className="w-55 h-55 border-4 border-gray-200">
-            <AvatarImage src={image} alt="Profile" className="object-cover" />
+            <AvatarImage
+              src={image || undefined}
+              alt="Profile"
+              className="object-cover"
+              onError={() => setImage("")}
+            />
             <AvatarFallback className="text-2xl bg-gray-100 text-gray-600 font-medium">
               {initial}
             </AvatarFallback>
@@ -161,7 +167,7 @@ export default function EditProfileModal({
             <Save className="w-6 h-6 text-white" />
           </div>
 
-          {image !== "/default-avatar.png" && (
+          {image && (
             <button
               type="button"
               onClick={handleRemoveImage}
