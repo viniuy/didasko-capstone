@@ -146,6 +146,39 @@ export function AppSidebar() {
       "/main/grading/recitation",
     ],
   };
+  const [userImage, setUserImage] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!open) setIsGradingOpen(false);
+  }, [open]);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchUserImage = async () => {
+      if (!session?.user?.id) return;
+
+      const bucket = supabase.storage.from("user-images");
+      const possibleFiles = [`${session.user.id}.png`];
+
+      for (const filename of possibleFiles) {
+        const { data } = bucket.getPublicUrl(filename);
+        try {
+          const res = await fetch(data.publicUrl, { method: "HEAD" });
+          if (res.ok) {
+            setUserImage(`${data.publicUrl}?t=${Date.now()}`);
+            return;
+          }
+        } catch (err) {
+          console.error("Error checking image:", err);
+        }
+      }
+
+      // fallback
+      setUserImage(session?.user?.image || undefined);
+    };
+
+    fetchUserImage();
+  }, [session?.user?.id]);
 
   // Immediate path check and redirect
   useEffect(() => {
@@ -215,41 +248,9 @@ export function AppSidebar() {
     }
   };
 
-  useEffect(() => {
-    if (!open) setIsGradingOpen(false);
-  }, [open]);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-
   if (status === "loading") {
     return <SidebarSkeleton />;
   }
-
-  useEffect(() => {
-    const fetchUserImage = async () => {
-      if (!session?.user?.id) return;
-
-      const bucket = supabase.storage.from("user-images");
-      const possibleFiles = [`${session.user.id}.png`];
-
-      for (const filename of possibleFiles) {
-        const { data } = bucket.getPublicUrl(filename);
-        try {
-          const res = await fetch(data.publicUrl, { method: "HEAD" });
-          if (res.ok) {
-            setUserImage(`${data.publicUrl}?t=${Date.now()}`);
-            return;
-          }
-        } catch (err) {
-          console.error("Error checking image:", err);
-        }
-      }
-
-      // fallback
-      setUserImage(session?.user?.image || undefined);
-    };
-
-    fetchUserImage();
-  }, [session?.user?.id]);
 
   const displayName = session?.user?.name || "Loading...";
   const displayDepartment = isAdmin
@@ -260,7 +261,6 @@ export function AppSidebar() {
     ? "Faculty"
     : "";
   const avatarInitial = displayName.charAt(0);
-  const [userImage, setUserImage] = useState<string | undefined>(undefined);
   const user = {
     name: session?.user?.name || "Unknown User",
     role: session?.user?.role || "",
