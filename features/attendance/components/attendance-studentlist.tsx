@@ -21,7 +21,7 @@ import {
   Scan,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import {
   Popover,
   PopoverContent,
@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import axiosInstance from "@/lib/axios";
 import axios from "axios";
+import { supabase } from "@/lib/supabase-client";
 
 // Add interface for Excel data
 interface ExcelRow {
@@ -872,103 +873,73 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     itemsPerPage,
   ]);
 
-  const handleImageUpload = async (index: number, file: File) => {
+  // Uploads a student image to Supabase and returns the public URL
+  const handleImageUpload = async (
+    studentId: string,
+    file: File
+  ): Promise<string | null> => {
+    if (!file) return null;
+
     try {
-      const student = currentStudents[index];
-      if (!student) return;
+      // Use a consistent filename format like you do with user-images
+      const ext = file.name.split(".").pop() ?? "png";
+      const fileName = `${studentId}.${ext}`; // Simple format: studentId.extension
 
-      const formData = new FormData();
-      formData.append("image", file);
+      const bucket = supabase.storage.from("student-image");
 
-      const response = await axiosInstance.post(
-        `/courses/${courseSlug}/students/${student.id}/image`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const { error: uploadError } = await bucket.upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: true, // This will overwrite if file already exists
+      });
 
-      // Update the student's image in the list
+      if (uploadError) throw uploadError;
+
+      // Get public URL and add timestamp to bust cache
+      const { data: publicUrlData } = bucket.getPublicUrl(fileName);
+      const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+
+      if (!publicUrlData.publicUrl) throw new Error("Failed to get public URL");
+
+      // Update local state
+      setTempImage({
+        index: studentList.findIndex((s) => s.id === studentId),
+        dataUrl: publicUrl,
+      });
+
+      // Update the student list with the new image
       setStudentList((prev) =>
-        prev.map((s) =>
-          s.id === student.id ? { ...s, image: response.data.imageUrl } : s
-        )
+        prev.map((s) => (s.id === studentId ? { ...s, image: publicUrl } : s))
       );
 
-      toast.success("Profile picture updated successfully");
-    } catch (error) {
-      console.error("Error uploading image:", error);
+      toast.success("Image uploaded successfully");
+      return publicUrl;
+    } catch (err) {
+      console.error("Upload failed:", err);
       toast.error("Failed to upload image");
+      return null;
     }
   };
 
-  const handleSaveImageChanges = async (index: number) => {
-    if (!tempImage || tempImage.index !== index) return;
+  // Saves the uploaded image URL to the backend API
+  const handleSaveImageChanges = async (studentId: string): Promise<void> => {
+    const student = studentList.find((s) => s.id === studentId);
+    const imageUrl = student?.image;
+
+    if (!imageUrl) return;
 
     try {
-      setIsSaving(true);
-      const formData = new FormData();
-      // Convert base64 to blob
-      const base64Response = await axiosInstance.get(tempImage.dataUrl, {
-        responseType: "arraybuffer",
+      // Update via your backend API instead of directly to Supabase
+      await axiosInstance.put(`/students/${studentId}/image`, {
+        imageUrl: imageUrl,
       });
-      const blob = new Blob([base64Response.data]);
 
-      // Get file extension from data URL
-      const ext = tempImage.dataUrl.split(";")[0].split("/")[1];
-      const fileName = `image.${ext}`;
-
-      // Create file from blob with proper name and type
-      const file = new File([blob], fileName, { type: `image/${ext}` });
-      formData.append("image", file);
-
-      const uploadResponse = await axiosInstance.post("/upload", formData);
-      const { imageUrl } = uploadResponse.data;
-
-      // Update the student's image in the database
-      const student = studentList[index];
-      const updateResponse = await axiosInstance.put(
-        `/students/${student.id}/image`,
-        { imageUrl }
-      );
-      const updatedStudent = updateResponse.data;
-
-      // Update student list with new image URL
-      setStudentList((prev) =>
-        prev.map((student, i) =>
-          i === index ? { ...student, image: imageUrl } : student
-        )
-      );
-
-      // Clear temp image
+      // Clear temporary image
       setTempImage(null);
 
-      // Show success message
-      setShowSuccessMessage((prev) => ({ ...prev, [index]: true }));
-      setTimeout(() => {
-        setShowSuccessMessage((prev) => ({ ...prev, [index]: false }));
-      }, 3000);
-    } catch (error) {
-      console.error("Error saving image:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save image",
-        {
-          duration: 3000,
-          style: {
-            background: "#fff",
-            color: "#dc2626",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-        }
-      );
-    } finally {
-      setIsSaving(false);
+      toast.success("Profile picture saved successfully");
+    } catch (err) {
+      console.error("Failed to save image URL to DB:", err);
+      toast.error("Failed to save profile picture");
     }
   };
 
@@ -1080,6 +1051,84 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     } catch (error) {
       console.error("Error importing Excel file:", error);
       toast.error("Failed to import Excel file");
+    }
+  };
+
+  const handleAddStudent = async (student: {
+    lastName: string;
+    firstName: string;
+    middleInitial?: string;
+    image?: string;
+  }) => {
+    try {
+      const response = await axiosInstance.post("/students", {
+        ...student,
+        courseId: courseSlug,
+      });
+      const newStudent = response.data;
+
+      const fullName = `${newStudent.lastName}, ${newStudent.firstName}${
+        newStudent.middleInitial ? ` ${newStudent.middleInitial}.` : ""
+      }`;
+
+      setStudentList((prev) => [
+        ...prev,
+        {
+          id: newStudent.id,
+          name: fullName,
+          image: newStudent.image,
+          status: "NOT_SET" as AttendanceStatusWithNotSet,
+          attendanceRecords: [],
+        },
+      ]);
+
+      toast.success("Student added successfully");
+    } catch (error) {
+      console.error("Error adding student:", error);
+      toast.error("Failed to add student");
+    }
+  };
+
+  const handleSelectExistingStudent = async (student: {
+    id: string;
+    lastName: string;
+    firstName: string;
+    middleInitial?: string;
+    image?: string;
+  }) => {
+    try {
+      console.log("Adding student to course:", {
+        studentId: student.id,
+        courseId: courseSlug,
+      });
+
+      const response = await axiosInstance.post(
+        `/courses/${courseSlug}/students`,
+        {
+          studentId: student.id,
+        }
+      );
+      const addedStudent = response.data;
+
+      const fullName = `${student.lastName}, ${student.firstName}${
+        student.middleInitial ? ` ${student.middleInitial}.` : ""
+      }`;
+
+      const newStudent: Student = {
+        id: student.id,
+        name: fullName,
+        image: student.image,
+        status: "NOT_SET" as AttendanceStatusWithNotSet,
+        attendanceRecords: [],
+      };
+
+      setStudentList((prev) => [...prev, newStudent]);
+      toast.success("Student added successfully");
+    } catch (error) {
+      console.error("Error adding existing student:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to add student"
+      );
     }
   };
 
@@ -1346,32 +1395,32 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return () => document.removeEventListener("keydown", handleKeyPress);
   }, [attendanceStartTime, pendingAttendanceUpdates]);
 
-  const handleRemoveImage = async (index: number, name: string) => {
-    const student = studentList[index];
+  const handleRemoveImage = async (studentId: string) => {
+    const student = studentList.find((s) => s.id === studentId);
     if (!student?.image) return;
 
     try {
-      // Delete the image file from public/uploads
+      // Delete the image file from storage
       await axiosInstance.delete("/upload", {
         data: { imageUrl: student.image },
       });
 
       // Update the database
-      await axiosInstance.put(`/students/${student.id}/image`, {
+      await axiosInstance.put(`/students/${studentId}/image`, {
         imageUrl: null,
       });
 
       // Update local state
       setStudentList((prev) =>
-        prev.map((student, idx) =>
-          idx === index ? { ...student, image: undefined } : student
-        )
+        prev.map((s) => (s.id === studentId ? { ...s, image: undefined } : s))
       );
 
       // Clear temp image if it exists for this student
-      if (tempImage?.index === index) {
+      const studentIndex = studentList.findIndex((s) => s.id === studentId);
+      if (tempImage?.index === studentIndex) {
         setTempImage(null);
       }
+
       toast.success("Profile picture removed successfully");
     } catch (error) {
       console.error("Error removing image:", error);
@@ -2278,7 +2327,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       <div className="flex-1 overflow-auto p-4 bg-white">
         {!hasAttendanceForSelectedDate &&
         selectedDate &&
-        !attendanceStartTime ? (
+        !attendanceStartTime &&
+        isToday(selectedDate) ? (
           // Show "Start Attendance" button when no attendance exists for the selected date
           <div className="flex flex-col items-center justify-center py-20">
             <div className="text-center max-w-md">
@@ -2321,16 +2371,14 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               currentStudents.map((student, index) => (
                 <div key={student.id} className="relative">
                   <StudentCard
-                    student={{
-                      name: student.name,
-                      status: student.status,
-                      image: student.image,
-                    }}
+                    student={student}
                     index={index}
                     tempImage={tempImage}
-                    onImageUpload={handleImageUpload}
-                    onSaveChanges={handleSaveImageChanges}
-                    onRemoveImage={handleRemoveImage}
+                    onImageUpload={(file) =>
+                      handleImageUpload(student.id, file)
+                    }
+                    onSaveChanges={() => handleSaveImageChanges(student.id)}
+                    onRemoveImage={() => handleRemoveImage(student.id)}
                     onStatusChange={(index, status: AttendanceStatus) =>
                       updateStatus(index, status)
                     }

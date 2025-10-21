@@ -37,7 +37,7 @@ interface StudentCardProps {
   };
   index: number;
   tempImage: { index: number; dataUrl: string } | null;
-  onImageUpload: (index: number, file: File) => void;
+  onImageUpload: (file: File) => void;
   onSaveChanges: (index: number) => void;
   onRemoveImage: (index: number, name: string) => void;
   onStatusChange: (index: number, status: AttendanceStatus) => void;
@@ -99,7 +99,7 @@ export function StudentCard({
         }
         return;
       }
-      onImageUpload(index, file);
+      onImageUpload(file);
     }
   };
 
