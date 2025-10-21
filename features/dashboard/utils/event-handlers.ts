@@ -15,8 +15,10 @@ import {
 import { startOfDay, isPast, isSameDay } from "date-fns";
 
 // Function to normalize date by removing time portion
-function normalizeDate(date: Date): Date {
-  return startOfDay(new Date(date));
+function normalizeDate(date: Date | string): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 export async function handleSaveNewEvent({

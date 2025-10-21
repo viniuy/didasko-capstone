@@ -19,7 +19,7 @@ import { useEffect, useState, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { format, isSameDay, isBefore, isAfter } from "date-fns";
 import { CalendarIcon } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { Role } from "@/lib/types";
