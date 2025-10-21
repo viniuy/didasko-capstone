@@ -163,49 +163,18 @@ export default function SemesterCourses({
   const itemsPerPage = 3;
 
   const fetchSchedules = async () => {
-    if (!session?.user?.id) {
-      setIsLoading(false);
-      return;
-    }
+    if (!session?.user?.id) return;
 
     try {
       const response = await axiosInstance.get("/courses", {
-        params: {
-          facultyId: session.user.id,
-          semester,
-        },
+        params: { facultyId: session.user.id, semester },
       });
-      const courses = response.data.courses || [];
-      const coursesWithStats = await Promise.all(
-        courses.map(async (course: Course) => {
-          const stats = await fetchAttendanceStats(course.slug);
-          return {
-            ...course,
-            attendanceStats: stats,
-          };
-        })
-      );
-      setCourses(coursesWithStats);
+      setCourses(response.data.courses);
     } catch (error) {
-      console.error("Error in fetchSchedules:", error);
+      console.error(error);
       setCourses([]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchAttendanceStats = async (courseSlug: string) => {
-    try {
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/attendance/stats`
-      );
-      console.log("Attendance stats response:", response.data);
-      if (response.status !== 200 || !response.data)
-        throw new Error("Failed to fetch attendance stats");
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching attendance stats:", error);
-      return null;
     }
   };
 

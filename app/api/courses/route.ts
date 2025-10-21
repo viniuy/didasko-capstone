@@ -22,51 +22,26 @@ export async function GET(request: Request) {
     const section = searchParams.get("section");
 
     // Build where clause based on filters
-    const where: Prisma.CourseWhereInput = {
-      AND: [
-        facultyId ? { facultyId } : {},
-        department ? { faculty: { department } } : {},
-        semester ? { semester } : {},
-        code ? { code } : {},
-        section ? { section } : {},
-        search
-          ? {
-              OR: [
-                {
-                  title: {
-                    contains: search,
-                    mode: "insensitive" as Prisma.QueryMode,
-                  },
-                },
-                {
-                  code: {
-                    contains: search,
-                    mode: "insensitive" as Prisma.QueryMode,
-                  },
-                },
-                {
-                  room: {
-                    contains: search,
-                    mode: "insensitive" as Prisma.QueryMode,
-                  },
-                },
-              ],
-            }
-          : {},
-      ].filter((condition) => Object.keys(condition).length > 0),
-    };
+    const where: Prisma.CourseWhereInput = {};
 
-    // Get courses with include related data
+    if (facultyId) where.facultyId = facultyId;
+    if (department) where.faculty = { department };
+    if (semester) where.semester = semester;
+    if (code) where.code = code;
+    if (section) where.section = section;
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { code: { contains: search, mode: "insensitive" } },
+        { room: { contains: search, mode: "insensitive" } },
+      ];
+    }
+    // Get courses with related data + attendance
     const courses = await prisma.course.findMany({
       where,
       include: {
         faculty: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            department: true,
-          },
+          select: { id: true, name: true, email: true, department: true },
         },
         students: {
           select: {
@@ -77,22 +52,48 @@ export async function GET(request: Request) {
           },
         },
         schedules: true,
+        attendance: true,
       },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
 
     const response: CourseResponse = {
-      courses: courses.map((course) => ({
-        ...course,
-        students: course.students?.map((student) => ({
-          ...student,
-          middleInitial: student.middleInitial || undefined,
-        })),
-        schedules: course.schedules?.map((schedule) => ({
-          ...schedule,
-          day: new Date(schedule.day),
-        })),
-      })),
+      courses: courses.map((course) => {
+        const totalStudents = course.students.length;
+        const totalPresent = course.attendance.filter(
+          (a) => a.status === "PRESENT"
+        ).length;
+        const totalAbsents = course.attendance.filter(
+          (a) => a.status === "ABSENT"
+        ).length;
+        const totalLate = course.attendance.filter(
+          (a) => a.status === "LATE"
+        ).length;
+        const lastAttendanceDate = course.attendance.length
+          ? course.attendance[course.attendance.length - 1].date
+          : null;
+
+        return {
+          ...course,
+          attendanceStats: {
+            totalStudents,
+            totalPresent,
+            totalAbsents,
+            totalLate,
+            lastAttendanceDate,
+            attendanceRate:
+              totalStudents > 0 ? totalPresent / totalStudents : 0,
+          },
+          students: course.students.map((s) => ({
+            ...s,
+            middleInitial: s.middleInitial || undefined,
+          })),
+          schedules: course.schedules.map((s) => ({
+            ...s,
+            day: new Date(s.day),
+          })),
+        };
+      }),
       pagination: {
         total: courses.length,
         page: 1,
