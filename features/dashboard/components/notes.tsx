@@ -260,7 +260,6 @@ export default function Notes() {
       });
 
       const response = await axiosInstance.delete(`/api/notes/${noteToDelete}`);
-
       if (response.status === 200) {
         setOpenDelete(false);
         setNoteToDelete(null);
@@ -337,7 +336,7 @@ export default function Notes() {
     );
 
     if (result.success) {
-      showAlert("Success", "Note updated successfully", "success");
+      toast.success("Note updated successfully");
     } else {
       showAlert("Error", result.error || "Failed to update note", "error");
     }

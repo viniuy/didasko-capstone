@@ -20,7 +20,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { format, isSameDay, isBefore, isAfter } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import toast from "react-hot-toast";
-import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { Role } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -51,12 +50,6 @@ import {
   handleSaveNewEvent,
   handleUpdateEvent,
 } from "../utils/event-handlers";
-
-// Dynamically import Toaster with no SSR
-const DynamicToaster = dynamic(
-  () => import("react-hot-toast").then((mod) => mod.Toaster),
-  { ssr: false }
-);
 
 export default function UpcomingEvents() {
   const { data: session, status } = useSession();
@@ -643,49 +636,6 @@ export default function UpcomingEvents() {
 
   return (
     <div className="h-full flex flex-col">
-      <DynamicToaster
-        toastOptions={{
-          className: "",
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          success: {
-            style: {
-              background: "#fff",
-              color: "#124A69",
-              border: "1px solid #e5e7eb",
-            },
-            iconTheme: {
-              primary: "#124A69",
-              secondary: "#fff",
-            },
-          },
-          error: {
-            style: {
-              background: "#fff",
-              color: "#dc2626",
-              border: "1px solid #e5e7eb",
-            },
-            iconTheme: {
-              primary: "#dc2626",
-              secondary: "#fff",
-            },
-          },
-          loading: {
-            style: {
-              background: "#fff",
-              color: "#124A69",
-              border: "1px solid #e5e7eb",
-            },
-          },
-        }}
-      />
       <div className="flex justify-between items-center mb-1">
         <h2 className="text-lg font-semibold text-[#FAEDCB]">Events</h2>
         {canManageEvents && (

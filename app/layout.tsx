@@ -11,7 +11,6 @@ export const metadata = {
   title: "Didasko",
   description: "Next.js application with Google authentication",
 };
-
 export default function RootLayout({
   children,
 }: {
@@ -31,6 +30,7 @@ export default function RootLayout({
         >
           <Toaster
             position="top-center"
+            containerClassName="my-toaster-container"
             toastOptions={{
               className: "",
               style: {
