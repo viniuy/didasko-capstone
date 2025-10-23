@@ -146,7 +146,7 @@ export function AppSidebar() {
       "/main/grading/recitation",
     ],
   };
-  const [userImage, setUserImage] = useState<string | undefined>(undefined);
+  const [userImage, setUserImage] = useState<string | undefined>();
 
   useEffect(() => {
     if (!open) setIsGradingOpen(false);
@@ -266,9 +266,8 @@ export function AppSidebar() {
     role: session?.user?.role || "",
     id: session?.user?.id || "",
     department: displayDepartment,
-    image: userImage,
+    image: userImage || null,
   };
-
   return (
     <Sidebar
       collapsible="icon"

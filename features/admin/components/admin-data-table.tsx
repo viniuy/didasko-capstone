@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import {
   MoreHorizontal,
   Pencil,
@@ -1594,8 +1594,6 @@ export function AdminDataTable({
           )}
         </DialogContent>
       </Dialog>
-
-      <Toaster />
     </div>
   );
 }

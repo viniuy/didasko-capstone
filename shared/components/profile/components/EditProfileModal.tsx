@@ -19,7 +19,7 @@ interface EditProfileModalProps {
     id: string;
     name: string;
     role: string;
-    image?: string | null;
+    image: string | null;
   };
 }
 
@@ -28,7 +28,7 @@ export default function EditProfileModal({
   onClose,
   user,
 }: EditProfileModalProps) {
-  const [image, setImage] = useState(user.image || "");
+  const [image, setImage] = useState(user.image);
   const [file, setFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -142,14 +142,10 @@ export default function EditProfileModal({
         <div className="relative w-55 h-55 group mx-auto mb-4">
           <Avatar className="w-55 h-55 border-4 border-gray-200">
             <AvatarImage
-              src={image || undefined}
-              alt="Profile"
+              src={image || user.image || undefined}
               className="object-cover"
-              onError={() => setImage("")}
             />
-            <AvatarFallback className="text-2xl bg-gray-100 text-gray-600 font-medium">
-              {initial}
-            </AvatarFallback>
+            <AvatarFallback className="text-xl">{initial}</AvatarFallback>
           </Avatar>
 
           <input

@@ -27,7 +27,7 @@ import {
   Camera,
   X,
 } from "lucide-react";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
 import GradingTableHeader from "./grading-table-header";
 import GradingTableRow from "./grading-table-row";
@@ -2200,49 +2200,6 @@ export function GradingTable({
 
   return (
     <div className="min-h-screen w-full p-0">
-      <Toaster
-        toastOptions={{
-          className: "",
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          success: {
-            style: {
-              background: "#fff",
-              color: "#124A69",
-              border: "1px solid #e5e7eb",
-            },
-            iconTheme: {
-              primary: "#124A69",
-              secondary: "#fff",
-            },
-          },
-          error: {
-            style: {
-              background: "#fff",
-              color: "#dc2626",
-              border: "1px solid #e5e7eb",
-            },
-            iconTheme: {
-              primary: "#dc2626",
-              secondary: "#fff",
-            },
-          },
-          loading: {
-            style: {
-              background: "#fff",
-              color: "#124A69",
-              border: "1px solid #e5e7eb",
-            },
-          },
-        }}
-      />
       <div className="max-w-6xl mx-auto">
         <HeaderSection
           courseCode={courseCode}
