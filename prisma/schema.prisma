@@ -117,12 +117,13 @@ model Class {
 }
 
 model Student {
-  id              String       @id @unique
+  id              String       @id @default(uuid())
   lastName        String
   firstName       String
   middleInitial   String?
   image           String?
   studentId       String       @unique
+  rfid_id         Int?         @unique
   grades          Grade[]
   attendance      Attendance[]
   coursesEnrolled Course[]     @relation("StudentCourses")

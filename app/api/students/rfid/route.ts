@@ -6,6 +6,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { rfidUid } = body as RfidScanInput;
+    const rfid_id = parseInt(rfidUid, 10);
 
     if (!rfidUid) {
       return NextResponse.json(
@@ -14,11 +15,9 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("Scanning RFID:", rfidUid);
-
     // Find student by ID (which serves as RFID UID)
     const student = await prisma.student.findUnique({
-      where: { id: rfidUid },
+      where: { rfid_id: rfid_id },
       include: {
         coursesEnrolled: {
           select: {

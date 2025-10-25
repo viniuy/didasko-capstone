@@ -86,15 +86,21 @@ export async function POST(request: Request) {
       middleInitial,
       image,
       studentId,
-      id, // Custom ID for RFID
+      rfid_id: rfid_id_raw,
       courseId,
-    } = body as StudentCreateInput & { id?: string };
+    } = body as StudentCreateInput & { rfid_id?: string | number };
+
+    // Parse rfid_id to integer if provided
+    const rfid_id =
+      rfid_id_raw !== undefined && rfid_id_raw !== null
+        ? parseInt(String(rfid_id_raw), 10)
+        : undefined;
 
     console.log("Creating student:", {
       lastName,
       firstName,
       studentId,
-      id,
+      rfid_id,
       courseId,
     });
 
@@ -121,13 +127,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if custom ID already exists (if provided)
-    if (id) {
-      const existingCustomId = await prisma.student.findUnique({
-        where: { id },
+    // Check if rfid_id already exists (if provided)
+    if (rfid_id !== undefined && !isNaN(rfid_id)) {
+      const existingRfid = await prisma.student.findUnique({
+        where: { rfid_id },
       });
 
-      if (existingCustomId) {
+      if (existingRfid) {
         return NextResponse.json(
           { error: "RFID UID already registered to another student" },
           { status: 409 }
@@ -144,9 +150,9 @@ export async function POST(request: Request) {
       studentId,
     };
 
-    // If custom ID is provided, use it
-    if (id) {
-      studentData.id = id;
+    // If rfid_id is provided, add it to the data
+    if (rfid_id !== undefined && !isNaN(rfid_id)) {
+      studentData.rfid_id = rfid_id;
     }
 
     // If courseId is provided, connect the student to the course

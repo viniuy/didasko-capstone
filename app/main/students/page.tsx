@@ -19,6 +19,8 @@ interface Student {
   middleInitial: string;
   studentImage: string | null;
   studentId: string;
+  id?: string;
+  rfid_id?: string | null;
 }
 
 interface FormData {
@@ -30,7 +32,6 @@ interface FormData {
 }
 
 export default function StudentsPage() {
-  // Simulate scanning RFID card
   const [uuid, setUuid] = React.useState("");
   const [isScanning, setIsScanning] = React.useState(false);
   const [hasScanned, setHasScanned] = React.useState(false);
@@ -44,39 +45,105 @@ export default function StudentsPage() {
     studentId: "",
   });
   const [student, setStudent] = React.useState<Student | null>(null);
+  const [students, setStudents] = React.useState<Student[]>([]);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [filteredStudents, setFilteredStudents] = React.useState<Student[]>([]);
+  const [showAddManual, setShowAddManual] = React.useState(false);
+  const [selectedStudentForRfid, setSelectedStudentForRfid] =
+    React.useState<Student | null>(null);
   const rfidInputRef = React.useRef<HTMLInputElement>(null);
   const scanTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  // Handle scan button click
+  React.useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  React.useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredStudents(students);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = students.filter(
+        (s) =>
+          s.firstName.toLowerCase().includes(query) ||
+          s.lastName.toLowerCase().includes(query) ||
+          s.studentId.toLowerCase().includes(query) ||
+          `${s.firstName} ${s.lastName}`.toLowerCase().includes(query)
+      );
+      setFilteredStudents(filtered);
+    }
+  }, [searchQuery, students]);
+
+  const fetchStudents = async () => {
+    try {
+      const response = await fetch("/api/students");
+      if (response.ok) {
+        const data = await response.json();
+
+        // Check if data is an array, if not handle it appropriately
+        if (Array.isArray(data)) {
+          const mappedStudents = data.map((s: any) => ({
+            uuid: s.rfid_id || s.id,
+            id: s.id,
+            rfid_id: s.rfid_id,
+            lastName: s.lastName,
+            firstName: s.firstName,
+            middleInitial: s.middleInitial || "",
+            studentImage: s.image,
+            studentId: s.studentId,
+          }));
+          setStudents(mappedStudents);
+        } else if (data && data.students && Array.isArray(data.students)) {
+          // If the API returns {students: [...]}
+          const mappedStudents = data.students.map((s: any) => ({
+            uuid: s.rfid_id || s.id,
+            id: s.id,
+            rfid_id: s.rfid_id,
+            lastName: s.lastName,
+            firstName: s.firstName,
+            middleInitial: s.middleInitial || "",
+            studentImage: s.image,
+            studentId: s.studentId,
+          }));
+          setStudents(mappedStudents);
+        } else {
+          console.error("Unexpected data format:", data);
+          setStudents([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching students:", error);
+      toast.error("Failed to load students");
+      setStudents([]);
+    }
+  };
+
   const handleScan = () => {
-    // Clear any existing timeout
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
     }
 
-    // Reset everything first
     setUuid("");
-    setStudent(null);
-    setHasScanned(false);
-    setIsEditing(false);
-    setForm({
-      lastName: "",
-      firstName: "",
-      middleInitial: "",
-      studentImage: null,
-      studentId: "",
-    });
+    if (!selectedStudentForRfid) {
+      setStudent(null);
+      setHasScanned(false);
+      setIsEditing(false);
+      setForm({
+        lastName: "",
+        firstName: "",
+        middleInitial: "",
+        studentImage: null,
+        studentId: "",
+      });
+    }
 
     setIsScanning(true);
-    // Focus the hidden input to capture RFID input
     if (rfidInputRef.current) {
       rfidInputRef.current.focus();
     }
   };
 
-  // Handle cancel scan
   const handleCancelScan = () => {
-    // Clear any existing timeout
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
     }
@@ -84,95 +151,95 @@ export default function StudentsPage() {
     setIsScanning(false);
     setUuid("");
 
-    // Clear the RFID input field
     if (rfidInputRef.current) {
       rfidInputRef.current.value = "";
     }
   };
 
-  // Handle RFID input from keyboard-based reader
   const handleRfidInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
-    // Clear any existing timeout
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
     }
 
-    // If this is a new scan (input length is 1 and we weren't scanning), start fresh
     if (value.length === 1 && !isScanning) {
       setUuid(value);
       setIsScanning(true);
       return;
     }
 
-    // If we're scanning, continue building the UID
     if (isScanning) {
       setUuid(value);
 
-      // Check if we have a complete RFID UID (10 characters as per your update)
       if (value.length >= 10) {
-        try {
-          // Call the RFID API to check if student exists
-          const response = await fetch("/api/students/rfid", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ rfidUid: value }),
-          });
+        // If we're assigning RFID to a selected student
+        if (selectedStudentForRfid) {
+          const loadingToast = toast.loading(
+            `Assigning RFID "${value}" to ${selectedStudentForRfid.firstName} ${selectedStudentForRfid.lastName}...`
+          );
 
-          const result = await response.json();
+          setTimeout(async () => {
+            try {
+              const res = await fetch("/api/students/rfid/assign", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  rfid: parseInt(value, 10),
+                  studentId: selectedStudentForRfid.id,
+                }),
+              });
 
-          if (result.found && result.student) {
-            // Student found - convert to the format expected by the UI
-            const foundStudent = {
-              uuid: result.student.id, // Use the student's id as RFID UID
-              lastName: result.student.lastName,
-              firstName: result.student.firstName,
-              middleInitial: result.student.middleInitial || "",
-              studentImage: result.student.image,
-              studentId: result.student.studentId,
-            };
-            setStudent(foundStudent);
+              const data = await res.json();
+              toast.dismiss(loadingToast);
 
-            // Pre-fill the form with existing student data
-            setForm({
-              lastName: foundStudent.lastName,
-              firstName: foundStudent.firstName,
-              middleInitial: foundStudent.middleInitial,
-              studentImage: null, // Clear image for editing
-              studentId: foundStudent.studentId,
-            });
+              if (!res.ok)
+                throw new Error(data.error || "Failed to assign RFID");
 
-            setHasScanned(true);
-            setIsEditing(true); // Set to editing mode since student exists
-          } else {
-            // No student found
-            setStudent(null);
-            setHasScanned(true);
-          }
-        } catch (error) {
-          console.error("Error scanning RFID:", error);
-          setStudent(null);
-          setHasScanned(true);
+              setSelectedStudentForRfid((prev) =>
+                prev ? { ...prev, rfid_id: String(value) } : prev
+              );
+              setStudents((prevStudents) =>
+                prevStudents.map((s) =>
+                  s.id === selectedStudentForRfid.id
+                    ? { ...s, rfid_id: String(value) }
+                    : s
+                )
+              );
+              toast.success(
+                `RFID "${value}" successfully assigned to ${selectedStudentForRfid.firstName}!`,
+                { duration: 3000 }
+              );
+
+              setUuid(value);
+              setHasScanned(true);
+            } catch (err: any) {
+              toast.dismiss(loadingToast);
+              toast.error(err.message || "Something went wrong.", {
+                duration: 3000,
+              });
+            } finally {
+              setIsScanning(false);
+              if (rfidInputRef.current) rfidInputRef.current.value = "";
+            }
+          }, 2000);
+
+          return;
         }
 
         setIsScanning(false);
 
-        // Clear the input field after processing the scan
         if (rfidInputRef.current) {
           rfidInputRef.current.value = "";
         }
       } else {
-        // Set a timeout to reset scanning state if no more input comes in
         scanTimeoutRef.current = setTimeout(() => {
           setIsScanning(false);
           setUuid("");
           if (rfidInputRef.current) {
             rfidInputRef.current.value = "";
           }
-        }, 1000); // 1 second timeout
+        }, 1000);
       }
     }
   };
@@ -181,14 +248,12 @@ export default function StudentsPage() {
     const { name, value, files } = e.target;
 
     if (files && files[0]) {
-      // Handle image file
       const file = files[0];
       setForm((prev) => ({
         ...prev,
         [name]: file,
       }));
     } else {
-      // Handle text input
       setForm((prev) => ({
         ...prev,
         [name]: value,
@@ -201,34 +266,27 @@ export default function StudentsPage() {
     setIsSubmitting(true);
 
     try {
-      // Handle image upload first if there's an image
       let imageUrl = null;
       if (form.studentImage) {
-        // For now, we'll just use a placeholder. In a real app, you'd upload to a service like Cloudinary
         imageUrl = `data:${form.studentImage.type};base64,${await fileToBase64(
           form.studentImage
         )}`;
       } else if (isEditing && student && student.studentImage) {
-        // Keep existing image if no new one is selected during editing
         imageUrl = student.studentImage;
       }
 
-      // Create student data
       const studentData = {
         lastName: form.lastName,
         firstName: form.firstName,
         middleInitial: form.middleInitial || undefined,
         image: imageUrl,
         studentId: form.studentId,
-        // Use the scanned RFID UID as the student's ID
-        id: uuid,
+        rfid_id: uuid || undefined,
       };
 
-      // Call the students API
       let response;
-      if (isEditing) {
-        // Update existing student
-        response = await fetch(`/api/students/${uuid}`, {
+      if (isEditing && student?.id) {
+        response = await fetch(`/api/students/${student.id}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -236,7 +294,6 @@ export default function StudentsPage() {
           body: JSON.stringify(studentData),
         });
       } else {
-        // Create new student
         response = await fetch("/api/students", {
           method: "POST",
           headers: {
@@ -252,7 +309,8 @@ export default function StudentsPage() {
         console.log(`Student ${action} successfully:`, result);
         toast.success(`Student ${action} successfully!`);
 
-        // Reset form and states
+        await fetchStudents();
+
         setForm({
           lastName: "",
           firstName: "",
@@ -264,6 +322,8 @@ export default function StudentsPage() {
         setStudent(null);
         setHasScanned(false);
         setIsEditing(false);
+        setShowAddManual(false);
+        setSelectedStudentForRfid(null);
       } else {
         const errorData = await response.json();
         const action = isEditing ? "updating" : "registering";
@@ -278,14 +338,12 @@ export default function StudentsPage() {
     }
   };
 
-  // Helper function to convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
         if (typeof reader.result === "string") {
-          // Extract base64 part from data URL
           const base64 = reader.result.split(",")[1];
           resolve(base64);
         } else {
@@ -297,7 +355,6 @@ export default function StudentsPage() {
   };
 
   const handleNewScan = () => {
-    // Clear any existing timeout
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
     }
@@ -306,6 +363,8 @@ export default function StudentsPage() {
     setStudent(null);
     setHasScanned(false);
     setIsEditing(false);
+    setShowAddManual(false);
+    setSelectedStudentForRfid(null);
     setForm({
       lastName: "",
       firstName: "",
@@ -314,10 +373,39 @@ export default function StudentsPage() {
       studentId: "",
     });
 
-    // Clear the RFID input field
     if (rfidInputRef.current) {
       rfidInputRef.current.value = "";
     }
+  };
+
+  const handleSelectStudentForRfid = (selectedStudent: Student) => {
+    setSelectedStudentForRfid(selectedStudent);
+    setStudent(selectedStudent);
+    setIsEditing(true);
+    setForm({
+      lastName: selectedStudent.lastName,
+      firstName: selectedStudent.firstName,
+      middleInitial: selectedStudent.middleInitial,
+      studentImage: null,
+      studentId: selectedStudent.studentId,
+    });
+    setShowAddManual(false);
+    handleScan();
+  };
+
+  const handleAddManualStudent = () => {
+    setShowAddManual(true);
+    setHasScanned(true);
+    setStudent(null);
+    setIsEditing(false);
+    setSelectedStudentForRfid(null);
+    setForm({
+      lastName: "",
+      firstName: "",
+      middleInitial: "",
+      studentImage: null,
+      studentId: "",
+    });
   };
 
   return (
@@ -338,14 +426,76 @@ export default function StudentsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto pb-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
-              {/* Scan RFID Card */}
-              <Card>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+              <Card className="lg:col-span-1">
                 <CardHeader>
-                  <CardTitle>Scan RFID</CardTitle>
+                  <CardTitle>Student Directory</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="search">Search Students</Label>
+                    <Input
+                      id="search"
+                      placeholder="Search by name or student ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleAddManualStudent}
+                    className="w-full bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                  >
+                    Add Student (No RFID)
+                  </Button>
+
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                    {filteredStudents.length > 0 ? (
+                      filteredStudents.map((s) => (
+                        <div
+                          key={s.id || s.uuid}
+                          className="p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => handleSelectStudentForRfid(s)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <p className="font-semibold">
+                                {s.lastName}, {s.firstName} {s.middleInitial}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                ID: {s.studentId}
+                              </p>
+                              {s.rfid_id ? (
+                                <p className="text-xs text-green-600 mt-1">
+                                  ✓ RFID Assigned
+                                </p>
+                              ) : (
+                                <p className="text-xs text-orange-600 mt-1">
+                                  ⚠ No RFID
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No students found
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-1">
+                <CardHeader>
+                  <CardTitle>
+                    {selectedStudentForRfid
+                      ? `Assign RFID to ${selectedStudentForRfid.firstName} ${selectedStudentForRfid.lastName}`
+                      : "Scan RFID"}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Hidden input for RFID reader */}
                   <input
                     ref={rfidInputRef}
                     type="text"
@@ -393,19 +543,21 @@ export default function StudentsPage() {
                     <div className="space-y-4">
                       <div className="p-4 bg-muted/50 rounded-lg">
                         <h3 className="text-lg font-semibold mb-10">
-                          Student Found
+                          {selectedStudentForRfid
+                            ? "Assign RFID"
+                            : "Student Found"}
                         </h3>
 
-                        {/* Show the pre-filled form for editing */}
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="studentId">Student ID </Label>
+                            <Label htmlFor="studentId">Student ID</Label>
                             <Input
                               id="studentId"
                               name="studentId"
                               value={form.studentId}
                               onChange={handleChange}
                               required
+                              disabled={selectedStudentForRfid !== null}
                             />
                           </div>
                           <div className="space-y-2">
@@ -416,6 +568,7 @@ export default function StudentsPage() {
                               value={form.lastName}
                               onChange={handleChange}
                               required
+                              disabled={selectedStudentForRfid !== null}
                             />
                           </div>
                           <div className="space-y-2">
@@ -426,6 +579,7 @@ export default function StudentsPage() {
                               value={form.firstName}
                               onChange={handleChange}
                               required
+                              disabled={selectedStudentForRfid !== null}
                             />
                           </div>
                           <div className="space-y-2">
@@ -437,6 +591,7 @@ export default function StudentsPage() {
                               name="middleInitial"
                               value={form.middleInitial}
                               onChange={handleChange}
+                              disabled={selectedStudentForRfid !== null}
                             />
                           </div>
                           <div className="space-y-2">
@@ -449,17 +604,36 @@ export default function StudentsPage() {
                               onChange={handleChange}
                             />
                           </div>
+
+                          {selectedStudentForRfid && uuid && (
+                            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <p className="text-sm text-green-800">
+                                ✓ RFID scanned:{" "}
+                                <span className="font-mono">{uuid}</span>
+                              </p>
+                            </div>
+                          )}
+
                           <div className="flex gap-2">
                             <Button
-                              type="submit"
+                              onClick={handleSubmit}
                               className="flex-1 bg-[#124A69] hover:bg-[#0a2f42] text-white"
-                              disabled={isSubmitting}
+                              disabled={
+                                isSubmitting ||
+                                (selectedStudentForRfid !== null && !uuid)
+                              }
                             >
                               {isSubmitting ? (
                                 <div className="flex items-center gap-2">
                                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                  {isEditing ? "Updating..." : "Registering..."}
+                                  {selectedStudentForRfid
+                                    ? "Assigning RFID..."
+                                    : isEditing
+                                    ? "Updating..."
+                                    : "Registering..."}
                                 </div>
+                              ) : selectedStudentForRfid ? (
+                                "Assign RFID"
                               ) : isEditing ? (
                                 "Update Student"
                               ) : (
@@ -467,30 +641,35 @@ export default function StudentsPage() {
                               )}
                             </Button>
                             <Button
-                              type="button"
                               variant="outline"
                               onClick={handleNewScan}
                               disabled={isSubmitting}
                               className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
                             >
-                              Scan New ID
+                              Cancel
                             </Button>
                           </div>
-                        </form>
+                        </div>
                       </div>
                     </div>
                   ) : hasScanned && !student ? (
                     <div className="space-y-4">
                       <div className="p-4 bg-muted/50 rounded-lg">
                         <h3 className="text-lg font-semibold mb-3">
-                          {isEditing ? "Edit Student" : "Register New Student"}
+                          {showAddManual
+                            ? "Add New Student"
+                            : isEditing
+                            ? "Edit Student"
+                            : "Register New Student"}
                         </h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                          {isEditing
+                          {showAddManual
+                            ? "Fill in the student details. RFID can be assigned later."
+                            : isEditing
                             ? `Editing student with RFID UID "${uuid}"`
                             : `RFID UID "${uuid}" is not registered. Please fill in the student details below.`}
                         </p>
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="space-y-4">
                           <div className="space-y-2">
                             <Label htmlFor="studentId">
                               Student ID <span className="text-red-500">*</span>
@@ -554,51 +733,53 @@ export default function StudentsPage() {
                           </div>
                           <div className="flex gap-2">
                             <Button
-                              type="submit"
+                              onClick={handleSubmit}
                               className="flex-1 bg-[#124A69] hover:bg-[#0a2f42] text-white"
                               disabled={isSubmitting}
                             >
                               {isSubmitting ? (
                                 <div className="flex items-center gap-2">
                                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                  Registering...
+                                  {showAddManual
+                                    ? "Adding..."
+                                    : "Registering..."}
                                 </div>
+                              ) : showAddManual ? (
+                                "Add Student"
                               ) : (
                                 "Register Student"
                               )}
                             </Button>
                             <Button
-                              type="button"
                               variant="outline"
                               onClick={handleNewScan}
                               disabled={isSubmitting}
                               className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
                             >
-                              Scan New ID
+                              Cancel
                             </Button>
                           </div>
-                        </form>
+                        </div>
                       </div>
                     </div>
                   ) : (
                     <div className="p-4 bg-muted/50 rounded-lg">
                       <p className="text-sm text-muted-foreground text-center">
-                        Click "Scan ID" to listen for RFID input and check if
-                        the student is registered.
+                        {selectedStudentForRfid
+                          ? `Click "Scan ID" to assign an RFID to ${selectedStudentForRfid.firstName} ${selectedStudentForRfid.lastName}`
+                          : 'Click "Scan ID" to listen for RFID input and check if the student is registered.'}
                       </p>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* ID Preview Card */}
-              <Card className="w-120">
+              <Card className="w-120 lg:col-span-1">
                 <CardHeader>
                   <CardTitle>ID Preview</CardTitle>
                 </CardHeader>
                 <CardContent className="w-120">
                   <div className="bg-white border-2 border-gray-300 rounded-lg shadow-sm overflow-hidden">
-                    {/* Header with STI logo - yellow background */}
                     <div className="bg-[#FEF100] h-20 flex flex-col items-center justify-center">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-blue-600 font-bold text-lg">
@@ -607,12 +788,10 @@ export default function StudentsPage() {
                       </div>
                     </div>
 
-                    {/* Main blue body */}
                     <div className="bg-blue-800 p-6 relative">
                       <div className="text-[#FEF100] flex justify-center font-semibold text-lg mb-7 mt-2">
                         ALABANG
                       </div>
-                      {/* Photo section - centered */}{" "}
                       <div className="flex justify-center mb-7">
                         <div className="w-70 h-70 bg-gray-200 border-2 border-white shadow-md flex items-center justify-center overflow-hidden">
                           {form.studentImage ? (
@@ -634,7 +813,6 @@ export default function StudentsPage() {
                           )}
                         </div>
                       </div>
-                      {/* Name information - centered */}
                       <div className="text-center mb-6">
                         <div className="text-white font-bold text-3xl mb-1 truncate px-2">
                           {form.lastName || "________"}
@@ -644,7 +822,6 @@ export default function StudentsPage() {
                           {form.middleInitial ? "." : ""}
                         </div>
                       </div>
-                      {/* Bottom teal section with student number */}
                       <div className="bg-teal-500 rounded-lg p-3 text-center">
                         <div className="text-white font-semibold text-lg">
                           {form.studentId || "________"}
@@ -660,7 +837,6 @@ export default function StudentsPage() {
             </div>
           </div>
         </div>
-        {/* Right Sidebar */}
         <Rightsidebar />
       </main>
     </div>

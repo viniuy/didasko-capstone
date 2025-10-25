@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
-//@ts-ignore
-export async function GET(request: Request, { params }: { params }) {
-  try {
-    const { studentId } = params;
 
-    const student = await prisma.student.findUnique({
-      where: { id: studentId },
+export async function GET(request: Request, { params }: { params: any }) {
+  try {
+    const rfidId = Number(params.rfid_id);
+
+    if (isNaN(rfidId)) {
+      return NextResponse.json(
+        { error: "Invalid RFID ID format" },
+        { status: 400 }
+      );
+    }
+
+    // If rfid_id is not unique, use findFirst
+    const student = await prisma.student.findFirst({
+      where: { rfid_id: rfidId },
       include: {
         coursesEnrolled: {
           select: {
@@ -36,54 +44,79 @@ export async function GET(request: Request, { params }: { params }) {
     );
   }
 }
-//@ts-ignore
-export async function PUT(request: Request, { params }: { params }) {
+
+// ✅ PUT /api/students/[rfid_id]
+export async function PUT(request: Request, { params }: { params: any }) {
   try {
-    const { studentId } = params;
+    const currentRfidId = Number(params.rfid_id);
+
+    if (isNaN(currentRfidId)) {
+      return NextResponse.json(
+        { error: "Invalid RFID ID format" },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     const {
       lastName,
       firstName,
       middleInitial,
       image,
-      studentId: newStudentId,
+      rfid_id: newRfidId,
     } = body;
 
-    // Validate required fields
-    if (!lastName || !firstName || !newStudentId) {
+    if (!lastName || !firstName || !newRfidId) {
       return NextResponse.json(
         {
           error:
-            "Missing required fields: lastName, firstName, and studentId are required",
+            "Missing required fields: lastName, firstName, and rfid_id are required",
         },
         { status: 400 }
       );
     }
 
-    // Check if the new studentId already exists for a different student
-    if (newStudentId !== studentId) {
-      const existingStudent = await prisma.student.findUnique({
-        where: { studentId: newStudentId },
+    const numericNewRfid = Number(newRfidId);
+    if (isNaN(numericNewRfid)) {
+      return NextResponse.json(
+        { error: "New RFID ID must be an integer" },
+        { status: 400 }
+      );
+    }
+
+    // Check if the new RFID already exists for another student
+    if (numericNewRfid !== currentRfidId) {
+      const existingStudent = await prisma.student.findFirst({
+        where: { rfid_id: numericNewRfid },
       });
 
       if (existingStudent) {
         return NextResponse.json(
-          { error: "Student ID already exists" },
+          { error: "RFID ID already exists for another student" },
           { status: 409 }
         );
       }
     }
 
-    // Update the student
-    const updatedStudent = await prisma.student.update({
-      where: { id: studentId },
+    // Update the student (updateMany allows updating by non-unique fields)
+    const updatedStudent = await prisma.student.updateMany({
+      where: { rfid_id: currentRfidId },
       data: {
         lastName,
         firstName,
         middleInitial,
         image: image || null,
-        studentId: newStudentId,
+        rfid_id: numericNewRfid,
       },
+    });
+
+    if (updatedStudent.count === 0) {
+      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    // Fetch and return the updated record
+    const refreshedStudent = await prisma.student.findFirst({
+      where: { rfid_id: numericNewRfid },
       include: {
         coursesEnrolled: {
           select: {
@@ -96,8 +129,7 @@ export async function PUT(request: Request, { params }: { params }) {
       },
     });
 
-    console.log("Updated student:", updatedStudent);
-    return NextResponse.json(updatedStudent);
+    return NextResponse.json(refreshedStudent);
   } catch (error) {
     console.error("Error updating student:", error);
 
@@ -110,7 +142,7 @@ export async function PUT(request: Request, { params }: { params }) {
       }
       if (error.code === "P2002") {
         return NextResponse.json(
-          { error: "Student ID already exists" },
+          { error: "RFID ID already exists" },
           { status: 409 }
         );
       }

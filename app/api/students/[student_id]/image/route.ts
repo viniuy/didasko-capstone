@@ -10,12 +10,12 @@ export async function PUT(request: Request, { params }: { params }) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { studentId } = await Promise.resolve(params);
+    const { rfid_id } = await Promise.resolve(params);
     const { imageUrl } = await request.json();
 
     // Update the student's image in the database
     const updatedStudent = await prisma.student.update({
-      where: { id: studentId },
+      where: { id: rfid_id },
       data: { image: imageUrl },
     });
 
