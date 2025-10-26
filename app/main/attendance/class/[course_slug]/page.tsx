@@ -59,11 +59,6 @@ export default function ClassAttendancePage({
             <Header />
 
             <div className="flex-1 overflow-y-auto pb-6">
-              <h2 className="pl-2 pb-1 text-2xl font-bold text-muted-foreground">
-                Your Schedule
-              </h2>
-              <Schedule courseSlug={course_slug} semester={course?.semester} />
-
               <div className="mt-6">
                 <Studentlist courseSlug={course_slug} />
               </div>

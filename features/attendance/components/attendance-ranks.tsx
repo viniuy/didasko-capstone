@@ -136,9 +136,11 @@ export default function AttendanceLeaderboard() {
               className={`${bgColor} text-white rounded-lg shadow-md p-4 flex flex-col justify-between`}
             >
               <div>
-                <h2 className="text-2xl font-bold uppercase">{cls.title}</h2>
+                <h2 className="text-2xl text-black font-bold uppercase">
+                  {cls.title}
+                </h2>
                 <div className="flex items-center justify-between">
-                  <p className="text-xl font-medium opacity-90">
+                  <p className="text-xl font-medium text-black opacity-90">
                     {cls.section}
                   </p>
                   <div className="relative">
@@ -150,7 +152,7 @@ export default function AttendanceLeaderboard() {
                 </div>
               </div>
 
-              <p className="text-sm -mt-3 text-gray-100 font-semibold opacity-90">
+              <p className="text-sm -mt-3 text-black opacity-90">
                 {cls.attendanceRate}% attendance rate
               </p>
             </Card>

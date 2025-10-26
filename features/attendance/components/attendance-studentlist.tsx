@@ -600,17 +600,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return record;
   };
 
-  // Get attendance status for the selected date
-  const getStatusForDate = (
-    student: Student,
-    selectedDate: string
-  ): AttendanceStatusWithNotSet => {
-    const record = student.attendanceRecords.find(
-      (record) => record.date === selectedDate
-    );
-    return record ? record.status : "NOT_SET";
-  };
-
   // Filter students based on all filters
   const filteredStudents = useMemo(() => {
     return studentList
