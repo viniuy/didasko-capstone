@@ -9,7 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Scan, Plus, Edit } from "lucide-react";
+import { Scan, Plus, Edit, Upload, Download } from "lucide-react";
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import toast from "react-hot-toast";
 
 interface Student {
@@ -65,9 +73,15 @@ export default function StudentsPage() {
   // Loading state
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
+  // Import dialog state
+  const [isImportDialogOpen, setIsImportDialogOpen] = React.useState(false);
+  const [importFile, setImportFile] = React.useState<File | null>(null);
+  const [importPreview, setImportPreview] = React.useState<any[]>([]);
+
   // Refs
   const rfidInputRef = React.useRef<HTMLInputElement>(null);
   const scanTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Fetch students on mount
   React.useEffect(() => {
@@ -177,6 +191,123 @@ export default function StudentsPage() {
 
     if (rfidInputRef.current) {
       rfidInputRef.current.focus();
+    }
+  };
+
+  // Handle export template
+  const handleExportTemplate = () => {
+    const template = [
+      ["Student ID", "Last Name", "First Name", "Middle Initial"],
+      ["2021-00001", "Dela Cruz", "Juan", "A"],
+      ["2021-00002", "Santos", "Maria", "B"],
+    ];
+
+    const csvContent = template.map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "student_import_template.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success("Template downloaded successfully!");
+  };
+
+  // Handle file selection
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
+      toast.error("Please select a CSV file");
+      return;
+    }
+
+    setImportFile(file);
+
+    // Parse CSV for preview
+    const text = await file.text();
+    const lines = text.split("\n").filter((line) => line.trim());
+    const headers = lines[0].split(",");
+
+    const preview = lines.slice(1, 6).map((line) => {
+      const values = line.split(",");
+      return {
+        studentId: values[0]?.trim() || "",
+        lastName: values[1]?.trim() || "",
+        firstName: values[2]?.trim() || "",
+        middleInitial: values[3]?.trim() || "",
+      };
+    });
+
+    setImportPreview(preview);
+  };
+
+  // Handle import students
+  const handleImportStudents = async () => {
+    if (!importFile) {
+      toast.error("Please select a file first");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const text = await importFile.text();
+      const lines = text.split("\n").filter((line) => line.trim());
+      const dataLines = lines.slice(1); // Skip header
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const line of dataLines) {
+        const values = line.split(",");
+        const studentData = {
+          studentId: values[0]?.trim(),
+          lastName: values[1]?.trim(),
+          firstName: values[2]?.trim(),
+          middleInitial: values[3]?.trim() || undefined,
+        };
+
+        if (
+          !studentData.studentId ||
+          !studentData.lastName ||
+          !studentData.firstName
+        ) {
+          errorCount++;
+          continue;
+        }
+
+        try {
+          const response = await fetch("/api/students", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(studentData),
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast.success(`Imported ${successCount} students successfully!`);
+      if (errorCount > 0) {
+        toast.error(`${errorCount} students failed to import`);
+      }
+
+      await fetchStudents();
+      setIsImportDialogOpen(false);
+      setImportFile(null);
+      setImportPreview([]);
+    } catch (error) {
+      console.error("Error importing students:", error);
+      toast.error("Failed to import students");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -339,8 +470,6 @@ export default function StudentsPage() {
       let response;
       if (viewMode === "editing" && selectedStudent?.id) {
         // Update existing student
-        console.log(selectedStudent);
-        console.log(selectedStudent.id);
         response = await fetch(`/api/students/${selectedStudent.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -626,8 +755,8 @@ export default function StudentsPage() {
               </div>
 
               {selectedStudent?.rfid_id && (
-                <div className="p-3 bg-blue border border-blue-200 rounded-lg">
-                  <p className="text-sm text-[#124A69]">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
                     Current RFID:{" "}
                     <span className="font-mono font-semibold">
                       {selectedStudent.rfid_id}
@@ -707,7 +836,7 @@ export default function StudentsPage() {
             </h1>
           </div>
 
-          <div className="flex-1 overflow-y-auto pb-6">
+          <div className="flex-1 overflow-y-auto pb-6 ">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
               {/* Student Directory */}
               <Card className="lg:col-span-1">
@@ -742,7 +871,141 @@ export default function StudentsPage() {
                     Search via RFID
                   </Button>
 
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  <Dialog
+                    open={isImportDialogOpen}
+                    onOpenChange={setIsImportDialogOpen}
+                  >
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Import Students
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>Import Students</DialogTitle>
+                        <DialogDescription>
+                          Download the template, fill it with student data, and
+                          upload it back.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="space-y-4">
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleExportTemplate}
+                            variant="outline"
+                            className="flex-1"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Export Template
+                          </Button>
+                          <Button
+                            onClick={() => fileInputRef.current?.click()}
+                            variant="outline"
+                            className="flex-1"
+                          >
+                            <Upload className="w-4 h-4 mr-2" />
+                            Select File
+                          </Button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".csv"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                          />
+                        </div>
+
+                        {importFile && (
+                          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm text-blue-800">
+                              Selected:{" "}
+                              <span className="font-semibold">
+                                {importFile.name}
+                              </span>
+                            </p>
+                          </div>
+                        )}
+
+                        {importPreview.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>Preview (First 5 rows)</Label>
+                            <div className="border rounded-lg overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead className="bg-muted">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left">
+                                      Student ID
+                                    </th>
+                                    <th className="px-3 py-2 text-left">
+                                      Last Name
+                                    </th>
+                                    <th className="px-3 py-2 text-left">
+                                      First Name
+                                    </th>
+                                    <th className="px-3 py-2 text-left">
+                                      Middle Initial
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {importPreview.map((row, idx) => (
+                                    <tr key={idx} className="border-t">
+                                      <td className="px-3 py-2">
+                                        {row.studentId}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {row.lastName}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {row.firstName}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {row.middleInitial}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-4">
+                          <Button
+                            onClick={handleImportStudents}
+                            disabled={!importFile || isSubmitting}
+                            className="flex-1 bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                          >
+                            {isSubmitting ? (
+                              <div className="flex items-center gap-2">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                Importing...
+                              </div>
+                            ) : (
+                              "Import Students"
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setIsImportDialogOpen(false);
+                              setImportFile(null);
+                              setImportPreview([]);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
                     {filteredStudents.length > 0 ? (
                       filteredStudents.map((student) => (
                         <div
