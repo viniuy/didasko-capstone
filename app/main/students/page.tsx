@@ -352,7 +352,7 @@ export default function StudentsPage() {
     if (value.length >= 10) {
       // Check if RFID is already assigned
       const existingStudent = students.find(
-        (s) => s.rfid_id && s.rfid_id === value
+        (s) => s.rfid_id && String(s.rfid_id) === value
       );
 
       if (existingStudent) {
