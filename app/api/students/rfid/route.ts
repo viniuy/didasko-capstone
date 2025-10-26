@@ -6,7 +6,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { rfidUid } = body as RfidScanInput;
-    const rfid_id = parseInt(rfidUid, 10);
 
     if (!rfidUid) {
       return NextResponse.json(
@@ -15,9 +14,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find student by ID (which serves as RFID UID)
+    const rfid_id = parseInt(rfidUid, 10);
+    if (isNaN(rfid_id)) {
+      return NextResponse.json(
+        { error: "Invalid RFID UID format" },
+        { status: 400 }
+      );
+    }
+
     const student = await prisma.student.findUnique({
-      where: { rfid_id: rfid_id },
+      where: { rfid_id },
       include: {
         coursesEnrolled: {
           select: {
@@ -31,19 +37,25 @@ export async function POST(request: Request) {
     });
 
     if (student) {
-      console.log("Student found:", student);
+      console.log(
+        "RFID already assigned to:",
+        student.firstName,
+        student.lastName
+      );
       return NextResponse.json({
         found: true,
+        assigned: true,
         student,
-        message: "Student found successfully",
-      } as RfidScanResponse);
-    } else {
-      console.log("No student found for RFID:", rfidUid);
-      return NextResponse.json({
-        found: false,
-        message: "No student found with this RFID UID",
+        message: `RFID "${rfidUid}" is already assigned to ${student.firstName} ${student.lastName}`,
       } as RfidScanResponse);
     }
+
+    console.log("RFID not assigned:", rfidUid);
+    return NextResponse.json({
+      found: false,
+      assigned: false,
+      message: `RFID "${rfidUid}" is not assigned to any student.`,
+    } as RfidScanResponse);
   } catch (error) {
     console.error("Error scanning RFID:", error);
     return NextResponse.json(
