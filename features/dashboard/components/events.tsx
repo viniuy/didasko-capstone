@@ -891,7 +891,10 @@ export default function UpcomingEvents() {
 
             <div className="space-y-2">
               <Label className="text-medium">
-                Date and Time <span className="text-red-500">*</span>
+                Date and Time <span className="text-red-500">*</span>{" "}
+                <span className="text-gray-400 text-xs">
+                  no time will result into all-day event
+                </span>
               </Label>
               <div className="space-y-1">
                 <div className="flex gap-2">
@@ -1050,7 +1053,10 @@ export default function UpcomingEvents() {
 
             <div className="space-y-2">
               <Label className="text-medium">
-                Date and Time <span className="text-red-500">*</span>
+                Date and Time <span className="text-red-500">*</span>{" "}
+                <span className="text-gray-400 text-xs">
+                  no time will result into all-day event
+                </span>
               </Label>
               <div className="space-y-1">
                 <div className="flex gap-2">
