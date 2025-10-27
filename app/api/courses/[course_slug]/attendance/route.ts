@@ -132,6 +132,7 @@ export async function GET(request: Request, context: { params }) {
   }
 }
 //@ts-ignore
+//@ts-ignore
 export async function POST(request: Request, context: { params }) {
   try {
     const session = await getServerSession(authOptions);
@@ -160,79 +161,67 @@ export async function POST(request: Request, context: { params }) {
     // Process each attendance record
     const result = await prisma.$transaction(async (tx) => {
       const records = [];
+
       for (const record of attendance) {
-        // First try to find an existing record for this student on this date
         const existingRecord = await tx.attendance.findFirst({
           where: {
             studentId: record.studentId,
             courseId: course.id,
             date: {
               gte: utcDate,
-              lt: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000), // Next day
+              lt: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000),
             },
           },
         });
 
-        if (existingRecord) {
-          // Update existing record
-          const updated = await tx.attendance.update({
-            where: { id: existingRecord.id },
-            data: { status: record.status },
-            include: {
-              student: {
-                select: {
-                  id: true,
-                  lastName: true,
-                  firstName: true,
-                  middleInitial: true,
-                },
-              },
-              course: {
-                select: {
-                  id: true,
-                  code: true,
-                  title: true,
-                  section: true,
-                  slug: true,
-                  academicYear: true,
-                },
-              },
+        const dataToSave = {
+          status: record.status,
+          reason:
+            record.status.toUpperCase() === "EXCUSED"
+              ? record.reason ?? null
+              : null,
+        };
+
+        const includeFields = {
+          student: {
+            select: {
+              id: true,
+              lastName: true,
+              firstName: true,
+              middleInitial: true,
             },
-          });
-          records.push(updated);
-        } else {
-          // Create new record only if one doesn't exist
-          const created = await tx.attendance.create({
-            data: {
-              studentId: record.studentId,
-              courseId: course.id,
-              date: utcDate,
-              status: record.status,
+          },
+          course: {
+            select: {
+              id: true,
+              code: true,
+              title: true,
+              section: true,
+              slug: true,
+              academicYear: true,
             },
-            include: {
-              student: {
-                select: {
-                  id: true,
-                  lastName: true,
-                  firstName: true,
-                  middleInitial: true,
-                },
+          },
+        };
+
+        const updatedOrCreated = existingRecord
+          ? await tx.attendance.update({
+              where: { id: existingRecord.id },
+              data: dataToSave,
+              include: includeFields,
+            })
+          : await tx.attendance.create({
+              data: {
+                studentId: record.studentId,
+                courseId: course.id,
+                date: utcDate,
+                ...dataToSave,
               },
-              course: {
-                select: {
-                  id: true,
-                  code: true,
-                  title: true,
-                  section: true,
-                  slug: true,
-                  academicYear: true,
-                },
-              },
-            },
-          });
-          records.push(created);
-        }
+              include: includeFields,
+            });
+
+        records.push(updatedOrCreated);
       }
+
       return records;
     });
 

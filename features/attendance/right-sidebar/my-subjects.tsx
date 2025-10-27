@@ -24,6 +24,10 @@ interface Course {
   };
 }
 
+interface AttendanceCourseShortcutsProps {
+  excludeCourseSlug?: string;
+}
+
 const CourseShortcut = ({ course }: { course: Course }) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -69,7 +73,9 @@ const LoadingSkeleton = () => (
   </div>
 );
 
-export default function AttendanceCourseShortcuts() {
+export default function AttendanceCourseShortcuts({
+  excludeCourseSlug,
+}: AttendanceCourseShortcutsProps) {
   const { data: session, status } = useSession();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,11 +95,14 @@ export default function AttendanceCourseShortcuts() {
           }),
         ]);
 
-        // Combine and sort by semester
+        // Combine and filter out excluded course
         const allCourses = [
           ...firstSem.data.courses,
           ...secondSem.data.courses,
-        ];
+        ].filter(
+          (course) => !excludeCourseSlug || course.slug !== excludeCourseSlug
+        );
+
         setCourses(allCourses);
       } catch (error) {
         console.error("Error fetching courses:", error);
@@ -106,7 +115,7 @@ export default function AttendanceCourseShortcuts() {
     if (status === "authenticated") {
       fetchCourses();
     }
-  }, [status, session?.user?.id]);
+  }, [status, session?.user?.id, excludeCourseSlug]);
 
   const firstSemCourses = courses.filter((c) => c.semester === "1st Semester");
   const secondSemCourses = courses.filter((c) => c.semester === "2nd Semester");

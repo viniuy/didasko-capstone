@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useMemo, useEffect, Fragment, useRef } from "react";
+import {
+  useState,
+  useMemo,
+  useEffect,
+  Fragment,
+  useRef,
+  useCallback,
+  useTransition,
+} from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,7 +131,30 @@ interface Course {
   };
 }
 
+// Helper function for debouncing
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null;
+      func(...args);
+    };
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 export default function StudentList({ courseSlug }: { courseSlug: string }) {
+  const [showExcuseModal, setShowExcuseModal] = useState(false);
+  const [excuseReason, setExcuseReason] = useState("");
+  const [pendingExcusedStudent, setPendingExcusedStudent] = useState<{
+    index: number;
+    status: AttendanceStatus;
+  } | null>(null);
+
   const [studentList, setStudentList] = useState<Student[]>([]);
   const [open, setOpen] = useState(false);
   const [courseInfo, setCourseInfo] = useState<Course | null>(null);
@@ -177,6 +208,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     [key: string]: {
       studentId: string;
       status: AttendanceStatus;
+      reason?: string | null;
     };
   }>({});
   const [toastTimeout, setToastTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -230,21 +262,35 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     [studentId: string]: string;
   }>({});
 
-  // Storage key helper
+  const [isPending, startTransition] = useTransition();
+
   const getStorageKey = (name: string) =>
     courseSlug ? `attendance:${courseSlug}:${name}` : `attendance::${name}`;
 
-  // Check if there's attendance for the selected date
-  const hasAttendanceForSelectedDate = useMemo(() => {
-    if (!selectedDate) return false;
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-    return attendanceDates.some((date) => {
-      const attendanceDateStr = format(date, "yyyy-MM-dd");
-      return attendanceDateStr === dateStr;
-    });
-  }, [selectedDate, attendanceDates]);
+  const selectedDateStr = useMemo(
+    () => (selectedDate ? format(selectedDate, "yyyy-MM-dd") : null),
+    [selectedDate]
+  );
 
-  // Calculate timeout and grace period in minutes based on time difference
+  const attendanceDateSet = useMemo(() => {
+    return new Set(attendanceDates.map((d) => format(d, "yyyy-MM-dd")));
+  }, [attendanceDates]);
+
+  const hasAttendanceForSelectedDate = useMemo(() => {
+    return selectedDateStr ? attendanceDateSet.has(selectedDateStr) : false;
+  }, [selectedDateStr, attendanceDateSet]);
+
+  const studentByRfidMap = useMemo(() => {
+    const map = new Map<string, Student>();
+    studentList.forEach((student) => {
+      if (student.rfid) {
+        const normalized = student.rfid.replace(/\s+/g, "").toUpperCase();
+        map.set(normalized, student);
+      }
+    });
+    return map;
+  }, [studentList]);
+
   const attendanceTimeout = useMemo(() => {
     if (!timeIn || !timeOut || !attendanceStartTime) return 0;
 
@@ -274,51 +320,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return 5;
   }, []);
 
-  // Helper function to get current attendance status
-  const getCurrentAttendanceStatus = useMemo(() => {
-    if (!attendanceStartTime || !timeIn || !timeOut) return null;
-
-    const now = new Date();
-    const today = new Date();
-    const [inHours, inMinutes] = timeIn.split(":").map(Number);
-    const [outHours, outMinutes] = timeOut.split(":").map(Number);
-
-    const timeInDate = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      inHours,
-      inMinutes,
-      0,
-      0
-    );
-    const timeOutDate = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-      outHours,
-      outMinutes,
-      0,
-      0
-    );
-
-    const timeDiff = now.getTime() - timeInDate.getTime();
-    const minutesLate = Math.floor(timeDiff / (1000 * 60));
-    const timeoutMinutes = Math.floor(
-      (timeOutDate.getTime() - timeInDate.getTime()) / (1000 * 60)
-    );
-
-    if (minutesLate <= timeoutMinutes) {
-      return { status: "REGULAR", message: "Regular attendance period" };
-    } else if (minutesLate <= timeoutMinutes + gracePeriod) {
-      return {
-        status: "GRACE",
-        message: `Grace period (${minutesLate - timeoutMinutes} min late)`,
-      };
-    } else {
-      return { status: "LATE", message: "Late period - mark as absent" };
-    }
-  }, [attendanceStartTime, timeIn, timeOut, gracePeriod]);
+  // Continuing from Part 1...
 
   const fetchStudents = async () => {
     if (!courseSlug) return;
@@ -349,7 +351,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         status: response.data.course.status,
       });
 
-      // Fetch attendance for the selected date after getting students
       if (selectedDate) {
         await fetchAttendance(selectedDate);
       }
@@ -368,31 +369,21 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     try {
       setIsDateLoading(true);
       const dateStr = format(date, "yyyy-MM-dd");
-      console.log(
-        "Fetching attendance for date:",
-        dateStr,
-        "Original date:",
-        date.toISOString()
-      );
 
       const attendanceResponse = await axiosInstance.get<{
         attendance: AttendanceRecord[];
       }>(`/courses/${courseSlug}/attendance`, {
         params: {
           date: dateStr,
-          limit: 1000, // Increase limit to get all records
+          limit: 1000,
         },
       });
-
-      console.log("Attendance response:", attendanceResponse.data);
-      console.log("not Found:", attendanceResponse.data);
 
       const attendanceData = attendanceResponse.data.attendance;
       const attendanceMap = new Map<string, AttendanceRecord>(
         attendanceData.map((record) => [record.studentId, record])
       );
 
-      // Update the entire student list with attendance records
       setStudentList((prevStudents) =>
         prevStudents.map((student) => {
           const record = attendanceMap.get(student.id);
@@ -415,16 +406,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         })
       );
 
-      // Clear any unsaved changes when fetching new attendance
       setUnsavedChanges({});
     } catch (error) {
       console.error("Error fetching attendance:", error);
       if (axios.isAxiosError(error)) {
-        console.error("Error details:", {
-          status: error.response?.status,
-          data: error.response?.data,
-          message: error.message,
-        });
         toast.error(
           error.response?.data?.error || "Failed to fetch attendance records"
         );
@@ -453,14 +438,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (!courseSlug) return;
 
     try {
-      // Get all attendance dates for this course
       const response = await axiosInstance.get(
         `/courses/${courseSlug}/attendance/dates`
       );
 
-      console.log("Attendance dates API response:", response.data);
-
-      // Check if the response has the expected structure
       if (!response.data || !Array.isArray(response.data.dates)) {
         console.error("Invalid response structure:", response.data);
         toast.error(
@@ -469,7 +450,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         return;
       }
 
-      // Convert dates and sort them
       const uniqueDates = response.data.dates
         .map((dateStr: string) => {
           const date = new Date(dateStr);
@@ -477,8 +457,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         })
         .filter((date: Date | null): date is Date => date !== null)
         .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-
-      console.log("Unique attendance dates:", uniqueDates);
 
       setAttendanceDates(uniqueDates);
     } catch (error) {
@@ -527,7 +505,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           setShowTimeoutModal(true);
           setIsInGracePeriod(session.isInGrace || false);
 
-          // Recreate timers based on elapsed time
           if (timeIn && timeOut) {
             const today = new Date();
             const [hIn, mIn] = timeIn.split(":").map(Number);
@@ -566,7 +543,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               }, graceRemainingMs);
               setGracePeriodTimer(grace);
             } else {
-              // Already past timeout; set grace if within grace window
               const pastByMs = Math.abs(remainingMs);
               if (pastByMs < gracePeriod * 60 * 1000) {
                 setIsInGracePeriod(true);
@@ -589,7 +565,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     }
   }, [courseSlug]);
 
-  // Get attendance records for the selected date
   const getAttendanceForDate = (student: Student, date: Date | undefined) => {
     if (!date) return null;
     const dateStr = format(date, "yyyy-MM-dd");
@@ -600,15 +575,21 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return record;
   };
 
-  // Filter students based on all filters
   const filteredStudents = useMemo(() => {
+    const searchLower = searchQuery.toLowerCase();
+
     return studentList
-      .filter((student) =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
       .filter((student) => {
-        if (filters.status.length === 0) return true;
-        return filters.status.includes(student.status);
+        if (searchQuery && !student.name.toLowerCase().includes(searchLower)) {
+          return false;
+        }
+        if (
+          filters.status.length > 0 &&
+          !filters.status.includes(student.status)
+        ) {
+          return false;
+        }
+        return true;
       })
       .sort((a, b) => {
         if (!sortDate) return 0;
@@ -621,64 +602,59 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }
         return (aAttendance?.date || "").localeCompare(bAttendance?.date || "");
       });
-  }, [studentList, searchQuery, selectedDate, filters.status]);
+  }, [studentList, searchQuery, selectedDate, filters.status, sortDate]);
 
-  const totalPages = useMemo(() => {
-    const filtered = studentList
-      .filter((student) =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      .filter((student) => {
-        if (filters.status.length === 0) return true;
-        return filters.status.includes(student.status);
-      });
-    return Math.ceil(filtered.length / itemsPerPage);
-  }, [studentList, searchQuery, filters.status, itemsPerPage]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredStudents.length / itemsPerPage)),
+    [filteredStudents.length, itemsPerPage]
+  );
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(1);
-  };
+  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    startTransition(() => {
+      setSearchQuery(value);
+      setCurrentPage(1);
+    });
+  }, []);
 
-  const updateStatus = async (index: number, newStatus: AttendanceStatus) => {
+  const updateStatusContinue = async (
+    index: number,
+    newStatus: AttendanceStatus,
+    reason?: string
+  ) => {
     const actualIndex = (currentPage - 1) * itemsPerPage + index;
     const student = filteredStudents[actualIndex];
     if (!student) return;
 
-    // Check if this student is in cooldown
     if (cooldownMap[student.id]) {
       return;
     }
 
-    // Set cooldown for this student
     setCooldownMap((prev) => ({ ...prev, [student.id]: true }));
-    setIsUpdating(true); // Set updating state immediately
+    setIsUpdating(true);
 
-    // Add one day to the selected date
     const nextDay = new Date(selectedDate);
     nextDay.setDate(nextDay.getDate() + 1);
 
-    // Store the latest update
-    latestUpdateRef.current = {
+    latestUpdateRef.current = { studentId: student.id, status: newStatus };
+
+    // Build the new pending update entry immediately
+    const newPendingUpdate = {
       studentId: student.id,
       status: newStatus,
+      reason: reason ?? null,
     };
 
-    // Add to pending updates
+    // Update the state immediately
     setPendingUpdates((prev) => ({
       ...prev,
-      [student.id]: {
-        studentId: student.id,
-        status: newStatus,
-      },
+      [student.id]: newPendingUpdate,
     }));
 
-    // Clear any existing toast timeout
     if (toastTimeout) {
       clearTimeout(toastTimeout);
     }
 
-    // Show loading toast immediately
     toast.loading("Updating attendance... (feel free to add more students)", {
       id: "attendance-update",
       style: {
@@ -692,13 +668,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       },
     });
 
-    // Set a new timeout for the toast
     const timeout = setTimeout(async () => {
       try {
-        // Get the latest pending updates including the current one
-        const updates = Object.values(pendingUpdates);
+        const updates = Object.values({
+          ...pendingUpdates,
+          [student.id]: newPendingUpdate,
+        });
 
-        // Ensure the latest update is included
         if (latestUpdateRef.current) {
           const latestUpdate = latestUpdateRef.current;
           if (
@@ -719,11 +695,14 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           `/courses/${courseSlug}/attendance`,
           {
             date: nextDay.toISOString(),
-            attendance: updates,
+            attendance: updates.map((u) => ({
+              studentId: u.studentId,
+              status: u.status,
+              reason: u.reason ?? null,
+            })),
           }
         );
 
-        // Update local state immediately for better UX
         setStudentList((prev) =>
           prev.map((s) => {
             const update = updates.find((u) => u.studentId === s.id);
@@ -736,14 +715,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
         await promise;
 
-        // Update attendance records
         const records = updates.map((update) => ({
           id: crypto.randomUUID(),
           studentId: update.studentId,
           courseId: courseSlug!,
           status: update.status,
           date: format(selectedDate, "yyyy-MM-dd"),
-          reason: null,
+          reason: update.reason ?? null,
         }));
 
         setStudentList((prev) =>
@@ -760,11 +738,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           })
         );
 
-        // Clear pending updates and latest update ref after successful update
         setPendingUpdates({});
         latestUpdateRef.current = null;
 
-        // Update the loading toast to success
         toast.success(
           `Updated ${updates.length} student${updates.length > 1 ? "s" : ""}`,
           {
@@ -782,7 +758,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         );
       } catch (error) {
         console.error("Error saving attendance:", error);
-        // Revert local state on error
         setStudentList((prev) =>
           prev.map((s) => {
             const update = Object.values(pendingUpdates).find(
@@ -795,7 +770,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           })
         );
 
-        // Update the loading toast to error
         toast.error("Failed to update attendance", {
           id: "attendance-update",
           style: {
@@ -809,107 +783,90 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           },
         });
       } finally {
-        // Clear all cooldowns and updating state after API call is complete
         setCooldownMap({});
         setIsUpdating(false);
       }
-    }, 3000); // Wait 3 seconds before sending the request
+    }, 1000);
 
     setToastTimeout(timeout);
   };
 
-  // Clean up timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimeout) {
-        clearTimeout(toastTimeout);
-      }
-    };
-  }, [toastTimeout]);
-
-  const currentStudents = useMemo(() => {
-    const filtered = studentList
-      .filter((student) =>
-        student.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      .filter((student) => {
-        if (filters.status.length === 0) return true;
-        return filters.status.includes(student.status);
-      })
-      .sort((a, b) => {
-        if (!sortDate) return 0;
-        const aAttendance = getAttendanceForDate(a, selectedDate);
-        const bAttendance = getAttendanceForDate(b, selectedDate);
-        if (sortDate === "newest") {
-          return (bAttendance?.date || "").localeCompare(
-            aAttendance?.date || ""
-          );
-        }
-        return (aAttendance?.date || "").localeCompare(bAttendance?.date || "");
-      });
-
-    return filtered.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-  }, [
-    studentList,
-    searchQuery,
-    filters.status,
-    sortDate,
-    selectedDate,
-    currentPage,
-    itemsPerPage,
-  ]);
-
-  // Uploads a student image to Supabase and returns the public URL
-  const handleImageUpload = async (
-    studentId: string,
-    file: File
-  ): Promise<string | null> => {
-    if (!file) return null;
-
-    try {
-      // Use a consistent filename format like you do with user-images
-      const ext = file.name.split(".").pop() ?? "png";
-      const fileName = `${studentId}.${ext}`; // Simple format: studentId.extension
-
-      const bucket = supabase.storage.from("student-image");
-
-      const { error: uploadError } = await bucket.upload(fileName, file, {
-        cacheControl: "3600",
-        upsert: true, // This will overwrite if file already exists
-      });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL and add timestamp to bust cache
-      const { data: publicUrlData } = bucket.getPublicUrl(fileName);
-      const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
-
-      if (!publicUrlData.publicUrl) throw new Error("Failed to get public URL");
-
-      // Update local state
-      setTempImage({
-        index: studentList.findIndex((s) => s.id === studentId),
-        dataUrl: publicUrl,
-      });
-
-      // Update the student list with the new image
-      setStudentList((prev) =>
-        prev.map((s) => (s.id === studentId ? { ...s, image: publicUrl } : s))
-      );
-
-      toast.success("Image uploaded successfully");
-      return publicUrl;
-    } catch (err) {
-      console.error("Upload failed:", err);
-      toast.error("Failed to upload image");
-      return null;
+  const updateStatus = async (index: number, newStatus: AttendanceStatus) => {
+    if (newStatus === "EXCUSED") {
+      setPendingExcusedStudent({ index, status: newStatus });
+      setShowExcuseModal(true);
+      return;
     }
+
+    await updateStatusContinue(index, newStatus);
   };
 
-  // Saves the uploaded image URL to the backend API
+  useEffect(() => {
+    const timers = [
+      timeoutTimer,
+      gracePeriodTimer,
+      graceTimeoutTimer,
+      scanTimeoutRef.current,
+      batchSaveTimeoutRef.current,
+      toastTimeout,
+    ].filter(Boolean);
+
+    return () => {
+      timers.forEach((timer) => timer && clearTimeout(timer));
+    };
+  }, [timeoutTimer, gracePeriodTimer, graceTimeoutTimer, toastTimeout]);
+
+  const currentStudents = useMemo(() => {
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    return filteredStudents.slice(startIdx, startIdx + itemsPerPage);
+  }, [filteredStudents, currentPage, itemsPerPage]);
+
+  const handleImageUpload = useCallback(
+    async (studentId: string, file: File): Promise<string | null> => {
+      if (!file) return null;
+
+      try {
+        const ext = file.name.split(".").pop() ?? "png";
+        const fileName = `${studentId}.${ext}`;
+        const bucket = supabase.storage.from("student-image");
+
+        const { error: uploadError } = await bucket.upload(fileName, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = bucket.getPublicUrl(fileName);
+        const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+
+        if (!publicUrlData.publicUrl)
+          throw new Error("Failed to get public URL");
+
+        // Use startTransition for non-blocking UI updates
+        startTransition(() => {
+          setTempImage({
+            index: studentList.findIndex((s) => s.id === studentId),
+            dataUrl: publicUrl,
+          });
+          setStudentList((prev) =>
+            prev.map((s) =>
+              s.id === studentId ? { ...s, image: publicUrl } : s
+            )
+          );
+        });
+
+        toast.success("Image uploaded successfully");
+        return publicUrl;
+      } catch (err) {
+        console.error("Upload failed:", err);
+        toast.error("Failed to upload image");
+        return null;
+      }
+    },
+    [studentList]
+  );
+
   const handleSaveImageChanges = async (studentId: string): Promise<void> => {
     const student = studentList.find((s) => s.id === studentId);
     const imageUrl = student?.image;
@@ -917,14 +874,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (!imageUrl) return;
 
     try {
-      // Update via your backend API instead of directly to Supabase
       await axiosInstance.put(`/students/${studentId}/image`, {
         imageUrl: imageUrl,
       });
 
-      // Clear temporary image
       setTempImage(null);
-
       toast.success("Profile picture saved successfully");
     } catch (err) {
       console.error("Failed to save image URL to DB:", err);
@@ -947,7 +901,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
     const formattedDate = format(selectedDate, "MMMM d, yyyy");
 
-    // Create header rows
     const header = [
       ["ATTENDANCE RECORD"],
       [""],
@@ -955,40 +908,23 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       ["Course:", courseInfo?.code || ""],
       ["Section:", courseInfo?.section || ""],
       [""],
-      // Column headers
       ["Student Name", "Attendance Status"],
     ];
 
-    // Create student data rows using filtered students
     const studentRows = filteredStudents.map((student) => [
       student.name,
       student.status === "NOT_SET" ? "No Status" : student.status,
     ]);
 
-    // Combine header and data
     const ws = XLSX.utils.aoa_to_sheet([...header, ...studentRows]);
 
-    // Style configurations
-    const headerStyle = {
-      font: { bold: true, size: 14 },
-      alignment: { horizontal: "center" },
-    };
+    ws["!cols"] = [{ wch: 40 }, { wch: 20 }];
 
-    // Configure column widths
-    ws["!cols"] = [
-      { wch: 40 }, // Student Name
-      { wch: 20 }, // Attendance Status
-    ];
-
-    // Merge cells for title
-    ws["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, // Merge first row across all columns
-    ];
+    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Attendance");
 
-    // Generate filename with course and date
     const filename = `attendance_${courseInfo?.code || "course"}_${format(
       selectedDate,
       "yyyy-MM-dd"
@@ -1086,18 +1022,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     image?: string;
   }) => {
     try {
-      console.log("Adding student to course:", {
-        studentId: student.id,
-        courseId: courseSlug,
-      });
-
       const response = await axiosInstance.post(
         `/courses/${courseSlug}/students`,
         {
           studentId: student.id,
         }
       );
-      const addedStudent = response.data;
 
       const fullName = `${student.lastName}, ${student.firstName}${
         student.middleInitial ? ` ${student.middleInitial}.` : ""
@@ -1135,22 +1065,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const clearAllAttendance = async () => {
     if (!selectedDate || !courseSlug) {
-      toast.error("Please select a date before clearing attendance", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
+      toast.error("Please select a date before clearing attendance");
       return;
     }
 
     setIsClearing(true);
-    // Set cooldown for all students
+
     const allStudentCooldowns = studentList.reduce((acc, student) => {
       acc[student.id] = true;
       return acc;
@@ -1159,7 +1079,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-    // Get all attendance records for the selected date
     const recordsToDelete = studentList
       .filter((student) => student.status !== "NOT_SET")
       .map((student) => {
@@ -1168,20 +1087,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         );
         return record?.id;
       })
-      .filter((id): id is string => id !== undefined);
+      .filter((id): id is string => !!id);
 
     if (recordsToDelete.length === 0) {
-      toast.error("No attendance records to clear", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
+      toast.error("No attendance records to clear");
       setIsClearing(false);
       setCooldownMap({});
       return;
@@ -1195,28 +1104,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       }
     );
 
-    toast.promise(
-      promise,
-      {
-        loading: "Clearing attendance...",
-        success: "Attendance cleared successfully",
-        error: "Failed to clear attendance",
-      },
-      {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      }
-    );
+    toast.promise(promise, {
+      loading: "Clearing attendance...",
+      success: "Attendance cleared successfully",
+      error: "Failed to clear attendance",
+    });
 
     try {
-      // Update local state immediately for all students
       setStudentList((prev) =>
         prev.map((student) => ({
           ...student,
@@ -1230,26 +1124,18 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       await promise;
       setShowClearConfirm(false);
 
-      // Remove this date from attendanceDates so a new session can be started
-      setAttendanceDates((prev) => {
-        const dateStr = format(selectedDate, "yyyy-MM-dd");
-        return prev.filter((d) => format(d, "yyyy-MM-dd") !== dateStr);
-      });
+      setAttendanceDates((prev) =>
+        prev.filter((d) => format(d, "yyyy-MM-dd") !== dateStr)
+      );
 
-      // End any active session state and reset scanning
       setAttendanceStartTime(null);
       setShowTimeoutModal(false);
       setIsInGracePeriod(false);
-      setPendingAttendanceUpdates({});
-
-      // Reset to first page after clearing
+      setPendingUpdates({});
       setCurrentPage(1);
-
-      // Immediately allow starting a new session
       setShowTimeSetupModal(true);
     } catch (error) {
       console.error("Error clearing attendance:", error);
-      // Revert local state on error
       setStudentList((prev) =>
         prev.map((student) => ({
           ...student,
@@ -1260,38 +1146,23 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
     } finally {
       setIsClearing(false);
-      // Clear all cooldowns
       setCooldownMap({});
     }
   };
 
-  // Add useEffect to fetch attendance when date changes
   useEffect(() => {
-    if (courseSlug && selectedDate) {
-      fetchAttendance(selectedDate);
+    if (courseSlug && selectedDateStr) {
+      fetchAttendance(selectedDate!);
       fetchAttendanceDates();
     }
-  }, [selectedDate, courseSlug]);
+  }, [selectedDateStr, courseSlug]);
 
-  // Add useEffect to reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, filters.status, sortDate]);
 
-  // Add cleanup effect at the component level
-  useEffect(() => {
-    // Clean up any existing pointer-events style
-    document.body.style.removeProperty("pointer-events");
-
-    return () => {
-      document.body.style.removeProperty("pointer-events");
-    };
-  }, []);
-
-  // Add cleanup effect that runs on mount and unmount
   useEffect(() => {
     return () => {
-      // Remove all styles that Radix UI might add
       document.body.style.removeProperty("pointer-events");
       document.body.style.removeProperty("overflow");
       document.body.style.removeProperty("position");
@@ -1304,7 +1175,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     };
   }, []);
 
-  // Real-time timer effect for attendance session
   useEffect(() => {
     if (!attendanceStartTime || !showTimeoutModal) return;
 
@@ -1314,10 +1184,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       const minutesRemaining =
         attendanceTimeout - Math.floor(timeDiff / (1000 * 60));
 
-      // Force re-render for timer display
       setStudentList((prev) => [...prev]);
 
-      // Check if timeout has passed
       if (minutesRemaining <= 0 && timeoutTimer) {
         handleAttendanceTimeout();
       }
@@ -1326,19 +1194,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return () => clearInterval(interval);
   }, [attendanceStartTime, showTimeoutModal, attendanceTimeout, timeoutTimer]);
 
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutTimer) clearTimeout(timeoutTimer);
-      if (gracePeriodTimer) clearTimeout(gracePeriodTimer);
-      if (graceTimeoutTimer) clearTimeout(graceTimeoutTimer);
-      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-      if (batchSaveTimeoutRef.current)
-        clearTimeout(batchSaveTimeoutRef.current);
-    };
-  }, [timeoutTimer, gracePeriodTimer, graceTimeoutTimer]);
-
-  // Global grace countdown ticker
   useEffect(() => {
     if (!attendanceStartTime) {
       setGraceCountdown("");
@@ -1360,10 +1215,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return () => clearInterval(interval);
   }, [attendanceStartTime, graceMinutes]);
 
-  // Keyboard shortcuts for RFID input
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + R to open RFID panel
       if ((e.ctrlKey || e.metaKey) && e.key === "r") {
         e.preventDefault();
         if (attendanceStartTime) {
@@ -1371,7 +1224,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }
       }
 
-      // Ctrl/Cmd + S to save all changes
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         if (Object.keys(pendingAttendanceUpdates).length > 0) {
@@ -1389,22 +1241,18 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (!student?.image) return;
 
     try {
-      // Delete the image file from storage
       await axiosInstance.delete("/upload", {
         data: { imageUrl: student.image },
       });
 
-      // Update the database
       await axiosInstance.put(`/students/${studentId}/image`, {
         imageUrl: null,
       });
 
-      // Update local state
       setStudentList((prev) =>
         prev.map((s) => (s.id === studentId ? { ...s, image: undefined } : s))
       );
 
-      // Clear temp image if it exists for this student
       const studentIndex = studentList.findIndex((s) => s.id === studentId);
       if (tempImage?.index === studentIndex) {
         setTempImage(null);
@@ -1414,7 +1262,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     } catch (error) {
       console.error("Error removing image:", error);
       toast.error("Failed to remove profile picture");
-      throw error; // Re-throw to let StudentCard handle the error state
+      throw error;
     }
   };
 
@@ -1425,28 +1273,15 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const startAttendance = async () => {
     if (!selectedDate || !courseSlug) {
-      toast.error("Please select a date before starting attendance", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
+      toast.error("Please select a date before starting attendance");
       return;
     }
 
-    // Show time setup modal first
     setShowTimeSetupModal(true);
   };
 
   const confirmAttendanceStart = async () => {
     try {
-      const dateStr = format(selectedDate!, "yyyy-MM-dd");
-
       const started = new Date();
       setAttendanceStartTime(started);
       setIsInGracePeriod(true);
@@ -1462,7 +1297,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         })
       );
 
-      // Set grace period timer
       const grace = setTimeout(() => {
         setIsInGracePeriod(false);
         toast.success(
@@ -1494,129 +1328,125 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
     } catch {}
 
-    // After grace period, all late arrivals will be marked as LATE
     toast.success("Grace period ended. Late arrivals will be marked as LATE");
     setIsInGracePeriod(false);
 
-    // Clear grace period timer
     if (gracePeriodTimer) {
       clearTimeout(gracePeriodTimer);
       setGracePeriodTimer(null);
     }
   };
 
-  const processRfidAttendance = async (rfid: string) => {
-    if (!attendanceStartTime || !selectedDate) {
-      toast.error("Attendance session not started");
-      return;
-    }
+  const processRfidAttendance = useCallback(
+    async (rfid: string) => {
+      if (!attendanceStartTime || !selectedDate || isProcessingRfid) return;
 
-    if (isProcessingRfid) {
-      return; // Prevent duplicate processing
-    }
+      setIsProcessingRfid(true);
 
-    setIsProcessingRfid(true);
+      try {
+        const normalized = rfid.replace(/\s+/g, "").toUpperCase();
+        let student = studentByRfidMap.get(normalized); // O(1) lookup
 
-    try {
-      const norm = (v: string | undefined) =>
-        (v || "").replace(/\s+/g, "").toUpperCase();
-      const incoming = norm(rfid);
-      let student = studentList.find((s) => norm(s.rfid) === incoming);
-
-      if (!student) {
-        try {
-          const res = await axiosInstance.post("/students/rfid", {
-            rfidUid: rfid,
-          });
-          const resolved = res.data?.student;
-          if (resolved?.id) {
-            const matchById = studentList.find((s) => s.id === resolved.id);
-            if (matchById) {
-              if (!matchById.rfid || norm(matchById.rfid) !== incoming) {
-                setStudentList((prev) =>
-                  prev.map((s) => (s.id === matchById.id ? { ...s, rfid } : s))
-                );
+        if (!student) {
+          try {
+            const res = await axiosInstance.post("/students/rfid", {
+              rfidUid: rfid,
+            });
+            const resolved = res.data?.student;
+            if (resolved?.id) {
+              const matchById = studentList.find((s) => s.id === resolved.id);
+              if (matchById) {
+                if (
+                  !matchById.rfid ||
+                  matchById.rfid.replace(/\s+/g, "").toUpperCase() !==
+                    normalized
+                ) {
+                  setStudentList((prev) =>
+                    prev.map((s) =>
+                      s.id === matchById.id ? { ...s, rfid } : s
+                    )
+                  );
+                }
+                student = matchById;
               }
-              student = matchById;
             }
-          }
-        } catch {}
-      }
-
-      if (!student) {
-        toast.error("Student not found in this course for this RFID", {
-          duration: 2000,
-        });
-        return;
-      }
-
-      // Check if student already has attendance marked
-      if (student.status !== "NOT_SET") {
-        toast.error(`${student.name} already marked as ${student.status}`, {
-          duration: 2000,
-        });
-        return;
-      }
-
-      // Determine status based ONLY on grace period
-      const status: AttendanceStatus = isInGracePeriod ? "PRESENT" : "LATE";
-      const now = new Date();
-
-      // Update local state immediately
-      setStudentList((prev) =>
-        prev.map((s) => (s.id === student.id ? { ...s, status } : s))
-      );
-
-      // Save local time-in
-      const timeInIso = now.toISOString();
-      setLocalTimeInMap((prev) => ({ ...prev, [student.id]: timeInIso }));
-
-      // Add to pending updates
-      setPendingAttendanceUpdates((prev) => ({
-        ...prev,
-        [student.id]: {
-          status,
-          timestamp: now,
-          rfid,
-        },
-      }));
-
-      // Show success toast ONCE
-      const statusText = status === "PRESENT" ? "Present" : "Late";
-      toast.success(`${student.name} marked as ${statusText}`, {
-        duration: 2000,
-        id: `rfid-${student.id}`, // Unique ID prevents duplicate toasts
-        style: {
-          background: status === "LATE" ? "#fef3c7" : "#f0fdf4",
-          color: status === "LATE" ? "#92400e" : "#166534",
-          border: status === "LATE" ? "1px solid #f59e0b" : "1px solid #22c55e",
-        },
-      });
-
-      // Clear RFID input
-      setRfidInput("");
-      setIsScanning(false);
-
-      // Debounce batch save - ONLY ONE TIMER
-      if (batchSaveTimeoutRef.current) {
-        clearTimeout(batchSaveTimeoutRef.current);
-      }
-
-      batchSaveTimeoutRef.current = setTimeout(() => {
-        const updates = pendingUpdatesRef.current;
-        if (Object.keys(updates).length > 0) {
-          batchUpdateAttendance();
+          } catch {}
         }
-      }, 2000); // Save after 2 seconds of inactivity
-    } catch (error) {
-      console.error("RFID processing error:", error);
-      toast.error("Failed to process RFID", { duration: 2000 });
-    } finally {
-      setIsProcessingRfid(false);
-    }
-  };
 
-  // Handle RFID input from keyboard-based reader
+        if (!student) {
+          toast.error("Student not found in this course for this RFID", {
+            duration: 2000,
+          });
+          return;
+        }
+
+        if (student.status !== "NOT_SET") {
+          toast.error(`${student.name} already marked as ${student.status}`, {
+            duration: 2000,
+          });
+          return;
+        }
+
+        const status: AttendanceStatus = isInGracePeriod ? "PRESENT" : "LATE";
+        const now = new Date();
+
+        // Use startTransition for non-blocking updates
+        startTransition(() => {
+          setStudentList((prev) =>
+            prev.map((s) => (s.id === student!.id ? { ...s, status } : s))
+          );
+          setLocalTimeInMap((prev) => ({
+            ...prev,
+            [student!.id]: now.toISOString(),
+          }));
+          setPendingAttendanceUpdates((prev) => ({
+            ...prev,
+            [student!.id]: { status, timestamp: now, rfid },
+          }));
+        });
+
+        const statusText = status === "PRESENT" ? "Present" : "Late";
+        toast.success(`${student.name} marked as ${statusText}`, {
+          duration: 2000,
+          id: `rfid-${student.id}`,
+          style: {
+            background: status === "LATE" ? "#fef3c7" : "#f0fdf4",
+            color: status === "LATE" ? "#92400e" : "#166534",
+            border:
+              status === "LATE" ? "1px solid #f59e0b" : "1px solid #22c55e",
+          },
+        });
+
+        setRfidInput("");
+        setIsScanning(false);
+
+        if (batchSaveTimeoutRef.current) {
+          clearTimeout(batchSaveTimeoutRef.current);
+        }
+
+        batchSaveTimeoutRef.current = setTimeout(() => {
+          const updates = pendingUpdatesRef.current;
+          if (Object.keys(updates).length > 0) {
+            batchUpdateAttendance();
+          }
+        }, 2000);
+      } catch (error) {
+        console.error("RFID processing error:", error);
+        toast.error("Failed to process RFID", { duration: 2000 });
+      } finally {
+        setIsProcessingRfid(false);
+      }
+    },
+    [
+      attendanceStartTime,
+      selectedDate,
+      isProcessingRfid,
+      studentByRfidMap,
+      isInGracePeriod,
+      studentList,
+    ]
+  );
+
   const handleRfidInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
@@ -1633,28 +1463,26 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (isScanning) {
       setRfidInput(value);
 
-      // Process when we have complete RFID (10 characters)
       if (value.length >= 10) {
         await processRfidAttendance(value);
         setIsScanning(false);
 
-        // Clear input immediately
         if (rfidInputRef.current) {
           rfidInputRef.current.value = "";
         }
         setRfidInput("");
       } else {
-        // Reset if no more input after 500ms (faster than 1s)
         scanTimeoutRef.current = setTimeout(() => {
           setIsScanning(false);
           setRfidInput("");
           if (rfidInputRef.current) {
             rfidInputRef.current.value = "";
           }
-        }, 500); // Reduced from 1000ms
+        }, 500);
       }
     }
   };
+
   const batchUpdateAttendance = async (overrideUpdates?: {
     [studentId: string]: {
       status: AttendanceStatus;
@@ -1669,7 +1497,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     try {
       const dateStr = format(selectedDate!, "yyyy-MM-dd");
 
-      // Send batch update to API (no await - fire and forget for smoother UX)
       const updatePromise = axiosInstance.post(
         `/courses/${courseSlug}/attendance/batch`,
         {
@@ -1682,10 +1509,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }
       );
 
-      // Clear pending updates immediately for smoother UX
       setPendingAttendanceUpdates({});
 
-      // Update attendance dates optimistically
       const dateOnly = new Date(format(selectedDate!, "yyyy-MM-dd"));
       setAttendanceDates((prev) => {
         const exists = prev.some(
@@ -1710,17 +1535,14 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   };
 
   const endAttendanceSession = async () => {
-    // Mark all NOT_SET students as ABSENT before ending
     const notSetStudents = studentList.filter((s) => s.status === "NOT_SET");
     if (notSetStudents.length > 0) {
       const now = new Date();
-      // Update UI immediately
       setStudentList((prev) =>
         prev.map((s) =>
           s.status === "NOT_SET" ? { ...s, status: "ABSENT" } : s
         )
       );
-      // Queue batch updates
       setPendingAttendanceUpdates((prev) => ({
         ...prev,
         ...notSetStudents.reduce((acc, s) => {
@@ -1734,7 +1556,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       localStorage.removeItem(getStorageKey("session"));
     } catch {}
 
-    // Clear all timers
     if (timeoutTimer) {
       clearTimeout(timeoutTimer);
       setTimeoutTimer(null);
@@ -1748,12 +1569,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       setGraceTimeoutTimer(null);
     }
 
-    // Reset session state
     setAttendanceStartTime(null);
     setShowTimeoutModal(false);
     setIsInGracePeriod(false);
 
-    // Force ABSENT for any remaining NOT_SET students at end
     const now = new Date();
     const remainingNotSet = studentList
       .filter((s) => s.status === "NOT_SET")
@@ -1779,22 +1598,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const markAllAsPresent = async () => {
     if (!selectedDate || !courseSlug) {
-      toast.error("Please select a date before marking attendance", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
+      toast.error("Please select a date before marking attendance");
       return;
     }
 
     setIsMarkingAll(true);
-    // Set cooldown for all students
     const allStudentCooldowns = studentList.reduce((acc, student) => {
       acc[student.id] = true;
       return acc;
@@ -1804,7 +1612,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     try {
-      // Create attendance records for all students
       const attendanceRecords = studentList.map((student) => ({
         studentId: student.id,
         status: "PRESENT" as AttendanceStatus,
@@ -1815,27 +1622,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         attendance: attendanceRecords,
       });
 
-      toast.promise(
-        promise,
-        {
-          loading: "Marking all students as present...",
-          success: "All students marked as present",
-          error: "Failed to mark students as present",
-        },
-        {
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-        }
-      );
+      toast.promise(promise, {
+        loading: "Marking all students as present...",
+        success: "All students marked as present",
+        error: "Failed to mark students as present",
+      });
 
-      // Update local state immediately for better UX
       setStudentList((prev) =>
         prev.map((student) => ({
           ...student,
@@ -1857,7 +1649,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       setShowMarkAllConfirm(false);
     } catch (error) {
       console.error("Error marking all as present:", error);
-      // Revert local state on error
       setStudentList((prev) =>
         prev.map((student) => ({
           ...student,
@@ -1867,45 +1658,23 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
     } finally {
       setIsMarkingAll(false);
-      // Clear all cooldowns
       setCooldownMap({});
     }
   };
 
   const markAllLateAsPresent = async () => {
     if (!selectedDate || !courseSlug) {
-      toast.error("Please select a date before marking attendance", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
+      toast.error("Please select a date before marking attendance");
       return;
     }
 
     const lateStudents = studentList.filter((s) => s.status === "LATE");
     if (lateStudents.length === 0) {
-      toast.error("No late students to mark as present", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
+      toast.error("No late students to mark as present");
       return;
     }
 
     setIsMarkingAll(true);
-
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     try {
@@ -1917,29 +1686,15 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       const promise = axiosInstance.post(`/courses/${courseSlug}/attendance`, {
         date: dateStr,
         attendance: attendanceRecords,
+        reason: null,
       });
 
-      toast.promise(
-        promise,
-        {
-          loading: "Marking late students as present...",
-          success: "Late students marked as present",
-          error: "Failed to mark late students as present",
-        },
-        {
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-        }
-      );
+      toast.promise(promise, {
+        loading: "Marking late students as present...",
+        success: "Late students marked as present",
+        error: "Failed to mark late students as present",
+      });
 
-      // Update local state immediately for better UX
       setStudentList((prev) =>
         prev.map((student) =>
           student.status === "LATE"
@@ -1964,7 +1719,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       await promise;
     } catch (error) {
       console.error("Error marking late as present:", error);
-      // Revert local state on error
       setStudentList((prev) =>
         prev.map((student) =>
           student.status === "PRESENT" &&
@@ -1977,6 +1731,26 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       setIsMarkingAll(false);
     }
   };
+
+  const renderStudentCards = useMemo(() => {
+    return currentStudents.map((student, index) => (
+      <div key={student.id} className="relative">
+        <StudentCard
+          student={student}
+          index={index}
+          tempImage={tempImage}
+          onImageUpload={(file) => handleImageUpload(student.id, file)}
+          onSaveChanges={() => handleSaveImageChanges(student.id)}
+          onRemoveImage={() => handleRemoveImage(student.id)}
+          onStatusChange={(index, status: AttendanceStatus) =>
+            updateStatus(index, status)
+          }
+          isSaving={isSaving}
+          isInCooldown={cooldownMap[student.id] || false}
+        />
+      </div>
+    ));
+  }, [currentStudents, tempImage, cooldownMap, isSaving, handleImageUpload]);
 
   if (isLoading) {
     return (
@@ -1997,6 +1771,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       </div>
     );
   }
+
+  // Continuing final part with JSX return...
 
   if (studentList.length === 0) {
     return (
@@ -2040,9 +1816,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 ml-6 flex-grow">
+        <div className="flex items-center gap-3 ml-6 grow">
           <div className="flex items-center gap-3">
-            <div className="relative flex-grow max-w-[300px]">
+            <div className="relative grow max-w-[300px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search a name"
@@ -2091,7 +1867,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   {isDateLoading ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
                   ) : (
-                    <CalendarIcon className="h-4 w-4 flex-shrink-0" />
+                    <CalendarIcon className="h-4 w-4 shrink-0" />
                   )}
                 </Button>
               </PopoverTrigger>
@@ -2275,7 +2051,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         selectedDate &&
         !attendanceStartTime &&
         isToday(selectedDate) ? (
-          // Show "Start Attendance" button when no attendance exists for the selected date
           <div className="flex flex-col items-center justify-center py-20">
             <div className="text-center max-w-md">
               <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -2297,10 +2072,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             </div>
           </div>
         ) : (
-          // Show students grid when attendance session is active or records exist
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {isDateLoading ? (
-              // Loading skeleton for student cards
               Array.from({ length: 10 }).map((_, index) => (
                 <div
                   key={index}
@@ -2314,25 +2087,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </div>
               ))
             ) : currentStudents.length > 0 ? (
-              currentStudents.map((student, index) => (
-                <div key={student.id} className="relative">
-                  <StudentCard
-                    student={student}
-                    index={index}
-                    tempImage={tempImage}
-                    onImageUpload={(file) =>
-                      handleImageUpload(student.id, file)
-                    }
-                    onSaveChanges={() => handleSaveImageChanges(student.id)}
-                    onRemoveImage={() => handleRemoveImage(student.id)}
-                    onStatusChange={(index, status: AttendanceStatus) =>
-                      updateStatus(index, status)
-                    }
-                    isSaving={isSaving}
-                    isInCooldown={cooldownMap[student.id] || false}
-                  />
-                </div>
-              ))
+              renderStudentCards
             ) : (
               <div className="col-span-full flex flex-col items-center justify-center py-12">
                 <div className="text-gray-500 text-lg font-medium mb-2">
@@ -2400,6 +2155,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           )}
       </div>
 
+      {/* All Dialog Components - Export Preview */}
       <Dialog open={showExportPreview} onOpenChange={setShowExportPreview}>
         <DialogContent className="max-w-[600px] p-6">
           <DialogHeader>
@@ -2526,6 +2282,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </DialogContent>
       </Dialog>
 
+      {/* Import Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogContent className="max-w-[400px] p-6">
           <DialogHeader>
@@ -2553,6 +2310,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </DialogContent>
       </Dialog>
 
+      {/* Mark All Confirm Alert */}
       {hasAttendanceForSelectedDate && (
         <AlertDialog
           open={showMarkAllConfirm}
@@ -2601,6 +2359,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </AlertDialog>
       )}
 
+      {/* Clear Confirm Alert */}
       {hasAttendanceForSelectedDate && (
         <AlertDialog
           open={showClearConfirm}
@@ -2649,6 +2408,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </AlertDialog>
       )}
 
+      {/* Reset Confirmation*/}
       {hasAttendanceForSelectedDate && (
         <div className="flex justify-end mt-3 gap-2">
           <Button
@@ -2656,28 +2416,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             size="sm"
             onClick={() => {
               if (previousAttendance) {
-                // Undo action
-                if (!previousAttendance) return;
-
-                // Create a new object to ensure state update triggers re-render
                 const restoredAttendance = { ...previousAttendance };
-
-                // Update states in sequence to ensure proper re-render
-                setUnsavedChanges({}); // Clear current changes first
+                setUnsavedChanges({});
                 setTimeout(() => {
                   setUnsavedChanges(restoredAttendance);
                   setPreviousAttendance(null);
                   toast.success("Attendance restored", {
                     duration: 3000,
-                    style: {
-                      background: "#fff",
-                      color: "#124A69",
-                      border: "1px solid #e5e7eb",
-                    },
                   });
                 }, 0);
               } else {
-                // Show reset confirmation modal
                 setShowResetConfirmation(true);
               }
             }}
@@ -2696,6 +2444,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </div>
       )}
 
+      {/* Reset Dialog */}
       {hasAttendanceForSelectedDate && (
         <Dialog
           open={showResetConfirmation}
@@ -2732,11 +2481,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   setShowResetConfirmation(false);
                   toast.success("Attendance reset successfully", {
                     duration: 5000,
-                    style: {
-                      background: "#fff",
-                      color: "#124A69",
-                      border: "1px solid #e5e7eb",
-                    },
                   });
                 }}
                 className="bg-[#124A69] hover:bg-[#0d3a56] text-white"
@@ -2748,7 +2492,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </Dialog>
       )}
 
-      {/* Floating RFID Input Button */}
+      {/* Floating RFID Button */}
       {attendanceStartTime && !showTimeoutModal && (
         <div className="fixed bottom-6 right-6 z-50">
           <Button
@@ -2777,7 +2521,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           </DialogHeader>
 
           <div className="space-y-6">
-            {/* Time Input Fields */}
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
@@ -2806,7 +2549,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex gap-3">
               <Button
                 onClick={confirmAttendanceStart}
@@ -2827,7 +2569,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* Timeout Modal */}
+      {/* RFID Timeout Modal - Continuation */}
       <Dialog
         open={showTimeoutModal}
         onOpenChange={(open) => {
@@ -2862,11 +2604,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           </DialogHeader>
 
           <div className="flex gap-6 justify-center">
-            {/* Left Column: Controls */}
             <div className="flex-1 max-w-[760px] space-y-6">
-              {/* Timer Display */}
-
-              {/* RFID Input */}
               <div className="space-y-3 ">
                 {/* Hidden RFID input for reader */}
                 <input
@@ -2904,7 +2642,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </div>
               </div>
 
-              {/* Scanned Students List (cards) */}
+              {/* Scanned Students List */}
               <div className="space-y-4 min-h-[460px] max-h-[460px] overflow-auto px-1">
                 {studentList
                   .filter((s) => s.status !== "NOT_SET")
@@ -2980,11 +2718,71 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   className="flex-1 h-11 bg-[#124A69] hover:bg-[#0a2f42] text-white"
                   onClick={handleAttendanceTimeout}
                 >
-                  Time Out
+                  Done
                 </Button>
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Excuse Modal */}
+      <Dialog open={showExcuseModal} onOpenChange={setShowExcuseModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excuse Reason</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please provide a reason for marking this student as excused.
+            </p>
+            <Input
+              placeholder="Enter reason..."
+              value={excuseReason}
+              onChange={(e) => setExcuseReason(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowExcuseModal(false);
+                setExcuseReason("");
+                setPendingExcusedStudent(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!pendingExcusedStudent) return;
+
+                const { index, status } = pendingExcusedStudent;
+                const actualIndex = (currentPage - 1) * itemsPerPage + index;
+                const student = filteredStudents[actualIndex];
+                if (!student) return;
+
+                setPendingUpdates((prev) => ({
+                  ...prev,
+                  [student.id]: {
+                    studentId: student.id,
+                    status,
+                    reason: excuseReason.trim(),
+                  },
+                }));
+
+                setShowExcuseModal(false);
+                setExcuseReason("");
+                setPendingExcusedStudent(null);
+
+                updateStatusContinue(index, status, excuseReason.trim());
+              }}
+            >
+              Save Reason
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

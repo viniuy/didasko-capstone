@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
 
       course.attendance.forEach((record) => {
         const key = record.studentId;
-
         if (!studentMap.has(key)) {
           studentMap.set(key, {
             studentId: record.studentId,
@@ -67,7 +66,6 @@ export async function GET(request: NextRequest) {
         }
 
         const student = studentMap.get(key)!;
-
         if (record.status === "PRESENT") student.totalPresent++;
         else if (record.status === "ABSENT") student.totalAbsent++;
         else if (record.status === "LATE") student.totalLate++;
@@ -82,7 +80,6 @@ export async function GET(request: NextRequest) {
             student.totalAbsent +
             student.totalLate +
             student.totalExcused;
-
           const attendanceRate =
             totalSessions > 0
               ? (student.totalPresent / totalSessions) * 100
@@ -94,6 +91,7 @@ export async function GET(request: NextRequest) {
             totalPresent: student.totalPresent,
             totalAbsent: student.totalAbsent,
             totalLate: student.totalLate,
+            totalExcused: student.totalExcused, // ✅ Now included!
             totalSessions,
             attendanceRate,
           };

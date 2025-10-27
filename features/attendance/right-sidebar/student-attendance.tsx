@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trophy, TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import axiosInstance from "@/lib/axios";
@@ -43,19 +43,6 @@ const getMedalColor = (rank: number) => {
   return "text-white/40";
 };
 
-const getAttendanceColor = (rate: number) => {
-  if (rate >= 90) return "text-green-400";
-  if (rate >= 75) return "text-yellow-400";
-  if (rate >= 60) return "text-orange-400";
-  return "text-red-400";
-};
-
-const getTrendIcon = (rate: number) => {
-  if (rate >= 90) return <TrendingUp className="h-3 w-3 text-green-400" />;
-  if (rate >= 75) return <Minus className="h-3 w-3 text-yellow-400" />;
-  return <TrendingDown className="h-3 w-3 text-red-400" />;
-};
-
 const LeaderboardItem = ({
   student,
   rank,
@@ -79,7 +66,6 @@ const LeaderboardItem = ({
             <h3 className="text-sm font-semibold text-white truncate">
               {student.studentName}
             </h3>
-            {getTrendIcon(student.attendanceRate)}
           </div>
 
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -104,7 +90,7 @@ const LeaderboardItem = ({
             <div className="flex items-center gap-1">
               <span className="text-white/50">Excused:</span>
               <span className="text-blue-400 font-semibold">
-                {student.totalExcused}
+                {student.totalExcused ?? 0}
               </span>
             </div>
           </div>
@@ -228,6 +214,7 @@ export default function AttendanceLeaderboard({
             existing.totalPresent += student.totalPresent;
             existing.totalAbsent += student.totalAbsent;
             existing.totalLate += student.totalLate;
+            existing.totalExcused += student.totalExcused;
             existing.totalSessions += student.totalSessions;
           } else {
             allStudents.set(student.studentId, { ...student });

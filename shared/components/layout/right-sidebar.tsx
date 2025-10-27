@@ -58,7 +58,7 @@ export default function Rightsidebar() {
             // Show modules for /main/attendance/class/[slug]
             <>
               <div className="h-[calc(50vh-20px)] w-full">
-                <AttendanceCourseShortcuts />
+                <AttendanceCourseShortcuts excludeCourseSlug={courseSlug} />
               </div>
               <div className="h-[calc(50vh-20px)]">
                 <AttendanceLeaderboard courseSlug={courseSlug} />
