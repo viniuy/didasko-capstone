@@ -1,5 +1,4 @@
 "use client";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
@@ -133,6 +132,7 @@ export default function AttendanceLeaderboard({
   const [sortBy, setSortBy] = useState<SortOption>("absents");
   const [isLoading, setIsLoading] = useState(true);
   const [courseTitle, setCourseTitle] = useState<string>("");
+  const [courseSection, setCourseSection] = useState<string>("");
 
   const isSingleCourse = !!courseSlug;
 
@@ -144,9 +144,11 @@ export default function AttendanceLeaderboard({
       try {
         const response = await axiosInstance.get(`/courses/${courseSlug}`);
         setCourseTitle(response.data.title || "");
+        setCourseSection(response.data.section || "");
       } catch (error) {
         console.error("Error fetching course title:", error);
         setCourseTitle("");
+        setCourseSection("");
       }
     };
 
@@ -271,11 +273,25 @@ export default function AttendanceLeaderboard({
   return (
     <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
       <CardHeader className="pb-3 flex-shrink-0">
-        <CardTitle className="text-white text-lg flex items-center gap-2 -mb-8">
-          <Trophy className="h-5 w-5" />
-          {isSingleCourse && courseTitle
-            ? courseTitle
-            : "Attendance Leaderboard"}
+        <CardTitle className="text-white text-lg flex flex-col gap-1 -mb-8">
+          {isSingleCourse && courseTitle ? (
+            <>
+              <div className="flex items-center gap-2">
+                <Trophy className="h-5 w-5" />
+                <span className="text-xl text-gray-300">{courseTitle}</span>
+                {courseSection && (
+                  <span className="text-xs text-gray-400 ml-3">
+                    {courseSection}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              <span>Attendance Leaderboard</span>
+            </div>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden flex flex-col">
@@ -300,7 +316,7 @@ export default function AttendanceLeaderboard({
             value={sortBy}
             onValueChange={(value) => setSortBy(value as SortOption)}
           >
-            <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+            <SelectTrigger className="w-full bg-white/10 border-white/20 text-white flex items-center justify-between">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent className="bg-[#0f3d58] border-white/20 text-white">
