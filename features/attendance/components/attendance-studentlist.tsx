@@ -154,7 +154,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     index: number;
     status: AttendanceStatus;
   } | null>(null);
-
+  const [isBulkExcuse, setIsBulkExcuse] = useState(false);
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [studentList, setStudentList] = useState<Student[]>([]);
   const [open, setOpen] = useState(false);
   const [courseInfo, setCourseInfo] = useState<Course | null>(null);
@@ -320,7 +321,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return 5;
   }, []);
 
-  // Continuing from Part 1...
+  const handleSelectStudent = (id: string) => {
+    setSelectedStudents((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+  };
 
   const fetchStudents = async () => {
     if (!courseSlug) return;
@@ -616,6 +621,112 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       setCurrentPage(1);
     });
   }, []);
+
+  const bulkUpdateStatus = async (status: AttendanceStatus) => {
+    if (selectedStudents.length === 0) return;
+
+    if (status === "EXCUSED") {
+      setIsBulkExcuse(true);
+      setShowExcuseModal(true);
+      return;
+    }
+
+    selectedStudents.forEach((id) => {
+      const index = filteredStudents.findIndex((s) => s.id === id);
+      if (index !== -1) {
+        updateStatusContinue(index, status);
+      }
+    });
+
+    setSelectedStudents([]);
+  };
+
+  const updateBulkExcusedStatuses = async (
+    studentIds: string[],
+    reason: string
+  ) => {
+    if (studentIds.length === 0 || !reason.trim()) return;
+
+    setIsUpdating(true);
+
+    const nextDay = new Date(selectedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    // Build the updates array
+    const updates = studentIds.map((id) => ({
+      studentId: id,
+      status: "EXCUSED" as AttendanceStatus,
+      reason: reason.trim(),
+    }));
+
+    // Optimistically update UI
+    setPendingUpdates((prev) => {
+      const updated = { ...prev };
+      updates.forEach((u) => {
+        updated[u.studentId] = u;
+      });
+      return updated;
+    });
+
+    toast.loading("Updating excused students...", { id: "attendance-update" });
+
+    try {
+      await axiosInstance.post(`/courses/${courseSlug}/attendance`, {
+        date: nextDay.toISOString(),
+        attendance: updates,
+      });
+
+      setStudentList((prev) =>
+        prev.map((s) => {
+          const update = updates.find((u) => u.studentId === s.id);
+          if (update) {
+            return { ...s, status: update.status };
+          }
+          return s;
+        })
+      );
+
+      toast.success(
+        `Excused ${updates.length} student${updates.length > 1 ? "s" : ""}`,
+        {
+          id: "attendance-update",
+        }
+      );
+    } catch (error) {
+      console.error("Bulk excuse error:", error);
+      toast.error("Failed to bulk excuse students", {
+        id: "attendance-update",
+      });
+    } finally {
+      setIsUpdating(false);
+      setSelectedStudents([]);
+      setPendingUpdates({});
+    }
+  };
+
+  const handleExcusedSubmit = () => {
+    if (!excuseReason.trim()) return;
+
+    if (isBulkExcuse && selectedStudents.length > 0) {
+      updateBulkExcusedStatuses(selectedStudents, excuseReason.trim());
+
+      setIsBulkExcuse(false);
+      setShowExcuseModal(false);
+      setExcuseReason("");
+      setPendingExcusedStudent(null);
+      setSelectedStudents([]);
+      return;
+    }
+
+    if (!pendingExcusedStudent) return;
+
+    const { index, status } = pendingExcusedStudent;
+    updateStatusContinue(index, status, excuseReason.trim());
+
+    setShowExcuseModal(false);
+    setExcuseReason("");
+    setPendingExcusedStudent(null);
+  };
 
   const updateStatusContinue = async (
     index: number,
@@ -1747,10 +1858,19 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           }
           isSaving={isSaving}
           isInCooldown={cooldownMap[student.id] || false}
+          isSelected={selectedStudents.includes(student.id)}
+          onSelect={handleSelectStudent}
         />
       </div>
     ));
-  }, [currentStudents, tempImage, cooldownMap, isSaving, handleImageUpload]);
+  }, [
+    currentStudents,
+    tempImage,
+    cooldownMap,
+    isSaving,
+    handleImageUpload,
+    selectedStudents,
+  ]);
 
   if (isLoading) {
     return (
@@ -1982,6 +2102,36 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {selectedStudents.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full shadow-md bg-white border-gray-200 hover:bg-gray-50"
+                  disabled={isSaving || isUpdating}
+                >
+                  <MoreHorizontal className="h-4 w-4 text-gray-700" />
+                </Button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => bulkUpdateStatus("PRESENT")}>
+                  Mark Selected Present
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => bulkUpdateStatus("LATE")}>
+                  Mark Selected Late
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => bulkUpdateStatus("ABSENT")}>
+                  Mark Selected Absent
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => bulkUpdateStatus("EXCUSED")}>
+                  Mark Selected Excused
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           <div className="flex items-center gap-3 ml-auto">
             {attendanceStartTime && (
               <Button
@@ -2727,18 +2877,36 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       </Dialog>
 
       {/* Excuse Modal */}
-      <Dialog open={showExcuseModal} onOpenChange={setShowExcuseModal}>
+      <Dialog
+        open={showExcuseModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowExcuseModal(false);
+            setExcuseReason("");
+            setPendingExcusedStudent(null);
+            setIsBulkExcuse(false); // reset bulk state
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Excuse Reason</DialogTitle>
+            <DialogTitle>
+              {isBulkExcuse ? "Excuse Selected Students" : "Excuse Reason"}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Please provide a reason for marking this student as excused.
+              {isBulkExcuse
+                ? "Please provide a reason for excusing all selected students."
+                : "Please provide a reason for marking this student as excused."}
             </p>
             <Input
-              placeholder="Enter reason..."
+              placeholder={
+                isBulkExcuse
+                  ? "Enter reason for all selected..."
+                  : "Enter reason..."
+              }
               value={excuseReason}
               onChange={(e) => setExcuseReason(e.target.value)}
             />
@@ -2751,37 +2919,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 setShowExcuseModal(false);
                 setExcuseReason("");
                 setPendingExcusedStudent(null);
+                setIsBulkExcuse(false);
               }}
             >
               Cancel
             </Button>
-            <Button
-              onClick={() => {
-                if (!pendingExcusedStudent) return;
-
-                const { index, status } = pendingExcusedStudent;
-                const actualIndex = (currentPage - 1) * itemsPerPage + index;
-                const student = filteredStudents[actualIndex];
-                if (!student) return;
-
-                setPendingUpdates((prev) => ({
-                  ...prev,
-                  [student.id]: {
-                    studentId: student.id,
-                    status,
-                    reason: excuseReason.trim(),
-                  },
-                }));
-
-                setShowExcuseModal(false);
-                setExcuseReason("");
-                setPendingExcusedStudent(null);
-
-                updateStatusContinue(index, status, excuseReason.trim());
-              }}
-            >
-              Save Reason
-            </Button>
+            <Button onClick={handleExcusedSubmit}>Save Reason</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

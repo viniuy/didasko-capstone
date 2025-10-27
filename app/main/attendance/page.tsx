@@ -22,13 +22,6 @@ export default function AttendancePage() {
             <div className="space-y-2 md:space-y-6 lg:space-y-8">
               <div className="space-y-2">
                 <h2 className="pl-2 pb-1 text-xl sm:text-2xl font-bold text-muted-foreground">
-                  Attendance Leaderboard
-                </h2>
-                <AttendanceLeaderboard />
-              </div>
-
-              <div className="space-y-2">
-                <h2 className="pl-2 pb-1 text-xl sm:text-2xl font-bold text-muted-foreground">
                   Overview of Attendance
                 </h2>
 

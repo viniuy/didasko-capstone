@@ -29,6 +29,7 @@ import { toast } from "react-hot-toast";
 
 interface StudentCardProps {
   student: {
+    id: string;
     name: string;
     status: AttendanceStatusWithNotSet;
     image?: string;
@@ -43,6 +44,8 @@ interface StudentCardProps {
   onStatusChange: (index: number, status: AttendanceStatus) => void;
   isSaving?: boolean;
   isInCooldown?: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
 const statusStyles: Record<AttendanceStatusWithNotSet, string> = {
@@ -63,6 +66,8 @@ export function StudentCard({
   onStatusChange,
   isSaving = false,
   isInCooldown = false,
+  isSelected = false,
+  onSelect,
 }: StudentCardProps) {
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [imageToRemove, setImageToRemove] = useState<{
@@ -114,7 +119,17 @@ export function StudentCard({
 
   return (
     <div className="w-full bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-3 relative">
+        {onSelect && (
+          <div className="absolute  left-3">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onSelect(student.id)}
+              className="w-4 h-4 accent-[#124A69] cursor-pointer"
+            />
+          </div>
+        )}
         <div className="relative group">
           <div
             className="cursor-pointer"
