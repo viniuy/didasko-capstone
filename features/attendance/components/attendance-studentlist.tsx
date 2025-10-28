@@ -26,7 +26,7 @@ import {
   CalendarIcon,
   MoreHorizontal,
   Filter,
-  Scan,
+  MousePointerClick,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { format, isToday } from "date-fns";
@@ -227,6 +227,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [attendanceStartTime, setAttendanceStartTime] = useState<Date | null>(
     null
   );
+  const [isSelecting, setIsSelecting] = useState(false);
   const [timeoutTimer, setTimeoutTimer] = useState<NodeJS.Timeout | null>(null);
   const [gracePeriodTimer, setGracePeriodTimer] =
     useState<NodeJS.Timeout | null>(null);
@@ -321,9 +322,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return 5;
   }, []);
 
+  const toggleSelectMode = () => {
+    setIsSelecting((prev) => !prev);
+    if (isSelecting) setSelectedStudents([]);
+  };
+
   const handleSelectStudent = (id: string) => {
     setSelectedStudents((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+      prev.includes(id)
+        ? prev.filter((studentId) => studentId !== id)
+        : [...prev, id]
     );
   };
 
@@ -1859,7 +1867,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           isSaving={isSaving}
           isInCooldown={cooldownMap[student.id] || false}
           isSelected={selectedStudents.includes(student.id)}
-          onSelect={handleSelectStudent}
+          onSelect={isSelecting ? handleSelectStudent : undefined}
+          isSelecting={isSelecting}
         />
       </div>
     ));
@@ -1870,6 +1879,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     isSaving,
     handleImageUpload,
     selectedStudents,
+    isSelecting,
   ]);
 
   if (isLoading) {
@@ -2107,11 +2117,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  size="icon"
-                  className="rounded-full shadow-md bg-white border-gray-200 hover:bg-gray-50"
+                  className="rounded-full shadow-md bg-[#FAEDCB] border-gray-200 hover:bg-[#f1deb1]"
                   disabled={isSaving || isUpdating}
                 >
-                  <MoreHorizontal className="h-4 w-4 text-gray-700" />
+                  Mark Selected Students as...
                 </Button>
               </DropdownMenuTrigger>
 
@@ -2142,6 +2151,19 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 {graceCountdown || `${graceMinutes}:00`}
               </Button>
             )}
+            <Button
+              onClick={toggleSelectMode}
+              className={`rounded-full flex items-center gap-2 transition-colors duration-200 ${
+                isSelecting
+                  ? "bg-white text-black border border-[#124A69] hover:bg-gray-100"
+                  : "bg-[#124A69] text-white hover:bg-[#0D3A54]"
+              }`}
+            >
+              <MousePointerClick
+                className={isSelecting ? "text-[#124A69]" : "text-white"}
+              />
+              {isSelecting ? "Cancel Selection" : "Select Students"}
+            </Button>
             <Button
               variant="outline"
               className="rounded-full relative flex items-center gap-2 px-3"

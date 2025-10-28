@@ -46,6 +46,7 @@ interface StudentCardProps {
   isInCooldown?: boolean;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
+  isSelecting?: boolean;
 }
 
 const statusStyles: Record<AttendanceStatusWithNotSet, string> = {
@@ -108,20 +109,11 @@ export function StudentCard({
     }
   };
 
-  const handleImageDelete = async () => {
-    try {
-      setIsDeleting(true);
-      await onRemoveImage(index, student.name);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   return (
     <div className="w-full bg-white p-6 rounded-lg shadow-sm border border-gray-100">
       <div className="flex flex-col items-center gap-3 relative">
         {onSelect && (
-          <div className="absolute  left-3">
+          <div className="absolute left-3">
             <input
               type="checkbox"
               checked={isSelected}
