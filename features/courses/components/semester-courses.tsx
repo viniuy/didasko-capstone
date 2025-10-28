@@ -207,10 +207,10 @@ export default function SemesterCourses({
       <Card className="p-4 shadow-md rounded-lg">
         <div className="text-center py-8">
           <BookOpenText className="mx-auto mb-4" size={50} />
-          <h2 className="text-xl font-semibold mb-2">No {semester} Courses</h2>
+          <h2 className="text-xl font-semibold mb-2">No {semester} Subjects</h2>
           <p className="text-gray-500">
-            You don't have any courses assigned for the {semester.toLowerCase()}
-            .
+            You don't have any subjects assigned for the{" "}
+            {semester.toLowerCase()}.
           </p>
         </div>
       </Card>

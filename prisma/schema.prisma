@@ -38,6 +38,12 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+enum AssessmentType {
+  PT
+  QUIZ
+  EXAM
+}
+
 model User {
   id         String     @id @default(uuid())
   name       String
@@ -131,6 +137,8 @@ model Student {
   leadingGroups   Group[]      @relation("GroupLeader")
   quizScores      QuizScore[]
   gradeScores     GradeScore[]
+  assessmentScores AssessmentScore[]
+  termGrades       TermGrade[]
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -187,6 +195,8 @@ model Criteria {
   updatedAt            DateTime @updatedAt @map("updated_at")
   isGroupCriteria      Boolean  @default(false)
   isRecitationCriteria Boolean  @default(false)
+  linkedPTAssessments       Assessment[] @relation("RecitationLink")
+  linkedReportingAssessments Assessment[] @relation("ReportingLink")
 
   @@map("criteria")
 }
@@ -289,6 +299,7 @@ model Course {
   quizzes      Quiz[]
   gradeConfigs GradeConfiguration[]
   gradeScores  GradeScore[]
+  termConfigs  TermConfiguration[] @relation("CourseTermConfigs")
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
 
@@ -379,5 +390,98 @@ model QuizScore {
   @@index([quizId])
   @@index([studentId])
   @@map("quiz_scores")
+}
+
+model TermConfiguration {
+  id        String   @id @default(uuid())
+  courseId  String
+  course    Course   @relation("CourseTermConfigs", fields: [courseId], references: [id], onDelete: Cascade)
+  term      String   // "PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"
+  
+  ptWeight   Float    @default(30)
+  quizWeight Float    @default(20)
+  examWeight Float    @default(50)
+  
+  assessments Assessment[]
+  termGrades  TermGrade[]
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([courseId, term])
+  @@index([courseId])
+  @@map("term_configurations")
+}
+
+model Assessment {
+  id              String            @id @default(uuid())
+  termConfigId    String
+  termConfig      TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
+  
+  type            AssessmentType
+  name            String            // "PT1", "Q1", "Final Exam"
+  maxScore        Float
+  date            DateTime?
+  enabled         Boolean           @default(true)
+  order           Int               @default(0) // For sorting display order
+  
+  // For linking PT assessments to Recitation/Reporting
+  linkedRecitationId String?
+  linkedRecitation   Criteria? @relation("RecitationLink", fields: [linkedRecitationId], references: [id], onDelete: SetNull)
+  linkedReportingId  String?
+  linkedReporting    Criteria? @relation("ReportingLink", fields: [linkedReportingId], references: [id], onDelete: SetNull)
+  
+  scores AssessmentScore[]
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([termConfigId])
+  @@index([type])
+  @@map("assessments")
+}
+
+model AssessmentScore {
+  id           String     @id @default(uuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  score        Float
+  
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@unique([assessmentId, studentId])
+  @@index([assessmentId])
+  @@index([studentId])
+  @@map("assessment_scores")
+}
+
+model TermGrade {
+  id             String            @id @default(uuid())
+  termConfigId   String
+  termConfig     TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
+  studentId      String
+  student        Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  // Weighted scores for each component
+  ptWeightedScore   Float?
+  quizWeightedScore Float?
+  examWeightedScore Float?
+  
+  // Final computed values
+  totalPercentage   Float?  // Sum of weighted scores (0-100)
+  numericGrade      Float?  // 1.00, 1.25, 1.50, etc.
+  remarks           String? // "PASSED" or "FAILED"
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([termConfigId, studentId])
+  @@index([termConfigId])
+  @@index([studentId])
+  @@map("term_grades")
 }
 
