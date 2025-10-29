@@ -467,8 +467,9 @@ function SettingsModal({
                     updateConfig({ ptWeight: value });
                   }}
                   onKeyDown={(e) => {
-                    if (["e", "E", "+", "-"].includes(e.key))
+                    if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
                       e.preventDefault();
+                    }
                   }}
                   min="0"
                   max="100"
@@ -489,8 +490,9 @@ function SettingsModal({
                     updateConfig({ quizWeight: value });
                   }}
                   onKeyDown={(e) => {
-                    if (["e", "E", "+", "-"].includes(e.key))
+                    if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
                       e.preventDefault();
+                    }
                   }}
                   className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   min="0"
@@ -511,8 +513,9 @@ function SettingsModal({
                     updateConfig({ examWeight: value });
                   }}
                   onKeyDown={(e) => {
-                    if (["e", "E", "+", "-"].includes(e.key))
+                    if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
                       e.preventDefault();
+                    }
                   }}
                   className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   min="0"
@@ -598,6 +601,11 @@ function SettingsModal({
                             maxScore: Number(e.target.value),
                           })
                         }
+                        onKeyDown={(e) => {
+                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
                         className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                         placeholder="Max"
                         min="0"
@@ -776,6 +784,11 @@ function SettingsModal({
                           maxScore: Number(e.target.value),
                         })
                       }
+                      onKeyDown={(e) => {
+                        if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
                       className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       placeholder="Max"
                       min="0"
@@ -869,6 +882,11 @@ function SettingsModal({
                         maxScore: Number(e.target.value),
                       })
                     }
+                    onKeyDown={(e) => {
+                      if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
                     className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     placeholder="Max"
                     min="0"
@@ -1259,7 +1277,9 @@ export function ClassRecordTable({
       );
       if (percentageScore === null) return null;
 
-      return Math.round((percentageScore / 100) * assessment.maxScore);
+      return (
+        Math.round((percentageScore / 100) * assessment.maxScore * 100) / 100
+      );
     }
 
     return getScore(studentId, assessment.id);
