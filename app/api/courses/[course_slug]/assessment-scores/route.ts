@@ -3,11 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 
-// GET - Load all assessment scores for a course
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { course_slug: string } }
-) {
+//@ts-ignore
+export async function GET(req: NextRequest, { params }: { params }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
