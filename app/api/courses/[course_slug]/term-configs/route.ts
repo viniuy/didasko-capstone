@@ -4,14 +4,16 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { AssessmentType } from "@prisma/client";
 
-//@ts-ignore
-export async function GET(req: NextRequest, { params }: { params }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ course_slug: string }> }
+) {
+  const { course_slug } = await params;
   const session = await getServerSession(authOptions);
+
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const { course_slug } = params;
 
   const course = await prisma.course.findUnique({
     where: { slug: course_slug },
@@ -54,15 +56,18 @@ export async function GET(req: NextRequest, { params }: { params }) {
 
   return NextResponse.json(termConfigs);
 }
-//@ts-ignore
-export async function POST(req: NextRequest, { params }: { params }) {
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ course_slug: string }> }
+) {
   try {
+    const { course_slug } = await params;
     const session = await getServerSession(authOptions);
+
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const { course_slug } = params;
 
     const course = await prisma.course.findUnique({
       where: { slug: course_slug },
@@ -131,29 +136,38 @@ export async function POST(req: NextRequest, { params }: { params }) {
       for (const assessment of config.assessments) {
         const isNew = !assessment.id || assessment.id.startsWith("temp");
 
-        operations.push(
-          prisma.assessment.upsert({
-            where: { id: isNew ? "" : assessment.id },
-            update: {
-              name: assessment.name,
-              maxScore: assessment.maxScore,
-              date: assessment.date ? new Date(assessment.date) : null,
-              enabled: assessment.enabled,
-              order: assessment.order,
-              linkedCriteriaId: assessment.linkedCriteriaId ?? null,
-            },
-            create: {
-              termConfigId: termConfig.id,
-              type: assessment.type as AssessmentType,
-              name: assessment.name,
-              maxScore: assessment.maxScore,
-              date: assessment.date ? new Date(assessment.date) : null,
-              enabled: assessment.enabled,
-              order: assessment.order,
-              linkedCriteriaId: assessment.linkedCriteriaId ?? null,
-            },
-          })
-        );
+        if (isNew) {
+          // Create new assessment
+          operations.push(
+            prisma.assessment.create({
+              data: {
+                termConfigId: termConfig.id,
+                type: assessment.type as AssessmentType,
+                name: assessment.name,
+                maxScore: assessment.maxScore,
+                date: assessment.date ? new Date(assessment.date) : null,
+                enabled: assessment.enabled,
+                order: assessment.order,
+                linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+              },
+            })
+          );
+        } else {
+          // Update existing assessment
+          operations.push(
+            prisma.assessment.update({
+              where: { id: assessment.id },
+              data: {
+                name: assessment.name,
+                maxScore: assessment.maxScore,
+                date: assessment.date ? new Date(assessment.date) : null,
+                enabled: assessment.enabled,
+                order: assessment.order,
+                linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+              },
+            })
+          );
+        }
       }
     }
 
