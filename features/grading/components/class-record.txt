@@ -71,7 +71,8 @@ interface Assessment {
   date: string | null;
   enabled: boolean;
   order: number;
-  linkedCriteriaId?: string | null;
+  linkedRecitationId?: string | null;
+  linkedReportingId?: string | null;
 }
 
 interface TermConfig {
@@ -141,12 +142,22 @@ function getScoreStyle(score: number | null, max: number | null): string {
   return "";
 }
 
-interface CriteriaOption {
+interface Recitation {
   id: string;
   name: string;
-  date?: string | null;
-  maxScore?: number;
-  type: "RECITATION" | "GROUP_REPORTING" | "INDIVIDUAL_REPORTING";
+  date: string;
+}
+
+interface Reporting {
+  id: string;
+  name: string;
+  date: string;
+}
+
+interface individualRes {
+  id: string;
+  name: string;
+  date: string;
 }
 
 interface SettingsModalProps {
@@ -154,7 +165,8 @@ interface SettingsModalProps {
   onClose: () => void;
   termConfigs: Record<string, TermConfig>;
   onSave: (configs: Record<string, TermConfig>) => void;
-  availableCriteria: CriteriaOption[];
+  availableRecitations: Recitation[];
+  availableReportings: Reporting[];
 }
 
 function SettingsModal({
@@ -162,7 +174,8 @@ function SettingsModal({
   onClose,
   termConfigs: initialConfigs,
   onSave,
-  availableCriteria,
+  availableRecitations,
+  availableReportings,
 }: SettingsModalProps) {
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIMS");
   const [termConfigs, setTermConfigs] = useState(initialConfigs);
@@ -178,7 +191,7 @@ function SettingsModal({
   const config = termConfigs[activeTerm];
 
   const clamp = (value: number, min: number, max: number) => {
-    return Math.min(Math.max(value, min), max);
+    return Math.min(Math.max(value, min), max); // Fixed: was missing return
   };
 
   const updateConfig = (updates: Partial<TermConfig>) => {
@@ -191,7 +204,12 @@ function SettingsModal({
   const updateAssessment = (
     type: "PT" | "QUIZ" | "EXAM",
     id: string,
-    updates: Partial<Assessment>
+    updates: Partial<
+      Assessment & {
+        linkedRecitationId?: string | null;
+        linkedReportingId?: string | null;
+      }
+    >
   ) => {
     const assessments = config.assessments.map((a) =>
       a.id === id ? { ...a, ...updates } : a
@@ -537,7 +555,7 @@ function SettingsModal({
             </div>
           </div>
 
-          {/* PT/Lab Section */}
+          {/* PT/Lab Section - UPDATED */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
@@ -648,67 +666,53 @@ function SettingsModal({
                   </div>
 
                   {/* Second Row: Linking dropdowns */}
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-xs text-gray-500 w-32">
-                      Link to Existing Grades:
-                    </span>
-
-                    <select
-                      value={pt.linkedCriteriaId || ""}
-                      onChange={(e) => {
-                        const linkedId = e.target.value || null;
-                        const linkedCriteria = availableCriteria.find(
-                          (c) => c.id === linkedId
-                        );
-
-                        updateAssessment("PT", pt.id, {
-                          linkedCriteriaId: linkedId,
-                          ...(linkedCriteria?.maxScore && {
-                            maxScore: linkedCriteria.maxScore,
-                          }),
-                        });
-                      }}
-                      className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs"
-                    >
-                      <option value="">No Link</option>
-
-                      {/* Grouped based on type */}
-                      <optgroup label="Recitation">
-                        {availableCriteria
-                          .filter((c) => c.type === "RECITATION")
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} {c.maxScore ? `(${c.maxScore} pts)` : ""}
-                            </option>
-                          ))}
-                      </optgroup>
-
-                      <optgroup label="Group Reporting">
-                        {availableCriteria
-                          .filter((c) => c.type === "GROUP_REPORTING")
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} {c.maxScore ? `(${c.maxScore} pts)` : ""}
-                            </option>
-                          ))}
-                      </optgroup>
-
-                      <optgroup label="Individual Reporting">
-                        {availableCriteria
-                          .filter((c) => c.type === "INDIVIDUAL_REPORTING")
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} {c.maxScore ? `(${c.maxScore} pts)` : ""}
-                            </option>
-                          ))}
-                      </optgroup>
-                    </select>
-
-                    {pt.linkedCriteriaId && (
-                      <span className="text-xs text-green-600 font-medium">
-                        ✓ Linked
+                  <div className="flex items-center gap-3 pl-8">
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-gray-500 w-20">
+                        Link to Recitation:
                       </span>
-                    )}
+                      <select
+                        value={(pt as any).linkedRecitationId || ""}
+                        onChange={(e) =>
+                          updateAssessment("PT", pt.id, {
+                            linkedRecitationId: e.target.value || null,
+                          })
+                        }
+                        className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      >
+                        <option value="">No Link</option>
+                        {availableRecitations.map((rec) => (
+                          <option key={rec.id} value={rec.id}>
+                            {rec.name}{" "}
+                            {rec.date &&
+                              `(${format(new Date(rec.date), "MMM d")})`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-gray-500 w-20">
+                        Link to Reporting:
+                      </span>
+                      <select
+                        value={(pt as any).linkedReportingId || ""}
+                        onChange={(e) =>
+                          updateAssessment("PT", pt.id, {
+                            linkedReportingId: e.target.value || null,
+                          })
+                        }
+                        className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs"
+                      >
+                        <option value="">No Link</option>
+                        {availableReportings.map((rep) => (
+                          <option key={rep.id} value={rep.id}>
+                            {rep.name}{" "}
+                            {rep.date &&
+                              `(${format(new Date(rep.date), "MMM d")})`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1094,7 +1098,10 @@ export function ClassRecordTable({
       ],
     },
   });
-  const [availableCriteria, setAvailableCriteria] = useState<CriteriaOption[]>(
+  const [availableRecitations, setAvailableRecitations] = useState<
+    Recitation[]
+  >([]);
+  const [availableReportings, setAvailableReportings] = useState<Reporting[]>(
     []
   );
 
@@ -1104,7 +1111,7 @@ export function ClassRecordTable({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const useDebouncedCallback = (callback: Function, delay: number) => {
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null); // Add null as initial value
 
     return useCallback(
       (...args: any[]) => {
@@ -1132,57 +1139,35 @@ export function ClassRecordTable({
       setLoading(true);
 
       try {
-        const [studentsRes, configRes, scoresRes, criteriaLinksRes] =
-          await Promise.all([
-            axiosInstance.get(`/courses/${courseSlug}/students`),
-            axiosInstance.get(`/courses/${courseSlug}/term-configs`),
-            axiosInstance.get(`/courses/${courseSlug}/assessment-scores`),
-            axiosInstance.get(`/courses/${courseSlug}/criteria/link`),
-          ]);
-
+        const [
+          studentsRes,
+          configRes,
+          scoresRes,
+          reportingRes,
+          recitationsRes,
+          individualRes,
+        ] = await Promise.all([
+          axiosInstance.get(`/courses/${courseSlug}/students`),
+          axiosInstance.get(`/courses/${courseSlug}/term-configs`),
+          axiosInstance.get(`/courses/${courseSlug}/assessment-scores`),
+          axiosInstance.get(
+            `/courses/${courseSlug}/criteria?isGroupCriteria=true`
+          ),
+          axiosInstance.get(
+            `/courses/${courseSlug}/criteria?isRecitationCriteria=true`
+          ),
+          axiosInstance.get(`/courses/${courseSlug}/criteria`),
+        ]);
         const studentList = studentsRes.data?.students || [];
         setStudents(studentList);
 
         if (configRes.data && Object.keys(configRes.data).length > 0) {
           setTermConfigs(configRes.data);
         }
-
-        const {
-          recitations = [],
-          groupReportings = [],
-          individualReportings = [],
-        } = criteriaLinksRes.data || {};
-
-        const recitationList = recitations.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          date: item.date,
-          maxScore: item.maxScore,
-          type: "RECITATION" as const,
-        }));
-
-        const groupList = groupReportings.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          date: item.date,
-          maxScore: item.maxScore,
-          type: "GROUP_REPORTING" as const,
-        }));
-
-        const individualList = individualReportings.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          date: item.date,
-          maxScore: item.maxScore,
-          type: "INDIVIDUAL_REPORTING" as const,
-        }));
-
-        setAvailableCriteria([
-          ...recitationList,
-          ...groupList,
-          ...individualList,
-        ]);
-
+        setAvailableRecitations(recitationsRes.data || []);
+        setAvailableReportings(reportingRes.data || []);
+        console.log("Recitations: ", availableRecitations);
+        console.log("Reportings: ", availableReportings);
         const scoresMap = new Map(
           Object.entries(scoresRes.data).map(([key, value]: any) => [
             key,
@@ -1238,31 +1223,6 @@ export function ClassRecordTable({
 
   const getScore = (studentId: string, assessmentId: string): number | null => {
     return scores.get(`${studentId}:${assessmentId}`)?.score || null;
-  };
-
-  const getLinkedCriteriaScore = (
-    studentId: string,
-    criteriaId: string
-  ): number | null => {
-    const student = scores.get(`${studentId}:criteria:${criteriaId}`);
-    return student?.score || null;
-  };
-
-  const getEffectiveScore = (
-    studentId: string,
-    assessment: Assessment
-  ): number | null => {
-    if (assessment.linkedCriteriaId) {
-      const percentageScore = getLinkedCriteriaScore(
-        studentId,
-        assessment.linkedCriteriaId
-      );
-      if (percentageScore === null) return null;
-
-      return Math.round((percentageScore / 100) * assessment.maxScore);
-    }
-
-    return getScore(studentId, assessment.id);
   };
 
   const setScore = (
@@ -1334,15 +1294,16 @@ export function ClassRecordTable({
 
     let ptPercentages: number[] = [];
     ptAssessments.forEach((pt) => {
-      const score = getEffectiveScore(studentId, pt);
+      const score = getScore(studentId, pt.id);
       if (score !== null) {
         const pct = percent(score, pt.maxScore);
         if (pct !== null) ptPercentages.push(pct);
       }
     });
+
     let quizPercentages: number[] = [];
     quizAssessments.forEach((quiz) => {
-      const score = getEffectiveScore(studentId, quiz);
+      const score = getScore(studentId, quiz.id);
       if (score !== null) {
         const pct = percent(score, quiz.maxScore);
         if (pct !== null) quizPercentages.push(pct);
@@ -1351,7 +1312,7 @@ export function ClassRecordTable({
 
     let examPercentage: number | null = null;
     if (examAssessment) {
-      const examScore = getEffectiveScore(studentId, examAssessment);
+      const examScore = getScore(studentId, examAssessment.id);
       if (examScore !== null) {
         examPercentage = percent(examScore, examAssessment.maxScore);
       }
@@ -1433,11 +1394,9 @@ export function ClassRecordTable({
       console.error(error);
     }
   };
-
   if (loading) {
     return <LoadingSpinner />;
   }
-
   if (activeTerm === "SUMMARY") {
     return (
       <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px]">
@@ -1616,7 +1575,8 @@ export function ClassRecordTable({
           onClose={() => setSettingsOpen(false)}
           termConfigs={termConfigs}
           onSave={handleSaveSettings}
-          availableCriteria={availableCriteria}
+          availableRecitations={availableRecitations}
+          availableReportings={availableReportings}
         />
       </div>
     );
@@ -1833,27 +1793,17 @@ export function ClassRecordTable({
                         <input
                           type="text"
                           inputMode="numeric"
-                          className={`w-[90%] h-8 text-center border border-gray-200 rounded ${
-                            pt.linkedCriteriaId
-                              ? "bg-blue-50 cursor-not-allowed"
-                              : ""
-                          } ${getScoreStyle(
-                            getEffectiveScore(student.id, pt),
+                          className={`w-[90%] h-8 text-center border border-gray-200 rounded ${getScoreStyle(
+                            getScore(student.id, pt.id),
                             pt.maxScore
                           )}`}
-                          value={getEffectiveScore(student.id, pt) ?? ""}
+                          value={getScore(student.id, pt.id) ?? ""}
                           onChange={handleScoreChange(
                             student.id,
                             pt.id,
                             pt.maxScore
                           )}
                           onKeyDown={handleNumericKeyDown}
-                          disabled={!!pt.linkedCriteriaId}
-                          title={
-                            pt.linkedCriteriaId
-                              ? "This score is linked from existing grades"
-                              : ""
-                          }
                         />
                       </td>
                     ))}
@@ -1875,27 +1825,17 @@ export function ClassRecordTable({
                         <input
                           type="text"
                           inputMode="numeric"
-                          className={`w-[90%] h-8 text-center border border-gray-200 rounded ${
-                            quiz.linkedCriteriaId
-                              ? "bg-blue-50 cursor-not-allowed"
-                              : ""
-                          } ${getScoreStyle(
-                            getEffectiveScore(student.id, quiz),
+                          className={`w-[90%] h-8 text-center border border-gray-200 rounded ${getScoreStyle(
+                            getScore(student.id, quiz.id),
                             quiz.maxScore
                           )}`}
-                          value={getEffectiveScore(student.id, quiz) ?? ""}
+                          value={getScore(student.id, quiz.id) ?? ""}
                           onChange={handleScoreChange(
                             student.id,
                             quiz.id,
                             quiz.maxScore
                           )}
                           onKeyDown={handleNumericKeyDown}
-                          disabled={!!quiz.linkedCriteriaId}
-                          title={
-                            quiz.linkedCriteriaId
-                              ? "This score is linked from existing grades"
-                              : ""
-                          }
                         />
                       </td>
                     ))}
@@ -1915,27 +1855,17 @@ export function ClassRecordTable({
                           <input
                             type="text"
                             inputMode="numeric"
-                            className={`w-[90%] h-8 text-center border border-gray-200 rounded ${
-                              exam.linkedCriteriaId
-                                ? "bg-blue-50 cursor-not-allowed"
-                                : ""
-                            } ${getScoreStyle(
-                              getEffectiveScore(student.id, exam),
+                            className={`w-[90%] h-8 text-center border border-gray-200 rounded ${getScoreStyle(
+                              getScore(student.id, exam.id),
                               exam.maxScore
                             )}`}
-                            value={getEffectiveScore(student.id, exam) ?? ""}
+                            value={getScore(student.id, exam.id) ?? ""}
                             onChange={handleScoreChange(
                               student.id,
                               exam.id,
                               exam.maxScore
                             )}
                             onKeyDown={handleNumericKeyDown}
-                            disabled={!!exam.linkedCriteriaId}
-                            title={
-                              exam.linkedCriteriaId
-                                ? "This score is linked from existing grades"
-                                : ""
-                            }
                           />
                         </td>
                         <td className="border border-gray-300 py-3 text-center text-sm">
@@ -1985,7 +1915,8 @@ export function ClassRecordTable({
         onClose={() => setSettingsOpen(false)}
         termConfigs={termConfigs}
         onSave={handleSaveSettings}
-        availableCriteria={availableCriteria}
+        availableRecitations={availableRecitations}
+        availableReportings={availableReportings}
       />
     </div>
   );

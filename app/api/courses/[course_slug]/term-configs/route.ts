@@ -50,6 +50,7 @@ export async function GET(
         date: a.date ? a.date.toISOString().split("T")[0] : null,
         enabled: a.enabled,
         order: a.order,
+        linkedCriteriaId: a.linkedCriteriaId ?? null,
       })),
     };
   });
@@ -145,6 +146,7 @@ export async function POST(
               date: assessment.date ? new Date(assessment.date) : null,
               enabled: assessment.enabled,
               order: assessment.order,
+              linkedCriteriaId: assessment.linkedCriteriaId ?? null,
             },
             create: {
               termConfigId: termConfig.id,
@@ -154,6 +156,7 @@ export async function POST(
               date: assessment.date ? new Date(assessment.date) : null,
               enabled: assessment.enabled,
               order: assessment.order,
+              linkedCriteriaId: assessment.linkedCriteriaId ?? null,
             },
           })
         );

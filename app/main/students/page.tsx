@@ -698,6 +698,7 @@ export default function StudentsPage() {
                   value={formData.studentId}
                   onChange={handleFormChange}
                   required
+                  maxLength={20}
                 />
               </div>
 
@@ -711,6 +712,7 @@ export default function StudentsPage() {
                   value={formData.lastName}
                   onChange={handleFormChange}
                   required
+                  maxLength={50}
                 />
               </div>
 
@@ -724,6 +726,7 @@ export default function StudentsPage() {
                   value={formData.firstName}
                   onChange={handleFormChange}
                   required
+                  maxLength={50}
                 />
               </div>
 
@@ -851,6 +854,7 @@ export default function StudentsPage() {
                       placeholder="Search by name or student ID..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
+                      maxLength={100}
                     />
                   </div>
 

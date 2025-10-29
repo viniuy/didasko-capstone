@@ -25,8 +25,8 @@ export async function GET(
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    // Get all assessment scores for this course
-    const scores = await prisma.assessmentScore.findMany({
+    // 1. Get all assessment scores
+    const assessmentScores = await prisma.assessmentScore.findMany({
       where: {
         assessment: {
           termConfig: {
@@ -35,23 +35,45 @@ export async function GET(
         },
       },
       select: {
-        id: true,
         studentId: true,
         assessmentId: true,
         score: true,
-        createdAt: true,
-        updatedAt: true,
       },
     });
 
-    // Transform to Map-friendly format: { "studentId:assessmentId": { studentId, assessmentId, score } }
+    // 2. Get all criteria scores (from Grade model)
+    const criteriaScores = await prisma.grade.findMany({
+      where: {
+        courseId: course.id,
+      },
+      select: {
+        studentId: true,
+        criteriaId: true,
+        value: true, // This is the percentage (0-100)
+      },
+    });
+
+    // 3. Transform to Map-friendly format
     const scoresMap: Record<string, any> = {};
-    scores.forEach((score) => {
+
+    // Add assessment scores with format: studentId:assessmentId
+    assessmentScores.forEach((score) => {
       const key = `${score.studentId}:${score.assessmentId}`;
       scoresMap[key] = {
         studentId: score.studentId,
         assessmentId: score.assessmentId,
-        score: score.score,
+        score: score.score, // Raw score
+      };
+    });
+
+    // 4. Add criteria scores with format: studentId:criteria:criteriaId
+    // Store as percentage (0-100)
+    criteriaScores.forEach((grade) => {
+      const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
+      scoresMap[key] = {
+        studentId: grade.studentId,
+        assessmentId: `criteria:${grade.criteriaId}`,
+        score: grade.value, // Percentage value (0-100)
       };
     });
 
@@ -64,7 +86,6 @@ export async function GET(
     );
   }
 }
-
 // PUT - Save or update a single assessment score
 export async function PUT(req: NextRequest) {
   try {
