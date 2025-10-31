@@ -12,13 +12,8 @@ export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const params = useParams();
-
-  // Extract course slug from URL params
-  // If your route is /main/attendance/class/[course_slug], use 'course_slug'
-  // If your route is /main/attendance/class/[slug], use 'slug'
   const courseSlug = (params.course_slug || params.slug) as string;
   const isGrading = pathname.startsWith("/main/grading");
-  // Check if we're on the attendance page
   const isAttendanceList = pathname === "/main/attendance";
   const isClassAttendance =
     pathname.startsWith("/main/attendance/") &&
@@ -26,7 +21,6 @@ export default function Rightsidebar() {
 
   return (
     <>
-      {/* Burger button — visible only on small screens */}
       <Button
         variant="outline"
         size="icon"
