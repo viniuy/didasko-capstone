@@ -210,19 +210,33 @@ function SettingsModal({
       return;
     }
 
-    const count = existing.length + 1;
+    // Find the highest order number to append at the end
+    const maxOrder =
+      existing.length > 0 ? Math.max(...existing.map((a) => a.order)) : -1;
+
+    const prefix = type;
+    const existingNumbers = existing
+      .map((a) => {
+        const match = a.name.match(new RegExp(`^${prefix}(\\d+)$`));
+        return match ? parseInt(match[1]) : 0;
+      })
+      .filter((n) => n > 0);
+
+    const nextNumber =
+      existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+
     const newAssessment: Assessment = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: `${type}${count}`,
+      id: `temp-${Math.random().toString(36).substr(2, 9)}`,
+      name: `${type}${nextNumber}`,
       type,
       maxScore: 0,
       date: null,
       enabled: true,
-      order: existing.length,
+      order: maxOrder + 1,
     };
+
     updateConfig({ assessments: [...config.assessments, newAssessment] });
   };
-
   const removeAssessment = (type: "PT" | "QUIZ", id: string) => {
     const existing = config.assessments.filter(
       (a) => a.type === type && a.enabled
@@ -243,12 +257,10 @@ function SettingsModal({
   const totalWeight = getTotalWeight();
   const isValidWeight = totalWeight === 100;
 
-  // Comprehensive validation function
   const validateConfigs = (): string[] => {
     const errors: string[] = [];
 
     Object.entries(termConfigs).forEach(([term, cfg]) => {
-      // Validate weights
       const total = cfg.ptWeight + cfg.quizWeight + cfg.examWeight;
       if (total !== 100) {
         errors.push(
@@ -266,7 +278,6 @@ function SettingsModal({
         errors.push(`${term}: Exam weight must be between 0-100%`);
       }
 
-      // Validate PT assessments
       const enabledPTs = cfg.assessments.filter(
         (a) => a.type === "PT" && a.enabled
       );
@@ -286,7 +297,6 @@ function SettingsModal({
         }
       });
 
-      // Validate Quiz assessments
       const enabledQuizzes = cfg.assessments.filter(
         (a) => a.type === "QUIZ" && a.enabled
       );
@@ -306,7 +316,6 @@ function SettingsModal({
         }
       });
 
-      // Validate Exam
       const exam = cfg.assessments.find((a) => a.type === "EXAM");
       if (!exam) {
         errors.push(`${term}: Exam assessment is missing`);

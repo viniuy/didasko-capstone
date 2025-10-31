@@ -17,7 +17,7 @@ export default function Rightsidebar() {
   // If your route is /main/attendance/class/[course_slug], use 'course_slug'
   // If your route is /main/attendance/class/[slug], use 'slug'
   const courseSlug = (params.course_slug || params.slug) as string;
-
+  const isGrading = pathname.startsWith("/main/grading");
   // Check if we're on the attendance page
   const isAttendanceList = pathname === "/main/attendance";
   const isClassAttendance =
@@ -63,6 +63,13 @@ export default function Rightsidebar() {
               <div className="h-[calc(50vh-20px)]">
                 <AttendanceLeaderboard courseSlug={courseSlug} />
               </div>
+            </>
+          ) : isGrading ? (
+            <>
+              <div className="h-[calc(50vh-20px)] w-full">
+                <AttendanceCourseShortcuts excludeCourseSlug={courseSlug} />
+              </div>
+              <div className="h-[calc(50vh-20px)]"></div>
             </>
           ) : (
             // Show default modules for other routes

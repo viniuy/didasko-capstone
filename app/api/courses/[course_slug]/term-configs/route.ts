@@ -169,6 +169,22 @@ export async function POST(
           );
         }
       }
+      const assessmentsByType = config.assessments.reduce(
+        (acc: any, a: any) => {
+          if (!acc[a.type]) acc[a.type] = [];
+          acc[a.type].push(a);
+          return acc;
+        },
+        {}
+      );
+
+      // Reassign sequential order values within each type
+      Object.values(assessmentsByType).forEach((group: any) => {
+        group.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+        group.forEach((assessment: any, index: number) => {
+          assessment.order = index;
+        });
+      });
     }
 
     await prisma.$transaction(operations);
