@@ -13,6 +13,7 @@ import {
   BookUser,
   BookOpen,
   Users,
+  BookCopy,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import EditProfileModal from "@/shared/components/profile/components/EditProfileModal";
@@ -52,7 +53,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 const adminItems = [
   { title: "Home", url: "/dashboard/admin", icon: Home },
-  { title: "Courses", url: "/main/courses", icon: BookOpen },
+  { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Students", url: "/main/students", icon: Users },
 ];
 
@@ -60,6 +61,7 @@ const academicHeadItems = [
   { title: "Dashboard", url: "/dashboard/academic-head", icon: Home },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
   { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
+  { title: "Courses", url: "/main/course", icon: BookOpen },
 ];
 
 const facultyItems = [
@@ -126,7 +128,7 @@ export function AppSidebar() {
   const allowedPaths = {
     ADMIN: [
       "/dashboard/admin",
-      "/main/courses",
+      "/main/course",
       "/main/accounts",
       "/main/students",
     ],
@@ -137,6 +139,7 @@ export function AppSidebar() {
       "/main/grading/class-record",
       "/main/grading/reporting",
       "/main/grading/recitation",
+      "/main/course",
     ],
     FACULTY: [
       "/dashboard/faculty",
