@@ -5,19 +5,24 @@ import { Menu, X } from "lucide-react";
 import UpcomingEvents from "@/features/dashboard/components/events";
 import Notes from "@/features/dashboard/components/notes";
 import { Button } from "@/components/ui/button";
-import AttendanceCourseShortcuts from "@/features/attendance/right-sidebar/my-subjects";
-import AttendanceLeaderboard from "@/features/attendance/right-sidebar/student-attendance";
+import CourseShortcut from "@/features/right-sidebar/components/my-subjects";
+import AttendanceLeaderboard from "@/features/right-sidebar/components/student-attendance";
+import GradingLeaderboard from "@/features/right-sidebar/components/grading-leaderboard";
 
 export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const params = useParams();
   const courseSlug = (params.course_slug || params.slug) as string;
-  const isGrading = pathname.startsWith("/main/grading");
+
+  // Route detection
   const isAttendanceList = pathname === "/main/attendance";
   const isClassAttendance =
-    pathname.startsWith("/main/attendance/") &&
-    pathname !== "/main/attendance/";
+    pathname.startsWith("/main/attendance/class/") && courseSlug;
+  const isGradingClassRecord =
+    pathname.startsWith("/main/grading/class-record/") && courseSlug;
+  const isGradingList =
+    pathname === "/main/grading" || pathname === "/main/grading/class-record";
 
   return (
     <>
@@ -38,35 +43,48 @@ export default function Rightsidebar() {
         `}
       >
         <div className="flex-grow overflow-y-auto grid grid-rows-2 gap-4 h-[calc(100vh-32px)]">
+          {/* Attendance List Page */}
           {isAttendanceList ? (
-            // Show modules for /main/attendance
             <>
               <div className="h-[calc(50vh-20px)]">
-                <AttendanceCourseShortcuts />
+                <CourseShortcut />
               </div>
               <div className="h-[calc(50vh-20px)]">
                 <AttendanceLeaderboard />
               </div>
             </>
-          ) : isClassAttendance ? (
-            // Show modules for /main/attendance/class/[slug]
+          ) : /* Attendance Class Page */
+          isClassAttendance ? (
             <>
-              <div className="h-[calc(50vh-20px)] w-full">
-                <AttendanceCourseShortcuts excludeCourseSlug={courseSlug} />
+              <div className="h-[calc(50vh-20px)]">
+                <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
               <div className="h-[calc(50vh-20px)]">
                 <AttendanceLeaderboard courseSlug={courseSlug} />
               </div>
             </>
-          ) : isGrading ? (
+          ) : /* Grading Class Record Page */
+          isGradingClassRecord ? (
             <>
-              <div className="h-[calc(50vh-20px)] w-full">
-                <AttendanceCourseShortcuts excludeCourseSlug={courseSlug} />
+              <div className="h-[calc(50vh-20px)]">
+                <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-20px)]"></div>
+              <div className="h-[calc(50vh-20px)]">
+                <GradingLeaderboard courseSlug={courseSlug} />
+              </div>
+            </>
+          ) : /* Grading List Page */
+          isGradingList ? (
+            <>
+              <div className="h-[calc(50vh-20px)]">
+                <CourseShortcut />
+              </div>
+              <div className="h-[calc(50vh-20px)]">
+                <GradingLeaderboard />
+              </div>
             </>
           ) : (
-            // Show default modules for other routes
+            /* Default Dashboard */
             <>
               <div className="h-[calc(50vh-20px)]">
                 <UpcomingEvents />

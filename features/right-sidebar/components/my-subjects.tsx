@@ -5,7 +5,7 @@ import { BookOpenText, Loader2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import axiosInstance from "@/lib/axios";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,17 +24,28 @@ interface Course {
   };
 }
 
-interface AttendanceCourseShortcutsProps {
+interface CourseShortcutsProps {
   excludeCourseSlug?: string;
+  basePath?: string; // e.g., "/main/attendance/class" or "/main/grading/class-record"
+  title?: string;
+  showAttendanceStats?: boolean;
 }
 
-const CourseShortcut = ({ course }: { course: Course }) => {
+const CourseShortcut = ({
+  course,
+  basePath,
+  showAttendanceStats = false,
+}: {
+  course: Course;
+  basePath: string;
+  showAttendanceStats?: boolean;
+}) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleClick = () => {
     setIsLoading(true);
-    router.push(`/main/attendance/class/${course.slug}`);
+    router.push(`${basePath}/${course.slug}`);
   };
 
   return (
@@ -49,9 +60,12 @@ const CourseShortcut = ({ course }: { course: Course }) => {
             {course.title}
           </h3>
           <p className="text-xs text-white/70">Section {course.section}</p>
-          <p className="text-xs text-white/60 mt-1">
-            Absents last attendance: {course.attendanceStats?.totalAbsents || 0}
-          </p>
+          {showAttendanceStats && (
+            <p className="text-xs text-white/60 mt-1">
+              Absents last attendance:{" "}
+              {course.attendanceStats?.totalAbsents || 0}
+            </p>
+          )}
         </div>
         {isLoading && (
           <Loader2 className="h-4 w-4 animate-spin text-white mt-1" />
@@ -73,12 +87,55 @@ const LoadingSkeleton = () => (
   </div>
 );
 
-export default function AttendanceCourseShortcuts({
+// Helper function to detect module from pathname
+const getModuleConfig = (pathname: string) => {
+  if (pathname.includes("/attendance/")) {
+    return {
+      basePath: "/main/attendance/class",
+      title: "Quick Access",
+      showAttendanceStats: true,
+    };
+  } else if (
+    pathname.includes("/grading/") ||
+    pathname.includes("/class-record/")
+  ) {
+    return {
+      basePath: "/main/grading/class-record",
+      title: "Quick Access",
+      showAttendanceStats: false,
+    };
+  } else if (pathname.includes("/grades/")) {
+    return {
+      basePath: "/main/grades/class",
+      title: "Quick Access",
+      showAttendanceStats: false,
+    };
+  }
+  // Default fallback
+  return {
+    basePath: "/main/courses",
+    title: "Quick Access",
+    showAttendanceStats: false,
+  };
+};
+
+export default function CourseShortcuts({
   excludeCourseSlug,
-}: AttendanceCourseShortcutsProps) {
+  basePath: propBasePath,
+  title: propTitle,
+  showAttendanceStats: propShowAttendanceStats,
+}: CourseShortcutsProps) {
   const { data: session, status } = useSession();
+  const pathname = usePathname();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Auto-detect module config from pathname if props not provided
+  const moduleConfig = getModuleConfig(pathname);
+  const basePath = propBasePath || moduleConfig.basePath;
+  const title = propTitle || moduleConfig.title;
+  const showAttendanceStats =
+    propShowAttendanceStats ?? moduleConfig.showAttendanceStats;
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -126,7 +183,7 @@ export default function AttendanceCourseShortcuts({
         <CardHeader className="pb-3">
           <CardTitle className="text-white text-lg flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Quick Access
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
@@ -142,7 +199,7 @@ export default function AttendanceCourseShortcuts({
         <CardHeader className="pb-3">
           <CardTitle className="text-white text-lg flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            Quick Access
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
@@ -160,7 +217,7 @@ export default function AttendanceCourseShortcuts({
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white text-lg flex items-center gap-2 -mb-8">
           <Calendar className="h-5 w-5" />
-          Quick Access
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden flex flex-col">
@@ -190,7 +247,12 @@ export default function AttendanceCourseShortcuts({
               </div>
             ) : (
               firstSemCourses.map((course) => (
-                <CourseShortcut key={course.id} course={course} />
+                <CourseShortcut
+                  key={course.id}
+                  course={course}
+                  basePath={basePath}
+                  showAttendanceStats={showAttendanceStats}
+                />
               ))
             )}
           </TabsContent>
@@ -205,7 +267,12 @@ export default function AttendanceCourseShortcuts({
               </div>
             ) : (
               secondSemCourses.map((course) => (
-                <CourseShortcut key={course.id} course={course} />
+                <CourseShortcut
+                  key={course.id}
+                  course={course}
+                  basePath={basePath}
+                  showAttendanceStats={showAttendanceStats}
+                />
               ))
             )}
           </TabsContent>
