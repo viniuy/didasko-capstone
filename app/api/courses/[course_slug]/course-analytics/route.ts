@@ -15,7 +15,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { course_slug } = params;
+    const { course_slug } = await params;
 
     // Fetch course with all related data
     const course = await prisma.course.findUnique({

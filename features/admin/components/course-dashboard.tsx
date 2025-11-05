@@ -33,6 +33,9 @@ import {
   Loader2,
   FileSpreadsheet,
   X,
+  AlertCircle,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -47,9 +50,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Pagination,
   PaginationContent,
@@ -82,12 +83,18 @@ interface Student {
   middleInitial?: string;
   studentId: string;
   image?: string;
+  rfid_id?: number;
   attendanceRate?: number;
   totalPresent?: number;
   totalAbsent?: number;
   totalLate?: number;
   totalExcused?: number;
   averageGrade?: number;
+}
+
+interface StudentWithRecords extends Student {
+  hasAttendance: boolean;
+  hasGrades: boolean;
 }
 
 interface CourseStats {
@@ -141,7 +148,6 @@ const getInitials = (firstName: string, lastName: string) => {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 };
 
-// Loading Spinner Component
 function LoadingSpinner() {
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px]">
@@ -186,15 +192,23 @@ const StatsCard = ({
   color?: string;
 }) => (
   <Card className="border-2 border-[#124A69]/30 hover:border-[#124A69] hover:shadow-lg transition-all duration-200">
-    <CardContent className="p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
-          {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
+    <CardContent className="p-4 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs sm:text-sm font-medium text-gray-600 mb-1 truncate">
+            {title}
+          </p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 truncate">
+            {value}
+          </p>
+          {subtitle && (
+            <p className="text-xs sm:text-sm text-gray-500 mt-1 truncate">
+              {subtitle}
+            </p>
+          )}
         </div>
-        <div className={`${color} p-3 rounded-lg`}>
-          <Icon className="w-6 h-6 text-white" />
+        <div className={`${color} p-2 sm:p-3 rounded-lg shrink-0`}>
+          <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
         </div>
       </div>
     </CardContent>
@@ -202,219 +216,679 @@ const StatsCard = ({
 );
 
 const AddStudentSheet = ({
-  onAddNew,
-  onSelectExisting,
-  courseSlug,
+  isOpen,
+  onOpenChange,
+  existingStudents,
+  isLoading,
+  enrolledStudentIds,
+  onSelectStudent,
 }: {
-  onAddNew: (student: any) => void;
-  onSelectExisting: (student: Student) => void;
-  courseSlug: string;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  existingStudents: Student[];
+  isLoading: boolean;
+  enrolledStudentIds: string[];
+  onSelectStudent: (student: Student) => Promise<void>;
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("existing");
-  const [searchExisting, setSearchExisting] = useState("");
-  const [existingStudents, setExistingStudents] = useState<Student[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [newStudent, setNewStudent] = useState({
-    studentId: "",
-    lastName: "",
-    firstName: "",
-    middleInitial: "",
-  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && activeTab === "existing") {
-      fetchExistingStudents();
-    }
-  }, [isOpen, activeTab]);
-
-  const fetchExistingStudents = async () => {
-    try {
-      setIsLoading(true);
-      const response = await axiosInstance.get("/students");
-      setExistingStudents(response.data.students || []);
-    } catch (error) {
-      console.error("Error fetching students:", error);
-      toast.error("Failed to load students");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filteredExisting = existingStudents.filter((s) =>
-    `${s.lastName} ${s.firstName} ${s.studentId}`
-      .toLowerCase()
-      .includes(searchExisting.toLowerCase())
+  const filteredStudents = existingStudents.filter(
+    (s) =>
+      !enrolledStudentIds.includes(s.id) &&
+      `${s.lastName} ${s.firstName} ${s.studentId}`
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase())
   );
 
-  const handleAddNew = async () => {
-    if (
-      !newStudent.studentId ||
-      !newStudent.lastName ||
-      !newStudent.firstName
-    ) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
+  const handleSelect = async (student: Student) => {
+    setIsSubmitting(true);
     try {
-      await onAddNew(newStudent);
-      setNewStudent({
-        studentId: "",
-        lastName: "",
-        firstName: "",
-        middleInitial: "",
-      });
-      setIsOpen(false);
-    } catch (error) {
-      console.error("Error adding student:", error);
-    }
-  };
-
-  const handleSelectExisting = async (student: Student) => {
-    try {
-      await onSelectExisting(student);
-      setIsOpen(false);
-    } catch (error) {
-      console.error("Error adding existing student:", error);
+      await onSelectStudent(student);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2">
-          <Users className="w-4 h-4" />
-          Add Student
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="w-[500px] sm:w-[600px] overflow-y-auto">
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <SheetContent className="w-[500px] sm:w-[600px] overflow-y-auto p-4">
         <SheetHeader>
           <SheetTitle>Add Student to Course</SheetTitle>
           <SheetDescription>
-            Add a new student or select from existing students
+            Select from existing students with RFID registration
           </SheetDescription>
         </SheetHeader>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="existing">Existing Students</TabsTrigger>
-            <TabsTrigger value="new">New Student</TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="existing" className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-              <Input
-                placeholder="Search students..."
-                value={searchExisting}
-                onChange={(e) => setSearchExisting(e.target.value)}
-                className="pl-8"
-              />
+        <div className="mt-6 space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p className="font-medium mb-1">RFID Required</p>
+              <p>
+                Only students with registered RFID cards can be added to
+                courses.
+              </p>
             </div>
-            <div className="border rounded-lg max-h-[500px] overflow-y-auto">
-              {isLoading ? (
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
-                </div>
-              ) : filteredExisting.length > 0 ? (
-                filteredExisting.map((student) => (
-                  <div
-                    key={student.id}
-                    className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50"
-                  >
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search students..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+
+          <div className="border rounded-lg max-h-[500px] overflow-y-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
+              </div>
+            ) : filteredStudents.length > 0 ? (
+              filteredStudents.map((student) => (
+                <div
+                  key={student.id}
+                  className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={student.image}
+                        alt={student.firstName}
+                      />
+                      <AvatarFallback className="bg-[#124A69] text-white text-sm">
+                        {getInitials(student.firstName, student.lastName)}
+                      </AvatarFallback>
+                    </Avatar>
                     <div>
-                      <p className="font-medium">
+                      <p className="font-medium text-gray-900">
                         {student.lastName}, {student.firstName}{" "}
                         {student.middleInitial
                           ? `${student.middleInitial}.`
                           : ""}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {student.studentId}
+                        {student.studentId} • RFID: {student.rfid_id}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleSelectExisting(student)}
-                      className="bg-[#124A69] hover:bg-[#0D3A54]"
-                    >
-                      Add
-                    </Button>
                   </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-gray-500">
-                  No students found
+                  <Button
+                    size="sm"
+                    onClick={() => handleSelect(student)}
+                    disabled={isSubmitting}
+                    className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Add"
+                    )}
+                  </Button>
                 </div>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="new" className="space-y-4">
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1 block">
-                  Student ID <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  value={newStudent.studentId}
-                  onChange={(e) =>
-                    setNewStudent({ ...newStudent, studentId: e.target.value })
-                  }
-                  placeholder="2024-0001"
-                />
+              ))
+            ) : (
+              <div className="p-8 text-center text-gray-500">
+                <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                <p className="font-medium">No students found</p>
+                <p className="text-sm mt-1">
+                  {searchQuery
+                    ? "Try adjusting your search"
+                    : "No students with RFID registration available"}
+                </p>
               </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">
-                  Last Name <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  value={newStudent.lastName}
-                  onChange={(e) =>
-                    setNewStudent({ ...newStudent, lastName: e.target.value })
-                  }
-                  placeholder="Dela Cruz"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">
-                  First Name <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  value={newStudent.firstName}
-                  onChange={(e) =>
-                    setNewStudent({ ...newStudent, firstName: e.target.value })
-                  }
-                  placeholder="Juan"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">
-                  Middle Initial
-                </label>
-                <Input
-                  value={newStudent.middleInitial}
-                  onChange={(e) =>
-                    setNewStudent({
-                      ...newStudent,
-                      middleInitial: e.target.value,
-                    })
-                  }
-                  placeholder="A"
-                  maxLength={1}
-                />
-              </div>
-              <Button
-                onClick={handleAddNew}
-                className="w-full bg-[#124A69] hover:bg-[#0D3A54]"
-              >
-                Add Student
-              </Button>
-            </div>
-          </TabsContent>
-        </Tabs>
+            )}
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
+  );
+};
+
+const RemoveStudentSheet = ({
+  isOpen,
+  onOpenChange,
+  students,
+  isLoading,
+  courseSlug,
+  onRemoveSuccess,
+}: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  students: StudentWithRecords[];
+  isLoading: boolean;
+  courseSlug: string;
+  onRemoveSuccess: () => void;
+}) => {
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [confirmationInput, setConfirmationInput] = useState("");
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const hasStudentsWithRecords = students.some(
+    (s) => selectedStudents.includes(s.id) && (s.hasAttendance || s.hasGrades)
+  );
+
+  const filteredStudents = students.filter((student) =>
+    `${student.lastName} ${student.firstName} ${student.studentId}`
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase())
+  );
+
+  const handleToggleStudent = (studentId: string) => {
+    setSelectedStudents((prev) =>
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  const handleToggleAll = () => {
+    if (selectedStudents.length === filteredStudents.length) {
+      setSelectedStudents([]);
+    } else {
+      setSelectedStudents(filteredStudents.map((s) => s.id));
+    }
+  };
+
+  const handleRemove = () => {
+    if (selectedStudents.length === 0) {
+      toast.error("Please select at least one student to remove");
+      return;
+    }
+
+    if (hasStudentsWithRecords) {
+      setShowConfirmation(true);
+    } else {
+      confirmRemoval();
+    }
+  };
+
+  const confirmRemoval = async () => {
+    if (hasStudentsWithRecords && confirmationInput !== "Remove") {
+      toast.error('Please type "Remove" to confirm');
+      return;
+    }
+
+    try {
+      setIsRemoving(true);
+      await axiosInstance.delete(`/courses/${courseSlug}/students`, {
+        data: { studentIds: selectedStudents },
+      });
+
+      toast.success(
+        `Successfully removed ${selectedStudents.length} student${
+          selectedStudents.length > 1 ? "s" : ""
+        }`
+      );
+
+      setSelectedStudents([]);
+      setConfirmationInput("");
+      setShowConfirmation(false);
+      onOpenChange(false);
+      onRemoveSuccess();
+    } catch (error: any) {
+      console.error("Error removing students:", error);
+      const errorMessage =
+        error?.response?.data?.error || "Failed to remove students";
+      toast.error(errorMessage);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const resetSheet = () => {
+    setSelectedStudents([]);
+    setSearchQuery("");
+    setConfirmationInput("");
+    setShowConfirmation(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <>
+      <Sheet open={isOpen && !showConfirmation} onOpenChange={resetSheet}>
+        <SheetContent className="w-[500px] sm:w-[600px] overflow-y-auto p-4">
+          <SheetHeader>
+            <SheetTitle className="text-red-600">
+              Remove Students from Course
+            </SheetTitle>
+            <SheetDescription>
+              Select students to remove from this course
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800">
+                <p className="font-medium mb-1">Warning</p>
+                <p>
+                  Removing students with attendance or grades will permanently
+                  delete their records for this course. This action cannot be
+                  undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search students..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+
+            {selectedStudents.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-800">
+                  {selectedStudents.length} student
+                  {selectedStudents.length > 1 ? "s" : ""} selected
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedStudents([])}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+
+            <div className="border rounded-lg">
+              {isLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 border-b bg-gray-50 flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredStudents.length > 0 &&
+                        selectedStudents.length === filteredStudents.length
+                      }
+                      onChange={handleToggleAll}
+                      className="w-4 h-4 text-[#124A69] border-gray-300 rounded focus:ring-[#124A69]"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Select All
+                    </span>
+                  </div>
+
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {filteredStudents.length > 0 ? (
+                      filteredStudents.map((student) => (
+                        <div
+                          key={student.id}
+                          className="flex items-center gap-3 p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedStudents.includes(student.id)}
+                            onChange={() => handleToggleStudent(student.id)}
+                            className="w-4 h-4 text-[#124A69] border-gray-300 rounded focus:ring-[#124A69]"
+                          />
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage
+                              src={student.image}
+                              alt={student.firstName}
+                            />
+                            <AvatarFallback className="bg-[#124A69] text-white text-sm">
+                              {getInitials(student.firstName, student.lastName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-900">
+                              {student.lastName}, {student.firstName}{" "}
+                              {student.middleInitial
+                                ? `${student.middleInitial}.`
+                                : ""}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {student.studentId}
+                            </p>
+                            {(student.hasAttendance || student.hasGrades) && (
+                              <div className="flex gap-2 mt-1">
+                                {student.hasAttendance && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs bg-orange-100 text-orange-700"
+                                  >
+                                    Has Attendance
+                                  </Badge>
+                                )}
+                                {student.hasGrades && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs bg-purple-100 text-purple-700"
+                                  >
+                                    Has Grades
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center text-gray-500">
+                        <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                        <p className="font-medium">No students found</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={resetSheet}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRemove}
+                disabled={selectedStudents.length === 0 || isRemoving}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isRemoving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  `Remove ${selectedStudents.length} Student${
+                    selectedStudents.length !== 1 ? "s" : ""
+                  }`
+                )}
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <DialogContent className="w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">
+              Confirm Student Removal
+            </DialogTitle>
+            <DialogDescription>
+              This action will permanently delete all attendance and grade
+              records for the selected students.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4 space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-800 font-medium mb-2">
+                You are about to remove:
+              </p>
+              <ul className="text-sm text-red-700 space-y-1">
+                {students
+                  .filter((s) => selectedStudents.includes(s.id))
+                  .map((student) => (
+                    <li key={student.id}>
+                      • {student.lastName}, {student.firstName} (
+                      {student.studentId})
+                      {(student.hasAttendance || student.hasGrades) && (
+                        <span className="text-red-600 font-semibold">
+                          {" "}
+                          - Has Records
+                        </span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Type <span className="font-bold text-red-600">"Remove"</span> to
+                confirm
+              </label>
+              <Input
+                value={confirmationInput}
+                onChange={(e) => setConfirmationInput(e.target.value)}
+                placeholder="Remove"
+                className="border-red-300 focus:border-red-500 focus:ring-red-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowConfirmation(false);
+                  setConfirmationInput("");
+                }}
+                disabled={isRemoving}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmRemoval}
+                disabled={confirmationInput !== "Remove" || isRemoving}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isRemoving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Confirm Removal"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
+
+const RemoveAllStudentsDialog = ({
+  isOpen,
+  onOpenChange,
+  students,
+  isLoading,
+  courseSlug,
+  courseInfo,
+  onRemoveSuccess,
+}: {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  students: StudentWithRecords[];
+  isLoading: boolean;
+  courseSlug: string;
+  courseInfo: CourseInfo;
+  onRemoveSuccess: () => void;
+}) => {
+  const [confirmationInput, setConfirmationInput] = useState("");
+  const [isRemoving, setIsRemoving] = useState(false);
+
+  const hasAnyRecords = students.some((s) => s.hasAttendance || s.hasGrades);
+  const studentsWithRecords = students.filter(
+    (s) => s.hasAttendance || s.hasGrades
+  );
+
+  const handleRemoveAll = async () => {
+    if (confirmationInput !== "REMOVE ALL STUDENTS") {
+      toast.error('Please type "REMOVE ALL STUDENTS" to confirm');
+      return;
+    }
+
+    try {
+      setIsRemoving(true);
+      await axiosInstance.delete(`/courses/${courseSlug}/students/all`);
+
+      toast.success(`Successfully removed all students from the course`);
+
+      setConfirmationInput("");
+      onOpenChange(false);
+      onRemoveSuccess();
+    } catch (error: any) {
+      console.error("Error removing all students:", error);
+      const errorMessage =
+        error?.response?.data?.error || "Failed to remove all students";
+      toast.error(errorMessage);
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const resetDialog = () => {
+    setConfirmationInput("");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={resetDialog}>
+      <DialogContent className="w-[500px]">
+        <DialogHeader>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-3 bg-red-100 rounded-full">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+            </div>
+            <DialogTitle className="text-red-600 text-xl">
+              Remove All Students
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-base">
+            This will permanently remove all students from this course
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div className="bg-red-100 border-2 border-red-300 rounded-lg p-4">
+              <div className="flex gap-3 mb-3">
+                <AlertCircle className="w-6 h-6 text-red-700 shrink-0" />
+                <div>
+                  <p className="font-bold text-red-900 text-base mb-1">
+                    CRITICAL WARNING
+                  </p>
+                  <p className="text-sm text-red-800">
+                    This action is IRREVERSIBLE and will DELETE ALL DATA for
+                    this course including:
+                  </p>
+                </div>
+              </div>
+              <ul className="text-sm text-red-800 space-y-1 ml-9">
+                <li>• All student enrollments ({students.length} students)</li>
+                <li>• All attendance records</li>
+                <li>• All grade records</li>
+                <li>• All related course data</li>
+              </ul>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+              <p className="font-semibold text-amber-900 mb-2">
+                Course Information:
+              </p>
+              <div className="text-sm text-amber-800 space-y-1">
+                <p>
+                  <span className="font-medium">Course:</span> {courseInfo.code}{" "}
+                  - {courseInfo.title}
+                </p>
+                <p>
+                  <span className="font-medium">Section:</span>{" "}
+                  {courseInfo.section}
+                </p>
+                <p>
+                  <span className="font-medium">Total Students:</span>{" "}
+                  {students.length}
+                </p>
+                {hasAnyRecords && (
+                  <p className="text-red-700 font-semibold mt-2">
+                    ⚠️ {studentsWithRecords.length} student
+                    {studentsWithRecords.length !== 1 ? "s" : ""} with existing
+                    records will lose ALL data
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {hasAnyRecords && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-h-40 overflow-y-auto">
+                <p className="text-sm font-semibold text-red-800 mb-2">
+                  Students with records that will be deleted:
+                </p>
+                <ul className="text-sm text-red-700 space-y-1">
+                  {studentsWithRecords.map((student) => (
+                    <li key={student.id}>
+                      • {student.lastName}, {student.firstName} (
+                      {student.studentId})
+                      {student.hasAttendance && student.hasGrades
+                        ? " - Attendance & Grades"
+                        : student.hasAttendance
+                        ? " - Attendance"
+                        : " - Grades"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-gray-900">
+                To confirm this action, type:{" "}
+                <span className="text-red-600 font-mono bg-red-50 px-2 py-1 rounded">
+                  REMOVE ALL STUDENTS
+                </span>
+              </label>
+              <Input
+                value={confirmationInput}
+                onChange={(e) => setConfirmationInput(e.target.value)}
+                placeholder="REMOVE ALL STUDENTS"
+                className="border-red-300 focus:border-red-500 focus:ring-red-500 font-mono"
+              />
+              {confirmationInput &&
+                confirmationInput !== "REMOVE ALL STUDENTS" && (
+                  <p className="text-sm text-red-600">
+                    Text must match exactly (case sensitive)
+                  </p>
+                )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={resetDialog}
+                disabled={isRemoving}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRemoveAll}
+                disabled={
+                  confirmationInput !== "REMOVE ALL STUDENTS" || isRemoving
+                }
+                className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+              >
+                {isRemoving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Removing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Remove All Students
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -445,6 +919,18 @@ export function CourseDashboard({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [showAddSheet, setShowAddSheet] = useState(false);
+  const [existingStudents, setExistingStudents] = useState<Student[]>([]);
+  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+
+  const [showRemoveSheet, setShowRemoveSheet] = useState(false);
+  const [studentsWithRecords, setStudentsWithRecords] = useState<
+    StudentWithRecords[]
+  >([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+
+  const [showRemoveAllDialog, setShowRemoveAllDialog] = useState(false);
+
   useEffect(() => {
     if (courseSlug) {
       fetchCourseData();
@@ -462,7 +948,6 @@ export function CourseDashboard({
       setStats(stats);
       setTableData(students);
 
-      // Small delay for better UX
       await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (error) {
       console.error("Error fetching course data:", error);
@@ -470,6 +955,67 @@ export function CourseDashboard({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchExistingStudents = async () => {
+    try {
+      setIsLoadingExisting(true);
+      const response = await axiosInstance.get("/students");
+      const studentsWithRfid = (response.data.students || []).filter(
+        (s: Student) => s.rfid_id !== null && s.rfid_id !== undefined
+      );
+      setExistingStudents(studentsWithRfid);
+    } catch (error: any) {
+      console.error("Error fetching students:", error);
+      const errorMessage =
+        error?.response?.data?.error || "Failed to load students";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoadingExisting(false);
+    }
+  };
+
+  const fetchStudentsWithRecords = async () => {
+    try {
+      setIsLoadingRecords(true);
+      const response = await axiosInstance.get(
+        `/courses/${courseSlug}/students/records`
+      );
+      const studentsData = response.data.students || [];
+
+      const studentsWithRecordStatus: StudentWithRecords[] = tableData.map(
+        (student) => {
+          const recordInfo = studentsData.find((s: any) => s.id === student.id);
+          return {
+            ...student,
+            hasAttendance: recordInfo?.hasAttendance || false,
+            hasGrades: recordInfo?.hasGrades || false,
+          };
+        }
+      );
+
+      setStudentsWithRecords(studentsWithRecordStatus);
+    } catch (error) {
+      console.error("Error fetching student records:", error);
+      toast.error("Failed to load student records");
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  };
+
+  const handleOpenAddSheet = async () => {
+    setShowAddSheet(true);
+    await fetchExistingStudents();
+  };
+
+  const handleOpenRemoveSheet = async () => {
+    setShowRemoveSheet(true);
+    await fetchStudentsWithRecords();
+  };
+
+  const handleOpenRemoveAllDialog = async () => {
+    setShowRemoveAllDialog(true);
+    await fetchStudentsWithRecords();
   };
 
   const columns = useMemo<ColumnDef<Student>[]>(
@@ -611,31 +1157,33 @@ export function CourseDashboard({
     },
   });
 
-  const handleAddNewStudent = async (student: any) => {
-    try {
-      await axiosInstance.post("/students", { ...student, courseSlug });
-      toast.success("Student added successfully");
-      await fetchCourseData();
-    } catch (error: any) {
-      const errorMessage =
-        error?.response?.data?.error || "Failed to add student";
-      toast.error(errorMessage);
-      throw error;
-    }
-  };
-
   const handleSelectExistingStudent = async (student: Student) => {
     try {
-      await axiosInstance.post(`/courses/${courseSlug}/students`, {
-        studentId: student.id,
-      });
-      toast.success("Student added successfully");
+      const response = await axiosInstance.post(
+        `/courses/${courseSlug}/students`,
+        [
+          {
+            "Student ID": student.studentId,
+            "First Name": student.firstName,
+            "Last Name": student.lastName,
+            "Middle Initial": student.middleInitial || "",
+          },
+        ]
+      );
+
       await fetchCourseData();
+
+      return response.data;
     } catch (error: any) {
+      console.error("Error adding existing student:", error);
+
       const errorMessage =
-        error?.response?.data?.error || "Failed to add student";
-      toast.error(errorMessage);
-      throw error;
+        error?.response?.data?.error ||
+        error?.response?.data?.details ||
+        error?.message ||
+        "Failed to add student to course";
+
+      throw new Error(errorMessage);
     }
   };
 
@@ -699,10 +1247,11 @@ export function CourseDashboard({
         ["Date:", new Date().toLocaleDateString()],
         [""],
         ["IMPORTANT NOTES:"],
-        ["1. Student ID must be unique"],
-        ["2. Last Name and First Name are required"],
-        ["3. Middle Initial is optional (single letter)"],
-        ["4. Do not include empty rows"],
+        ["1. Student ID must match existing students with RFID"],
+        ["2. Only students with registered RFID can be added"],
+        ["3. Last Name and First Name are required"],
+        ["4. Middle Initial is optional (single letter)"],
+        ["5. Do not include empty rows"],
         [""],
         EXPECTED_HEADERS,
       ];
@@ -912,9 +1461,31 @@ export function CourseDashboard({
       setImportProgress(null);
       setShowImportDialog(false);
 
-      setTimeout(async () => {
-        await fetchCourseData();
-      }, 500);
+      setTableData((prev) => {
+        const newStudents = detailedFeedback
+          .filter((f: { status: string }) => f.status === "imported")
+          .map((f: any) => {
+            const importedStudent = previewData.find(
+              (s) => s["Student ID"] === f.studentId
+            );
+            return {
+              id: f.id || "TEMP-" + f.studentId,
+              studentId: f.studentId,
+              firstName: importedStudent?.["First Name"] || "",
+              lastName: importedStudent?.["Last Name"] || "",
+              middleInitial: importedStudent?.["Middle Initial"] || "",
+              attendanceRate: 0,
+              totalPresent: 0,
+              totalAbsent: 0,
+              totalLate: 0,
+              totalExcused: 0,
+              averageGrade: 0,
+            };
+          });
+
+        return [...prev, ...newStudents];
+      });
+      await fetchCourseData();
     } catch (error: any) {
       const errorResponse = error?.response?.data;
       const errorMessage = errorResponse?.error || "Failed to import students";
@@ -995,21 +1566,18 @@ export function CourseDashboard({
             title="Attendance Rate"
             value={`${stats.attendanceRate.toFixed(1)}%`}
             subtitle="Average attendance"
-            color="bg-green-500"
           />
           <StatsCard
             icon={TrendingUp}
             title="Average Grade"
             value={stats.averageGrade.toFixed(1)}
             subtitle={`${stats.passingRate.toFixed(1)}% passing rate`}
-            color="bg-blue-500"
           />
           <StatsCard
             icon={UserX}
             title="Total Absences"
             value={stats.totalAbsents}
             subtitle={`${stats.totalLate} late, ${stats.totalExcused} excused`}
-            color="bg-red-500"
           />
         </div>
 
@@ -1032,7 +1600,7 @@ export function CourseDashboard({
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant="outline"
                 onClick={handleExport}
@@ -1049,11 +1617,29 @@ export function CourseDashboard({
                 <Upload className="w-4 h-4" />
                 Import
               </Button>
-              <AddStudentSheet
-                onAddNew={handleAddNewStudent}
-                onSelectExisting={handleSelectExistingStudent}
-                courseSlug={courseSlug}
-              />
+              <Button
+                onClick={handleOpenAddSheet}
+                className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
+              >
+                <Users className="w-4 h-4" />
+                Add Student
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleOpenRemoveSheet}
+                className="gap-2 border-red-500 text-red-600 hover:bg-red-50"
+              >
+                <UserX className="w-4 h-4" />
+                Remove Student
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleOpenRemoveAllDialog}
+                className="gap-2 border-red-600 text-red-700 hover:bg-red-100"
+              >
+                <Trash2 className="w-4 h-4" />
+                Remove All
+              </Button>
             </div>
           </div>
 
@@ -1157,12 +1743,22 @@ export function CourseDashboard({
                 Import Students
               </DialogTitle>
               <DialogDescription>
-                Upload a file following the template format to batch import
-                students
+                Upload a file to batch import students with RFID registration
               </DialogDescription>
             </DialogHeader>
 
             <div className="mt-6 space-y-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium mb-1">Important</p>
+                  <p>
+                    Only students with registered RFID cards can be imported.
+                    Students without RFID will be skipped.
+                  </p>
+                </div>
+              </div>
+
               <div className="flex items-center gap-4">
                 <input
                   type="file"
@@ -1523,6 +2119,42 @@ export function CourseDashboard({
             )}
           </DialogContent>
         </Dialog>
+
+        <AddStudentSheet
+          isOpen={showAddSheet}
+          onOpenChange={setShowAddSheet}
+          existingStudents={existingStudents}
+          isLoading={isLoadingExisting}
+          enrolledStudentIds={tableData.map((s) => s.id)}
+          onSelectStudent={async (student) => {
+            try {
+              await handleSelectExistingStudent(student);
+              setShowAddSheet(false);
+              toast.success("Student added to course successfully!");
+            } catch (error: any) {
+              toast.error(error.message || "Failed to add student to course");
+            }
+          }}
+        />
+
+        <RemoveStudentSheet
+          isOpen={showRemoveSheet}
+          onOpenChange={setShowRemoveSheet}
+          students={studentsWithRecords}
+          isLoading={isLoadingRecords}
+          courseSlug={courseSlug}
+          onRemoveSuccess={fetchCourseData}
+        />
+
+        <RemoveAllStudentsDialog
+          isOpen={showRemoveAllDialog}
+          onOpenChange={setShowRemoveAllDialog}
+          students={studentsWithRecords}
+          isLoading={isLoadingRecords}
+          courseSlug={courseSlug}
+          courseInfo={courseInfo}
+          onRemoveSuccess={fetchCourseData}
+        />
       </div>
     </div>
   );

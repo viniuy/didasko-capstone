@@ -36,6 +36,12 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
+interface CourseStats {
+  passingRate: number;
+  attendanceRate: number;
+  totalStudents: number;
+}
+
 interface Course {
   id: string;
   code: string;
@@ -61,6 +67,7 @@ interface Course {
     fromTime: string;
     toTime: string;
   }[];
+  stats?: CourseStats;
   [key: string]: any;
 }
 
@@ -178,8 +185,8 @@ const CourseCard = ({ course }: { course: Course }) => {
     }
   };
 
-  const passingRate = 95;
-  const attendanceRate = 85;
+  const passingRate = course.stats?.passingRate ?? 0;
+  const attendanceRate = course.stats?.attendanceRate ?? 0;
 
   return (
     <div
@@ -293,20 +300,41 @@ export function CourseDataTable({
           axiosInstance.get("/users?role=FACULTY"),
         ]);
 
-        console.log("Faculty data loaded:", facultyResponse.data);
-
         if (Array.isArray(facultyResponse.data)) {
           setFaculties(facultyResponse.data);
-        } else {
-          console.error("Unexpected faculty response:", facultyResponse.data);
         }
 
-        // Set initial courses
+        // Fetch stats for all courses in parallel
         if (initialCourses.length > 0) {
-          setTableData(initialCourses);
+          const coursesWithStats = await Promise.all(
+            initialCourses.map(async (course) => {
+              try {
+                const statsResponse = await axiosInstance.get(
+                  `/courses/${course.slug}/courses-stats`
+                );
+                return {
+                  ...course,
+                  stats: statsResponse.data,
+                };
+              } catch (error) {
+                console.error(
+                  `Error fetching stats for course ${course.code}:`,
+                  error
+                );
+                return {
+                  ...course,
+                  stats: {
+                    passingRate: 0,
+                    attendanceRate: 0,
+                    totalStudents: 0,
+                  },
+                };
+              }
+            })
+          );
+          setTableData(coursesWithStats);
         }
 
-        // Small delay for better UX
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error("Error loading initial data:", error);
@@ -325,7 +353,30 @@ export function CourseDataTable({
       const response = await axiosInstance.get("/courses");
       const data = await response.data;
       if (data.courses) {
-        setTableData(data.courses);
+        // Fetch stats for refreshed courses
+        const coursesWithStats = await Promise.all(
+          data.courses.map(async (course: Course) => {
+            try {
+              const statsResponse = await axiosInstance.get(
+                `/courses/${course.slug}/course-stats`
+              );
+              return {
+                ...course,
+                stats: statsResponse.data,
+              };
+            } catch (error) {
+              return {
+                ...course,
+                stats: {
+                  passingRate: 0,
+                  attendanceRate: 0,
+                  totalStudents: 0,
+                },
+              };
+            }
+          })
+        );
+        setTableData(coursesWithStats);
       }
     } catch (error) {
       console.error("Error refreshing table data:", error);
@@ -748,7 +799,7 @@ export function CourseDataTable({
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#124A69]">
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#124A69] mb-5">
         Course Management Dashboard
       </h1>
 
@@ -837,14 +888,14 @@ export function CourseDataTable({
           </div>
         ) : filteredCourses.length > 0 ? (
           <div className="space-y-8 ">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[570px] ">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[555px] ">
               {paginatedCourses.map((course) => (
                 <CourseCard key={course.id} course={course} />
               ))}
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between w-full mt-6">
+              <div className="flex items-center justify-between w-full">
                 <span className="text-sm text-gray-600 w-[1100%]">
                   {Math.min(
                     (currentPage - 1) * ITEMS_PER_PAGE + 1,
