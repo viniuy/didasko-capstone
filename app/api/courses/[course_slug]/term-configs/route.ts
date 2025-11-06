@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { AssessmentType } from "@prisma/client";
 
+// ✅ GET ROUTE
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ course_slug: string }> }
@@ -57,6 +58,7 @@ export async function GET(
   return NextResponse.json(termConfigs);
 }
 
+// ✅ POST ROUTE (fixed $transaction)
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ course_slug: string }> }
@@ -69,32 +71,27 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const course = await prisma.course.findUnique({
-      where: { slug: course_slug },
-    });
-
-    if (!course) {
-      return NextResponse.json({ error: "Course not found" }, { status: 404 });
-    }
-
     const body = await req.json();
     const termConfigs = body.termConfigs;
 
-    // Validate weights
-    for (const [term, config] of Object.entries(termConfigs) as any) {
-      const total = config.ptWeight + config.quizWeight + config.examWeight;
-      if (total !== 100) {
-        return NextResponse.json(
-          { error: `${term}: Weights must total 100%` },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Process each term config
+    // ✅ All DB operations inside this one transaction
     await prisma.$transaction(async (tx) => {
+      // ✅ Fetch course within transaction client
+      const course = await tx.course.findUnique({
+        where: { slug: course_slug },
+      });
+
+      if (!course) {
+        throw new Error("Course not found");
+      }
+
       for (const [term, config] of Object.entries(termConfigs) as any) {
-        // Upsert term configuration
+        const total = config.ptWeight + config.quizWeight + config.examWeight;
+        if (total !== 100) {
+          throw new Error(`${term}: Weights must total 100%`);
+        }
+
+        // ✅ Upsert Term Config
         const termConfig = await tx.termConfiguration.upsert({
           where: {
             courseId_term: {
@@ -116,7 +113,6 @@ export async function POST(
           },
         });
 
-        // Get existing assessments
         const existingAssessments = await tx.assessment.findMany({
           where: { termConfigId: termConfig.id },
           select: { id: true },
@@ -127,19 +123,18 @@ export async function POST(
           .filter((a: any) => a.id && !a.id.startsWith("temp"))
           .map((a: any) => a.id);
 
-        // Delete assessments that are no longer in the config
         const idsToDelete = existingIds.filter(
           (id) => !incomingIds.includes(id)
         );
+
         if (idsToDelete.length > 0) {
           await tx.assessment.deleteMany({
             where: { id: { in: idsToDelete } },
           });
         }
 
-        // Process each assessment
+        // ✅ Create or update incoming assessments
         for (const assessment of config.assessments) {
-          // Check if assessment exists in database
           const existsInDb = existingIds.includes(assessment.id);
 
           const assessmentData = {
@@ -156,7 +151,6 @@ export async function POST(
             !assessment.id ||
             assessment.id.startsWith("temp")
           ) {
-            // Create new assessment (doesn't exist in DB or has temp ID)
             await tx.assessment.create({
               data: {
                 termConfigId: termConfig.id,
@@ -165,7 +159,6 @@ export async function POST(
               },
             });
           } else {
-            // Update existing assessment (exists in DB)
             await tx.assessment.update({
               where: { id: assessment.id },
               data: assessmentData,
@@ -176,19 +169,12 @@ export async function POST(
     });
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error saving term configs:", error);
-
-    // Log more detailed error information
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-      console.error("Error stack:", error.stack);
-    }
-
     return NextResponse.json(
       {
         error: "Failed to save configurations",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: error.message || "Unknown error",
       },
       { status: 500 }
     );
