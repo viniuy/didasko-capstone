@@ -80,6 +80,7 @@ export async function POST(
     const body = await req.json();
     const termConfigs = body.termConfigs;
 
+    // Validate weights
     for (const [term, config] of Object.entries(termConfigs) as any) {
       const total = config.ptWeight + config.quizWeight + config.examWeight;
       if (total !== 100) {
@@ -90,110 +91,105 @@ export async function POST(
       }
     }
 
-    const operations: any[] = [];
-
-    for (const [term, config] of Object.entries(termConfigs) as any) {
-      const termConfig = await prisma.termConfiguration.upsert({
-        where: {
-          courseId_term: {
+    // Process each term config
+    await prisma.$transaction(async (tx) => {
+      for (const [term, config] of Object.entries(termConfigs) as any) {
+        // Upsert term configuration
+        const termConfig = await tx.termConfiguration.upsert({
+          where: {
+            courseId_term: {
+              courseId: course.id,
+              term,
+            },
+          },
+          create: {
             courseId: course.id,
             term,
+            ptWeight: config.ptWeight,
+            quizWeight: config.quizWeight,
+            examWeight: config.examWeight,
           },
-        },
-        create: {
-          courseId: course.id,
-          term,
-          ptWeight: config.ptWeight,
-          quizWeight: config.quizWeight,
-          examWeight: config.examWeight,
-        },
-        update: {
-          ptWeight: config.ptWeight,
-          quizWeight: config.quizWeight,
-          examWeight: config.examWeight,
-        },
-      });
+          update: {
+            ptWeight: config.ptWeight,
+            quizWeight: config.quizWeight,
+            examWeight: config.examWeight,
+          },
+        });
 
-      const existingAssessments = await prisma.assessment.findMany({
-        where: { termConfigId: termConfig.id },
-        select: { id: true },
-      });
+        // Get existing assessments
+        const existingAssessments = await tx.assessment.findMany({
+          where: { termConfigId: termConfig.id },
+          select: { id: true },
+        });
 
-      const existingIds = existingAssessments.map((a) => a.id);
-      const incomingIds = config.assessments
-        .filter((a: any) => a.id && !a.id.startsWith("temp"))
-        .map((a: any) => a.id);
+        const existingIds = existingAssessments.map((a) => a.id);
+        const incomingIds = config.assessments
+          .filter((a: any) => a.id && !a.id.startsWith("temp"))
+          .map((a: any) => a.id);
 
-      const idsToDelete = existingIds.filter((id) => !incomingIds.includes(id));
-      if (idsToDelete.length > 0) {
-        operations.push(
-          prisma.assessment.deleteMany({
-            where: { id: { in: idsToDelete } },
-          })
+        // Delete assessments that are no longer in the config
+        const idsToDelete = existingIds.filter(
+          (id) => !incomingIds.includes(id)
         );
-      }
+        if (idsToDelete.length > 0) {
+          await tx.assessment.deleteMany({
+            where: { id: { in: idsToDelete } },
+          });
+        }
 
-      for (const assessment of config.assessments) {
-        const isNew = !assessment.id || assessment.id.startsWith("temp");
+        // Process each assessment
+        for (const assessment of config.assessments) {
+          // Check if assessment exists in database
+          const existsInDb = existingIds.includes(assessment.id);
 
-        if (isNew) {
-          // Create new assessment
-          operations.push(
-            prisma.assessment.create({
+          const assessmentData = {
+            name: assessment.name,
+            maxScore: assessment.maxScore,
+            date: assessment.date ? new Date(assessment.date) : null,
+            enabled: assessment.enabled,
+            order: assessment.order,
+            linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+          };
+
+          if (
+            !existsInDb ||
+            !assessment.id ||
+            assessment.id.startsWith("temp")
+          ) {
+            // Create new assessment (doesn't exist in DB or has temp ID)
+            await tx.assessment.create({
               data: {
                 termConfigId: termConfig.id,
                 type: assessment.type as AssessmentType,
-                name: assessment.name,
-                maxScore: assessment.maxScore,
-                date: assessment.date ? new Date(assessment.date) : null,
-                enabled: assessment.enabled,
-                order: assessment.order,
-                linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+                ...assessmentData,
               },
-            })
-          );
-        } else {
-          // Update existing assessment
-          operations.push(
-            prisma.assessment.update({
+            });
+          } else {
+            // Update existing assessment (exists in DB)
+            await tx.assessment.update({
               where: { id: assessment.id },
-              data: {
-                name: assessment.name,
-                maxScore: assessment.maxScore,
-                date: assessment.date ? new Date(assessment.date) : null,
-                enabled: assessment.enabled,
-                order: assessment.order,
-                linkedCriteriaId: assessment.linkedCriteriaId ?? null,
-              },
-            })
-          );
+              data: assessmentData,
+            });
+          }
         }
       }
-      const assessmentsByType = config.assessments.reduce(
-        (acc: any, a: any) => {
-          if (!acc[a.type]) acc[a.type] = [];
-          acc[a.type].push(a);
-          return acc;
-        },
-        {}
-      );
-
-      // Reassign sequential order values within each type
-      Object.values(assessmentsByType).forEach((group: any) => {
-        group.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
-        group.forEach((assessment: any, index: number) => {
-          assessment.order = index;
-        });
-      });
-    }
-
-    await prisma.$transaction(operations);
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error saving term configs:", error);
+
+    // Log more detailed error information
+    if (error instanceof Error) {
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
+
     return NextResponse.json(
-      { error: "Failed to save configurations" },
+      {
+        error: "Failed to save configurations",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

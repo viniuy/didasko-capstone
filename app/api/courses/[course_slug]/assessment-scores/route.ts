@@ -87,7 +87,10 @@ export async function GET(
 }
 
 // PUT - Save or update a single assessment score
-export async function PUT(req: NextRequest) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ course_slug: string }> }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
