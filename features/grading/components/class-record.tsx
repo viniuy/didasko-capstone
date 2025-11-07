@@ -1,9 +1,12 @@
+// Part 1 of 2 - Copy this first
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
-import { Search, Loader2, Settings, Download, Calendar } from "lucide-react";
+import { Search, Loader2, Settings, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SettingsModal } from "./SettingsModal";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 function LoadingSpinner() {
   return (
@@ -80,6 +83,8 @@ interface ClassRecordTableProps {
   courseSlug: string;
   courseCode: string;
   courseSection: string;
+  courseTitle: string;
+  courseNumber: Int16Array;
 }
 
 const TERM_WEIGHTS = {
@@ -108,12 +113,10 @@ function getNumericGrade(totalPercent: number): string {
 }
 
 function getScoreStyle(score: number | null, max: number | null): string {
-  if (score != null && score > 0 && (max == null || max <= 0)) {
+  if (score != null && score > 0 && (max == null || max <= 0))
     return "bg-red-500 text-white";
-  }
-  if (score != null && max != null && score > max) {
+  if (score != null && max != null && score > max)
     return "bg-red-500 text-white";
-  }
   if (score != null && max != null && max > 0) {
     const percentage = (score / max) * 100;
     return percentage < 75 ? "text-red-500" : "";
@@ -133,6 +136,8 @@ export function ClassRecordTable({
   courseSlug,
   courseCode,
   courseSection,
+  courseTitle,
+  courseNumber,
 }: ClassRecordTableProps) {
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
@@ -285,7 +290,6 @@ export function ClassRecordTable({
   const [availableCriteria, setAvailableCriteria] = useState<CriteriaOption[]>(
     []
   );
-
   const [scores, setScores] = useState<Map<string, StudentScore>>(new Map());
   const [search, setSearch] = useState("");
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIMS");
@@ -293,15 +297,10 @@ export function ClassRecordTable({
 
   const useDebouncedCallback = (callback: Function, delay: number) => {
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
     return useCallback(
       (...args: any[]) => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-        }
-        timeoutRef.current = setTimeout(() => {
-          callback(...args);
-        }, delay);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => callback(...args), delay);
       },
       [callback, delay]
     );
@@ -318,7 +317,6 @@ export function ClassRecordTable({
     const load = async () => {
       if (!courseSlug) return;
       setLoading(true);
-
       try {
         const [studentsRes, configRes, scoresRes, criteriaLinksRes] =
           await Promise.all([
@@ -327,20 +325,16 @@ export function ClassRecordTable({
             axiosInstance.get(`/courses/${courseSlug}/assessment-scores`),
             axiosInstance.get(`/courses/${courseSlug}/criteria/link`),
           ]);
-
         const studentList = studentsRes.data?.students || [];
         setStudents(studentList);
-
         if (configRes.data && Object.keys(configRes.data).length > 0) {
           setTermConfigs(configRes.data);
         }
-
         const {
           recitations = [],
           groupReportings = [],
           individualReportings = [],
         } = criteriaLinksRes.data || {};
-
         const recitationList = recitations.map((item: any) => ({
           id: item.id,
           name: item.name,
@@ -348,7 +342,6 @@ export function ClassRecordTable({
           maxScore: item.maxScore,
           type: "RECITATION" as const,
         }));
-
         const groupList = groupReportings.map((item: any) => ({
           id: item.id,
           name: item.name,
@@ -356,7 +349,6 @@ export function ClassRecordTable({
           maxScore: item.maxScore,
           type: "GROUP_REPORTING" as const,
         }));
-
         const individualList = individualReportings.map((item: any) => ({
           id: item.id,
           name: item.name,
@@ -364,13 +356,11 @@ export function ClassRecordTable({
           maxScore: item.maxScore,
           type: "INDIVIDUAL_REPORTING" as const,
         }));
-
         setAvailableCriteria([
           ...recitationList,
           ...groupList,
           ...individualList,
         ]);
-
         const scoresMap = new Map(
           Object.entries(scoresRes.data).map(([key, value]: any) => [
             key,
@@ -378,7 +368,6 @@ export function ClassRecordTable({
           ])
         );
         setScores(scoresMap);
-
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (err) {
         console.error("Error loading data:", err);
@@ -387,7 +376,6 @@ export function ClassRecordTable({
         setLoading(false);
       }
     };
-
     load();
   }, [courseSlug]);
 
@@ -447,12 +435,10 @@ export function ClassRecordTable({
         assessment.linkedCriteriaId
       );
       if (percentageScore === null) return null;
-
       return (
         Math.round((percentageScore / 100) * assessment.maxScore * 100) / 100
       );
     }
-
     return getScore(studentId, assessment.id);
   };
 
@@ -463,13 +449,11 @@ export function ClassRecordTable({
   ) => {
     const key = `${studentId}:${assessmentId}`;
     const updated = new Map(scores);
-
     if (score === null) {
       updated.delete(key);
     } else {
       updated.set(key, { studentId, assessmentId, score });
     }
-
     setScores(updated);
     saveScoreToAPI(studentId, assessmentId, score);
   };
@@ -495,19 +479,15 @@ export function ClassRecordTable({
     (studentId: string, assessmentId: string, max: number) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const digits = sanitizeDigits(e.target.value);
-
       if (digits === "") {
         setScore(studentId, assessmentId, null);
         return;
       }
-
       const num = Number(digits);
-
       if (num === 0) {
         setScore(studentId, assessmentId, 0);
         return;
       }
-
       if (num > max) {
         notifyOnce(`Score cannot exceed max (${max}).`);
         setScore(studentId, assessmentId, max);
@@ -519,7 +499,6 @@ export function ClassRecordTable({
   const computeTermGrade = (studentId: string, term: Term) => {
     const config = termConfigs[term];
     if (!config) return null;
-
     const ptAssessments = config.assessments.filter(
       (a) => a.type === "PT" && a.enabled
     );
@@ -529,7 +508,6 @@ export function ClassRecordTable({
     const examAssessment = config.assessments.find(
       (a) => a.type === "EXAM" && a.enabled
     );
-
     let ptPercentages: number[] = [];
     ptAssessments.forEach((pt) => {
       const score = getEffectiveScore(studentId, pt);
@@ -546,7 +524,6 @@ export function ClassRecordTable({
         if (pct !== null) quizPercentages.push(pct);
       }
     });
-
     let examPercentage: number | null = null;
     if (examAssessment) {
       const examScore = getEffectiveScore(studentId, examAssessment);
@@ -554,9 +531,7 @@ export function ClassRecordTable({
         examPercentage = percent(examScore, examAssessment.maxScore);
       }
     }
-
     if (examPercentage === null) return null;
-
     const ptAvg =
       ptPercentages.length > 0
         ? ptPercentages.reduce((a, b) => a + b, 0) / ptAssessments.length
@@ -565,13 +540,10 @@ export function ClassRecordTable({
       quizPercentages.length > 0
         ? quizPercentages.reduce((a, b) => a + b, 0) / quizAssessments.length
         : 0;
-
     const ptWeighted = (ptAvg / 100) * config.ptWeight;
     const quizWeighted = (quizAvg / 100) * config.quizWeight;
     const examWeighted = (examPercentage / 100) * config.examWeight;
-
     const totalPercent = ptWeighted + quizWeighted + examWeighted;
-
     return {
       totalPercent: totalPercent.toFixed(2),
       numericGrade: getNumericGrade(totalPercent),
@@ -586,17 +558,13 @@ export function ClassRecordTable({
     const midtermGrade = computeTermGrade(studentId, "MIDTERM");
     const preFinalsGrade = computeTermGrade(studentId, "PRE-FINALS");
     const finalsGrade = computeTermGrade(studentId, "FINALS");
-
-    if (!prelimGrade || !midtermGrade || !preFinalsGrade || !finalsGrade) {
+    if (!prelimGrade || !midtermGrade || !preFinalsGrade || !finalsGrade)
       return null;
-    }
-
     const finalWeighted =
       parseFloat(prelimGrade.numericGrade) * TERM_WEIGHTS.PRELIMS +
       parseFloat(midtermGrade.numericGrade) * TERM_WEIGHTS.MIDTERM +
       parseFloat(preFinalsGrade.numericGrade) * TERM_WEIGHTS["PRE-FINALS"] +
       parseFloat(finalsGrade.numericGrade) * TERM_WEIGHTS.FINALS;
-
     return {
       grade: finalWeighted.toFixed(2),
       remarks: finalWeighted <= 3.0 ? "PASSED" : "FAILED",
@@ -605,10 +573,19 @@ export function ClassRecordTable({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter((s) =>
-      `${s.lastName} ${s.firstName}`.toLowerCase().includes(q)
-    );
+    let result = students;
+
+    if (q) {
+      result = students.filter((s) =>
+        `${s.lastName} ${s.firstName}`.toLowerCase().includes(q)
+      );
+    }
+
+    return result.sort((a, b) => {
+      const lastNameCompare = a.lastName.localeCompare(b.lastName);
+      if (lastNameCompare !== 0) return lastNameCompare;
+      return a.firstName.localeCompare(b.firstName);
+    });
   }, [students, search]);
 
   const studentName = (s: Student) =>
@@ -619,16 +596,8 @@ export function ClassRecordTable({
   const handleSaveSettings = async (configs: Record<string, TermConfig>) => {
     try {
       toast.loading("Saving term configurations...");
-
-      // Ensure the data structure is correct
-      const payload = {
-        termConfigs: configs,
-      };
-
-      console.log("Saving config payload:", JSON.stringify(payload, null, 2));
-
+      const payload = { termConfigs: configs };
       await axiosInstance.post(`/courses/${courseSlug}/term-configs`, payload);
-
       toast.dismiss();
       setTermConfigs(configs);
       toast.success("Settings saved successfully!");
@@ -639,9 +608,131 @@ export function ClassRecordTable({
     }
   };
 
-  if (loading) {
-    return <LoadingSpinner />;
-  }
+  const handleExportToExcel = async () => {
+    try {
+      toast.loading("Generating Excel file...");
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Class Record");
+
+      // -----------------------
+      // Top metadata rows
+      // -----------------------
+      ws.getCell("A1").value = `Subject Name: ${courseTitle}`;
+
+      ws.getCell("A2").value = `Class number: ${courseNumber}`;
+
+      ws.getCell("A3").value = `Class Section: ${courseSection}`;
+
+      // Row 4 - Main Header
+      const headerRow = ws.addRow([
+        "",
+        "",
+        "Prelim Grade",
+        "Midterm Grade",
+        "Prefinals Grade",
+        "Finals Grade",
+      ]);
+
+      headerRow.height = 25;
+      headerRow.eachCell((cell, col) => {
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+
+        let isGradeHeader = col >= 3;
+
+        if (isGradeHeader) {
+          ws.getColumn(col).width = 10;
+        }
+
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: isGradeHeader ? "center" : "left",
+        };
+
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFD9D9D9" },
+        };
+      });
+      // -----------------------
+      // Student Rows Start Row 5
+      // -----------------------
+      filtered.forEach((student) => {
+        const prelim =
+          computeTermGrade(student.id, "PRELIMS")?.totalPercent ?? "";
+        const midterm =
+          computeTermGrade(student.id, "MIDTERM")?.totalPercent ?? "";
+        const prefinal =
+          computeTermGrade(student.id, "PRE-FINALS")?.totalPercent ?? "";
+        const finals =
+          computeTermGrade(student.id, "FINALS")?.totalPercent ?? "";
+
+        const fullName = studentName(student);
+        const formattedName = fullName
+          .replace(/\s+[A-Z]\.$/, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toUpperCase();
+
+        const row = ws.addRow([
+          student.id ?? "",
+          formattedName,
+          prelim,
+          midterm,
+          prefinal,
+          finals,
+        ]);
+
+        row.eachCell((cell, col) => {
+          cell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" },
+          };
+
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: col <= 2 ? "left" : "right",
+          };
+        });
+      });
+      // -----------------------
+      // Column Widths
+      // -----------------------
+      ws.getColumn(1).width = 16;
+      ws.getColumn(2).width = 30;
+      ws.getColumn(3).width = 15;
+      ws.getColumn(4).width = 15;
+      ws.getColumn(5).width = 15;
+      ws.getColumn(6).width = 15;
+
+      // Freeze top rows (up to header row)
+      ws.views = [{ state: "frozen", ySplit: 4 }];
+
+      // -----------------------
+      // Save File
+      // -----------------------
+      const buffer = await wb.xlsx.writeBuffer();
+      const fileName = `${courseCode}_${courseSection}_ClassRecord.xlsx`;
+      saveAs(new Blob([buffer]), fileName);
+
+      toast.dismiss();
+      toast.success("Excel exported successfully!");
+    } catch (error) {
+      toast.dismiss();
+      console.error(error);
+      toast.error("Failed to export Excel");
+    }
+  };
+
+  if (loading) return <LoadingSpinner />;
 
   if (activeTerm === "SUMMARY") {
     return (
@@ -668,7 +759,10 @@ export function ClassRecordTable({
               <Settings className="w-4 h-4" />
               Settings
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]">
+            <button
+              onClick={handleExportToExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
+            >
               <Download className="w-4 h-4" />
               Export to Excel
             </button>
@@ -1018,7 +1112,6 @@ export function ClassRecordTable({
             <tbody>
               {filtered.map((student) => {
                 const termGrade = computeTermGrade(student.id, activeTerm);
-
                 return (
                   <tr key={student.id} className="hover:bg-gray-50">
                     <td className="border border-gray-300 px-2 py-2">
@@ -1031,11 +1124,8 @@ export function ClassRecordTable({
                         </span>
                       </div>
                     </td>
-
-                    {/* Performance Tasks */}
                     {pts.map((pt) => {
                       const score = getEffectiveScore(student.id, pt);
-
                       return (
                         <td
                           key={pt.id}
@@ -1066,7 +1156,6 @@ export function ClassRecordTable({
                         </td>
                       );
                     })}
-
                     {pts.length > 0 && (
                       <td className="border border-gray-300 py-3 text-center text-sm">
                         <input
@@ -1077,11 +1166,8 @@ export function ClassRecordTable({
                         />
                       </td>
                     )}
-
-                    {/* Quizzes */}
                     {quizzes.map((quiz) => {
                       const score = getEffectiveScore(student.id, quiz);
-
                       return (
                         <td
                           key={quiz.id}
@@ -1112,7 +1198,6 @@ export function ClassRecordTable({
                         </td>
                       );
                     })}
-
                     {quizzes.length > 0 && (
                       <td className="border border-gray-300 py-3 text-center text-sm">
                         <input
@@ -1123,14 +1208,11 @@ export function ClassRecordTable({
                         />
                       </td>
                     )}
-
-                    {/* Exam */}
                     {exam && (
                       <>
                         <td className="border border-gray-300 py-3 text-center text-sm">
                           {(() => {
                             const score = getEffectiveScore(student.id, exam);
-
                             return (
                               <input
                                 type="text"
@@ -1157,7 +1239,6 @@ export function ClassRecordTable({
                             );
                           })()}
                         </td>
-
                         <td className="border border-gray-300 py-3 text-center text-sm">
                           <input
                             type="text"
@@ -1168,8 +1249,6 @@ export function ClassRecordTable({
                         </td>
                       </>
                     )}
-
-                    {/* Total Percent */}
                     <td className="border border-gray-300 py-3 text-center text-sm">
                       <input
                         type="text"
@@ -1182,8 +1261,6 @@ export function ClassRecordTable({
                         readOnly
                       />
                     </td>
-
-                    {/* Numeric Grade */}
                     <td className="border border-gray-300 py-3 text-center text-sm">
                       <input
                         type="text"

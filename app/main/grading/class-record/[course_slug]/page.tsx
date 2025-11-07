@@ -5,7 +5,6 @@ import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { format } from "date-fns";
-import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
 import { ClassRecordTable } from "@/features/grading/components/class-record";
@@ -20,12 +19,13 @@ export default function GradebookCoursePage({
   }>;
 }) {
   const resolvedParams = React.use(params);
-  const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [courseId, setCourseId] = useState<string>("");
   const [courseInfo, setCourseInfo] = useState<{
     code: string;
     section: string;
+    title: string;
+    classNumber: Int16Array;
   } | null>(null);
 
   useEffect(() => {
@@ -38,11 +38,12 @@ export default function GradebookCoursePage({
         if (response.data) {
           const course = response.data;
           const fetchedCourseId = course.id;
-          console.log("Fetched course ID:", fetchedCourseId);
           setCourseId(fetchedCourseId);
           setCourseInfo({
             code: course.code,
             section: course.section,
+            title: course.title,
+            classNumber: course.classNumber,
           });
         } else {
           console.warn("No course found for the given slug");
@@ -78,6 +79,8 @@ export default function GradebookCoursePage({
                   courseSlug={resolvedParams.course_slug}
                   courseCode={courseInfo.code}
                   courseSection={courseInfo.section}
+                  courseTitle={courseInfo.title}
+                  courseNumber={courseInfo.classNumber}
                 />
               )}
             </div>
