@@ -58,7 +58,7 @@ export async function GET(
   return NextResponse.json(termConfigs);
 }
 
-// ✅ POST ROUTE (fixed $transaction)
+// ✅ POST ROUTE (NO TRANSACTION - serverless friendly)
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ course_slug: string }> }
@@ -74,99 +74,101 @@ export async function POST(
     const body = await req.json();
     const termConfigs = body.termConfigs;
 
-    // ✅ All DB operations inside this one transaction
-    await prisma.$transaction(async (tx) => {
-      // ✅ Fetch course within transaction client
-      const course = await tx.course.findUnique({
-        where: { slug: course_slug },
-      });
+    // ✅ Fetch course
+    const course = await prisma.course.findUnique({
+      where: { slug: course_slug },
+    });
 
-      if (!course) {
-        throw new Error("Course not found");
+    if (!course) {
+      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    // ✅ Validate weights
+    for (const [term, config] of Object.entries(termConfigs) as any) {
+      const total = config.ptWeight + config.quizWeight + config.examWeight;
+      if (total !== 100) {
+        return NextResponse.json(
+          { error: `${term}: Weights must total 100%` },
+          { status: 400 }
+        );
       }
+    }
 
-      for (const [term, config] of Object.entries(termConfigs) as any) {
-        const total = config.ptWeight + config.quizWeight + config.examWeight;
-        if (total !== 100) {
-          throw new Error(`${term}: Weights must total 100%`);
-        }
-
-        // ✅ Upsert Term Config
-        const termConfig = await tx.termConfiguration.upsert({
-          where: {
-            courseId_term: {
-              courseId: course.id,
-              term,
-            },
-          },
-          create: {
+    // ✅ Process each term config WITHOUT transaction
+    for (const [term, config] of Object.entries(termConfigs) as any) {
+      // ✅ Upsert Term Config
+      const termConfig = await prisma.termConfiguration.upsert({
+        where: {
+          courseId_term: {
             courseId: course.id,
             term,
-            ptWeight: config.ptWeight,
-            quizWeight: config.quizWeight,
-            examWeight: config.examWeight,
           },
-          update: {
-            ptWeight: config.ptWeight,
-            quizWeight: config.quizWeight,
-            examWeight: config.examWeight,
-          },
+        },
+        create: {
+          courseId: course.id,
+          term,
+          ptWeight: config.ptWeight,
+          quizWeight: config.quizWeight,
+          examWeight: config.examWeight,
+        },
+        update: {
+          ptWeight: config.ptWeight,
+          quizWeight: config.quizWeight,
+          examWeight: config.examWeight,
+        },
+      });
+
+      // ✅ Get existing assessments
+      const existingAssessments = await prisma.assessment.findMany({
+        where: { termConfigId: termConfig.id },
+        select: { id: true },
+      });
+
+      const existingIds = existingAssessments.map((a) => a.id);
+      const incomingIds = config.assessments
+        .filter((a: any) => a.id && !a.id.startsWith("temp"))
+        .map((a: any) => a.id);
+
+      const idsToDelete = existingIds.filter((id) => !incomingIds.includes(id));
+
+      // ✅ Delete removed assessments
+      if (idsToDelete.length > 0) {
+        await prisma.assessment.deleteMany({
+          where: { id: { in: idsToDelete } },
         });
+      }
 
-        const existingAssessments = await tx.assessment.findMany({
-          where: { termConfigId: termConfig.id },
-          select: { id: true },
-        });
+      // ✅ Create or update assessments
+      for (const assessment of config.assessments) {
+        const existsInDb = existingIds.includes(assessment.id);
 
-        const existingIds = existingAssessments.map((a) => a.id);
-        const incomingIds = config.assessments
-          .filter((a: any) => a.id && !a.id.startsWith("temp"))
-          .map((a: any) => a.id);
+        const assessmentData = {
+          name: assessment.name,
+          maxScore: assessment.maxScore,
+          date: assessment.date ? new Date(assessment.date) : null,
+          enabled: assessment.enabled,
+          order: assessment.order,
+          linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+        };
 
-        const idsToDelete = existingIds.filter(
-          (id) => !incomingIds.includes(id)
-        );
-
-        if (idsToDelete.length > 0) {
-          await tx.assessment.deleteMany({
-            where: { id: { in: idsToDelete } },
+        if (!existsInDb || !assessment.id || assessment.id.startsWith("temp")) {
+          // Create new assessment
+          await prisma.assessment.create({
+            data: {
+              termConfigId: termConfig.id,
+              type: assessment.type as AssessmentType,
+              ...assessmentData,
+            },
+          });
+        } else {
+          // Update existing assessment
+          await prisma.assessment.update({
+            where: { id: assessment.id },
+            data: assessmentData,
           });
         }
-
-        // ✅ Create or update incoming assessments
-        for (const assessment of config.assessments) {
-          const existsInDb = existingIds.includes(assessment.id);
-
-          const assessmentData = {
-            name: assessment.name,
-            maxScore: assessment.maxScore,
-            date: assessment.date ? new Date(assessment.date) : null,
-            enabled: assessment.enabled,
-            order: assessment.order,
-            linkedCriteriaId: assessment.linkedCriteriaId ?? null,
-          };
-
-          if (
-            !existsInDb ||
-            !assessment.id ||
-            assessment.id.startsWith("temp")
-          ) {
-            await tx.assessment.create({
-              data: {
-                termConfigId: termConfig.id,
-                type: assessment.type as AssessmentType,
-                ...assessmentData,
-              },
-            });
-          } else {
-            await tx.assessment.update({
-              where: { id: assessment.id },
-              data: assessmentData,
-            });
-          }
-        }
       }
-    });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
