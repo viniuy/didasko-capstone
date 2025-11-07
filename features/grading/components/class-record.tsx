@@ -945,9 +945,12 @@ export function ClassRecordTable({
             <Settings className="w-4 h-4" />
             Settings
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]">
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
+            onClick={handleExportToExcel}
+          >
             <Download className="w-4 h-4" />
-            Export to PDF
+            Export to Excel
           </button>
           {loading && (
             <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
