@@ -468,6 +468,7 @@ export function SettingsModal({
                       }
                       className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       placeholder="Name"
+                      maxLength={5}
                     />
                     <div className="flex items-center gap-2">
                       <input
@@ -650,6 +651,7 @@ export function SettingsModal({
                     }
                     className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     placeholder="Name"
+                    maxLength={5}
                   />
                   <div className="flex items-center gap-2">
                     <input
@@ -748,6 +750,7 @@ export function SettingsModal({
                   }
                   className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   placeholder="Name"
+                  maxLength={5}
                 />
                 <div className="flex items-center gap-2">
                   <input

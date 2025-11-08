@@ -396,7 +396,7 @@ export function ClassRecordTable({
         console.error(error);
       }
     },
-    1000
+    3000
   );
 
   const currentConfig = termConfigs[activeTerm];
@@ -1060,7 +1060,7 @@ export function ClassRecordTable({
                 {exam && (
                   <>
                     <th className="border border-gray-300 px-1 py-1 text-center">
-                      0
+                      {exam.name}
                     </th>
                     <th className="border border-gray-300 px-1 py-1 text-center text-[#124A69] font-semibold">
                       {currentConfig.examWeight}%
