@@ -1,12 +1,18 @@
-// Part 1 of 2 - Copy this first
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
-import { Search, Loader2, Settings, Download } from "lucide-react";
+import {
+  Search,
+  Loader2,
+  Settings,
+  Download,
+  ClipboardPaste,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SettingsModal } from "./SettingsModal";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import PasteGradesModal from "./paste-grades";
 
 function LoadingSpinner() {
   return (
@@ -141,6 +147,7 @@ export function ClassRecordTable({
 }: ClassRecordTableProps) {
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
+  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [termConfigs, setTermConfigs] = useState<Record<string, TermConfig>>({
     PRELIMS: {
       id: "prelims",
@@ -398,6 +405,31 @@ export function ClassRecordTable({
     },
     3000
   );
+
+  const saveBulkScoresToAPI = async (
+    grades: Array<{
+      studentId: string;
+      assessmentId: string;
+      score: number | null;
+    }>
+  ) => {
+    try {
+      toast.loading("Updating Student Grades...");
+      // Send all scores in one POST request
+      await axiosInstance.post(
+        `/courses/${courseSlug}/assessment-scores/bulk`,
+        {
+          scores: grades,
+        }
+      );
+      toast.dismiss();
+      toast.success("Grades updated successfully");
+    } catch (error) {
+      toast.dismiss();
+      toast.error("Failed to save grades");
+      console.error(error);
+    }
+  };
 
   const currentConfig = termConfigs[activeTerm];
   const pts =
@@ -760,6 +792,13 @@ export function ClassRecordTable({
               Settings
             </button>
             <button
+              onClick={() => setIsPasteModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+            >
+              <ClipboardPaste className="w-4 h-4" />
+              Paste Grades
+            </button>
+            <button
               onClick={handleExportToExcel}
               className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
             >
@@ -917,6 +956,65 @@ export function ClassRecordTable({
           onSave={handleSaveSettings}
           availableCriteria={availableCriteria}
         />
+
+        <PasteGradesModal
+          isOpen={isPasteModalOpen}
+          onClose={() => setIsPasteModalOpen(false)}
+          availableColumns={(() => {
+            const ptColumns = pts.map((pt) => ({
+              id: pt.id,
+              name: pt.name,
+              type: "PT" as const,
+              maxScore: pt.maxScore,
+              term: activeTerm,
+            }));
+            const quizColumns = quizzes.map((quiz) => ({
+              id: quiz.id,
+              name: quiz.name,
+              type: "QUIZ" as const,
+              maxScore: quiz.maxScore,
+              term: activeTerm,
+            }));
+            const examColumns = exam
+              ? [
+                  {
+                    id: exam.id,
+                    name: exam.name,
+                    type: "EXAM" as const,
+                    maxScore: exam.maxScore,
+                    term: activeTerm,
+                  },
+                ]
+              : [];
+            return [...ptColumns, ...quizColumns, ...examColumns];
+          })()}
+          students={filtered.map((s) => ({
+            id: s.id,
+            name: studentName(s),
+            studentNumber: s.id,
+          }))}
+          onPasteGrades={async (columnId, grades) => {
+            // Update local state first
+            const updated = new Map(scores);
+            grades.forEach(({ studentId, score }) => {
+              const key = `${studentId}:${columnId}`;
+              if (score === null) {
+                updated.delete(key);
+              } else {
+                updated.set(key, { studentId, assessmentId: columnId, score });
+              }
+            });
+            setScores(updated);
+
+            // Save all grades to API
+            const gradesToSave = grades.map(({ studentId, score }) => ({
+              studentId,
+              assessmentId: columnId,
+              score,
+            }));
+            await saveBulkScoresToAPI(gradesToSave);
+          }}
+        />
       </div>
     );
   }
@@ -944,6 +1042,13 @@ export function ClassRecordTable({
           >
             <Settings className="w-4 h-4" />
             Settings
+          </button>
+          <button
+            onClick={() => setIsPasteModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+          >
+            <ClipboardPaste className="w-4 h-4" />
+            Paste Grades
           </button>
           <button
             className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
@@ -1290,6 +1395,65 @@ export function ClassRecordTable({
         termConfigs={termConfigs}
         onSave={handleSaveSettings}
         availableCriteria={availableCriteria}
+      />
+
+      <PasteGradesModal
+        isOpen={isPasteModalOpen}
+        onClose={() => setIsPasteModalOpen(false)}
+        availableColumns={(() => {
+          const ptColumns = pts.map((pt) => ({
+            id: pt.id,
+            name: pt.name,
+            type: "PT" as const,
+            maxScore: pt.maxScore,
+            term: activeTerm,
+          }));
+          const quizColumns = quizzes.map((quiz) => ({
+            id: quiz.id,
+            name: quiz.name,
+            type: "QUIZ" as const,
+            maxScore: quiz.maxScore,
+            term: activeTerm,
+          }));
+          const examColumns = exam
+            ? [
+                {
+                  id: exam.id,
+                  name: exam.name,
+                  type: "EXAM" as const,
+                  maxScore: exam.maxScore,
+                  term: activeTerm,
+                },
+              ]
+            : [];
+          return [...ptColumns, ...quizColumns, ...examColumns];
+        })()}
+        students={filtered.map((s) => ({
+          id: s.id,
+          name: studentName(s),
+          studentNumber: s.id,
+        }))}
+        onPasteGrades={async (columnId, grades) => {
+          // Update local state first
+          const updated = new Map(scores);
+          grades.forEach(({ studentId, score }) => {
+            const key = `${studentId}:${columnId}`;
+            if (score === null) {
+              updated.delete(key);
+            } else {
+              updated.set(key, { studentId, assessmentId: columnId, score });
+            }
+          });
+          setScores(updated);
+
+          // Save all grades to API
+          const gradesToSave = grades.map(({ studentId, score }) => ({
+            studentId,
+            assessmentId: columnId,
+            score,
+          }));
+          await saveBulkScoresToAPI(gradesToSave);
+        }}
       />
     </div>
   );

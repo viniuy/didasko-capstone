@@ -16,6 +16,8 @@ import {
   Save,
   AlertCircle,
   CalendarIcon,
+  ArrowRight,
+  Lightbulb,
 } from "lucide-react";
 import type { Term, Assessment, TermConfig } from "../types/ClassRecordTable";
 import type { CriteriaOption } from "../types/ClassRecordTable";
@@ -28,6 +30,225 @@ interface SettingsModalProps {
   availableCriteria: CriteriaOption[];
 }
 
+interface TutorialStep {
+  target: string;
+  title: string;
+  content: string;
+  position: "top" | "bottom" | "left" | "right";
+  highlightPadding?: number;
+}
+
+const tutorialSteps: TutorialStep[] = [
+  {
+    target: "[data-tutorial='term-tabs']",
+    title: "Step 1: Select a Term",
+    content:
+      "Choose which term you want to configure. Each term can have different weights and assessments.",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='weight-distribution']",
+    title: "Step 2: Set Grade Weights",
+    content:
+      "Adjust the percentage weights for PT/Lab, Quizzes, and Exam. They must add up to 100%!",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='pt-section']",
+    title: "Step 3: Configure PT/Lab",
+    content:
+      "Add, edit, or remove PT/Lab assessments. Set max scores and dates. You can also link to existing grades!",
+    position: "top",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='quiz-section']",
+    title: "Step 4: Configure Quizzes",
+    content:
+      "Same as PT/Lab - add multiple quizzes, set max scores, and schedule dates.",
+    position: "top",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='exam-section']",
+    title: "Step 5: Configure Exam",
+    content:
+      "Set up your final exam. This is required and must be enabled for each term.",
+    position: "top",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='save-button']",
+    title: "Step 6: Save Your Changes",
+    content:
+      "Once everything looks good, click here to save. Don't worry - we'll validate everything first!",
+    position: "top",
+    highlightPadding: 8,
+  },
+];
+
+function Tutorial({
+  isActive,
+  currentStep,
+  onNext,
+  onSkip,
+  totalSteps,
+}: {
+  isActive: boolean;
+  currentStep: number;
+  onNext: () => void;
+  onSkip: () => void;
+  totalSteps: number;
+}) {
+  const [highlightBox, setHighlightBox] = useState<DOMRect | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+  const step = tutorialSteps[currentStep];
+
+  useEffect(() => {
+    if (!isActive || !step) return;
+
+    const updatePosition = () => {
+      const element = document.querySelector(step.target);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setHighlightBox(rect);
+
+        const padding = step.highlightPadding || 8;
+        let top = 0;
+        let left = 0;
+
+        switch (step.position) {
+          case "bottom":
+            top = rect.bottom + padding + 10;
+            left = rect.left + rect.width / 2;
+            break;
+          case "top":
+            top = rect.top - padding - 200;
+            left = rect.left + rect.width / 2;
+            break;
+          case "left":
+            top = rect.top + rect.height / 2;
+            left = rect.left - padding - 10;
+            break;
+          case "right":
+            top = rect.top + rect.height / 2;
+            left = rect.right + padding + 10;
+            break;
+        }
+
+        setTooltipPosition({ top, left });
+      }
+    };
+
+    updatePosition();
+    const timer = setTimeout(updatePosition, 100);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isActive, currentStep, step]);
+
+  if (!isActive || !step || !highlightBox) return null;
+
+  const padding = step.highlightPadding || 8;
+
+  return (
+    <>
+      {/* Dark Overlay with Cutout */}
+      <div className="fixed inset-0 z-[100] pointer-events-none">
+        <svg className="w-full h-full">
+          <defs>
+            <mask id="settings-tutorial-mask">
+              <rect x="0" y="0" width="100%" height="100%" fill="white" />
+              <rect
+                x={highlightBox.left - padding}
+                y={highlightBox.top - padding}
+                width={highlightBox.width + padding * 2}
+                height={highlightBox.height + padding * 2}
+                rx="8"
+                fill="black"
+              />
+            </mask>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            fill="rgba(0, 0, 0, 0.75)"
+            mask="url(#settings-tutorial-mask)"
+          />
+        </svg>
+      </div>
+
+      {/* Highlight Border */}
+      <div
+        className="fixed z-[101] border-4 border-blue-500 rounded-lg pointer-events-none animate-pulse"
+        style={{
+          top: highlightBox.top - padding,
+          left: highlightBox.left - padding,
+          width: highlightBox.width + padding * 2,
+          height: highlightBox.height + padding * 2,
+        }}
+      />
+
+      {/* Tooltip */}
+      <div
+        className="fixed z-[102] pointer-events-auto"
+        style={{
+          top: tooltipPosition.top,
+          left: tooltipPosition.left,
+          transform:
+            step.position === "bottom" || step.position === "top"
+              ? "translateX(-50%)"
+              : step.position === "right"
+              ? "translateX(0)"
+              : "translateX(-100%)",
+        }}
+      >
+        <div className="bg-white rounded-lg shadow-2xl p-5 max-w-sm border-2 border-blue-500">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+              <Lightbulb className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-gray-900 mb-1">{step.title}</h3>
+              <p className="text-sm text-gray-600">{step.content}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+            <span className="text-xs text-gray-500 font-medium">
+              {currentStep + 1} of {totalSteps}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onSkip}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Skip Tour
+              </button>
+              <button
+                onClick={onNext}
+                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+              >
+                {currentStep === tutorialSteps.length - 1 ? "Got it!" : "Next"}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function SettingsModal({
   isOpen,
   onClose,
@@ -38,11 +259,19 @@ export function SettingsModal({
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIMS");
   const [termConfigs, setTermConfigs] = useState(initialConfigs);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
       setTermConfigs(initialConfigs);
       setValidationErrors([]);
+
+      // Check if user has seen tutorial
+      const hasSeenTutorial = localStorage.getItem("didasko-settings-tutorial");
+      if (!hasSeenTutorial) {
+        setTimeout(() => setShowTutorial(true), 500);
+      }
     }
   }, [isOpen, initialConfigs]);
 
@@ -243,6 +472,22 @@ export function SettingsModal({
     onClose();
   };
 
+  const handleNextTutorialStep = () => {
+    if (tutorialStep === tutorialSteps.length - 1) {
+      setShowTutorial(false);
+      setTutorialStep(0);
+      localStorage.setItem("didasko-settings-tutorial", "completed");
+    } else {
+      setTutorialStep(tutorialStep + 1);
+    }
+  };
+
+  const handleSkipTutorial = () => {
+    setShowTutorial(false);
+    setTutorialStep(0);
+    localStorage.setItem("didasko-settings-tutorial", "completed");
+  };
+
   if (!isOpen) return null;
 
   const pts = config.assessments
@@ -256,6 +501,15 @@ export function SettingsModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Tutorial Overlay */}
+        <Tutorial
+          isActive={showTutorial}
+          currentStep={tutorialStep}
+          onNext={handleNextTutorialStep}
+          onSkip={handleSkipTutorial}
+          totalSteps={tutorialSteps.length}
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div>
@@ -266,12 +520,24 @@ export function SettingsModal({
               Configure assessments and weights for each term
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setShowTutorial(true);
+                setTutorialStep(0);
+              }}
+              className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-blue-600"
+              title="Show Tutorial"
+            >
+              <Lightbulb className="w-5 h-5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Validation Errors Display */}
@@ -297,7 +563,7 @@ export function SettingsModal({
         )}
 
         {/* Term Tabs */}
-        <div className="flex border-b">
+        <div className="flex border-b" data-tutorial="term-tabs">
           {(["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const).map(
             (term) => {
               const termErrors = validationErrors.filter((e) =>
@@ -326,7 +592,10 @@ export function SettingsModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Weight Configuration */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div
+            className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg"
+            data-tutorial="weight-distribution"
+          >
             <h3 className="text-sm font-semibold text-gray-800 mb-3">
               Grade Weight Distribution
             </h3>
@@ -418,7 +687,7 @@ export function SettingsModal({
           </div>
 
           {/* PT/Lab Section */}
-          <div className="mb-6">
+          <div className="mb-6" data-tutorial="pt-section">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                 <span className="px-2 py-1 bg-[#124A69] text-white rounded text-xs font-bold">
@@ -601,7 +870,7 @@ export function SettingsModal({
           </div>
 
           {/* Quizzes Section */}
-          <div className="mb-6">
+          <div className="mb-6" data-tutorial="quiz-section">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                 <span className="px-2 py-1 bg-[#124A69] text-white rounded text-xs font-bold">
@@ -720,7 +989,7 @@ export function SettingsModal({
           </div>
 
           {/* Exam Section */}
-          <div>
+          <div data-tutorial="exam-section">
             <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <span className="px-2 py-1 bg-[#124A69] text-white rounded text-xs font-bold">
                 {config.examWeight}%
@@ -827,6 +1096,7 @@ export function SettingsModal({
             </button>
             <button
               onClick={handleSave}
+              data-tutorial="save-button"
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54]"
             >
               <Save className="w-4 h-4" />
