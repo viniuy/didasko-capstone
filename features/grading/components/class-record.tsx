@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
+import React from "react";
 import {
   Search,
   Loader2,
   Settings,
   Download,
   ClipboardPaste,
+  Lightbulb,
+  ArrowRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SettingsModal } from "./SettingsModal";
@@ -40,6 +43,225 @@ function LoadingSpinner() {
         </div>
       </div>
     </div>
+  );
+}
+
+interface TutorialStep {
+  target: string;
+  title: string;
+  content: string;
+  position: "top" | "bottom" | "left" | "right";
+  highlightPadding?: number;
+}
+
+const tutorialSteps: TutorialStep[] = [
+  {
+    target: "[data-tutorial='search-bar']",
+    title: "Step 1: Search Students",
+    content:
+      "Quickly find students by typing their name here. The table will filter automatically!",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='settings-button']",
+    title: "Step 2: Configure Settings",
+    content:
+      "Click here to set up assessments, weights, and dates for each term. You can customize PT/Lab, Quizzes, and Exams!",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='paste-grades-button']",
+    title: "Step 3: Paste Grades Quickly",
+    content:
+      "Copy grades from Excel and paste them in bulk! This saves tons of time when entering multiple grades.",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='export-button']",
+    title: "Step 4: Export to Excel",
+    content:
+      "Download all grades as an Excel file. Perfect for backup or sharing with administration!",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='term-tabs']",
+    title: "Step 5: Switch Between Terms",
+    content:
+      "Navigate between Prelims, Midterm, Pre-Finals, Finals, and Summary view. Each term has its own grades!",
+    position: "bottom",
+    highlightPadding: 8,
+  },
+  {
+    target: "[data-tutorial='grade-table']",
+    title: "Step 6: Enter Grades",
+    content:
+      "Click on any cell to enter grades. Scores that are below 75% will be highlighted in red. Grades are auto-saved!",
+    position: "top",
+    highlightPadding: 8,
+  },
+];
+
+function Tutorial({
+  isActive,
+  currentStep,
+  onNext,
+  onSkip,
+  totalSteps,
+}: {
+  isActive: boolean;
+  currentStep: number;
+  onNext: () => void;
+  onSkip: () => void;
+  totalSteps: number;
+}) {
+  const [highlightBox, setHighlightBox] = useState<DOMRect | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+  const step = tutorialSteps[currentStep];
+
+  useEffect(() => {
+    if (!isActive || !step) return;
+
+    const updatePosition = () => {
+      const element = document.querySelector(step.target);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setHighlightBox(rect);
+
+        const padding = step.highlightPadding || 8;
+        let top = 0;
+        let left = 0;
+
+        switch (step.position) {
+          case "bottom":
+            top = rect.bottom + padding + 10;
+            left = rect.left + rect.width / 2;
+            break;
+          case "top":
+            top = rect.top - padding - 200;
+            left = rect.left + rect.width / 2;
+            break;
+          case "left":
+            top = rect.top + rect.height / 2;
+            left = rect.left - padding - 10;
+            break;
+          case "right":
+            top = rect.top + rect.height / 2;
+            left = rect.right + padding + 10;
+            break;
+        }
+
+        setTooltipPosition({ top, left });
+      }
+    };
+
+    updatePosition();
+    const timer = setTimeout(updatePosition, 100);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isActive, currentStep, step]);
+
+  if (!isActive || !step || !highlightBox) return null;
+
+  const padding = step.highlightPadding || 8;
+
+  return (
+    <>
+      {/* Dark Overlay with Cutout */}
+      <div className="fixed inset-0 z-[100] pointer-events-none">
+        <svg className="w-full h-full">
+          <defs>
+            <mask id="class-record-tutorial-mask">
+              <rect x="0" y="0" width="100%" height="100%" fill="white" />
+              <rect
+                x={highlightBox.left - padding}
+                y={highlightBox.top - padding}
+                width={highlightBox.width + padding * 2}
+                height={highlightBox.height + padding * 2}
+                rx="8"
+                fill="black"
+              />
+            </mask>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            fill="rgba(0, 0, 0, 0.75)"
+            mask="url(#class-record-tutorial-mask)"
+          />
+        </svg>
+      </div>
+
+      {/* Highlight Border */}
+      <div
+        className="fixed z-[101] border-4 border-blue-500 rounded-lg pointer-events-none animate-pulse"
+        style={{
+          top: highlightBox.top - padding,
+          left: highlightBox.left - padding,
+          width: highlightBox.width + padding * 2,
+          height: highlightBox.height + padding * 2,
+        }}
+      />
+
+      {/* Tooltip */}
+      <div
+        className="fixed z-[102] pointer-events-auto"
+        style={{
+          top: tooltipPosition.top,
+          left: tooltipPosition.left,
+          transform:
+            step.position === "bottom" || step.position === "top"
+              ? "translateX(-50%)"
+              : step.position === "right"
+              ? "translateX(0)"
+              : "translateX(-100%)",
+        }}
+      >
+        <div className="bg-white rounded-lg shadow-2xl p-5 max-w-sm border-2 border-blue-500">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+              <Lightbulb className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-gray-900 mb-1">{step.title}</h3>
+              <p className="text-sm text-gray-600">{step.content}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+            <span className="text-xs text-gray-500 font-medium">
+              {currentStep + 1} of {totalSteps}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onSkip}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Skip Tour
+              </button>
+              <button
+                onClick={onNext}
+                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+              >
+                {currentStep === tutorialSteps.length - 1 ? "Got it!" : "Next"}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -148,6 +370,8 @@ export function ClassRecordTable({
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
   const [termConfigs, setTermConfigs] = useState<Record<string, TermConfig>>({
     PRELIMS: {
       id: "prelims",
@@ -176,7 +400,7 @@ export function ClassRecordTable({
         },
         {
           id: "exam1",
-          name: "Final Exam",
+          name: "Exam",
           type: "EXAM",
           maxScore: 100,
           date: null,
@@ -385,6 +609,31 @@ export function ClassRecordTable({
     };
     load();
   }, [courseSlug]);
+
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem(
+      "didasko-class-record-tutorial"
+    );
+    if (!hasSeenTutorial && !loading && students.length > 0) {
+      setTimeout(() => setShowTutorial(true), 1000);
+    }
+  }, [loading, students.length]);
+
+  const handleNextTutorialStep = () => {
+    if (tutorialStep === tutorialSteps.length - 1) {
+      setShowTutorial(false);
+      setTutorialStep(0);
+      localStorage.setItem("didasko-class-record-tutorial", "completed");
+    } else {
+      setTutorialStep(tutorialStep + 1);
+    }
+  };
+
+  const handleSkipTutorial = () => {
+    setShowTutorial(false);
+    setTutorialStep(0);
+    localStorage.setItem("didasko-class-record-tutorial", "completed");
+  };
 
   const saveScoreToAPI = useDebouncedCallback(
     async (studentId: string, assessmentId: string, score: number | null) => {
@@ -853,20 +1102,12 @@ export function ClassRecordTable({
                 <th className="border border-gray-300"></th>
                 {(["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const).map(
                   (term) => (
-                    <>
-                      <th
-                        key={`${term}-pct`}
-                        className="border border-gray-300 px-2 py-1"
-                      >
+                    <React.Fragment key={term}>
+                      <th className="border border-gray-300 px-2 py-1">
                         {TERM_WEIGHTS[term] * 100}%
                       </th>
-                      <th
-                        key={`${term}-eqv`}
-                        className="border border-gray-300 px-2 py-1"
-                      >
-                        EQV
-                      </th>
-                    </>
+                      <th className="border border-gray-300 px-2 py-1">EQV</th>
+                    </React.Fragment>
                   )
                 )}
                 <th className="border border-gray-300 px-2 py-1">GRADE</th>
@@ -893,11 +1134,8 @@ export function ClassRecordTable({
                     ).map((term) => {
                       const termGrade = computeTermGrade(student.id, term);
                       return (
-                        <>
-                          <td
-                            key={`${term}-pct`}
-                            className="border border-gray-300 py-3 text-center"
-                          >
+                        <React.Fragment key={term}>
+                          <td className="border border-gray-300 py-3 text-center">
                             <input
                               type="text"
                               className="w-14 h-8 text-center border border-gray-200 rounded text-sm"
@@ -905,10 +1143,7 @@ export function ClassRecordTable({
                               readOnly
                             />
                           </td>
-                          <td
-                            key={`${term}-eqv`}
-                            className="border border-gray-300 py-3 text-center"
-                          >
+                          <td className="border border-gray-300 py-3 text-center">
                             <input
                               type="text"
                               className="w-14 h-8 text-center border border-gray-200 rounded text-sm"
@@ -916,7 +1151,7 @@ export function ClassRecordTable({
                               readOnly
                             />
                           </td>
-                        </>
+                        </React.Fragment>
                       );
                     })}
                     <td className="border border-gray-300 py-3 text-center">
@@ -1021,13 +1256,30 @@ export function ClassRecordTable({
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px]">
+      <Tutorial
+        isActive={showTutorial}
+        currentStep={tutorialStep}
+        onNext={handleNextTutorialStep}
+        onSkip={handleSkipTutorial}
+        totalSteps={tutorialSteps.length}
+      />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">{courseCode}</h1>
           <p className="text-sm text-gray-600">{courseSection}</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="relative">
+          <button
+            onClick={() => {
+              setShowTutorial(true);
+              setTutorialStep(0);
+            }}
+            className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-blue-600"
+            title="Show Tutorial"
+          >
+            <Lightbulb className="w-5 h-5" />
+          </button>
+          <div className="relative" data-tutorial="search-bar">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
             <Input
               placeholder="Search a name"
@@ -1038,6 +1290,7 @@ export function ClassRecordTable({
           </div>
           <button
             onClick={() => setSettingsOpen(true)}
+            data-tutorial="settings-button"
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
           >
             <Settings className="w-4 h-4" />
@@ -1045,6 +1298,7 @@ export function ClassRecordTable({
           </button>
           <button
             onClick={() => setIsPasteModalOpen(true)}
+            data-tutorial="paste-grades-button"
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
           >
             <ClipboardPaste className="w-4 h-4" />
@@ -1053,6 +1307,7 @@ export function ClassRecordTable({
           <button
             className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
             onClick={handleExportToExcel}
+            data-tutorial="export-button"
           >
             <Download className="w-4 h-4" />
             Export to Excel
@@ -1063,7 +1318,10 @@ export function ClassRecordTable({
         </div>
       </div>
 
-      <div className="flex border-b border-gray-200 mb-6">
+      <div
+        className="flex border-b border-gray-200 mb-6"
+        data-tutorial="term-tabs"
+      >
         {TERMS.map((term) => (
           <button
             key={term}
@@ -1093,7 +1351,7 @@ export function ClassRecordTable({
           </button>
         </div>
       ) : (
-        <div className="w-full overflow-x-auto">
+        <div className="w-full overflow-x-auto" data-tutorial="grade-table">
           <table className="table-fixed w-full border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
