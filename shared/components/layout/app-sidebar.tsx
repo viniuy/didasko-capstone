@@ -59,13 +59,14 @@ const adminItems = [
 
 const academicHeadItems = [
   { title: "Dashboard", url: "/dashboard/academic-head", icon: Home },
+  { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
   { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
-  { title: "Courses", url: "/main/course", icon: BookOpen },
 ];
 
 const facultyItems = [
   { title: "Dashboard", url: "/dashboard/faculty", icon: Home },
+  { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
 ];
 
@@ -147,6 +148,7 @@ export function AppSidebar() {
       "/main/grading/class-record",
       "/main/grading/reporting",
       "/main/grading/recitation",
+      "/main/course",
     ],
   };
   const [userImage, setUserImage] = useState<string | undefined>();

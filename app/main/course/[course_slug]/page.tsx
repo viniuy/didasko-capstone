@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CourseDashboard } from "@/features/admin/components/course-dashboard";
+import { CourseDashboard } from "@/features/courses/components/course-dashboard";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";

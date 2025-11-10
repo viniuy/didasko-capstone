@@ -1,0 +1,1276 @@
+"use client";
+
+import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Search,
+  Download,
+  Upload,
+  GraduationCap,
+  Users,
+  CircleUserRound,
+  BookOpen,
+  Calendar,
+} from "lucide-react";
+import { CourseSheet } from "./course-sheet";
+import { CourseStatus } from "@prisma/client";
+import toast from "react-hot-toast";
+import * as XLSX from "xlsx";
+import axiosInstance from "@/lib/axios";
+import { useRouter } from "next/navigation";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  getCoursePermissions,
+  filterCoursesByRole,
+  type UserRole,
+} from "@/lib/permission";
+import { FacultyFilter } from "./faculty-filter";
+import { ExportDialog } from "../dialogs/export-dialog";
+import { ImportDialog } from "../dialogs/import-dialog";
+import { ImportStatusDialog } from "../dialogs/import-status-dialog";
+import { ScheduleAssignmentDialog } from "../dialogs/schedule-assignment-dialog";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+
+interface CourseStats {
+  passingRate: number;
+  attendanceRate: number;
+  totalStudents: number;
+}
+
+interface Course {
+  id: string;
+  code: string;
+  title: string;
+  room: string;
+  semester: string;
+  academicYear: string;
+  classNumber: number;
+  status: CourseStatus;
+  section: string;
+  slug: string;
+  facultyId: string | null;
+  faculty?: {
+    name: string;
+    email: string;
+  } | null;
+  _count?: {
+    students: number;
+  };
+  schedules: {
+    id: string;
+    day: string;
+    fromTime: string;
+    toTime: string;
+  }[];
+  stats?: CourseStats;
+  [key: string]: any;
+}
+
+interface Faculty {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+}
+
+interface CourseDataTableProps {
+  courses: Course[];
+  userRole: UserRole;
+  userId: string;
+  onCourseAdded?: () => void;
+}
+
+interface CsvRow {
+  "Course Code": string;
+  "Course Title": string;
+  Room: string;
+  Semester: string;
+  "Academic Year": string;
+  "Class Number": string;
+  Section: string;
+  Status: string;
+  "Faculty Email": string;
+}
+
+interface ImportStatus {
+  imported: number;
+  skipped: number;
+  errors: Array<{ code: string; message: string }>;
+  total: number;
+  detailedFeedback: Array<{
+    row: number;
+    code: string;
+    status: string;
+    message: string;
+  }>;
+}
+
+const ITEMS_PER_PAGE = 8;
+const MAX_PREVIEW_ROWS = 100;
+const EXPECTED_HEADERS = [
+  "Course Code",
+  "Course Title",
+  "Room",
+  "Semester",
+  "Academic Year",
+  "Class Number",
+  "Section",
+  "Status",
+];
+interface CsvRow {
+  "Course Code": string;
+  "Course Title": string;
+  Room: string;
+  Semester: string;
+  "Academic Year": string;
+  "Class Number": string;
+  Section: string;
+  Status: string;
+}
+
+const formatEnumValue = (value: string) =>
+  value
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+
+// Loading Spinner Component
+function LoadingSpinner() {
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
+      <div className="flex flex-col items-center gap-4 mt-40">
+        <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
+          Welcome to Didasko!
+        </h2>
+        <p
+          className="text-lg text-gray-600 animate-pulse"
+          style={{ animationDelay: "150ms" }}
+        >
+          Please sit tight while we are getting things ready for you...
+        </p>
+        <div className="flex gap-2 mt-4">
+          <div className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"></div>
+          <div
+            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+            style={{ animationDelay: "150ms" }}
+          ></div>
+          <div
+            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+            style={{ animationDelay: "300ms" }}
+          ></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Course Card Component
+const CourseCard = ({ course }: { course: Course }) => {
+  const router = useRouter();
+
+  const formatTo12Hour = (time: string) => {
+    if (!time) return "";
+    const [hours, minutes] = time.split(":").map(Number);
+    const suffix = hours >= 12 ? "PM" : "AM";
+    const normalizedHour = hours % 12 || 12;
+    return `${normalizedHour}:${minutes.toString().padStart(2, "0")} ${suffix}`;
+  };
+
+  const getStatusColor = (status: CourseStatus) => {
+    switch (status) {
+      case "ACTIVE":
+        return "bg-blue-200 text-blue-900 border-blue-300";
+      case "INACTIVE":
+        return "bg-gray-300 text-gray-700 border-gray-400";
+      case "ARCHIVED":
+        return "bg-red-300 text-red-800 border-red-400";
+      default:
+        return "bg-gray-200 text-gray-700 border-gray-300";
+    }
+  };
+
+  const passingRate = course.stats?.passingRate ?? 0;
+  const attendanceRate = course.stats?.attendanceRate ?? 0;
+
+  return (
+    <div
+      onClick={() => router.push(`/main/course/${course.slug}`)}
+      className="group relative w-auto h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-3 hover:border-[#124A69] hover:shadow-lg transition-all duration-200 cursor-pointer text-[#124A69]"
+    >
+      <div className="absolute top-4 right-4">
+        <Badge className={`${getStatusColor(course.status)} border`}>
+          {formatEnumValue(course.status)}
+        </Badge>
+      </div>
+
+      <div className="mb-4">
+        <h3 className="text-lg font-bold group-hover:text-[#0C3246] transition-colors">
+          {course.code} - {course.section}
+        </h3>
+        <p className="text-xs opacity-80 mt-1">{course.title}</p>
+      </div>
+
+      <div className="flex items-center mb-4 opacity-80">
+        <Calendar className="w-5 h-5" />
+        <span className="text-xs font-medium ml-2 truncate">
+          {course.room} |{" "}
+          {course.schedules?.length > 0
+            ? course.schedules
+                .map(
+                  (s) =>
+                    `${s.day.slice(0, 3)} ${formatTo12Hour(
+                      s.fromTime
+                    )}–${formatTo12Hour(s.toTime)}`
+                )
+                .join(", ")
+            : "No schedule"}
+        </span>
+      </div>
+
+      <div className="flex justify-between items-center mb-4 opacity-80 text-gray-700">
+        <div className="flex items-center min-w-0">
+          <CircleUserRound className="w-5 h-5 flex-shrink-0" />
+          <span
+            className="text-xs font-medium ml-2 truncate max-w-[150px]"
+            title={course.faculty?.name || "No Instructor"}
+          >
+            {course.faculty?.name || "No Instructor"}
+          </span>
+        </div>
+
+        <div className="flex items-center flex-shrink-0">
+          <Users className="w-5 h-5" />
+          <span className="text-xs font-medium ml-2">
+            {course._count?.students || 0} Students
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 pt-7">
+        <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
+          <div className="flex items-center gap-2 mb-1 text-xs">
+            <span>Passing Rate</span>
+          </div>
+          <p className="text-xl font-bold">{passingRate}%</p>
+        </div>
+        <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
+          <div className="flex items-center gap-2 mb-1 text-xs">
+            <GraduationCap className="w-3 h-3" />
+            <span>Attendance</span>
+          </div>
+          <p className="text-xl font-bold">{attendanceRate}%</p>
+        </div>
+      </div>
+
+      <div className="absolute inset-0 rounded-lg border-2 border-[#124A69] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+    </div>
+  );
+};
+
+export function CourseDataTable({
+  courses: initialCourses,
+  userRole,
+  userId,
+  onCourseAdded,
+}: CourseDataTableProps) {
+  // Get permissions based on role
+  const permissions = useMemo(() => getCoursePermissions(userRole), [userRole]);
+
+  // State
+  const [tableData, setTableData] = useState<Course[]>(initialCourses);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<CourseStatus | "ALL">("ALL");
+  const [facultyFilter, setFacultyFilter] = useState<string>(userId); // Default to user's own courses
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Import/Export State
+  const [showExportPreview, setShowExportPreview] = useState(false);
+  const [showImportPreview, setShowImportPreview] = useState(false);
+  const [showImportStatus, setShowImportStatus] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [previewData, setPreviewData] = useState<CsvRow[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isValidFile, setIsValidFile] = useState(false);
+  const [showScheduleAssignment, setShowScheduleAssignment] = useState(false);
+  const [importedCoursesForSchedule, setImportedCoursesForSchedule] = useState<
+    any[]
+  >([]);
+  const [importProgress, setImportProgress] = useState<{
+    current: number;
+    total: number;
+    status: string;
+    error?: string;
+    hasError?: boolean;
+  } | null>(null);
+
+  // Load initial data
+  useEffect(() => {
+    const loadAllData = async () => {
+      try {
+        setIsInitialLoading(true);
+
+        const [facultyResponse] = await Promise.all([
+          axiosInstance.get("/users?role=FACULTY"),
+        ]);
+
+        if (Array.isArray(facultyResponse.data)) {
+          setFaculties(facultyResponse.data);
+        }
+
+        // Fetch stats for all courses
+        if (initialCourses.length > 0) {
+          const coursesWithStats = await Promise.all(
+            initialCourses.map(async (course) => {
+              try {
+                const statsResponse = await axiosInstance.get(
+                  `/courses/${course.slug}/courses-stats`
+                );
+                return {
+                  ...course,
+                  stats: statsResponse.data,
+                };
+              } catch (error) {
+                console.error(
+                  `Error fetching stats for course ${course.code}:`,
+                  error
+                );
+                return {
+                  ...course,
+                  stats: {
+                    passingRate: 0,
+                    attendanceRate: 0,
+                    totalStudents: 0,
+                  },
+                };
+              }
+            })
+          );
+          setTableData(coursesWithStats);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      } catch (error) {
+        console.error("Error loading initial data:", error);
+        toast.error("Failed to load some data");
+      } finally {
+        setIsInitialLoading(false);
+      }
+    };
+
+    loadAllData();
+  }, [initialCourses]);
+
+  const refreshTableData = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await axiosInstance.get("/courses");
+      const data = await response.data;
+      if (data.courses) {
+        const coursesWithStats = await Promise.all(
+          data.courses.map(async (course: Course) => {
+            try {
+              const statsResponse = await axiosInstance.get(
+                `/courses/${course.slug}/course-stats`
+              );
+              return {
+                ...course,
+                stats: statsResponse.data,
+              };
+            } catch (error) {
+              return {
+                ...course,
+                stats: {
+                  passingRate: 0,
+                  attendanceRate: 0,
+                  totalStudents: 0,
+                },
+              };
+            }
+          })
+        );
+        setTableData(coursesWithStats);
+      }
+    } catch (error) {
+      console.error("Error refreshing table data:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Filter courses based on role and filters
+  const filteredCourses = useMemo(() => {
+    // First filter by role and faculty
+    let courses = filterCoursesByRole(
+      tableData,
+      userRole,
+      userId,
+      facultyFilter
+    );
+
+    // Then apply search and status filters
+    return courses.filter((course) => {
+      const matchesSearch =
+        course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        course.section.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === "ALL" || course.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [tableData, userRole, userId, facultyFilter, searchQuery, statusFilter]);
+
+  const totalPages = Math.ceil(filteredCourses.length / ITEMS_PER_PAGE);
+
+  const paginatedCourses = filteredCourses.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Export handler
+  const handleExport = useCallback(async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Courses");
+
+      // Add title row
+      worksheet.mergeCells("A1:H1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "COURSE MANAGEMENT DATA";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
+
+      // Add date row
+      worksheet.mergeCells("A2:H2");
+      const dateRow = worksheet.getCell("A2");
+      dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
+      dateRow.font = { italic: true, size: 11 };
+      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      worksheet.addRow([]);
+
+      // Add header row
+      const headerRow = worksheet.addRow([
+        "Course Code",
+        "Course Title",
+        "Room",
+        "Semester",
+        "Academic Year",
+        "Class Number",
+        "Section",
+        "Status",
+      ]);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Add data rows
+      filteredCourses.forEach((course: Course) => {
+        const row = worksheet.addRow([
+          course.code,
+          course.title,
+          course.room,
+          course.semester,
+          course.academicYear,
+          course.classNumber.toString(),
+          course.section,
+          formatEnumValue(course.status),
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+
+        if (row.number % 2 === 0) {
+          row.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF9FAFB" },
+          };
+        }
+      });
+
+      // Set column widths
+      worksheet.columns = [
+        { width: 15 },
+        { width: 35 },
+        { width: 12 },
+        { width: 18 },
+        { width: 18 },
+        { width: 15 },
+        { width: 12 },
+        { width: 15 },
+      ];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const filename = `courses_${new Date().toISOString().split("T")[0]}.xlsx`;
+      saveAs(blob, filename);
+
+      toast.success(`Successfully exported ${filteredCourses.length} courses`);
+      setShowExportPreview(false);
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export courses");
+    }
+  }, [filteredCourses]);
+
+  // Import template handler
+  const handleImportTemplate = useCallback(async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Template");
+
+      // Title
+      worksheet.mergeCells("A1:H1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "COURSE IMPORT TEMPLATE";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
+
+      // Instructions
+      worksheet.mergeCells("A3:H3");
+      const instructionTitle = worksheet.getCell("A3");
+      instructionTitle.value = "IMPORTANT INSTRUCTIONS";
+      instructionTitle.font = {
+        bold: true,
+        size: 12,
+        color: { argb: "FFD97706" },
+      };
+      instructionTitle.alignment = { vertical: "middle", horizontal: "left" };
+
+      const instructions = [
+        "1. Course Code must be unique (e.g., CS101, MATH201)",
+        "2. Semester must be exactly: 1st Semester or 2nd Semester",
+        "3. Status must be exactly: Active, Inactive, or Archived",
+        "4. All fields are required - do not leave any cell empty",
+        "5. Do not modify or delete the header row",
+        "6. Delete these instruction rows before importing",
+      ];
+
+      instructions.forEach((instruction, index) => {
+        worksheet.mergeCells(`A${4 + index}:H${4 + index}`);
+        const cell = worksheet.getCell(`A${4 + index}`);
+        cell.value = instruction;
+        cell.font = { size: 10 };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFACD" },
+        };
+      });
+
+      worksheet.addRow([]);
+
+      // Header
+      const headerRow = worksheet.addRow([
+        "Course Code",
+        "Course Title",
+        "Room",
+        "Semester",
+        "Academic Year",
+        "Class Number",
+        "Section",
+        "Status",
+      ]);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Examples
+      const examples = [
+        [
+          "CS101",
+          "Introduction to Programming",
+          "A101",
+          "1st Semester",
+          "2024-2025",
+          "1",
+          "A",
+          "Active",
+        ],
+        [
+          "MATH201",
+          "Calculus I",
+          "B205",
+          "1st Semester",
+          "2024-2025",
+          "1",
+          "B",
+          "Active",
+        ],
+        [
+          "ENG101",
+          "English Communication",
+          "C103",
+          "2nd Semester",
+          "2024-2025",
+          "2",
+          "A",
+          "Inactive",
+        ],
+      ];
+
+      examples.forEach((example) => {
+        const row = worksheet.addRow(example);
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+        row.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE8F4F8" },
+        };
+      });
+
+      worksheet.columns = [
+        { width: 15 },
+        { width: 35 },
+        { width: 12 },
+        { width: 18 },
+        { width: 18 },
+        { width: 15 },
+        { width: 12 },
+        { width: 15 },
+      ];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const filename = `course_import_template_${
+        new Date().toISOString().split("T")[0]
+      }.xlsx`;
+      saveAs(blob, filename);
+
+      toast.success("Template downloaded successfully");
+    } catch (error) {
+      console.error("Template error:", error);
+      toast.error("Failed to generate template");
+    }
+  }, []);
+
+  // File reader
+  const readFile = useCallback(async (file: File): Promise<CsvRow[]> => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const arrayBuffer = await file.arrayBuffer();
+      await workbook.xlsx.load(arrayBuffer);
+
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        throw new Error("No worksheet found in file");
+      }
+
+      const rows: any[][] = [];
+      worksheet.eachRow((row) => {
+        const rowValues = row.values as any[];
+        rows.push(rowValues.slice(1));
+      });
+
+      let headerRowIndex = -1;
+      const EXPECTED_HEADERS = [
+        "Course Code",
+        "Course Title",
+        "Room",
+        "Semester",
+        "Academic Year",
+        "Class Number",
+        "Section",
+        "Status",
+      ];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length < EXPECTED_HEADERS.length) continue;
+
+        const isHeaderRow = EXPECTED_HEADERS.every((header, index) => {
+          const cellValue =
+            typeof row[index] === "string"
+              ? row[index].trim().toLowerCase()
+              : "";
+          return cellValue === header.toLowerCase();
+        });
+
+        if (isHeaderRow) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        throw new Error(
+          "Could not find header row. Please use the template format."
+        );
+      }
+
+      const dataRows = rows.slice(headerRowIndex + 1).filter((row) => {
+        return (
+          row &&
+          row.some(
+            (cell) =>
+              cell !== null && cell !== undefined && String(cell).trim() !== ""
+          )
+        );
+      });
+
+      const formattedData: CsvRow[] = dataRows
+        .map((row) => {
+          const rowData: any = {};
+          EXPECTED_HEADERS.forEach((header, index) => {
+            const value = row[index];
+            rowData[header] =
+              value !== null && value !== undefined ? String(value).trim() : "";
+          });
+          return rowData as CsvRow;
+        })
+        .filter((row) => {
+          return EXPECTED_HEADERS.every(
+            (field) => row[field] && row[field].trim() !== ""
+          );
+        });
+
+      if (formattedData.length === 0) {
+        throw new Error(
+          "No valid data rows found. Please ensure all required fields are filled."
+        );
+      }
+
+      return formattedData;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(
+        "Error reading file. Please ensure it is a valid Excel file."
+      );
+    }
+  }, []);
+
+  const handleFilePreview = useCallback(
+    async (file: File) => {
+      try {
+        const data = await readFile(file);
+        if (data.length > 0) {
+          setPreviewData(data.slice(0, MAX_PREVIEW_ROWS));
+          setIsValidFile(true);
+          toast.success("File loaded successfully");
+        } else {
+          setIsValidFile(false);
+          setPreviewData([]);
+          toast.error("No valid data found in file");
+        }
+      } catch (error) {
+        setIsValidFile(false);
+        setPreviewData([]);
+        toast.error(
+          error instanceof Error ? error.message : "Error reading file"
+        );
+      }
+    },
+    [readFile]
+  );
+
+  const validateFile = useCallback((file: File): boolean => {
+    const extension = file.name.toLowerCase().split(".").pop();
+    const validExtensions = ["xlsx", "xls", "csv"];
+
+    if (!validExtensions.includes(extension || "")) {
+      toast.error(
+        "Invalid file type. Please upload an Excel (.xlsx, .xls) or CSV file."
+      );
+      return false;
+    }
+
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast.error("File size too large. Maximum size is 5MB.");
+      return false;
+    }
+
+    return true;
+  }, []);
+
+  const handleFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        if (validateFile(file)) {
+          setSelectedFile(file);
+          handleFilePreview(file);
+        } else {
+          setSelectedFile(null);
+          setPreviewData([]);
+          setIsValidFile(false);
+        }
+      }
+    },
+    [validateFile, handleFilePreview]
+  );
+
+  const handleImport = useCallback(async () => {
+    if (!selectedFile || !isValidFile || previewData.length === 0) {
+      if (!selectedFile) toast.error("Please select a file first.");
+      else if (!isValidFile) toast.error("Selected file is not valid.");
+      else if (previewData.length === 0)
+        toast.error("No valid data rows found in the file preview.");
+      return;
+    }
+
+    try {
+      setShowImportStatus(true);
+      setImportProgress({
+        current: 0,
+        total: previewData.length,
+        status: "Importing courses...",
+      });
+
+      const response = await axiosInstance.post("/courses/import", previewData);
+      const {
+        imported,
+        skipped,
+        errors,
+        total: backendTotalProcessed,
+        detailedFeedback,
+        importedCourses, // NEW: Get the list of imported courses
+      } = response.data;
+
+      setImportStatus({
+        imported: imported || 0,
+        skipped: skipped || 0,
+        errors: errors || [],
+        total: backendTotalProcessed || previewData.length,
+        detailedFeedback: detailedFeedback || [],
+      });
+
+      // Close import dialogs
+      setShowImportPreview(false);
+      setImportProgress(null);
+
+      if (errors && errors.length > 0) {
+        toast.error(`Import finished with ${errors.length} errors.`);
+      } else if (skipped && skipped > 0) {
+        toast(`Import finished. ${skipped} courses skipped.`, { icon: "⚠️" });
+      } else if (imported && imported > 0) {
+        toast.success(`Successfully imported ${imported} courses.`);
+      }
+
+      // NEW: If courses were imported, open schedule assignment dialog
+      if (importedCourses && importedCourses.length > 0) {
+        setImportedCoursesForSchedule(importedCourses);
+
+        // Small delay to show success message first
+        setTimeout(() => {
+          setShowScheduleAssignment(true);
+        }, 1000);
+      } else {
+        // No courses to assign schedules, just refresh
+        setTimeout(async () => {
+          await refreshTableData();
+          if (onCourseAdded) onCourseAdded();
+        }, 500);
+      }
+    } catch (error: any) {
+      const errorResponse = error?.response?.data;
+      const errorMessage =
+        errorResponse?.error ||
+        (error instanceof Error ? error.message : "Failed to import courses");
+      const importErrors = errorResponse?.errors || [
+        { code: "N/A", message: errorMessage },
+      ];
+
+      setImportProgress({
+        current: 0,
+        total: previewData.length,
+        status: "Import failed",
+        error: errorMessage,
+        hasError: true,
+      });
+      toast.error(errorMessage);
+
+      setImportStatus({
+        imported: errorResponse?.imported || 0,
+        skipped: errorResponse?.skipped || 0,
+        errors: importErrors,
+        total: errorResponse?.total || previewData.length,
+        detailedFeedback: errorResponse?.detailedFeedback || [],
+      });
+    }
+  }, [selectedFile, isValidFile, previewData, refreshTableData, onCourseAdded]);
+
+  const handleScheduleAssignmentComplete = useCallback(async () => {
+    toast.success("All schedules have been processed!");
+
+    // Refresh table data
+    await refreshTableData();
+    if (onCourseAdded) onCourseAdded();
+
+    // Reset schedule assignment state
+    setImportedCoursesForSchedule([]);
+    setShowScheduleAssignment(false);
+
+    // Clear import dialog state
+    setSelectedFile(null);
+    setPreviewData([]);
+    setIsValidFile(false);
+  }, [refreshTableData, onCourseAdded]);
+
+  // Show loading spinner
+  if (isInitialLoading) {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#124A69] mb-5">
+        Course Management Dashboard
+      </h1>
+
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex">
+            {/* Faculty Filter - Only for Academic Head */}
+            <div className="pr-5">
+              {permissions.canFilterByFaculty && (
+                <FacultyFilter
+                  faculties={faculties}
+                  selectedFacultyId={facultyFilter}
+                  onChange={setFacultyFilter}
+                  currentUserId={userId}
+                />
+              )}
+            </div>
+            <div className="relative w-full sm:w-[400px]">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search courses by code, title, or section..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {permissions.canExportData && (
+              <Button
+                variant="outline"
+                onClick={() => setShowExportPreview(true)}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            )}
+            {permissions.canImportCourses && (
+              <Button
+                variant="outline"
+                onClick={() => setShowImportPreview(true)}
+                className="gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                Import
+              </Button>
+            )}
+            {permissions.canCreateCourse && (
+              <CourseSheet
+                mode="add"
+                onSuccess={refreshTableData}
+                faculties={faculties}
+                userId={userId}
+                userRole={userRole}
+              />
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-2 border-b">
+          <button
+            onClick={() => setStatusFilter("ALL")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === "ALL"
+                ? "text-[#124A69] border-b-2 border-[#124A69]"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            All Courses ({filteredCourses.length})
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("ACTIVE")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === "ACTIVE"
+                ? "text-[#124A69] border-b-2 border-[#124A69]"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Active ({tableData.filter((c) => c.status === "ACTIVE").length})
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("INACTIVE")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === "INACTIVE"
+                ? "text-[#124A69] border-b-2 border-[#124A69]"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Inactive ({tableData.filter((c) => c.status === "INACTIVE").length})
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("ARCHIVED")}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              statusFilter === "ARCHIVED"
+                ? "text-[#124A69] border-b-2 border-[#124A69]"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Archived ({tableData.filter((c) => c.status === "ARCHIVED").length})
+          </button>
+        </div>
+
+        {isRefreshing ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69]" />
+          </div>
+        ) : filteredCourses.length > 0 ? (
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[555px]">
+              {paginatedCourses.map((course) => (
+                <CourseCard key={course.id} course={course} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between w-full">
+                <span className="text-sm text-gray-600 w-[1100%]">
+                  {Math.min(
+                    (currentPage - 1) * ITEMS_PER_PAGE + 1,
+                    filteredCourses.length
+                  )}
+                  –
+                  {Math.min(
+                    currentPage * ITEMS_PER_PAGE,
+                    filteredCourses.length
+                  )}{" "}
+                  of {filteredCourses.length} courses
+                </span>
+
+                <Pagination>
+                  <PaginationContent className="flex gap-1">
+                    <PaginationItem>
+                      <PaginationPrevious
+                        onClick={() =>
+                          currentPage > 1 && handlePageChange(currentPage - 1)
+                        }
+                        className={
+                          currentPage === 1
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+
+                    {Array.from({ length: totalPages })
+                      .map((_, i) => i + 1)
+                      .filter((page) => {
+                        return (
+                          page === 1 ||
+                          page === totalPages ||
+                          Math.abs(page - currentPage) <= 1
+                        );
+                      })
+                      .reduce((acc: (number | string)[], page, index, arr) => {
+                        if (index > 0) {
+                          const prevPage = arr[index - 1] as number;
+                          if ((page as number) - prevPage > 1) acc.push("…");
+                        }
+                        acc.push(page);
+                        return acc;
+                      }, [])
+                      .map((item, i) => (
+                        <PaginationItem key={i}>
+                          {item === "…" ? (
+                            <span className="px-2 text-gray-500 select-none">
+                              …
+                            </span>
+                          ) : (
+                            <PaginationLink
+                              onClick={() => handlePageChange(item as number)}
+                              isActive={currentPage === item}
+                              className={`hidden xs:inline-flex ${
+                                currentPage === item
+                                  ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                                  : ""
+                              }`}
+                            >
+                              {item}
+                            </PaginationLink>
+                          )}
+                        </PaginationItem>
+                      ))}
+
+                    <PaginationItem>
+                      <PaginationNext
+                        onClick={() =>
+                          currentPage < totalPages &&
+                          handlePageChange(currentPage + 1)
+                        }
+                        className={
+                          currentPage === totalPages
+                            ? "pointer-events-none opacity-50"
+                            : "cursor-pointer"
+                        }
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-64 text-center">
+            <BookOpen className="w-12 h-12 text-gray-400 mb-3" />
+            <p className="text-gray-600 font-medium">No courses found</p>
+            <p className="text-sm text-gray-500 mt-1">
+              {searchQuery
+                ? "Try adjusting your search"
+                : "Get started by adding a new course"}
+            </p>
+          </div>
+        )}
+
+        {/* Export Dialog */}
+        <ExportDialog
+          open={showExportPreview}
+          onOpenChange={setShowExportPreview}
+          courses={filteredCourses}
+          onExport={handleExport}
+        />
+
+        {/* Import Dialog */}
+        <ImportDialog
+          open={showImportPreview}
+          onOpenChange={(open) => {
+            setShowImportPreview(open);
+            if (!open) {
+              setSelectedFile(null);
+              setPreviewData([]);
+              setIsValidFile(false);
+              setImportProgress(null);
+            }
+          }}
+          previewData={previewData}
+          selectedFile={selectedFile}
+          isValidFile={isValidFile}
+          onFileChange={handleFileChange}
+          onImport={handleImport}
+          onDownloadTemplate={handleImportTemplate}
+          importProgress={importProgress}
+        />
+
+        {/* Import Status Dialog */}
+        <ImportStatusDialog
+          open={showImportStatus}
+          onOpenChange={setShowImportStatus}
+          importStatus={importStatus}
+          importProgress={importProgress}
+          onClose={() => {
+            setShowImportStatus(false);
+            setImportProgress(null);
+          }}
+          onImportMore={() => {
+            setShowImportStatus(false);
+            setShowImportPreview(true);
+          }}
+        />
+
+        <ScheduleAssignmentDialog
+          open={showScheduleAssignment}
+          onOpenChange={(open) => {
+            setShowScheduleAssignment(open);
+            if (!open) {
+              // If user closes without completing, still refresh
+              handleScheduleAssignmentComplete();
+            }
+          }}
+          courses={importedCoursesForSchedule}
+          onComplete={handleScheduleAssignmentComplete}
+        />
+      </div>
+    </div>
+  );
+}

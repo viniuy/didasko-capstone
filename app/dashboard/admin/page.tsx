@@ -5,7 +5,7 @@ import { AdminDataTable } from "@/features/admin/components/admin-data-table";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
-import { getDashboardData } from "@/features/admin/hook/dashboard-data";
+import { getDashboardData } from "@/features/courses/hook/dashboard-data";
 
 export default async function AdminDashboardPage() {
   const {

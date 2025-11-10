@@ -1,0 +1,160 @@
+"use client";
+
+import React from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/svdialog";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+
+const MAX_PREVIEW_ROWS = 100;
+const EXPECTED_HEADERS = [
+  "Course Code",
+  "Course Title",
+  "Room",
+  "Semester",
+  "Academic Year",
+  "Class Number",
+  "Section",
+  "Status",
+  "Faculty Email",
+];
+
+interface Course {
+  code: string;
+  title: string;
+  room: string;
+  semester: string;
+  academicYear: string;
+  classNumber: number;
+  section: string;
+  status: string;
+}
+
+interface ExportDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  courses: Course[];
+  onExport: () => void;
+}
+
+const formatEnumValue = (value: string) =>
+  value
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+
+export function ExportDialog({
+  open,
+  onOpenChange,
+  courses,
+  onExport,
+}: ExportDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[90vw] max-w-[1200px] p-4 sm:p-6">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-semibold text-[#124A69]">
+            Export Courses to Excel
+          </DialogTitle>
+          <DialogDescription>
+            Preview of {courses.length}{" "}
+            {courses.length === 1 ? "course" : "courses"} to be exported
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-6 border rounded-lg">
+          <div className="max-h-[450px] overflow-auto">
+            <table className="w-full border-collapse">
+              <thead className="bg-gray-50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b">
+                    #
+                  </th>
+                  {EXPECTED_HEADERS.map((header) => (
+                    <th
+                      key={header}
+                      className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-nowrap"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {courses.slice(0, MAX_PREVIEW_ROWS).map((course, index) => (
+                  <tr key={index} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-2 text-xs text-gray-500">
+                      {index + 1}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {course.code}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900 max-w-[250px] truncate">
+                      {course.title}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {course.room}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {course.semester}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {course.academicYear}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {course.classNumber}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {course.section}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {formatEnumValue(course.status)}
+                    </td>
+                  </tr>
+                ))}
+                {courses.length > MAX_PREVIEW_ROWS && (
+                  <tr className="border-t bg-gray-50">
+                    <td
+                      colSpan={9}
+                      className="px-4 py-3 text-sm text-gray-600 text-center font-medium"
+                    >
+                      + {courses.length - MAX_PREVIEW_ROWS} more{" "}
+                      {courses.length - MAX_PREVIEW_ROWS === 1
+                        ? "course"
+                        : "courses"}{" "}
+                      will be exported
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-between items-center">
+          <p className="text-sm text-gray-600">
+            Total courses to export:{" "}
+            <span className="font-semibold">{courses.length}</span>
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+              onClick={onExport}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export to Excel
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
