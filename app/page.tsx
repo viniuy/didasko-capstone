@@ -14,12 +14,14 @@ export default function AdminLogin() {
   const handleAdminLogin = async () => {
     try {
       setIsLoading(true);
-      const result = await signIn("google", {
+      const result = await signIn("azure-ad", {
         callbackUrl: "/dashboard/admin",
         redirect: false,
       });
 
       if (result?.error) {
+        console.error("Sign in error:", result.error);
+        // You can add error toast notification here
         throw new Error(result.error);
       }
 
@@ -28,6 +30,7 @@ export default function AdminLogin() {
       }
     } catch (err) {
       console.error("Login failed:", err);
+      // You can add error toast notification here
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +112,7 @@ export default function AdminLogin() {
                 )}
               </button>
               <p className="mt-4 text-sm text-gray-500">
-                Only authorized faculty can access this portal
+                Only authorized STI faculty can access this portal
               </p>
             </div>
           </div>
