@@ -76,10 +76,7 @@ export async function POST(request: NextRequest) {
 
         results.success++;
       } catch (error) {
-        console.error(
-          `Error assigning schedules to course ${courseId}:`,
-          error
-        );
+        console.error(`Error assigning schedules to course ${courseId}:`, error);
         results.failed++;
         results.errors.push({
           courseId,
@@ -96,41 +93,6 @@ export async function POST(request: NextRequest) {
     console.error("Error in assign schedules:", error);
     return NextResponse.json(
       { error: "Failed to assign schedules" },
-      { status: 500 }
-    );
-  } finally {
-    await prisma.$disconnect();
-  }
-}
-
-// Optional: GET endpoint to fetch schedules for a specific course
-export async function GET(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const courseId = searchParams.get("courseId");
-
-    if (!courseId) {
-      return NextResponse.json(
-        { error: "Course ID is required" },
-        { status: 400 }
-      );
-    }
-
-    const schedules = await prisma.courseSchedule.findMany({
-      where: { courseId },
-      orderBy: { day: "asc" },
-    });
-
-    return NextResponse.json({ schedules });
-  } catch (error) {
-    console.error("Error fetching schedules:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch schedules" },
       { status: 500 }
     );
   } finally {

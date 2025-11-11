@@ -13,7 +13,19 @@ import {
   CircleUserRound,
   BookOpen,
   Calendar,
+  MoreVertical,
+  Edit,
+  CalendarPlus,
+  Eye,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { CourseSheet } from "./course-sheet";
 import { CourseStatus } from "@prisma/client";
 import toast from "react-hot-toast";
@@ -99,7 +111,6 @@ interface CsvRow {
   "Class Number": string;
   Section: string;
   Status: string;
-  "Faculty Email": string;
 }
 
 interface ImportStatus {
@@ -127,16 +138,6 @@ const EXPECTED_HEADERS = [
   "Section",
   "Status",
 ];
-interface CsvRow {
-  "Course Code": string;
-  "Course Title": string;
-  Room: string;
-  Semester: string;
-  "Academic Year": string;
-  "Class Number": string;
-  Section: string;
-  Status: string;
-}
 
 const formatEnumValue = (value: string) =>
   value
@@ -175,7 +176,17 @@ function LoadingSpinner() {
 }
 
 // Course Card Component
-const CourseCard = ({ course }: { course: Course }) => {
+const CourseCard = ({ 
+  course, 
+  onEdit,
+  onAddSchedule,
+  onViewDetails 
+}: { 
+  course: Course;
+  onEdit: (course: Course) => void;
+  onAddSchedule: (course: Course) => void;
+  onViewDetails: (course: Course) => void;
+}) => {
   const router = useRouter();
 
   const formatTo12Hour = (time: string) => {
@@ -199,33 +210,81 @@ const CourseCard = ({ course }: { course: Course }) => {
     }
   };
 
+  const hasNoSchedule = !course.schedules || course.schedules.length === 0;
   const passingRate = course.stats?.passingRate ?? 0;
   const attendanceRate = course.stats?.attendanceRate ?? 0;
 
   return (
     <div
-      onClick={() => router.push(`/main/course/${course.slug}`)}
-      className="group relative w-auto h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-3 hover:border-[#124A69] hover:shadow-lg transition-all duration-200 cursor-pointer text-[#124A69]"
+      className="group relative w-auto h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-3 hover:border-[#124A69] hover:shadow-lg transition-all duration-200 text-[#124A69]"
     >
-      <div className="absolute top-4 right-4">
+      {/* More Options Menu */}
+      <div className="absolute top-2 right-2 z-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 hover:bg-gray-100"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>Course Actions</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onViewDetails(course);
+            }}>
+              <Eye className="mr-2 h-4 w-4" />
+              View Details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onEdit(course);
+            }}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Course
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onAddSchedule(course);
+            }}>
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              {hasNoSchedule ? "Add Schedule" : "Edit Schedule"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Status Badge */}
+      <div className="absolute top-4 right-12">
         <Badge className={`${getStatusColor(course.status)} border`}>
           {formatEnumValue(course.status)}
         </Badge>
       </div>
 
-      <div className="mb-4">
-        <h3 className="text-lg font-bold group-hover:text-[#0C3246] transition-colors">
-          {course.code} - {course.section}
-        </h3>
-        <p className="text-xs opacity-80 mt-1">{course.title}</p>
-      </div>
+      {/* Card Content - Clickable */}
+      <div 
+        onClick={() => router.push(`/main/course/${course.slug}`)}
+        className="cursor-pointer h-full"
+      >
+        <div className="mb-4">
+          <h3 className="text-lg font-bold group-hover:text-[#0C3246] transition-colors">
+            {course.code} - {course.section}
+          </h3>
+          <p className="text-xs opacity-80 mt-1">{course.title}</p>
+        </div>
 
-      <div className="flex items-center mb-4 opacity-80">
-        <Calendar className="w-5 h-5" />
-        <span className="text-xs font-medium ml-2 truncate">
-          {course.room} |{" "}
-          {course.schedules?.length > 0
-            ? course.schedules
+        <div className="flex items-center mb-4 opacity-80">
+          <Calendar className="w-5 h-5" />
+          <span className="text-xs font-medium ml-2 truncate">
+            {course.room} |{" "}
+            {hasNoSchedule ? (
+              <span className="text-amber-600 font-semibold">No schedule set</span>
+            ) : (
+              course.schedules
                 .map(
                   (s) =>
                     `${s.day.slice(0, 3)} ${formatTo12Hour(
@@ -233,42 +292,43 @@ const CourseCard = ({ course }: { course: Course }) => {
                     )}–${formatTo12Hour(s.toTime)}`
                 )
                 .join(", ")
-            : "No schedule"}
-        </span>
-      </div>
-
-      <div className="flex justify-between items-center mb-4 opacity-80 text-gray-700">
-        <div className="flex items-center min-w-0">
-          <CircleUserRound className="w-5 h-5 flex-shrink-0" />
-          <span
-            className="text-xs font-medium ml-2 truncate max-w-[150px]"
-            title={course.faculty?.name || "No Instructor"}
-          >
-            {course.faculty?.name || "No Instructor"}
+            )}
           </span>
         </div>
 
-        <div className="flex items-center flex-shrink-0">
-          <Users className="w-5 h-5" />
-          <span className="text-xs font-medium ml-2">
-            {course._count?.students || 0} Students
-          </span>
-        </div>
-      </div>
+        <div className="flex justify-between items-center mb-4 opacity-80 text-gray-700">
+          <div className="flex items-center min-w-0">
+            <CircleUserRound className="w-5 h-5 flex-shrink-0" />
+            <span
+              className="text-xs font-medium ml-2 truncate max-w-[150px]"
+              title={course.faculty?.name || "No Instructor"}
+            >
+              {course.faculty?.name || "No Instructor"}
+            </span>
+          </div>
 
-      <div className="grid grid-cols-2 gap-3 pt-7">
-        <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
-          <div className="flex items-center gap-2 mb-1 text-xs">
-            <span>Passing Rate</span>
+          <div className="flex items-center flex-shrink-0">
+            <Users className="w-5 h-5" />
+            <span className="text-xs font-medium ml-2">
+              {course._count?.students || 0} Students
+            </span>
           </div>
-          <p className="text-xl font-bold">{passingRate}%</p>
         </div>
-        <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
-          <div className="flex items-center gap-2 mb-1 text-xs">
-            <GraduationCap className="w-3 h-3" />
-            <span>Attendance</span>
+
+        <div className="grid grid-cols-2 gap-3 pt-7">
+          <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
+            <div className="flex items-center gap-2 mb-1 text-xs">
+              <span>Passing Rate</span>
+            </div>
+            <p className="text-xl font-bold">{passingRate}%</p>
           </div>
-          <p className="text-xl font-bold">{attendanceRate}%</p>
+          <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
+            <div className="flex items-center gap-2 mb-1 text-xs">
+              <GraduationCap className="w-3 h-3" />
+              <span>Attendance</span>
+            </div>
+            <p className="text-xl font-bold">{attendanceRate}%</p>
+          </div>
         </div>
       </div>
 
@@ -291,10 +351,12 @@ export function CourseDataTable({
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<CourseStatus | "ALL">("ALL");
-  const [facultyFilter, setFacultyFilter] = useState<string>(userId); // Default to user's own courses
+  const [facultyFilter, setFacultyFilter] = useState<string>(userId);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [scheduleDialogCourse, setScheduleDialogCourse] = useState<Course | null>(null);
 
   // Import/Export State
   const [showExportPreview, setShowExportPreview] = useState(false);
@@ -342,11 +404,14 @@ export function CourseDataTable({
                   ...course,
                   stats: statsResponse.data,
                 };
-              } catch (error) {
-                console.error(
-                  `Error fetching stats for course ${course.code}:`,
-                  error
-                );
+              } catch (error: any) {
+                // Silently handle 404s (courses without stats yet)
+                if (error?.response?.status !== 404) {
+                  console.error(
+                    `Error fetching stats for course ${course.code}:`,
+                    error
+                  );
+                }
                 return {
                   ...course,
                   stats: {
@@ -378,7 +443,9 @@ export function CourseDataTable({
       setIsRefreshing(true);
       const response = await axiosInstance.get("/courses");
       const data = await response.data;
+      
       if (data.courses) {
+        // Fetch stats for courses with error handling
         const coursesWithStats = await Promise.all(
           data.courses.map(async (course: Course) => {
             try {
@@ -389,7 +456,15 @@ export function CourseDataTable({
                 ...course,
                 stats: statsResponse.data,
               };
-            } catch (error) {
+            } catch (error: any) {
+              // Only log non-404 errors
+              if (error?.response?.status !== 404) {
+                console.warn(
+                  `Could not fetch stats for course ${course.code}:`,
+                  error
+                );
+              }
+              // Return course with default stats (no toast for 404s)
               return {
                 ...course,
                 stats: {
@@ -405,6 +480,7 @@ export function CourseDataTable({
       }
     } catch (error) {
       console.error("Error refreshing table data:", error);
+      toast.error("Failed to refresh course data");
     } finally {
       setIsRefreshing(false);
     }
@@ -444,6 +520,21 @@ export function CourseDataTable({
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Course action handlers
+  const handleEditCourse = (course: Course) => {
+    setEditingCourse(course);
+  };
+
+  const handleAddSchedule = (course: Course) => {
+    setScheduleDialogCourse(course);
+    setImportedCoursesForSchedule([course]);
+    setShowScheduleAssignment(true);
+  };
+
+  const handleViewDetails = (course: Course) => {
+    window.open(`/main/course/${course.slug}`, '_blank');
   };
 
   // Export handler
@@ -599,6 +690,7 @@ export function CourseDataTable({
         "4. All fields are required - do not leave any cell empty",
         "5. Do not modify or delete the header row",
         "6. Delete these instruction rows before importing",
+        "7. Courses without schedules will be automatically set to INACTIVE status",
       ];
 
       instructions.forEach((instruction, index) => {
@@ -905,7 +997,7 @@ export function CourseDataTable({
         errors,
         total: backendTotalProcessed,
         detailedFeedback,
-        importedCourses, // NEW: Get the list of imported courses
+        importedCourses,
       } = response.data;
 
       setImportStatus({
@@ -916,31 +1008,48 @@ export function CourseDataTable({
         detailedFeedback: detailedFeedback || [],
       });
 
-      // Close import dialogs
+      // Close import preview dialog
       setShowImportPreview(false);
       setImportProgress(null);
 
-      if (errors && errors.length > 0) {
-        toast.error(`Import finished with ${errors.length} errors.`);
-      } else if (skipped && skipped > 0) {
-        toast(`Import finished. ${skipped} courses skipped.`, { icon: "⚠️" });
-      } else if (imported && imported > 0) {
-        toast.success(`Successfully imported ${imported} courses.`);
+      // Show appropriate messages based on results
+      if (imported === 0 && skipped > 0) {
+        // ALL courses were skipped (duplicates)
+        toast.error(
+          `All ${skipped} courses already exist. No new courses imported.`
+        );
+        
+        // Don't refresh or open schedule dialog - nothing changed
+        return; // EXIT HERE - Don't proceed to schedule assignment
       }
 
-      // NEW: If courses were imported, open schedule assignment dialog
+      if (errors && errors.length > 0) {
+        toast.error(`Import finished with ${errors.length} errors.`);
+      } else if (skipped && skipped > 0 && imported > 0) {
+        // Some imported, some skipped
+        toast(
+          `Imported ${imported} courses. ${skipped} courses were skipped (duplicates).`,
+          { icon: "⚠️", duration: 5000 }
+        );
+      } else if (imported && imported > 0) {
+        // All imported successfully
+        toast.success(`Successfully imported ${imported} courses!`);
+      }
+
+      // ONLY open schedule dialog if courses were actually imported
       if (importedCourses && importedCourses.length > 0) {
         setImportedCoursesForSchedule(importedCourses);
-
+        
         // Small delay to show success message first
         setTimeout(() => {
           setShowScheduleAssignment(true);
         }, 1000);
       } else {
-        // No courses to assign schedules, just refresh
-        setTimeout(async () => {
-          await refreshTableData();
-          if (onCourseAdded) onCourseAdded();
+        // No courses imported - don't refresh since nothing changed
+        setTimeout(() => {
+          setSelectedFile(null);
+          setPreviewData([]);
+          setIsValidFile(false);
         }, 500);
       }
     } catch (error: any) {
@@ -973,6 +1082,12 @@ export function CourseDataTable({
 
   const handleScheduleAssignmentComplete = useCallback(async () => {
     toast.success("All schedules have been processed!");
+
+    // Show loading state with smooth transition
+    setIsRefreshing(true);
+    
+    // Small delay for visual feedback
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Refresh table data
     await refreshTableData();
@@ -1110,7 +1225,13 @@ export function CourseDataTable({
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[555px]">
               {paginatedCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
+                <CourseCard 
+                  key={course.id} 
+                  course={course}
+                  onEdit={handleEditCourse}
+                  onAddSchedule={handleAddSchedule}
+                  onViewDetails={handleViewDetails}
+                />
               ))}
             </div>
 
@@ -1258,6 +1379,7 @@ export function CourseDataTable({
           }}
         />
 
+        {/* Schedule Assignment Dialog */}
         <ScheduleAssignmentDialog
           open={showScheduleAssignment}
           onOpenChange={(open) => {
@@ -1270,6 +1392,23 @@ export function CourseDataTable({
           courses={importedCoursesForSchedule}
           onComplete={handleScheduleAssignmentComplete}
         />
+
+        {/* Edit Course Sheet */}
+        {editingCourse && (
+          <CourseSheet
+            mode="edit"
+            course={editingCourse}
+            onSuccess={() => {
+              refreshTableData();
+              setEditingCourse(null);
+            }}
+            faculties={faculties}
+            userId={userId}
+            userRole={userRole}
+            open={!!editingCourse}
+            onOpenChange={(open) => !open && setEditingCourse(null)}
+          />
+        )}
       </div>
     </div>
   );

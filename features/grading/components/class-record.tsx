@@ -22,7 +22,7 @@ function LoadingSpinner() {
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px]">
       <div className="flex flex-col items-center gap-4 mt-40">
         <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
-          Welcome to Didasko!
+          Loading Class Record...
         </h2>
         <p
           className="text-lg text-gray-600 animate-pulse"

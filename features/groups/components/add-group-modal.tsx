@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { Users, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,8 @@ interface AddGroupModalProps {
   onGroupAdded?: () => void;
   isValidationNeeded?: boolean;
   totalStudents?: number;
+  students: Student[];
+  groupMeta: GroupMeta;
 }
 
 interface Student {
@@ -49,6 +51,8 @@ export function AddGroupModal({
   onGroupAdded,
   isValidationNeeded = false,
   totalStudents = 0,
+  students = [],
+  groupMeta = { names: [], numbers: [], usedNames: [], usedNumbers: [] },
 }: AddGroupModalProps) {
   const [open, setOpen] = useState(false);
   const [groupNumber, setGroupNumber] = useState("");
@@ -60,14 +64,6 @@ export function AddGroupModal({
   const [studentSelectionError, setStudentSelectionError] = useState("");
   const [groupNumberError, setGroupNumberError] = useState("");
   const [groupNameError, setGroupNameError] = useState("");
-
-  const [students, setStudents] = useState<Student[]>([]);
-  const [groupMeta, setGroupMeta] = useState<GroupMeta>({
-    names: [],
-    numbers: [],
-    usedNames: [],
-    usedNumbers: [],
-  });
 
   // --- Helpers ---
   const calculateGroupSizes = (total: number) => {
@@ -94,34 +90,6 @@ export function AddGroupModal({
       NOT_SET: "No Attendance",
     }[status] || "No Attendance");
 
-  // --- Fetch Data ---
-  useEffect(() => {
-    if (!open) return;
-
-    const fetchAllData = async () => {
-      try {
-        setIsLoading(true);
-        const [studentsRes, metaRes] = await Promise.all([
-          fetch(`/api/courses/${courseCode}/students`),
-          fetch(`/api/courses/${courseCode}/groups/meta`),
-        ]);
-
-        const studentData = await studentsRes.json();
-        const metaData = await metaRes.json();
-
-        setStudents(studentData.students || []);
-        setGroupMeta(metaData || {});
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        toast.error("Failed to fetch course data");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAllData();
-  }, [open, courseCode]);
-
   // --- Filtering ---
   const availableStudents = useMemo(
     () => students.filter((s) => !excludedStudentIds.includes(s.id)),
@@ -142,27 +110,38 @@ export function AddGroupModal({
     const { maxGroups } = calculateGroupSizes(totalStudents);
 
     // Group number validation
-    if (!groupNumber || isNaN(groupNum) || groupNum < 1 || groupNum > maxGroups)
-      return setGroupNumberError(`Must be between 1 and ${maxGroups}`);
+    if (!groupNumber || isNaN(groupNum) || groupNum < 1 || groupNum > maxGroups) {
+      setGroupNumberError(`Must be between 1 and ${maxGroups}`);
+      return false;
+    }
 
-    if (groupMeta.usedNumbers.includes(groupNum))
-      return setGroupNumberError("This group number already exists");
+    // Check if group number already exists (convert to number for comparison)
+    if (groupMeta.usedNumbers.some(num => Number(num) === groupNum)) {
+      setGroupNumberError("This group number already exists");
+      return false;
+    }
 
     setGroupNumberError("");
 
     // Group name validation
-    if (groupName && groupMeta.usedNames.includes(groupName.trim()))
-      return setGroupNameError("This group name already exists");
+    if (groupName && groupMeta.usedNames.includes(groupName.trim())) {
+      setGroupNameError("This group name already exists");
+      return false;
+    }
 
     setGroupNameError("");
 
     // Student validation
-    if (selectedStudents.length < 2)
-      return setStudentSelectionError("At least 2 students required");
+    if (selectedStudents.length < 2) {
+      setStudentSelectionError("At least 2 students required");
+      return false;
+    }
 
     const remaining = availableStudents.length - selectedStudents.length;
-    if (remaining === 1)
-      return setStudentSelectionError("Cannot leave only 1 student");
+    if (remaining === 1) {
+      setStudentSelectionError("Cannot leave only 1 student");
+      return false;
+    }
 
     setStudentSelectionError("");
     return true;
@@ -190,6 +169,14 @@ export function AddGroupModal({
 
       toast.success("Group created successfully!");
       setOpen(false);
+      
+      // Reset form
+      setGroupNumber("");
+      setGroupName("");
+      setSelectedStudents([]);
+      setSelectedLeader("");
+      setStudentSearch("");
+      
       onGroupAdded?.();
     } catch (error) {
       console.error(error);
@@ -204,19 +191,17 @@ export function AddGroupModal({
       <DialogTrigger asChild>
         <button
           className="relative flex flex-col items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-          style={{ width: "8.75rem", height: "8.75rem" }} // = h-35 w-35 (Tailwind doesn't have 35)
+          style={{ width: "8.75rem", height: "8.75rem" }}
           disabled={isValidationNeeded}
         >
           {isValidationNeeded ? (
             <Loader2 className="h-20 w-20 text-gray-400 animate-spin" />
           ) : (
             <div className="relative flex items-center justify-center">
-              {/* Background group icon */}
               <Users
                 className="h-20 w-20 text-gray-400 opacity-70"
                 strokeWidth={1.5}
               />
-              {/* Centered plus icon */}
               <Plus
                 className="h-10 w-10 text-white absolute"
                 strokeWidth={2.5}

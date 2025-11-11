@@ -8,35 +8,8 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { format } from "date-fns";
 import { GroupHeader } from "@/features/groups/components/group-header";
 import { GroupGrid } from "@/features/groups/components/group-grid";
-interface Course {
-  id: string;
-  code: string;
-  title: string;
-  section: string;
-  description: string | null;
-}
+import type { Student, GroupMeta, Group, Course } from "@/features/groups/types";
 
-interface Group {
-  id: string;
-  number: string;
-  name: string | null;
-  students: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    middleInitial: string | null;
-    image: string | null;
-  }[];
-  leader: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    middleInitial: string | null;
-    image: string | null;
-  } | null;
-}
-
-// Server Component
 export default function GroupGradingPage({
   params,
 }: {
@@ -48,40 +21,65 @@ export default function GroupGradingPage({
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [groups, setGroups] = React.useState<Group[]>([]);
+  
+  // State for students and group metadata
+  const [students, setStudents] = React.useState<Student[]>([]);
+  const [groupMeta, setGroupMeta] = React.useState<GroupMeta>({
+    names: [],
+    numbers: [],
+    usedNames: [],
+    usedNumbers: [],
+  });
+  const [isLoadingData, setIsLoadingData] = React.useState(true);
 
+  // Fetch course, groups, students, and metadata on mount
   React.useEffect(() => {
-    const fetchCourse = async () => {
-      try {
-        const response = await fetch(
-          `/api/courses/${resolvedParams.course_slug}`
-        );
-        if (!response.ok) throw new Error("Failed to fetch course");
-        const data = await response.json();
-        setCourse(data);
-      } catch (error) {
-        console.error("Error fetching course:", error);
-      }
-    };
-
-    const fetchGroups = async () => {
+    const fetchAllData = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(
-          `/api/courses/${resolvedParams.course_slug}/groups`
+        setIsLoadingData(true);
+
+        // Fetch course
+        const courseResponse = await fetch(
+          `/api/courses/${resolvedParams.course_slug}`
         );
-        if (!response.ok) throw new Error("Failed to fetch groups");
-        const data = await response.json();
-        setGroups(data);
+        if (!courseResponse.ok) throw new Error("Failed to fetch course");
+        const courseData = await courseResponse.json();
+        setCourse(courseData);
+
+        // Fetch groups, students, and metadata in parallel
+        const [groupsRes, studentsRes, metaRes] = await Promise.all([
+          fetch(`/api/courses/${resolvedParams.course_slug}/groups`),
+          fetch(`/api/courses/${resolvedParams.course_slug}/students`),
+          fetch(`/api/courses/${resolvedParams.course_slug}/groups/meta`),
+        ]);
+
+        if (!groupsRes.ok) throw new Error("Failed to fetch groups");
+        if (!studentsRes.ok) throw new Error("Failed to fetch students");
+        if (!metaRes.ok) throw new Error("Failed to fetch metadata");
+
+        const groupsData = await groupsRes.json();
+        const studentsData = await studentsRes.json();
+        const metaData = await metaRes.json();
+
+        setGroups(groupsData);
+        setStudents(studentsData.students || []);
+        setGroupMeta(metaData || {
+          names: [],
+          numbers: [],
+          usedNames: [],
+          usedNumbers: [],
+        });
       } catch (error) {
-        console.error("Error fetching groups:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setIsLoading(false);
+        setIsLoadingData(false);
       }
     };
 
     if (resolvedParams.course_slug) {
-      fetchCourse();
-      fetchGroups();
+      fetchAllData();
     }
   }, [resolvedParams.course_slug]);
 
@@ -101,6 +99,7 @@ export default function GroupGradingPage({
 
   // Compute all student IDs already in a group
   const excludedStudentIds = groups.flatMap((g) => g.students.map((s) => s.id));
+  
   // Compute next group number (max + 1)
   const maxGroupNumber =
     groups.length > 0
@@ -108,18 +107,35 @@ export default function GroupGradingPage({
       : 0;
   const nextGroupNumber = maxGroupNumber + 1;
 
-  // Function to refresh groups after adding
-  const fetchGroups = async () => {
+  // Function to refresh all data after adding/deleting groups
+  const refreshData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(
-        `/api/courses/${resolvedParams.course_slug}/groups`
-      );
-      if (!response.ok) throw new Error("Failed to fetch groups");
-      const data = await response.json();
-      setGroups(data);
+
+      const [groupsRes, studentsRes, metaRes] = await Promise.all([
+        fetch(`/api/courses/${resolvedParams.course_slug}/groups`),
+        fetch(`/api/courses/${resolvedParams.course_slug}/students`),
+        fetch(`/api/courses/${resolvedParams.course_slug}/groups/meta`),
+      ]);
+
+      if (!groupsRes.ok) throw new Error("Failed to fetch groups");
+      if (!studentsRes.ok) throw new Error("Failed to fetch students");
+      if (!metaRes.ok) throw new Error("Failed to fetch metadata");
+
+      const groupsData = await groupsRes.json();
+      const studentsData = await studentsRes.json();
+      const metaData = await metaRes.json();
+
+      setGroups(groupsData);
+      setStudents(studentsData.students || []);
+      setGroupMeta(metaData || {
+        names: [],
+        numbers: [],
+        usedNames: [],
+        usedNumbers: [],
+      });
     } catch (error) {
-      console.error("Error fetching groups:", error);
+      console.error("Error refreshing data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -156,12 +172,15 @@ export default function GroupGradingPage({
                 <div className="p-6">
                   <GroupGrid
                     groups={filteredGroups}
-                    isLoading={isLoading}
+                    isLoading={isLoading || isLoadingData}
                     courseCode={resolvedParams.course_slug}
                     courseSection={course?.section || ""}
                     excludedStudentIds={excludedStudentIds}
                     nextGroupNumber={nextGroupNumber}
-                    onGroupAdded={fetchGroups}
+                    onGroupAdded={refreshData}
+                    students={students}
+                    groupMeta={groupMeta}
+                    totalStudents={students.length}
                   />
                 </div>
               </div>

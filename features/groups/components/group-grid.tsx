@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { GroupCard } from "./group-card";
 import { AddGroupModal } from "./add-group-modal";
-import { RandomizerButton } from "./randomizer-button";
+import { WheelRandomizer } from "./randomizer-button";
 import { Loader2 } from "lucide-react";
 import { Group } from "@/shared/types/groups";
+import { AttendanceStatus } from "@prisma/client";
 import {
   Pagination,
   PaginationContent,
@@ -13,6 +14,19 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 
+interface Student {
+  id: string;
+  name: string;
+  status: AttendanceStatus | "NOT_SET";
+}
+
+interface GroupMeta {
+  names: string[];
+  numbers: number[];
+  usedNames: string[];
+  usedNumbers: number[];
+}
+
 interface GroupGridProps {
   groups: Group[];
   isLoading: boolean;
@@ -21,7 +35,9 @@ interface GroupGridProps {
   excludedStudentIds: string[];
   nextGroupNumber: number;
   onGroupAdded: () => void;
-  isValidationNeeded?: boolean;
+  students: Student[];
+  groupMeta: GroupMeta;
+  totalStudents: number;
 }
 
 export function GroupGrid({
@@ -32,32 +48,13 @@ export function GroupGrid({
   excludedStudentIds,
   nextGroupNumber,
   onGroupAdded,
-  isValidationNeeded = false,
+  students,
+  groupMeta,
+  totalStudents,
 }: GroupGridProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalStudents, setTotalStudents] = useState(0);
   const itemsPerPage = 10;
   const totalPages = Math.ceil((groups.length + 1) / itemsPerPage);
-
-  useEffect(() => {
-    const fetchTotalStudents = async () => {
-      try {
-        const response = await fetch(`/api/courses/${courseCode}/students`);
-        const data = await response.json();
-        setTotalStudents(data.students.length);
-      } catch (error) {
-        console.error("Error fetching total students:", error);
-      }
-    };
-
-    fetchTotalStudents();
-  }, [courseCode]);
-
-  const handleGroupDeleted = () => {
-    if (onGroupAdded) {
-      onGroupAdded();
-    }
-  };
 
   if (isLoading) {
     return (
@@ -75,10 +72,17 @@ export function GroupGrid({
           excludedStudentIds={excludedStudentIds}
           nextGroupNumber={nextGroupNumber}
           onGroupAdded={onGroupAdded}
-          isValidationNeeded={isValidationNeeded}
+          isValidationNeeded={false}
           totalStudents={totalStudents}
+          students={students}
+          groupMeta={groupMeta}
         />
-        {/* <RandomizerButton disabled /> */}
+        <WheelRandomizer 
+          students={students}
+          excludedStudentIds={excludedStudentIds}
+          courseCode={courseCode}
+          onGroupsCreated={onGroupAdded}
+        />
       </div>
     );
   }
@@ -96,7 +100,7 @@ export function GroupGrid({
             group={group}
             courseCode={courseCode}
             courseSection={courseSection}
-            onGroupDeleted={handleGroupDeleted}
+            onGroupDeleted={onGroupAdded}
           />
         ))}
         {currentPage === totalPages && (
@@ -106,8 +110,10 @@ export function GroupGrid({
               excludedStudentIds={excludedStudentIds}
               nextGroupNumber={nextGroupNumber}
               onGroupAdded={onGroupAdded}
-              isValidationNeeded={isValidationNeeded}
+              isValidationNeeded={false}
               totalStudents={totalStudents}
+              students={students}
+              groupMeta={groupMeta}
             />
             {/* <RandomizerButton disabled /> */}
           </div>
