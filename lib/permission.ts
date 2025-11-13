@@ -1,4 +1,5 @@
 export type UserRole = "FACULTY" | "ACADEMIC_HEAD";
+
 export interface CoursePermissions {
   canManageStudents: boolean;
   canImportStudents: boolean;
@@ -9,6 +10,7 @@ export interface CoursePermissions {
   canCreateCourse: boolean;
   canEditOwnCourse: boolean;
   canDeleteOwnCourse: boolean;
+  canArchiveOwnCourse: boolean; // NEW: Only archive own courses
 }
 
 /**
@@ -30,9 +32,13 @@ export function getCoursePermissions(userRole: UserRole): CoursePermissions {
     canCreateCourse: true,
     canEditOwnCourse: true,
     canDeleteOwnCourse: true,
+    canArchiveOwnCourse: true, // Both roles can archive their own courses
   };
 }
 
+/**
+ * Check if user can manage students in a course
+ */
 export function canManageCourseStudents(
   userRole: UserRole,
   courseOwnerId: string,
@@ -43,6 +49,9 @@ export function canManageCourseStudents(
   return courseOwnerId === currentUserId;
 }
 
+/**
+ * Check if user can edit a specific course
+ */
 export function canEditCourse(
   courseOwnerId: string,
   currentUserId: string
@@ -50,6 +59,30 @@ export function canEditCourse(
   return courseOwnerId === currentUserId;
 }
 
+/**
+ * Check if user can archive a specific course
+ */
+export function canArchiveCourse(
+  courseOwnerId: string,
+  currentUserId: string
+): boolean {
+  // Only the course owner can archive/unarchive
+  return courseOwnerId === currentUserId;
+}
+
+/**
+ * Filter courses that user can archive
+ */
+export function filterArchivableCourses(
+  courses: any[],
+  currentUserId: string
+): any[] {
+  return courses.filter((course) => course.facultyId === currentUserId);
+}
+
+/**
+ * Filter courses based on user role and permissions
+ */
 export function filterCoursesByRole(
   courses: any[],
   userRole: UserRole,

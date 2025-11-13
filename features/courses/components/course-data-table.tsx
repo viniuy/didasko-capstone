@@ -16,7 +16,7 @@ import {
   MoreVertical,
   Edit,
   CalendarPlus,
-  Eye,
+  Settings2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,6 +43,8 @@ import {
 import {
   getCoursePermissions,
   filterCoursesByRole,
+  canArchiveCourse,
+  filterArchivableCourses,
   type UserRole,
 } from "@/lib/permission";
 import { FacultyFilter } from "./faculty-filter";
@@ -50,6 +52,7 @@ import { ExportDialog } from "../dialogs/export-dialog";
 import { ImportDialog } from "../dialogs/import-dialog";
 import { ImportStatusDialog } from "../dialogs/import-status-dialog";
 import { ScheduleAssignmentDialog } from "../dialogs/schedule-assignment-dialog";
+import { CourseSettingsDialog } from "../dialogs/course-settings-dialog"; // Adjust path as needed
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
@@ -151,7 +154,7 @@ function LoadingSpinner() {
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
       <div className="flex flex-col items-center gap-4 mt-40">
         <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
-          Welcome to Didasko!
+          Loading Courses...
         </h2>
         <p
           className="text-lg text-gray-600 animate-pulse"
@@ -176,12 +179,12 @@ function LoadingSpinner() {
 }
 
 // Course Card Component
-const CourseCard = ({ 
-  course, 
+const CourseCard = ({
+  course,
   onEdit,
   onAddSchedule,
-  onViewDetails 
-}: { 
+  onViewDetails,
+}: {
   course: Course;
   onEdit: (course: Course) => void;
   onAddSchedule: (course: Course) => void;
@@ -215,9 +218,7 @@ const CourseCard = ({
   const attendanceRate = course.stats?.attendanceRate ?? 0;
 
   return (
-    <div
-      className="group relative w-auto h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-3 hover:border-[#124A69] hover:shadow-lg transition-all duration-200 text-[#124A69]"
-    >
+    <div className="group relative w-auto h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-3 hover:border-[#124A69] hover:shadow-lg transition-all duration-200 text-[#124A69]">
       {/* More Options Menu */}
       <div className="absolute top-2 right-2 z-10">
         <DropdownMenu>
@@ -233,24 +234,21 @@ const CourseCard = ({
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>Course Actions</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={(e) => {
-              e.stopPropagation();
-              onViewDetails(course);
-            }}>
-              <Eye className="mr-2 h-4 w-4" />
-              View Details
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => {
-              e.stopPropagation();
-              onEdit(course);
-            }}>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(course);
+              }}
+            >
               <Edit className="mr-2 h-4 w-4" />
               Edit Course
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => {
-              e.stopPropagation();
-              onAddSchedule(course);
-            }}>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddSchedule(course);
+              }}
+            >
               <CalendarPlus className="mr-2 h-4 w-4" />
               {hasNoSchedule ? "Add Schedule" : "Edit Schedule"}
             </DropdownMenuItem>
@@ -266,7 +264,7 @@ const CourseCard = ({
       </div>
 
       {/* Card Content - Clickable */}
-      <div 
+      <div
         onClick={() => router.push(`/main/course/${course.slug}`)}
         className="cursor-pointer h-full"
       >
@@ -282,7 +280,9 @@ const CourseCard = ({
           <span className="text-xs font-medium ml-2 truncate">
             {course.room} |{" "}
             {hasNoSchedule ? (
-              <span className="text-amber-600 font-semibold">No schedule set</span>
+              <span className="text-amber-600 font-semibold">
+                No schedule set
+              </span>
             ) : (
               course.schedules
                 .map(
@@ -356,9 +356,11 @@ export function CourseDataTable({
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [scheduleDialogCourse, setScheduleDialogCourse] = useState<Course | null>(null);
+  const [scheduleDialogCourse, setScheduleDialogCourse] =
+    useState<Course | null>(null);
 
   // Import/Export State
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
@@ -443,7 +445,7 @@ export function CourseDataTable({
       setIsRefreshing(true);
       const response = await axiosInstance.get("/courses");
       const data = await response.data;
-      
+
       if (data.courses) {
         // Fetch stats for courses with error handling
         const coursesWithStats = await Promise.all(
@@ -534,7 +536,62 @@ export function CourseDataTable({
   };
 
   const handleViewDetails = (course: Course) => {
-    window.open(`/main/course/${course.slug}`, '_blank');
+    window.open(`/main/course/${course.slug}`, "_blank");
+  };
+
+  const handleArchiveCourses = async (courseIds: string[]) => {
+    try {
+      // Filter courses to only include those owned by current user
+      const coursesToArchive = tableData
+        .filter(
+          (course) =>
+            courseIds.includes(course.id) && course.facultyId === userId
+        )
+        .map((course) => course.id);
+
+      if (coursesToArchive.length === 0) {
+        toast.error("You can only archive your own courses");
+        return;
+      }
+
+      if (coursesToArchive.length < courseIds.length) {
+        toast.error(
+          `Only archiving ${coursesToArchive.length} of ${courseIds.length} courses (you can only archive your own courses)`
+        );
+      }
+
+      await axiosInstance.patch("/courses/bulk-archive", {
+        courseIds: coursesToArchive,
+        status: "ARCHIVED",
+      });
+
+      toast.success(
+        `Successfully archived ${coursesToArchive.length} course(s)`
+      );
+
+      // Refresh table data
+      await refreshTableData();
+      if (onCourseAdded) onCourseAdded();
+    } catch (error) {
+      console.error("Error archiving courses:", error);
+      throw error;
+    }
+  };
+
+  const handleUnarchiveCourses = async (courseIds: string[]) => {
+    try {
+      await axiosInstance.patch("/courses/bulk-archive", {
+        courseIds,
+        status: "ACTIVE",
+      });
+
+      // Refresh table data
+      await refreshTableData();
+      if (onCourseAdded) onCourseAdded();
+    } catch (error) {
+      console.error("Error unarchiving courses:", error);
+      throw error;
+    }
   };
 
   // Export handler
@@ -983,131 +1040,125 @@ export function CourseDataTable({
     }
 
     try {
-      setShowImportStatus(true);
-      setImportProgress({
-        current: 0,
-        total: previewData.length,
-        status: "Importing courses...",
-      });
+      // Check for duplicate courses BEFORE preparing import
+      const duplicates: string[] = [];
+      const validCourses: any[] = [];
 
-      const response = await axiosInstance.post("/courses/import", previewData);
-      const {
-        imported,
-        skipped,
-        errors,
-        total: backendTotalProcessed,
-        detailedFeedback,
-        importedCourses,
-      } = response.data;
+      for (const row of previewData) {
+        const code = row["Course Code"]?.trim().toUpperCase();
+        const section = row["Section"]?.trim().toUpperCase() || "A";
+        const academicYear =
+          row["Academic Year"]?.trim() || new Date().getFullYear().toString();
+        const semester = row["Semester"]?.trim() || "1st Semester";
 
-      setImportStatus({
-        imported: imported || 0,
-        skipped: skipped || 0,
-        errors: errors || [],
-        total: backendTotalProcessed || previewData.length,
-        detailedFeedback: detailedFeedback || [],
-      });
+        // Check if course already exists in database
+        const response = await axiosInstance.get("/courses");
+        const existingCourses = response.data.courses || [];
 
-      // Close import preview dialog
-      setShowImportPreview(false);
-      setImportProgress(null);
+        const isDuplicate = existingCourses.some(
+          (c: any) =>
+            c.code === code &&
+            c.section === section &&
+            c.academicYear === academicYear &&
+            c.semester === semester
+        );
 
-      // Show appropriate messages based on results
-      if (imported === 0 && skipped > 0) {
-        // ALL courses were skipped (duplicates)
+        if (isDuplicate) {
+          duplicates.push(`${code}-${section} (${academicYear} ${semester})`);
+        } else {
+          validCourses.push(row);
+        }
+      }
+
+      // If there are duplicates, show error
+      if (duplicates.length > 0) {
         toast.error(
-          `All ${skipped} courses already exist. No new courses imported.`
+          `${duplicates.length} course(s) already exist: ${duplicates.join(
+            ", "
+          )}`,
+          { duration: 6000 }
         );
-        
-        // Don't refresh or open schedule dialog - nothing changed
-        return; // EXIT HERE - Don't proceed to schedule assignment
+
+        // If ALL courses are duplicates, stop here
+        if (validCourses.length === 0) {
+          toast.error("All courses already exist. Nothing to import.");
+          return;
+        }
+
+        // Ask user if they want to continue with non-duplicate courses
+        const shouldContinue = confirm(
+          `${duplicates.length} duplicate course(s) found. Do you want to continue importing the ${validCourses.length} valid course(s)?`
+        );
+
+        if (!shouldContinue) {
+          return;
+        }
       }
 
-      if (errors && errors.length > 0) {
-        toast.error(`Import finished with ${errors.length} errors.`);
-      } else if (skipped && skipped > 0 && imported > 0) {
-        // Some imported, some skipped
-        toast(
-          `Imported ${imported} courses. ${skipped} courses were skipped (duplicates).`,
-          { icon: "⚠️", duration: 5000 }
-        );
-      } else if (imported && imported > 0) {
-        // All imported successfully
-        toast.success(`Successfully imported ${imported} courses!`);
-      }
+      // Prepare courses for schedule assignment (NO database import yet)
+      const coursesToImport = validCourses.map((row, index) => ({
+        tempId: `temp-${index}`,
+        code: row["Course Code"],
+        title: row["Course Title"],
+        section: row["Section"],
+        room: row["Room"],
+        semester: row["Semester"],
+        academicYear: row["Academic Year"],
+        classNumber: row["Class Number"],
+        status: row["Status"],
+      }));
 
-      // ONLY open schedule dialog if courses were actually imported
-      if (importedCourses && importedCourses.length > 0) {
-        setImportedCoursesForSchedule(importedCourses);
-        
-        // Small delay to show success message first
-        setTimeout(() => {
-          setShowScheduleAssignment(true);
-        }, 1000);
-      } else {
-        // No courses imported - don't refresh since nothing changed
-        setTimeout(() => {
-          setSelectedFile(null);
-          setPreviewData([]);
-          setIsValidFile(false);
-        }, 500);
-      }
+      // Close import preview
+      setShowImportPreview(false);
+
+      // Set courses for schedule assignment
+      setImportedCoursesForSchedule(coursesToImport);
+
+      // Show info message
+      toast.success(
+        `${coursesToImport.length} courses ready. Add schedules to complete import.`,
+        { duration: 4000 }
+      );
+
+      // Open schedule assignment dialog
+      setTimeout(() => {
+        setShowScheduleAssignment(true);
+      }, 500);
     } catch (error: any) {
-      const errorResponse = error?.response?.data;
       const errorMessage =
-        errorResponse?.error ||
-        (error instanceof Error ? error.message : "Failed to import courses");
-      const importErrors = errorResponse?.errors || [
-        { code: "N/A", message: errorMessage },
-      ];
+        error instanceof Error
+          ? error.message
+          : "Failed to prepare courses for import";
 
-      setImportProgress({
-        current: 0,
-        total: previewData.length,
-        status: "Import failed",
-        error: errorMessage,
-        hasError: true,
-      });
+      console.error("Import preparation error:", error);
       toast.error(errorMessage);
-
-      setImportStatus({
-        imported: errorResponse?.imported || 0,
-        skipped: errorResponse?.skipped || 0,
-        errors: importErrors,
-        total: errorResponse?.total || previewData.length,
-        detailedFeedback: errorResponse?.detailedFeedback || [],
-      });
     }
-  }, [selectedFile, isValidFile, previewData, refreshTableData, onCourseAdded]);
+  }, [selectedFile, isValidFile, previewData]);
 
   const handleScheduleAssignmentComplete = useCallback(async () => {
-    toast.success("All schedules have been processed!");
+    toast.success("All courses have been created with schedules!");
 
-    // Show loading state with smooth transition
+    // Show loading state
     setIsRefreshing(true);
-    
+
     // Small delay for visual feedback
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     // Refresh table data
     await refreshTableData();
     if (onCourseAdded) onCourseAdded();
 
-    // Reset schedule assignment state
+    // Reset all state
     setImportedCoursesForSchedule([]);
     setShowScheduleAssignment(false);
-
-    // Clear import dialog state
     setSelectedFile(null);
     setPreviewData([]);
     setIsValidFile(false);
+
+    // Also reset import status
+    setShowImportStatus(false);
+    setImportStatus(null);
   }, [refreshTableData, onCourseAdded]);
-
-  // Show loading spinner
-  if (isInitialLoading) {
-    return <LoadingSpinner />;
-  }
-
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
       <h1 className="text-2xl sm:text-3xl font-bold text-[#124A69] mb-5">
@@ -1139,6 +1190,14 @@ export function CourseDataTable({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowSettingsDialog(true)}
+              className="gap-2"
+            >
+              <Settings2 className="h-4 w-4" />
+              Settings
+            </Button>
             {permissions.canExportData && (
               <Button
                 variant="outline"
@@ -1225,8 +1284,8 @@ export function CourseDataTable({
           <div className="space-y-8">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[555px]">
               {paginatedCourses.map((course) => (
-                <CourseCard 
-                  key={course.id} 
+                <CourseCard
+                  key={course.id}
                   course={course}
                   onEdit={handleEditCourse}
                   onAddSchedule={handleAddSchedule}
@@ -1391,6 +1450,16 @@ export function CourseDataTable({
           }}
           courses={importedCoursesForSchedule}
           onComplete={handleScheduleAssignmentComplete}
+        />
+
+        <CourseSettingsDialog
+          open={showSettingsDialog}
+          onOpenChange={setShowSettingsDialog}
+          courses={filterArchivableCourses(tableData, userId)}
+          onArchiveCourses={handleArchiveCourses}
+          onUnarchiveCourses={handleUnarchiveCourses}
+          userId={userId}
+          userRole={userRole}
         />
 
         {/* Edit Course Sheet */}

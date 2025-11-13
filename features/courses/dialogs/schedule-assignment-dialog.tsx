@@ -39,6 +39,10 @@ interface ImportedCourse {
   title: string;
   section: string;
   room: string;
+  semester: string;
+  academicYear: string;
+  classNumber: string;
+  status: string;
 }
 
 interface ScheduleAssignmentDialogProps {
@@ -61,7 +65,7 @@ export function ScheduleAssignmentDialog({
   onComplete,
 }: ScheduleAssignmentDialogProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [allSchedules, setAllSchedules] = useState<Record<string, any[]>>({});
+  const [allSchedules, setAllSchedules] = useState<Record<number, any[]>>({});
   const [currentSchedules, setCurrentSchedules] = useState<Schedule[]>([
     { day: "", fromTime: "", toTime: "" },
   ]);
@@ -98,7 +102,6 @@ export function ScheduleAssignmentDialog({
     schedule1: Schedule,
     schedule2: Schedule
   ): boolean => {
-    // Different days = no overlap
     if (schedule1.day !== schedule2.day) return false;
 
     const start1 = timeToMinutes(schedule1.fromTime);
@@ -106,7 +109,6 @@ export function ScheduleAssignmentDialog({
     const start2 = timeToMinutes(schedule2.fromTime);
     const end2 = timeToMinutes(schedule2.toTime);
 
-    // Check if times overlap
     return start1 < end2 && start2 < end1;
   };
 
@@ -116,13 +118,13 @@ export function ScheduleAssignmentDialog({
       (s) => s.day || s.fromTime || s.toTime
     );
 
-    // At least one schedule must be completely filled
+    // REQUIRE at least one schedule - no skipping allowed
     const completeSchedules = filledSchedules.filter(
       (s) => s.day && s.fromTime && s.toTime
     );
 
     if (completeSchedules.length === 0) {
-      toast.error("Please add at least one complete schedule");
+      toast.error("At least one complete schedule is required to proceed");
       return false;
     }
 
@@ -134,7 +136,9 @@ export function ScheduleAssignmentDialog({
 
       if (hasAnyField && !hasAllFields) {
         toast.error(
-          `Schedule ${i + 1}: Please complete all fields (day, start time, end time)`
+          `Schedule ${
+            i + 1
+          }: Please complete all fields (day, start time, end time)`
         );
         return false;
       }
@@ -147,13 +151,10 @@ export function ScheduleAssignmentDialog({
       const toMinutes = timeToMinutes(schedule.toTime);
 
       if (fromMinutes >= toMinutes) {
-        toast.error(
-          `Schedule ${i + 1}: End time must be after start time`
-        );
+        toast.error(`Schedule ${i + 1}: End time must be after start time`);
         return false;
       }
 
-      // Check minimum duration (e.g., 30 minutes)
       if (toMinutes - fromMinutes < 30) {
         toast.error(
           `Schedule ${i + 1}: Class duration must be at least 30 minutes`
@@ -162,7 +163,7 @@ export function ScheduleAssignmentDialog({
       }
     }
 
-    // Check for duplicate/overlapping schedules
+    // Check for overlapping schedules
     for (let i = 0; i < completeSchedules.length; i++) {
       for (let j = i + 1; j < completeSchedules.length; j++) {
         const schedule1 = completeSchedules[i];
@@ -171,7 +172,9 @@ export function ScheduleAssignmentDialog({
         if (checkTimeOverlap(schedule1, schedule2)) {
           const dayLabel = DAYS.find((d) => d.value === schedule1.day)?.label;
           toast.error(
-            `Schedules ${i + 1} and ${j + 1} overlap on ${dayLabel}. Please adjust the times.`
+            `Schedules ${i + 1} and ${
+              j + 1
+            } overlap on ${dayLabel}. Please adjust the times.`
           );
           return false;
         }
@@ -191,10 +194,12 @@ export function ScheduleAssignmentDialog({
       (s) => s.day && s.fromTime && s.toTime
     );
 
-    // Save current course schedules
+    console.log(`Saving schedules for course ${currentIndex}:`, validSchedules);
+
+    // Save current course schedules using INDEX instead of ID
     const updatedSchedules = {
       ...allSchedules,
-      [currentCourse.id]: validSchedules.map((s) => ({
+      [currentIndex]: validSchedules.map((s) => ({
         day: DAYS.find((d) => d.value === s.day)?.short || s.day.slice(0, 3),
         fromTime: s.fromTime,
         toTime: s.toTime,
@@ -202,58 +207,84 @@ export function ScheduleAssignmentDialog({
     };
     setAllSchedules(updatedSchedules);
 
+    console.log("All schedules so far:", updatedSchedules);
+
     if (currentIndex < courses.length - 1) {
       // Move to next course
       setCurrentIndex(currentIndex + 1);
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     } else {
       // All done - submit to backend
+      console.log("All courses completed. Final schedules:", updatedSchedules);
       handleComplete(updatedSchedules);
     }
   };
 
-  const handleSkip = () => {
-    if (currentIndex < courses.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+  const handleCancel = () => {
+    // Show warning that no courses will be created
+    if (
+      confirm(
+        "Are you sure? Canceling will discard all imported courses without schedules."
+      )
+    ) {
+      onOpenChange(false);
+
+      // Reset state
+      setCurrentIndex(0);
+      setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
-    } else {
-      // Submit whatever we have
-      handleComplete(allSchedules);
+
+      toast.error("Import canceled. No courses were created.");
     }
   };
 
-  const handleComplete = async (schedules: Record<string, any[]>) => {
+  const handleComplete = async (schedules: Record<number, any[]>) => {
     setIsSubmitting(true);
 
     try {
-      // Format data for API
-      const coursesSchedules = Object.entries(schedules).map(
-        ([courseId, scheduleList]) => ({
-          courseId,
-          schedules: scheduleList,
-        })
+      // Combine courses with their schedules BEFORE sending to backend
+      const coursesWithSchedules = courses.map((course, index) => ({
+        code: course.code,
+        title: course.title,
+        section: course.section,
+        room: course.room,
+        semester: course.semester,
+        academicYear: course.academicYear,
+        classNumber: course.classNumber,
+        status: course.status,
+        schedules: schedules[index] || [],
+      }));
+
+      console.log("Sending to backend:", coursesWithSchedules);
+
+      // Send courses WITH schedules to backend in one request
+      const response = await axiosInstance.post(
+        "/courses/import-with-schedules",
+        {
+          courses: coursesWithSchedules,
+        }
       );
 
-      const response = await axiosInstance.post("/courses/assign-schedules", {
-        coursesSchedules,
-      });
+      console.log("Backend response:", response.data);
 
       if (response.data.results) {
-        const { success, failed } = response.data.results;
+        const { success, failed, errors } = response.data.results;
+
         if (failed > 0) {
           toast.error(
-            `${success} schedules assigned, ${failed} failed. Check console for details.`
+            `${success} courses created, ${failed} failed. Check console for details.`
           );
-          console.error("Schedule errors:", response.data.results.errors);
+          console.error("Import errors:", errors);
         } else {
           toast.success(
-            `Successfully assigned schedules to ${success} courses!`
+            `Successfully created ${success} courses with schedules!`
           );
         }
       } else {
-        toast.success("Schedules assigned successfully!");
+        toast.success("Courses created successfully with schedules!");
       }
 
+      // Call onComplete to refresh the table
       onComplete();
       onOpenChange(false);
 
@@ -262,8 +293,16 @@ export function ScheduleAssignmentDialog({
       setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     } catch (error: any) {
-      console.error("Error assigning schedules:", error);
-      toast.error(error?.response?.data?.error || "Failed to assign schedules");
+      console.error("Error creating courses:", error);
+      console.error("Error details:", error?.response?.data);
+
+      const errorMessage =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to create courses with schedules";
+
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -272,22 +311,29 @@ export function ScheduleAssignmentDialog({
   if (!currentCourse) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} >
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!open) {
+          handleCancel();
+        }
+      }}
+    >
       <DialogContent className="max-h-[90vh] w-[60vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold text-[#124A69]">
-              Add Schedules for Imported Courses
+              Add Required Schedules
             </DialogTitle>
             <Badge className="bg-[#124A69] text-white px-3 py-1">
               {currentIndex + 1} of {courses.length}
             </Badge>
           </div>
-          <DialogDescription className="flex items-center gap-2 text-base">
-            <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+          <DialogDescription className="flex items-start gap-2 text-base">
+            <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <span>
-              Successfully imported courses! Now let's add schedules for each
-              course.
+              <strong>Schedules are required!</strong> Each course must have at
+              least one schedule before it can be created.
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -443,11 +489,11 @@ export function ScheduleAssignmentDialog({
         <div className="flex justify-between gap-3 mt-8 pt-4 border-t">
           <Button
             variant="outline"
-            onClick={handleSkip}
+            onClick={handleCancel}
             disabled={isSubmitting}
-            className="px-6"
+            className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50"
           >
-            Skip This Course
+            Cancel Import
           </Button>
 
           <Button
@@ -456,10 +502,10 @@ export function ScheduleAssignmentDialog({
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? "Saving..."
+              ? "Creating Courses..."
               : currentIndex < courses.length - 1
               ? "Next Course →"
-              : "Finish & Save All"}
+              : "Create All Courses"}
           </Button>
         </div>
       </DialogContent>
