@@ -113,7 +113,7 @@ const getModuleConfig = (pathname: string) => {
   }
   // Default fallback
   return {
-    basePath: "/main/courses",
+    basePath: "/main/course",
     title: "Quick Access",
     showAttendanceStats: false,
   };

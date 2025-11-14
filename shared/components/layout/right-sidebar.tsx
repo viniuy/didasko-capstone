@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import CourseShortcut from "@/features/right-sidebar/components/my-subjects";
 import AttendanceLeaderboard from "@/features/right-sidebar/components/student-attendance";
 import GradingLeaderboard from "@/features/right-sidebar/components/grading-leaderboard";
+import CourseAnalytics from "@/features/right-sidebar/components/course-analytics"; // Add this
 
 export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
@@ -23,6 +24,7 @@ export default function Rightsidebar() {
     pathname.startsWith("/main/grading/class-record/") && courseSlug;
   const isGradingList =
     pathname === "/main/grading" || pathname === "/main/grading/class-record";
+  const isCourseDashboard = pathname.startsWith("/main/course/") && courseSlug;
 
   return (
     <>
@@ -43,8 +45,17 @@ export default function Rightsidebar() {
         `}
       >
         <div className="flex-grow overflow-y-auto grid grid-rows-2 gap-4 h-[calc(100vh-32px)]">
-          {/* Attendance List Page */}
-          {isAttendanceList ? (
+          {isCourseDashboard ? (
+            <>
+              <div className="h-[calc(50vh-20px)]">
+                <CourseShortcut excludeCourseSlug={courseSlug} />
+              </div>
+              <div className="h-[calc(50vh-20px)]">
+                <CourseAnalytics courseSlug={courseSlug} />
+              </div>
+            </>
+          ) : /* Attendance List Page */
+          isAttendanceList ? (
             <>
               <div className="h-[calc(50vh-20px)]">
                 <CourseShortcut />
@@ -53,8 +64,7 @@ export default function Rightsidebar() {
                 <AttendanceLeaderboard />
               </div>
             </>
-          ) : /* Attendance Class Page */
-          isClassAttendance ? (
+          ) : isClassAttendance ? (
             <>
               <div className="h-[calc(50vh-20px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
@@ -63,8 +73,7 @@ export default function Rightsidebar() {
                 <AttendanceLeaderboard courseSlug={courseSlug} />
               </div>
             </>
-          ) : /* Grading Class Record Page */
-          isGradingClassRecord ? (
+          ) : isGradingClassRecord ? (
             <>
               <div className="h-[calc(50vh-20px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
@@ -73,8 +82,7 @@ export default function Rightsidebar() {
                 <GradingLeaderboard courseSlug={courseSlug} />
               </div>
             </>
-          ) : /* Grading List Page */
-          isGradingList ? (
+          ) : isGradingList ? (
             <>
               <div className="h-[calc(50vh-20px)]">
                 <CourseShortcut />
@@ -84,7 +92,6 @@ export default function Rightsidebar() {
               </div>
             </>
           ) : (
-            /* Default Dashboard */
             <>
               <div className="h-[calc(50vh-20px)]">
                 <UpcomingEvents />
@@ -97,7 +104,6 @@ export default function Rightsidebar() {
         </div>
       </div>
 
-      {/* Dimmed overlay when sidebar is open (for small screens) */}
       {open && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"

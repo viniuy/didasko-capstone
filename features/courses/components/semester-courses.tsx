@@ -161,13 +161,14 @@ export default function SemesterCourses({
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
+  const isCourseActive = "ACTIVE";
 
   const fetchSchedules = async () => {
     if (!session?.user?.id) return;
-
+    console.log("I love savannah", isCourseActive);
     try {
       const response = await axiosInstance.get("/courses", {
-        params: { facultyId: session.user.id, semester },
+        params: { facultyId: session.user.id, semester, isCourseActive },
       });
       setCourses(response.data.courses);
     } catch (error) {

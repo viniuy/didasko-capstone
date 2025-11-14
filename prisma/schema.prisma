@@ -8,59 +8,22 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum Role {
-  ADMIN
-  FACULTY
-  ACADEMIC_HEAD
-}
-
-enum WorkType {
-  FULL_TIME
-  PART_TIME
-  CONTRACT
-}
-
-enum Permission {
-  GRANTED
-  DENIED
-}
-
-enum CourseStatus {
-  ACTIVE
-  INACTIVE
-  ARCHIVED
-}
-
-enum AttendanceStatus {
-  PRESENT
-  LATE
-  ABSENT
-  EXCUSED
-}
-
-enum AssessmentType {
-  PT
-  QUIZ
-  EXAM
-}
-
 model User {
-  id         String     @id @default(uuid())
-  name       String
-  email      String     @unique
-  department String
-  workType   WorkType   @map("work_type")
-  role       Role
-  permission Permission @default(DENIED)
-  image      String? // Optional profile image URL/path
-  createdAt  DateTime   @default(now()) @map("created_at")
-  updatedAt  DateTime   @updatedAt @map("updated_at")
-
+  id              String     @id @default(uuid())
+  name            String
+  email           String     @unique
+  department      String
+  workType        WorkType   @map("work_type")
+  role            Role
+  permission      Permission @default(DENIED)
+  image           String?
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
   accounts        Account[]
   sessions        Session[]
-  notes           Note[]
   coursesTeaching Course[]   @relation("FacultyCourses")
   criteria        Criteria[]
+  notes           Note[]
 
   @@map("users")
 }
@@ -103,9 +66,9 @@ model Section {
   id        String   @id @default(uuid())
   title     String
   section   String
-  classes   Class[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  classes   Class[]
 
   @@map("sections")
 }
@@ -114,10 +77,10 @@ model Class {
   id         String      @id @default(uuid())
   name       String
   sectionId  String
-  section    Section     @relation(fields: [sectionId], references: [id])
-  gradeItems GradeItem[]
   createdAt  DateTime    @default(now()) @map("created_at")
   updatedAt  DateTime    @updatedAt @map("updated_at")
+  section    Section     @relation(fields: [sectionId], references: [id])
+  gradeItems GradeItem[]
 
   @@map("classes")
 }
@@ -129,18 +92,18 @@ model Student {
   middleInitial    String?
   image            String?
   studentId        String            @unique
-  rfid_id          Int?              @unique
-  grades           Grade[]
-  attendance       Attendance[]
-  coursesEnrolled  Course[]          @relation("StudentCourses")
-  groups           Group[]           @relation("GroupStudents")
-  leadingGroups    Group[]           @relation("GroupLeader")
-  quizScores       QuizScore[]
-  gradeScores      GradeScore[]
-  assessmentScores AssessmentScore[]
-  termGrades       TermGrade[]
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
+  rfid_id          Int?              @unique
+  assessmentScores AssessmentScore[]
+  attendance       Attendance[]
+  gradeScores      GradeScore[]
+  grades           Grade[]
+  leadingGroups    Group[]           @relation("GroupLeader")
+  quizScores       QuizScore[]
+  termGrades       TermGrade[]
+  groups           Group[]           @relation("GroupStudents")
+  coursesEnrolled  Course[]          @relation("StudentCourses")
 
   @@map("students")
 }
@@ -154,13 +117,13 @@ model Grade {
   recitationScore Boolean
   date            DateTime
   studentId       String
-  student         Student  @relation(fields: [studentId], references: [id])
   courseId        String
-  course          Course   @relation(fields: [courseId], references: [id])
   criteriaId      String
-  criteria        Criteria @relation(fields: [criteriaId], references: [id])
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  course          Course   @relation(fields: [courseId], references: [id])
+  criteria        Criteria @relation(fields: [criteriaId], references: [id])
+  student         Student  @relation(fields: [studentId], references: [id])
 
   @@index([date])
   @@index([courseId])
@@ -172,9 +135,9 @@ model GradeItem {
   id        String   @id @default(uuid())
   name      String
   classId   String
-  class     Class    @relation(fields: [classId], references: [id])
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  class     Class    @relation(fields: [classId], references: [id])
 
   @@map("grade_items")
 }
@@ -183,31 +146,31 @@ model Criteria {
   id                   String       @id @default(uuid())
   name                 String
   courseId             String
-  course               Course       @relation(fields: [courseId], references: [id])
   userId               String       @map("user_id")
-  user                 User         @relation(fields: [userId], references: [id])
-  scoringRange         String // "1-5" or "1-10"
-  passingScore         String // "75" or "80"
-  grades               Grade[]
-  rubrics              Rubric[] // NEW: relation to Rubric
+  scoringRange         String
+  passingScore         String
   date                 DateTime
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
   isGroupCriteria      Boolean      @default(false)
   isRecitationCriteria Boolean      @default(false)
   linkedAssessments    Assessment[] @relation("LinkedCriteria")
+  course               Course       @relation(fields: [courseId], references: [id])
+  user                 User         @relation(fields: [userId], references: [id])
+  grades               Grade[]
+  rubrics              Rubric[]
 
   @@map("criteria")
 }
 
 model Rubric {
   id         String   @id @default(uuid())
-  criteria   Criteria @relation(fields: [criteriaId], references: [id])
   criteriaId String
   name       String
   percentage Int
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  criteria   Criteria @relation(fields: [criteriaId], references: [id])
 
   @@map("rubrics")
 }
@@ -231,28 +194,27 @@ model Note {
   title       String
   description String?
   userId      String   @map("user_id")
-  user        User     @relation(fields: [userId], references: [id])
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id])
 
   @@map("notes")
 }
 
 model GradeConfiguration {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   name             String
   courseId         String
-  course           Course   @relation(fields: [courseId], references: [id])
   reportingWeight  Float
   recitationWeight Float
   quizWeight       Float
   passingThreshold Float
   startDate        DateTime
   endDate          DateTime
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  scores GradeScore[]
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  course           Course       @relation(fields: [courseId], references: [id])
+  scores           GradeScore[]
 
   @@map("grade_configurations")
 }
@@ -260,11 +222,8 @@ model GradeConfiguration {
 model GradeScore {
   id              String             @id @default(uuid())
   studentId       String
-  student         Student            @relation(fields: [studentId], references: [id])
   courseId        String
-  course          Course             @relation(fields: [courseId], references: [id])
   configId        String
-  config          GradeConfiguration @relation(fields: [configId], references: [id])
   reportingScore  Float?
   recitationScore Float?
   quizScore       Float?
@@ -272,6 +231,9 @@ model GradeScore {
   remarks         String
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
+  config          GradeConfiguration @relation(fields: [configId], references: [id])
+  course          Course             @relation(fields: [courseId], references: [id])
+  student         Student            @relation(fields: [studentId], references: [id])
 
   @@map("grade_scores")
 }
@@ -287,20 +249,20 @@ model Course {
   classNumber  Int
   status       CourseStatus         @default(ACTIVE)
   section      String
-  faculty      User?                @relation("FacultyCourses", fields: [facultyId], references: [id])
   facultyId    String?              @map("faculty_id")
-  students     Student[]            @relation("StudentCourses")
-  schedules    CourseSchedule[]
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
   attendance   Attendance[]
+  schedules    CourseSchedule[]
+  faculty      User?                @relation("FacultyCourses", fields: [facultyId], references: [id])
   criteria     Criteria[]
+  gradeConfigs GradeConfiguration[]
+  gradeScores  GradeScore[]
   grades       Grade[]
   groups       Group[]
   quizzes      Quiz[]
-  gradeConfigs GradeConfiguration[]
-  gradeScores  GradeScore[]
   termConfigs  TermConfiguration[]  @relation("CourseTermConfigs")
-  createdAt    DateTime             @default(now()) @map("created_at")
-  updatedAt    DateTime             @updatedAt @map("updated_at")
+  students     Student[]            @relation("StudentCourses")
 
   @@map("courses")
 }
@@ -308,12 +270,12 @@ model Course {
 model CourseSchedule {
   id        String   @id @default(uuid())
   courseId  String
-  course    Course   @relation(fields: [courseId], references: [id])
   day       String
   fromTime  String
   toTime    String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+  course    Course   @relation(fields: [courseId], references: [id])
 
   @@map("course_schedules")
 }
@@ -321,14 +283,14 @@ model CourseSchedule {
 model Attendance {
   id        String           @id @default(uuid())
   studentId String
-  student   Student          @relation(fields: [studentId], references: [id])
   courseId  String
-  course    Course           @relation(fields: [courseId], references: [id])
   date      DateTime
   status    AttendanceStatus
-  reason    String? // Optional reason field for excused absences
+  reason    String?
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
+  course    Course           @relation(fields: [courseId], references: [id])
+  student   Student          @relation(fields: [studentId], references: [id])
 
   @@index([studentId])
   @@index([courseId])
@@ -341,12 +303,12 @@ model Group {
   number    String
   name      String?
   courseId  String
-  course    Course    @relation(fields: [courseId], references: [id])
-  students  Student[] @relation("GroupStudents")
-  leaderId  String? // Optional leader ID
-  leader    Student?  @relation("GroupLeader", fields: [leaderId], references: [id])
+  leaderId  String?
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
+  course    Course    @relation(fields: [courseId], references: [id])
+  leader    Student?  @relation("GroupLeader", fields: [leaderId], references: [id])
+  students  Student[] @relation("GroupStudents")
 
   @@map("groups")
 }
@@ -355,15 +317,15 @@ model Quiz {
   id                   String      @id @default(uuid())
   name                 String
   courseId             String
-  course               Course      @relation(fields: [courseId], references: [id])
   quizDate             DateTime
   attendanceRangeStart DateTime
   attendanceRangeEnd   DateTime
   maxScore             Float
   passingRate          Float
-  scores               QuizScore[]
   createdAt            DateTime    @default(now()) @map("created_at")
   updatedAt            DateTime    @updatedAt @map("updated_at")
+  scores               QuizScore[]
+  course               Course      @relation(fields: [courseId], references: [id])
 
   @@index([courseId])
   @@index([attendanceRangeStart])
@@ -374,9 +336,7 @@ model Quiz {
 model QuizScore {
   id         String   @id @default(uuid())
   quizId     String
-  quiz       Quiz     @relation(fields: [quizId], references: [id])
   studentId  String
-  student    Student  @relation(fields: [studentId], references: [id])
   score      Float
   attendance String
   plusPoints Float
@@ -384,6 +344,8 @@ model QuizScore {
   remarks    String?
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+  quiz       Quiz     @relation(fields: [quizId], references: [id])
+  student    Student  @relation(fields: [studentId], references: [id])
 
   @@unique([quizId, studentId])
   @@index([quizId])
@@ -392,20 +354,17 @@ model QuizScore {
 }
 
 model TermConfiguration {
-  id       String @id @default(uuid())
-  courseId String
-  course   Course @relation("CourseTermConfigs", fields: [courseId], references: [id], onDelete: Cascade)
-  term     String // "PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"
-
-  ptWeight   Float @default(30)
-  quizWeight Float @default(20)
-  examWeight Float @default(50)
-
+  id          String       @id @default(uuid())
+  courseId    String
+  term        String
+  ptWeight    Float        @default(30)
+  quizWeight  Float        @default(20)
+  examWeight  Float        @default(50)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
   assessments Assessment[]
+  course      Course       @relation("CourseTermConfigs", fields: [courseId], references: [id], onDelete: Cascade)
   termGrades  TermGrade[]
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([courseId, term])
   @@index([courseId])
@@ -413,21 +372,20 @@ model TermConfiguration {
 }
 
 model Assessment {
-  id           String            @id @default(uuid())
-  termConfigId String
-  termConfig   TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
-
+  id               String            @id @default(uuid())
+  termConfigId     String
   type             AssessmentType
-  name             String // "PT1", "Q1", "Final Exam"
+  name             String
   maxScore         Float
   date             DateTime?
   enabled          Boolean           @default(true)
-  order            Int               @default(0) // For sorting display order
-  linkedCriteriaId String?
-  linkedCriteria   Criteria?         @relation("LinkedCriteria", fields: [linkedCriteriaId], references: [id], onDelete: SetNull)
-  scores           AssessmentScore[]
+  order            Int               @default(0)
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
+  linkedCriteriaId String?
+  scores           AssessmentScore[]
+  linkedCriteria   Criteria?         @relation("LinkedCriteria", fields: [linkedCriteriaId], references: [id])
+  termConfig       TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
 
   @@index([termConfigId])
   @@index([type])
@@ -437,14 +395,12 @@ model Assessment {
 model AssessmentScore {
   id           String     @id @default(uuid())
   assessmentId String
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   studentId    String
+  score        Float
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   student      Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  score Float
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([assessmentId, studentId])
   @@index([assessmentId])
@@ -453,27 +409,58 @@ model AssessmentScore {
 }
 
 model TermGrade {
-  id           String            @id @default(uuid())
-  termConfigId String
-  termConfig   TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
-  studentId    String
-  student      Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  // Weighted scores for each component
+  id                String            @id @default(uuid())
+  termConfigId      String
+  studentId         String
   ptWeightedScore   Float?
   quizWeightedScore Float?
   examWeightedScore Float?
-
-  // Final computed values
-  totalPercentage Float? // Sum of weighted scores (0-100)
-  numericGrade    Float? // 1.00, 1.25, 1.50, etc.
-  remarks         String? // "PASSED" or "FAILED"
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  totalPercentage   Float?
+  numericGrade      Float?
+  remarks           String?
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termConfig        TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
 
   @@unique([termConfigId, studentId])
   @@index([termConfigId])
   @@index([studentId])
   @@map("term_grades")
+}
+
+enum Role {
+  ADMIN
+  FACULTY
+  ACADEMIC_HEAD
+}
+
+enum WorkType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+}
+
+enum Permission {
+  GRANTED
+  DENIED
+}
+
+enum CourseStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  EXCUSED
+}
+
+enum AssessmentType {
+  PT
+  QUIZ
+  EXAM
 }

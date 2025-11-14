@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -36,6 +37,10 @@ import {
   AlertCircle,
   Trash2,
   AlertTriangle,
+  Circle,
+  CheckCircle2,
+  XCircle,
+  Clock,
 } from "lucide-react";
 import {
   Dialog,
@@ -43,7 +48,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/svdialog";
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -76,6 +81,7 @@ import axiosInstance from "@/lib/axios";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useRouter } from "next/navigation";
 
+// ==================== Types ====================
 interface Student {
   id: string;
   lastName: string;
@@ -84,12 +90,41 @@ interface Student {
   studentId: string;
   image?: string;
   rfid_id?: number;
-  attendanceRate?: number;
-  totalPresent?: number;
-  totalAbsent?: number;
-  totalLate?: number;
-  totalExcused?: number;
-  averageGrade?: number;
+  attendanceRecords?: AttendanceRecord[];
+}
+
+interface AttendanceRecord {
+  id: string;
+  date: string;
+  status: "PRESENT" | "LATE" | "ABSENT" | "EXCUSED";
+}
+
+interface TermGrades {
+  prelims?: TermGradeData;
+  midterm?: TermGradeData;
+  preFinals?: TermGradeData;
+  finals?: TermGradeData;
+}
+
+interface TermGradeData {
+  ptScores: Assessment[];
+  quizScores: Assessment[];
+  examScore?: Assessment;
+  totalPercentage?: number;
+  numericGrade?: number;
+  remarks?: string;
+}
+
+interface Assessment {
+  id: string;
+  name: string;
+  score?: number;
+  maxScore: number;
+  percentage?: number;
+}
+
+interface StudentWithGrades extends Student {
+  termGrades: TermGrades;
 }
 
 interface StudentWithRecords extends Student {
@@ -136,6 +171,7 @@ interface CourseDashboardProps {
   backUrl?: string;
 }
 
+// ==================== Constants ====================
 const MAX_PREVIEW_ROWS = 100;
 const EXPECTED_HEADERS = [
   "Student ID",
@@ -143,10 +179,29 @@ const EXPECTED_HEADERS = [
   "First Name",
   "Middle Initial",
 ];
+const TERMS = ["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const;
 
+// ==================== Utility Functions ====================
 const getInitials = (firstName: string, lastName: string) => {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 };
+
+const getAttendanceIcon = (status: string) => {
+  switch (status) {
+    case "PRESENT":
+      return <CheckCircle2 className="w-3 h-3 text-green-600" />;
+    case "LATE":
+      return <Clock className="w-3 h-3 text-orange-600" />;
+    case "ABSENT":
+      return <XCircle className="w-3 h-3 text-red-600" />;
+    case "EXCUSED":
+      return <Circle className="w-3 h-3 text-blue-600" />;
+    default:
+      return <Circle className="w-3 h-3 text-gray-300" />;
+  }
+};
+
+// ==================== Reusable UI Components ====================
 
 function LoadingSpinner() {
   return (
@@ -161,17 +216,14 @@ function LoadingSpinner() {
         >
           Please sit tight while we are getting things ready for you...
         </p>
-
         <div className="flex gap-2 mt-4">
-          <div className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"></div>
-          <div
-            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
-            style={{ animationDelay: "150ms" }}
-          ></div>
-          <div
-            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
-            style={{ animationDelay: "300ms" }}
-          ></div>
+          {[0, 150, 300].map((delay, i) => (
+            <div
+              key={i}
+              className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+              style={{ animationDelay: `${delay}ms` }}
+            />
+          ))}
         </div>
       </div>
     </div>
@@ -215,6 +267,68 @@ const StatsCard = ({
   </Card>
 );
 
+const StudentAvatar = ({ student }: { student: Student }) => (
+  <div className="flex items-center gap-3">
+    <Avatar className="h-8 w-8">
+      <AvatarImage src={student.image} alt={student.firstName} />
+      <AvatarFallback className="bg-[#124A69] text-white text-xs">
+        {getInitials(student.firstName, student.lastName)}
+      </AvatarFallback>
+    </Avatar>
+    <span className="text-sm">
+      {student.lastName}, {student.firstName}{" "}
+      {student.middleInitial ? `${student.middleInitial}.` : ""}
+    </span>
+  </div>
+);
+
+const AttendanceVisualizer = ({
+  records,
+}: {
+  records?: AttendanceRecord[];
+}) => {
+  if (!records || records.length === 0) {
+    return <span className="text-gray-400 text-xs">No records</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap max-w-[200px]">
+      {records.slice(0, 20).map((record) => (
+        <div key={record.id} className="relative group">
+          {getAttendanceIcon(record.status)}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+            {new Date(record.date).toLocaleDateString()} - {record.status}
+          </div>
+        </div>
+      ))}
+      {records.length > 20 && (
+        <span className="text-xs text-gray-500 ml-1">
+          +{records.length - 20}
+        </span>
+      )}
+    </div>
+  );
+};
+
+const AttendanceLegend = () => (
+  <div className="flex items-center gap-4 text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border">
+    <span className="flex items-center gap-1">
+      <CheckCircle2 className="w-3 h-3 text-green-600" /> Present
+    </span>
+    <span className="flex items-center gap-1">
+      <Clock className="w-3 h-3 text-orange-600" /> Late
+    </span>
+    <span className="flex items-center gap-1">
+      <XCircle className="w-3 h-3 text-red-600" /> Absent
+    </span>
+    <span className="flex items-center gap-1">
+      <Circle className="w-3 h-3 text-blue-600" /> Excused
+    </span>
+  </div>
+);
+
+// ==================== Feature Components ====================
+
 const AddStudentSheet = ({
   isOpen,
   onOpenChange,
@@ -233,12 +347,16 @@ const AddStudentSheet = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredStudents = existingStudents.filter(
-    (s) =>
-      !enrolledStudentIds.includes(s.id) &&
-      `${s.lastName} ${s.firstName} ${s.studentId}`
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase())
+  const filteredStudents = useMemo(
+    () =>
+      existingStudents.filter(
+        (s) =>
+          !enrolledStudentIds.includes(s.id) &&
+          `${s.lastName} ${s.firstName} ${s.studentId}`
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())
+      ),
+    [existingStudents, enrolledStudentIds, searchQuery]
   );
 
   const handleSelect = async (student: Student) => {
@@ -368,44 +486,24 @@ const RemoveStudentSheet = ({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
 
-  const hasStudentsWithRecords = students.some(
-    (s) => selectedStudents.includes(s.id) && (s.hasAttendance || s.hasGrades)
+  const hasStudentsWithRecords = useMemo(
+    () =>
+      students.some(
+        (s) =>
+          selectedStudents.includes(s.id) && (s.hasAttendance || s.hasGrades)
+      ),
+    [students, selectedStudents]
   );
 
-  const filteredStudents = students.filter((student) =>
-    `${student.lastName} ${student.firstName} ${student.studentId}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
+  const filteredStudents = useMemo(
+    () =>
+      students.filter((student) =>
+        `${student.lastName} ${student.firstName} ${student.studentId}`
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase())
+      ),
+    [students, searchQuery]
   );
-
-  const handleToggleStudent = (studentId: string) => {
-    setSelectedStudents((prev) =>
-      prev.includes(studentId)
-        ? prev.filter((id) => id !== studentId)
-        : [...prev, studentId]
-    );
-  };
-
-  const handleToggleAll = () => {
-    if (selectedStudents.length === filteredStudents.length) {
-      setSelectedStudents([]);
-    } else {
-      setSelectedStudents(filteredStudents.map((s) => s.id));
-    }
-  };
-
-  const handleRemove = () => {
-    if (selectedStudents.length === 0) {
-      toast.error("Please select at least one student to remove");
-      return;
-    }
-
-    if (hasStudentsWithRecords) {
-      setShowConfirmation(true);
-    } else {
-      confirmRemoval();
-    }
-  };
 
   const confirmRemoval = async () => {
     if (hasStudentsWithRecords && confirmationInput !== "Remove") {
@@ -424,17 +522,10 @@ const RemoveStudentSheet = ({
           selectedStudents.length > 1 ? "s" : ""
         }`
       );
-
-      setSelectedStudents([]);
-      setConfirmationInput("");
-      setShowConfirmation(false);
-      onOpenChange(false);
+      resetSheet();
       onRemoveSuccess();
     } catch (error: any) {
-      console.error("Error removing students:", error);
-      const errorMessage =
-        error?.response?.data?.error || "Failed to remove students";
-      toast.error(errorMessage);
+      toast.error(error?.response?.data?.error || "Failed to remove students");
     } finally {
       setIsRemoving(false);
     }
@@ -468,8 +559,7 @@ const RemoveStudentSheet = ({
                 <p className="font-medium mb-1">Warning</p>
                 <p>
                   Removing students with attendance or grades will permanently
-                  delete their records for this course. This action cannot be
-                  undone.
+                  delete their records.
                 </p>
               </div>
             </div>
@@ -494,117 +584,63 @@ const RemoveStudentSheet = ({
                   size="sm"
                   variant="ghost"
                   onClick={() => setSelectedStudents([])}
-                  className="text-blue-600 hover:text-blue-800"
+                  className="text-blue-600"
                 >
                   Clear
                 </Button>
               </div>
             )}
 
-            <div className="border rounded-lg">
-              {isLoading ? (
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
-                </div>
-              ) : (
-                <>
-                  <div className="p-3 border-b bg-gray-50 flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={
-                        filteredStudents.length > 0 &&
-                        selectedStudents.length === filteredStudents.length
-                      }
-                      onChange={handleToggleAll}
-                      className="w-4 h-4 text-[#124A69] border-gray-300 rounded focus:ring-[#124A69]"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      Select All
-                    </span>
+            {/* Student list with checkboxes */}
+            <div className="border rounded-lg max-h-[400px] overflow-y-auto">
+              {filteredStudents.map((student) => (
+                <label
+                  key={student.id}
+                  className="flex items-center gap-3 p-4 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedStudents.includes(student.id)}
+                    onChange={() =>
+                      setSelectedStudents((prev) =>
+                        prev.includes(student.id)
+                          ? prev.filter((id) => id !== student.id)
+                          : [...prev, student.id]
+                      )
+                    }
+                    className="w-4 h-4 text-[#124A69] border-gray-300 rounded"
+                  />
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={student.image} alt={student.firstName} />
+                    <AvatarFallback className="bg-[#124A69] text-white text-sm">
+                      {getInitials(student.firstName, student.lastName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">
+                      {student.lastName}, {student.firstName}
+                    </p>
+                    <p className="text-sm text-gray-500">{student.studentId}</p>
                   </div>
-
-                  <div className="max-h-[400px] overflow-y-auto">
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((student) => (
-                        <div
-                          key={student.id}
-                          className="flex items-center gap-3 p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedStudents.includes(student.id)}
-                            onChange={() => handleToggleStudent(student.id)}
-                            className="w-4 h-4 text-[#124A69] border-gray-300 rounded focus:ring-[#124A69]"
-                          />
-                          <Avatar className="h-10 w-10">
-                            <AvatarImage
-                              src={student.image}
-                              alt={student.firstName}
-                            />
-                            <AvatarFallback className="bg-[#124A69] text-white text-sm">
-                              {getInitials(student.firstName, student.lastName)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-900">
-                              {student.lastName}, {student.firstName}{" "}
-                              {student.middleInitial
-                                ? `${student.middleInitial}.`
-                                : ""}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {student.studentId}
-                            </p>
-                            {(student.hasAttendance || student.hasGrades) && (
-                              <div className="flex gap-2 mt-1">
-                                {student.hasAttendance && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs bg-orange-100 text-orange-700"
-                                  >
-                                    Has Attendance
-                                  </Badge>
-                                )}
-                                {student.hasGrades && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs bg-purple-100 text-purple-700"
-                                  >
-                                    Has Grades
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-8 text-center text-gray-500">
-                        <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                        <p className="font-medium">No students found</p>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+                </label>
+              ))}
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3">
               <Button variant="outline" onClick={resetSheet}>
                 Cancel
               </Button>
               <Button
-                onClick={handleRemove}
-                disabled={selectedStudents.length === 0 || isRemoving}
+                onClick={() =>
+                  hasStudentsWithRecords
+                    ? setShowConfirmation(true)
+                    : confirmRemoval()
+                }
+                disabled={selectedStudents.length === 0}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                {isRemoving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  `Remove ${selectedStudents.length} Student${
-                    selectedStudents.length !== 1 ? "s" : ""
-                  }`
-                )}
+                Remove {selectedStudents.length} Student
+                {selectedStudents.length !== 1 ? "s" : ""}
               </Button>
             </div>
           </div>
@@ -612,76 +648,37 @@ const RemoveStudentSheet = ({
       </Sheet>
 
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="w-[400px]">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-red-600">
-              Confirm Student Removal
-            </DialogTitle>
+            <DialogTitle className="text-red-600">Confirm Removal</DialogTitle>
             <DialogDescription>
-              This action will permanently delete all attendance and grade
-              records for the selected students.
+              Type "Remove" to confirm deletion of all records
             </DialogDescription>
           </DialogHeader>
-
-          <div className="mt-4 space-y-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-800 font-medium mb-2">
-                You are about to remove:
-              </p>
-              <ul className="text-sm text-red-700 space-y-1">
-                {students
-                  .filter((s) => selectedStudents.includes(s.id))
-                  .map((student) => (
-                    <li key={student.id}>
-                      • {student.lastName}, {student.firstName} (
-                      {student.studentId})
-                      {(student.hasAttendance || student.hasGrades) && (
-                        <span className="text-red-600 font-semibold">
-                          {" "}
-                          - Has Records
-                        </span>
-                      )}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Type <span className="font-bold text-red-600">"Remove"</span> to
-                confirm
-              </label>
-              <Input
-                value={confirmationInput}
-                onChange={(e) => setConfirmationInput(e.target.value)}
-                placeholder="Remove"
-                className="border-red-300 focus:border-red-500 focus:ring-red-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowConfirmation(false);
-                  setConfirmationInput("");
-                }}
-                disabled={isRemoving}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={confirmRemoval}
-                disabled={confirmationInput !== "Remove" || isRemoving}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {isRemoving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Confirm Removal"
-                )}
-              </Button>
-            </div>
+          <Input
+            value={confirmationInput}
+            onChange={(e) => setConfirmationInput(e.target.value)}
+            placeholder="Remove"
+            className="border-red-300"
+          />
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmation(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmRemoval}
+              disabled={confirmationInput !== "Remove" || isRemoving}
+              className="bg-red-600"
+            >
+              {isRemoving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Confirm"
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -689,208 +686,388 @@ const RemoveStudentSheet = ({
   );
 };
 
-const RemoveAllStudentsDialog = ({
-  isOpen,
-  onOpenChange,
+const TermGradesTab = ({
   students,
-  isLoading,
-  courseSlug,
-  courseInfo,
-  onRemoveSuccess,
+  termKey,
 }: {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  students: StudentWithRecords[];
-  isLoading: boolean;
-  courseSlug: string;
-  courseInfo: CourseInfo;
-  onRemoveSuccess: () => void;
+  students: StudentWithGrades[];
+  termKey: "prelims" | "midterm" | "preFinals" | "finals";
 }) => {
-  const [confirmationInput, setConfirmationInput] = useState("");
-  const [isRemoving, setIsRemoving] = useState(false);
+  const termName =
+    termKey === "preFinals" ? "PRE-FINALS" : termKey.toUpperCase();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 10;
 
-  const hasAnyRecords = students.some((s) => s.hasAttendance || s.hasGrades);
-  const studentsWithRecords = students.filter(
-    (s) => s.hasAttendance || s.hasGrades
+  // Check if any student has data for this term
+  const hasData = students.some((s) => s.termGrades[termKey]);
+
+  if (!hasData) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+        <p>No grades available for {termName}</p>
+      </div>
+    );
+  }
+
+  // Filter students based on search
+  const filteredStudents = students.filter((student) =>
+    `${student.lastName} ${student.firstName} ${student.studentId}`
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase())
   );
 
-  const handleRemoveAll = async () => {
-    if (confirmationInput !== "REMOVE ALL STUDENTS") {
-      toast.error('Please type "REMOVE ALL STUDENTS" to confirm');
-      return;
-    }
+  // Paginate filtered students
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const paginatedStudents = filteredStudents.slice(
+    currentPage * itemsPerPage,
+    (currentPage + 1) * itemsPerPage
+  );
 
+  // Get all unique assessment names for table headers
+  const sampleTerm = students.find((s) => s.termGrades[termKey])?.termGrades[
+    termKey
+  ];
+  const ptColumns = sampleTerm?.ptScores?.map((pt) => pt.name) || [];
+  const quizColumns = sampleTerm?.quizScores?.map((q) => q.name) || [];
+  const hasExam = sampleTerm?.examScore !== undefined;
+
+  const handleExport = () => {
     try {
-      setIsRemoving(true);
-      await axiosInstance.delete(`/courses/${courseSlug}/students/all`);
+      const ws_data = [
+        [`${termName} Grades Export`],
+        [""],
+        ["Date:", new Date().toLocaleDateString()],
+        [""],
+        [
+          "Student ID",
+          "Last Name",
+          "First Name",
+          ...ptColumns,
+          ...quizColumns,
+          hasExam ? "Exam" : "",
+          "Final %",
+          "Grade",
+          "Remarks",
+        ].filter(Boolean),
+        ...filteredStudents
+          .map((student) => {
+            const termData = student.termGrades[termKey];
+            if (!termData) return [];
 
-      toast.success(`Successfully removed all students from the course`);
+            return [
+              student.studentId,
+              student.lastName,
+              student.firstName,
+              ...ptColumns.map((pt) => {
+                const score = termData.ptScores?.find((p) => p.name === pt);
+                return score?.score !== undefined
+                  ? `${score.score}/${score.maxScore}`
+                  : "—";
+              }),
+              ...quizColumns.map((q) => {
+                const score = termData.quizScores?.find(
+                  (quiz) => quiz.name === q
+                );
+                return score?.score !== undefined
+                  ? `${score.score}/${score.maxScore}`
+                  : "—";
+              }),
+              ...(hasExam
+                ? [
+                    termData.examScore?.score !== undefined
+                      ? `${termData.examScore.score}/${termData.examScore.maxScore}`
+                      : "—",
+                  ]
+                : []),
+              termData.totalPercentage?.toFixed(2) || "—",
+              termData.numericGrade?.toFixed(2) || "—",
+              termData.remarks || "—",
+            ];
+          })
+          .filter((row) => row.length > 0),
+      ];
 
-      setConfirmationInput("");
-      onOpenChange(false);
-      onRemoveSuccess();
-    } catch (error: any) {
-      console.error("Error removing all students:", error);
-      const errorMessage =
-        error?.response?.data?.error || "Failed to remove all students";
-      toast.error(errorMessage);
-    } finally {
-      setIsRemoving(false);
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, termName);
+      XLSX.writeFile(
+        wb,
+        `${termName}_grades_${new Date().toISOString().split("T")[0]}.xlsx`
+      );
+      toast.success("Exported successfully");
+    } catch (error) {
+      toast.error("Export failed");
     }
-  };
-
-  const resetDialog = () => {
-    setConfirmationInput("");
-    onOpenChange(false);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={resetDialog}>
-      <DialogContent className="w-[500px]">
-        <DialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-3 bg-red-100 rounded-full">
-              <AlertTriangle className="w-6 h-6 text-red-600" />
-            </div>
-            <DialogTitle className="text-red-600 text-xl">
-              Remove All Students
-            </DialogTitle>
-          </div>
-          <DialogDescription className="text-base">
-            This will permanently remove all students from this course
-          </DialogDescription>
-        </DialogHeader>
+    <div className="space-y-4">
+      {/* Action Bar */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:w-[400px]">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Search students..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(0); // Reset to first page on search
+            }}
+            className="pl-9"
+          />
+        </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center p-8">
-            <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
-          </div>
-        ) : (
-          <div className="mt-4 space-y-4">
-            <div className="bg-red-100 border-2 border-red-300 rounded-lg p-4">
-              <div className="flex gap-3 mb-3">
-                <AlertCircle className="w-6 h-6 text-red-700 shrink-0" />
-                <div>
-                  <p className="font-bold text-red-900 text-base mb-1">
-                    CRITICAL WARNING
-                  </p>
-                  <p className="text-sm text-red-800">
-                    This action is IRREVERSIBLE and will DELETE ALL DATA for
-                    this course including:
-                  </p>
-                </div>
-              </div>
-              <ul className="text-sm text-red-800 space-y-1 ml-9">
-                <li>• All student enrollments ({students.length} students)</li>
-                <li>• All attendance records</li>
-                <li>• All grade records</li>
-                <li>• All related course data</li>
-              </ul>
-            </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleExport} className="gap-2">
+            <Download className="w-4 h-4" />
+            Export {termName}
+          </Button>
+        </div>
+      </div>
 
-            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
-              <p className="font-semibold text-amber-900 mb-2">
-                Course Information:
-              </p>
-              <div className="text-sm text-amber-800 space-y-1">
-                <p>
-                  <span className="font-medium">Course:</span> {courseInfo.code}{" "}
-                  - {courseInfo.title}
-                </p>
-                <p>
-                  <span className="font-medium">Section:</span>{" "}
-                  {courseInfo.section}
-                </p>
-                <p>
-                  <span className="font-medium">Total Students:</span>{" "}
-                  {students.length}
-                </p>
-                {hasAnyRecords && (
-                  <p className="text-red-700 font-semibold mt-2">
-                    ⚠️ {studentsWithRecords.length} student
-                    {studentsWithRecords.length !== 1 ? "s" : ""} with existing
-                    records will lose ALL data
-                  </p>
+      {/* Grades Table */}
+      <div className="rounded-md border">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[200px] sticky left-0 bg-white z-10 border-r">
+                  Student
+                </TableHead>
+                {ptColumns.map((pt, idx) => (
+                  <TableHead
+                    key={`pt-${idx}`}
+                    className="text-center min-w-[100px]"
+                  >
+                    {pt}
+                  </TableHead>
+                ))}
+                {quizColumns.map((quiz, idx) => (
+                  <TableHead
+                    key={`quiz-${idx}`}
+                    className="text-center min-w-[100px]"
+                  >
+                    {quiz}
+                  </TableHead>
+                ))}
+                {hasExam && (
+                  <TableHead className="text-center min-w-[100px]">
+                    Exam
+                  </TableHead>
                 )}
-              </div>
-            </div>
+                <TableHead className="text-center min-w-[100px]">
+                  Final %
+                </TableHead>
+                <TableHead className="text-center min-w-[100px]">
+                  Grade
+                </TableHead>
+                <TableHead className="text-center min-w-[100px]">
+                  Remarks
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedStudents.length > 0 ? (
+                paginatedStudents.map((student) => {
+                  const termData = student.termGrades[termKey];
+                  if (!termData) return null;
 
-            {hasAnyRecords && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 max-h-40 overflow-y-auto">
-                <p className="text-sm font-semibold text-red-800 mb-2">
-                  Students with records that will be deleted:
-                </p>
-                <ul className="text-sm text-red-700 space-y-1">
-                  {studentsWithRecords.map((student) => (
-                    <li key={student.id}>
-                      • {student.lastName}, {student.firstName} (
-                      {student.studentId})
-                      {student.hasAttendance && student.hasGrades
-                        ? " - Attendance & Grades"
-                        : student.hasAttendance
-                        ? " - Attendance"
-                        : " - Grades"}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                  return (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium sticky left-0 bg-white z-10 border-r">
+                        <StudentAvatar student={student} />
+                      </TableCell>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-gray-900">
-                To confirm this action, type:{" "}
-                <span className="text-red-600 font-mono bg-red-50 px-2 py-1 rounded">
-                  REMOVE ALL STUDENTS
-                </span>
-              </label>
-              <Input
-                value={confirmationInput}
-                onChange={(e) => setConfirmationInput(e.target.value)}
-                placeholder="REMOVE ALL STUDENTS"
-                className="border-red-300 focus:border-red-500 focus:ring-red-500 font-mono"
-              />
-              {confirmationInput &&
-                confirmationInput !== "REMOVE ALL STUDENTS" && (
-                  <p className="text-sm text-red-600">
-                    Text must match exactly (case sensitive)
-                  </p>
-                )}
-            </div>
+                      {/* PT Scores */}
+                      {ptColumns.map((ptName, idx) => {
+                        const pt = termData.ptScores?.find(
+                          (p) => p.name === ptName
+                        );
+                        return (
+                          <TableCell key={`pt-${idx}`} className="text-center">
+                            {pt?.score !== undefined ? (
+                              <div className="flex flex-col items-center">
+                                <span className="font-semibold">
+                                  {pt.score}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  / {pt.maxScore}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </TableCell>
+                        );
+                      })}
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button
-                variant="outline"
-                onClick={resetDialog}
-                disabled={isRemoving}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleRemoveAll}
-                disabled={
-                  confirmationInput !== "REMOVE ALL STUDENTS" || isRemoving
+                      {/* Quiz Scores */}
+                      {quizColumns.map((quizName, idx) => {
+                        const quiz = termData.quizScores?.find(
+                          (q) => q.name === quizName
+                        );
+                        return (
+                          <TableCell
+                            key={`quiz-${idx}`}
+                            className="text-center"
+                          >
+                            {quiz?.score !== undefined ? (
+                              <div className="flex flex-col items-center">
+                                <span className="font-semibold">
+                                  {quiz.score}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  / {quiz.maxScore}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+
+                      {/* Exam Score */}
+                      {hasExam && (
+                        <TableCell className="text-center">
+                          {termData.examScore?.score !== undefined ? (
+                            <div className="flex flex-col items-center">
+                              <span className="font-semibold">
+                                {termData.examScore.score}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                / {termData.examScore.maxScore}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </TableCell>
+                      )}
+
+                      {/* Final Percentage */}
+                      <TableCell className="text-center">
+                        <span className="font-bold text-[#124A69]">
+                          {termData.totalPercentage?.toFixed(2) || "—"}%
+                        </span>
+                      </TableCell>
+
+                      {/* Numeric Grade */}
+                      <TableCell className="text-center">
+                        <span className="font-bold text-[#124A69]">
+                          {termData.numericGrade?.toFixed(2) || "—"}
+                        </span>
+                      </TableCell>
+
+                      {/* Remarks */}
+                      <TableCell className="text-center">
+                        {termData.remarks && (
+                          <Badge
+                            className={
+                              termData.remarks === "PASSED"
+                                ? "bg-green-500 hover:bg-green-600 text-white"
+                                : "bg-red-500 hover:bg-red-600 text-white"
+                            }
+                          >
+                            {termData.remarks}
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={
+                      ptColumns.length +
+                      quizColumns.length +
+                      (hasExam ? 1 : 0) +
+                      4
+                    }
+                    className="text-center py-8 text-gray-500"
+                  >
+                    No students found matching your search.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-600">
+            Showing {currentPage * itemsPerPage + 1} to{" "}
+            {Math.min(
+              (currentPage + 1) * itemsPerPage,
+              filteredStudents.length
+            )}{" "}
+            of {filteredStudents.length} students
+          </p>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                  className={
+                    currentPage === 0
+                      ? "pointer-events-none opacity-50"
+                      : "cursor-pointer"
+                  }
+                />
+              </PaginationItem>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum = i;
+                if (totalPages > 5) {
+                  if (currentPage > 2) {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  if (pageNum >= totalPages) {
+                    pageNum = totalPages - 5 + i;
+                  }
                 }
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold"
-              >
-                {isRemoving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Removing...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Remove All Students
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+                return (
+                  <PaginationItem key={pageNum}>
+                    <PaginationLink
+                      onClick={() => setCurrentPage(pageNum)}
+                      isActive={currentPage === pageNum}
+                      className={
+                        currentPage === pageNum
+                          ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                          : "cursor-pointer"
+                      }
+                    >
+                      {pageNum + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() =>
+                    setCurrentPage(Math.min(totalPages - 1, currentPage + 1))
+                  }
+                  className={
+                    currentPage >= totalPages - 1
+                      ? "pointer-events-none opacity-50"
+                      : "cursor-pointer"
+                  }
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+    </div>
   );
 };
+
+// ==================== Main Dashboard Component ====================
 
 export function CourseDashboard({
   courseSlug,
@@ -898,38 +1075,18 @@ export function CourseDashboard({
 }: CourseDashboardProps) {
   const router = useRouter();
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
-  const [tableData, setTableData] = useState<Student[]>([]);
+  const [tableData, setTableData] = useState<StudentWithGrades[]>([]);
   const [stats, setStats] = useState<CourseStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [previewData, setPreviewData] = useState<any[]>([]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isValidFile, setIsValidFile] = useState(false);
-  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
-  const [showImportStatus, setShowImportStatus] = useState(false);
-  const [importProgress, setImportProgress] = useState<{
-    current: number;
-    total: number;
-    status: string;
-    error?: string;
-    hasError?: boolean;
-  } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [showAddSheet, setShowAddSheet] = useState(false);
-  const [existingStudents, setExistingStudents] = useState<Student[]>([]);
-  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
-
   const [showRemoveSheet, setShowRemoveSheet] = useState(false);
+  const [existingStudents, setExistingStudents] = useState<Student[]>([]);
   const [studentsWithRecords, setStudentsWithRecords] = useState<
     StudentWithRecords[]
   >([]);
-  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
-
-  const [showRemoveAllDialog, setShowRemoveAllDialog] = useState(false);
+  const [selectedTerm, setSelectedTerm] = useState<string>("PRELIMS");
 
   useEffect(() => {
     if (courseSlug) {
@@ -947,10 +1104,7 @@ export function CourseDashboard({
       setCourseInfo(course);
       setStats(stats);
       setTableData(students);
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (error) {
-      console.error("Error fetching course data:", error);
       toast.error("Failed to load course data");
     } finally {
       setIsLoading(false);
@@ -959,182 +1113,35 @@ export function CourseDashboard({
 
   const fetchExistingStudents = async () => {
     try {
-      setIsLoadingExisting(true);
       const response = await axiosInstance.get("/students");
-      const studentsWithRfid = (response.data.students || []).filter(
-        (s: Student) => s.rfid_id !== null && s.rfid_id !== undefined
+      setExistingStudents(
+        (response.data.students || []).filter((s: Student) => s.rfid_id)
       );
-      setExistingStudents(studentsWithRfid);
-    } catch (error: any) {
-      console.error("Error fetching students:", error);
-      const errorMessage =
-        error?.response?.data?.error || "Failed to load students";
-      toast.error(errorMessage);
-    } finally {
-      setIsLoadingExisting(false);
-    }
-  };
-
-  const fetchStudentsWithRecords = async () => {
-    try {
-      setIsLoadingRecords(true);
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/students/records`
-      );
-      const studentsData = response.data.students || [];
-
-      const studentsWithRecordStatus: StudentWithRecords[] = tableData.map(
-        (student) => {
-          const recordInfo = studentsData.find((s: any) => s.id === student.id);
-          return {
-            ...student,
-            hasAttendance: recordInfo?.hasAttendance || false,
-            hasGrades: recordInfo?.hasGrades || false,
-          };
-        }
-      );
-
-      setStudentsWithRecords(studentsWithRecordStatus);
     } catch (error) {
-      console.error("Error fetching student records:", error);
-      toast.error("Failed to load student records");
-    } finally {
-      setIsLoadingRecords(false);
+      toast.error("Failed to load students");
     }
   };
 
-  const handleOpenAddSheet = async () => {
-    setShowAddSheet(true);
-    await fetchExistingStudents();
-  };
-
-  const handleOpenRemoveSheet = async () => {
-    setShowRemoveSheet(true);
-    await fetchStudentsWithRecords();
-  };
-
-  const handleOpenRemoveAllDialog = async () => {
-    setShowRemoveAllDialog(true);
-    await fetchStudentsWithRecords();
-  };
-
-  const columns = useMemo<ColumnDef<Student>[]>(
+  const columns = useMemo<ColumnDef<StudentWithGrades>[]>(
     () => [
       {
         accessorKey: "studentId",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Student ID
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
+        header: "Student ID",
+        cell: ({ row }) => (
+          <span className="font-mono text-sm">{row.original.studentId}</span>
         ),
       },
       {
         accessorKey: "lastName",
         header: "Name",
-        cell: ({ row }) => {
-          const student = row.original;
-          return (
-            <div className="flex items-center gap-3">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={student.image} alt={student.firstName} />
-                <AvatarFallback className="bg-[#124A69] text-white">
-                  {getInitials(student.firstName, student.lastName)}
-                </AvatarFallback>
-              </Avatar>
-              <span>
-                {student.lastName}, {student.firstName}{" "}
-                {student.middleInitial ? `${student.middleInitial}.` : ""}
-              </span>
-            </div>
-          );
-        },
+        cell: ({ row }) => <StudentAvatar student={row.original} />,
       },
       {
-        accessorKey: "attendanceRate",
-        header: "Attendance Rate",
-        cell: ({ row }) => {
-          const rate = row.original.attendanceRate || 0;
-          return (
-            <Badge
-              variant={
-                rate >= 90
-                  ? "default"
-                  : rate >= 75
-                  ? "secondary"
-                  : "destructive"
-              }
-              className={
-                rate >= 90 ? "bg-green-500 text-white hover:bg-green-600" : ""
-              }
-            >
-              {rate.toFixed(1)}%
-            </Badge>
-          );
-        },
-      },
-      {
-        accessorKey: "totalPresent",
-        header: "Present",
+        id: "attendance",
+        header: "Attendance",
         cell: ({ row }) => (
-          <span className="text-green-600 font-medium">
-            {row.original.totalPresent || 0}
-          </span>
+          <AttendanceVisualizer records={row.original.attendanceRecords} />
         ),
-      },
-      {
-        accessorKey: "totalAbsent",
-        header: "Absent",
-        cell: ({ row }) => (
-          <span className="text-red-600 font-medium">
-            {row.original.totalAbsent || 0}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "totalLate",
-        header: "Late",
-        cell: ({ row }) => (
-          <span className="text-orange-600 font-medium">
-            {row.original.totalLate || 0}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "totalExcused",
-        header: "Excused",
-        cell: ({ row }) => (
-          <span className="text-blue-600 font-medium">
-            {row.original.totalExcused || 0}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "averageGrade",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Average Grade
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        ),
-        cell: ({ row }) => {
-          const grade = row.original.averageGrade || 0;
-          return (
-            <span
-              className={`font-semibold ${
-                grade >= 75 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {grade.toFixed(1)}
-            </span>
-          );
-        },
       },
     ],
     []
@@ -1149,372 +1156,65 @@ export function CourseDashboard({
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    onColumnVisibilityChange: setColumnVisibility,
     state: {
       sorting,
       columnFilters,
-      columnVisibility,
     },
   });
 
   const handleSelectExistingStudent = async (student: Student) => {
     try {
-      const response = await axiosInstance.post(
-        `/courses/${courseSlug}/students`,
-        [
-          {
-            "Student ID": student.studentId,
-            "First Name": student.firstName,
-            "Last Name": student.lastName,
-            "Middle Initial": student.middleInitial || "",
-          },
-        ]
-      );
-
+      await axiosInstance.post(`/courses/${courseSlug}/students`, [
+        {
+          "Student ID": student.studentId,
+          "First Name": student.firstName,
+          "Last Name": student.lastName,
+          "Middle Initial": student.middleInitial || "",
+        },
+      ]);
       await fetchCourseData();
-
-      return response.data;
+      toast.success("Student added successfully!");
+      setShowAddSheet(false);
     } catch (error: any) {
-      console.error("Error adding existing student:", error);
-
-      const errorMessage =
-        error?.response?.data?.error ||
-        error?.response?.data?.details ||
-        error?.message ||
-        "Failed to add student to course";
-
-      throw new Error(errorMessage);
+      throw new Error(error?.response?.data?.error || "Failed to add student");
     }
   };
 
   const handleExport = () => {
     if (!courseInfo) return;
     try {
-      const header = [
-        ["STUDENT DATA"],
+      const ws_data = [
+        ["Course Dashboard Export"],
         [""],
         ["Course:", `${courseInfo.code} - ${courseInfo.title}`],
         ["Section:", courseInfo.section],
         ["Date:", new Date().toLocaleDateString()],
         [""],
-        [
-          "Student ID",
-          "Last Name",
-          "First Name",
-          "Middle Initial",
-          "Attendance Rate",
-          "Present",
-          "Absent",
-          "Late",
-          "Excused",
-          "Average Grade",
-        ],
+        ["Student ID", "Last Name", "First Name", "Middle Initial"],
+        ...tableData.map((s) => [
+          s.studentId,
+          s.lastName,
+          s.firstName,
+          s.middleInitial || "",
+        ]),
       ];
 
-      const rows = tableData.map((student) => [
-        student.studentId,
-        student.lastName,
-        student.firstName,
-        student.middleInitial || "",
-        `${(student.attendanceRate || 0).toFixed(1)}%`,
-        student.totalPresent || 0,
-        student.totalAbsent || 0,
-        student.totalLate || 0,
-        student.totalExcused || 0,
-        (student.averageGrade || 0).toFixed(1),
-      ]);
-
-      const ws = XLSX.utils.aoa_to_sheet([...header, ...rows]);
-      ws["!cols"] = Array(10).fill({ wch: 15 });
-
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Students");
-      const filename = `${courseInfo.code}_students_${
-        new Date().toISOString().split("T")[0]
-      }.xlsx`;
-      XLSX.writeFile(wb, filename);
-      toast.success("Student data exported successfully");
-    } catch (error) {
-      toast.error("Failed to export data");
-    }
-  };
-
-  const handleImportTemplate = () => {
-    try {
-      const header = [
-        ["STUDENT IMPORT TEMPLATE"],
-        [""],
-        ["Date:", new Date().toLocaleDateString()],
-        [""],
-        ["IMPORTANT NOTES:"],
-        ["1. Student ID must match existing students with RFID"],
-        ["2. Only students with registered RFID can be added"],
-        ["3. Last Name and First Name are required"],
-        ["4. Middle Initial is optional (single letter)"],
-        ["5. Do not include empty rows"],
-        [""],
-        EXPECTED_HEADERS,
-      ];
-
-      const exampleRow = ["2024-0001", "Dela Cruz", "Juan", "A"];
-
-      const ws = XLSX.utils.aoa_to_sheet([...header, exampleRow]);
-      ws["!cols"] = [{ wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 15 }];
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Template");
-      const filename = `student_import_template_${
-        new Date().toISOString().split("T")[0]
-      }.xlsx`;
-      XLSX.writeFile(wb, filename);
-      toast.success("Template downloaded successfully");
-    } catch (error) {
-      toast.error("Failed to generate template");
-    }
-  };
-
-  const readFile = useCallback((file: File): Promise<any[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = e.target?.result;
-          if (!data) {
-            reject(new Error("No data found in file"));
-            return;
-          }
-
-          let rawData: string[][];
-
-          if (file.name.toLowerCase().endsWith(".csv")) {
-            const csvData = data.toString();
-            rawData = csvData
-              .split("\n")
-              .map((line) =>
-                line
-                  .split(",")
-                  .map((cell) => cell.trim().replace(/^["\']|["\']$/g, ""))
-              );
-          } else {
-            const workbook = XLSX.read(data, { type: "binary" });
-            if (!workbook.SheetNames.length) {
-              reject(new Error("No sheets found in the file"));
-              return;
-            }
-            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const csvString = XLSX.utils.sheet_to_csv(worksheet, {
-              blankrows: false,
-              forceQuotes: true,
-            });
-            rawData = csvString
-              .split("\n")
-              .map((line) =>
-                line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
-              );
-          }
-
-          let headerRowIndex = -1;
-          for (let i = 0; i < rawData.length; i++) {
-            const row = rawData[i];
-            if (!Array.isArray(row) || row.length < EXPECTED_HEADERS.length)
-              continue;
-
-            const isHeaderRow = EXPECTED_HEADERS.every((header, index) => {
-              const cellValue =
-                typeof row[index] === "string" || typeof row[index] === "number"
-                  ? String(row[index]).trim().toLowerCase()
-                  : "";
-              return cellValue === header.toLowerCase();
-            });
-
-            if (isHeaderRow) {
-              headerRowIndex = i;
-              break;
-            }
-          }
-
-          if (headerRowIndex === -1) {
-            reject(new Error("Invalid template format"));
-            return;
-          }
-
-          const dataRows = rawData
-            .slice(headerRowIndex + 1)
-            .filter((row: any) => row.some((cell: any) => cell));
-
-          resolve(
-            dataRows.map((row: any) => ({
-              "Student ID": row[0],
-              "Last Name": row[1],
-              "First Name": row[2],
-              "Middle Initial": row[3] || "",
-            }))
-          );
-        } catch (error) {
-          reject(new Error("Error parsing file"));
-        }
-      };
-
-      reader.onerror = () => reject(new Error("Error reading file"));
-
-      if (file.name.toLowerCase().endsWith(".csv")) {
-        reader.readAsText(file);
-      } else {
-        reader.readAsBinaryString(file);
-      }
-    });
-  }, []);
-
-  const validateFile = useCallback((file: File): boolean => {
-    const extension = file.name.toLowerCase().split(".").pop();
-    const validExtensions = ["xlsx", "xls", "csv"];
-
-    if (!validExtensions.includes(extension || "")) {
-      toast.error(
-        "Invalid file type. Please upload an Excel (.xlsx, .xls) or CSV file."
+      XLSX.writeFile(
+        wb,
+        `${courseInfo.code}_students_${
+          new Date().toISOString().split("T")[0]
+        }.xlsx`
       );
-      return false;
-    }
-
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toast.error("File size too large. Maximum size is 5MB.");
-      return false;
-    }
-
-    return true;
-  }, []);
-
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (!validateFile(file)) {
-        setSelectedFile(null);
-        setPreviewData([]);
-        setIsValidFile(false);
-        return;
-      }
-
-      try {
-        setSelectedFile(file);
-        const data = await readFile(file);
-        if (data.length > 0) {
-          setPreviewData(data.slice(0, MAX_PREVIEW_ROWS));
-          setIsValidFile(true);
-          toast.success("File loaded successfully");
-        } else {
-          setIsValidFile(false);
-          setPreviewData([]);
-          toast.error(
-            "Could not find header row. Please make sure the file is using the template format."
-          );
-        }
-      } catch (error) {
-        toast.error("Failed to read file");
-        setIsValidFile(false);
-        setSelectedFile(null);
-        setPreviewData([]);
-      }
+      toast.success("Exported successfully");
+    } catch (error) {
+      toast.error("Export failed");
     }
   };
 
-  const handleImport = async () => {
-    if (!selectedFile || !isValidFile || previewData.length === 0) {
-      toast.error("Please select a valid file");
-      return;
-    }
-
-    try {
-      setShowImportStatus(true);
-      setImportProgress({
-        current: 0,
-        total: previewData.length,
-        status: "Importing students...",
-      });
-
-      const response = await axiosInstance.post(
-        `/courses/${courseSlug}/students/import`,
-        previewData
-      );
-
-      const { imported, skipped, errors, total, detailedFeedback } =
-        response.data;
-
-      setImportStatus({
-        imported: imported || 0,
-        skipped: skipped || 0,
-        errors: errors || [],
-        total: total || previewData.length,
-        detailedFeedback: detailedFeedback || [],
-      });
-
-      if (errors && errors.length > 0) {
-        toast.error(`Import finished with ${errors.length} errors.`);
-      } else if (skipped && skipped > 0) {
-        toast(`Import finished. ${skipped} students skipped.`, { icon: "⚠️" });
-      } else if (imported && imported > 0) {
-        toast.success(`Successfully imported ${imported} students.`);
-      }
-
-      setImportProgress(null);
-      setShowImportDialog(false);
-
-      setTableData((prev) => {
-        const newStudents = detailedFeedback
-          .filter((f: { status: string }) => f.status === "imported")
-          .map((f: any) => {
-            const importedStudent = previewData.find(
-              (s) => s["Student ID"] === f.studentId
-            );
-            return {
-              id: f.id || "TEMP-" + f.studentId,
-              studentId: f.studentId,
-              firstName: importedStudent?.["First Name"] || "",
-              lastName: importedStudent?.["Last Name"] || "",
-              middleInitial: importedStudent?.["Middle Initial"] || "",
-              attendanceRate: 0,
-              totalPresent: 0,
-              totalAbsent: 0,
-              totalLate: 0,
-              totalExcused: 0,
-              averageGrade: 0,
-            };
-          });
-
-        return [...prev, ...newStudents];
-      });
-      await fetchCourseData();
-    } catch (error: any) {
-      const errorResponse = error?.response?.data;
-      const errorMessage = errorResponse?.error || "Failed to import students";
-
-      setImportProgress({
-        current: 0,
-        total: previewData.length,
-        status: "Import failed",
-        error: errorMessage,
-        hasError: true,
-      });
-
-      toast.error(errorMessage);
-
-      setImportStatus({
-        imported: errorResponse?.imported || 0,
-        skipped: errorResponse?.skipped || 0,
-        errors: errorResponse?.errors || [
-          { studentId: "N/A", message: errorMessage },
-        ],
-        total: errorResponse?.total || previewData.length,
-        detailedFeedback: errorResponse?.detailedFeedback || [],
-      });
-    }
-  };
-
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
+  if (isLoading) return <LoadingSpinner />;
 
   if (!courseInfo || !stats) {
     return (
@@ -1533,6 +1233,7 @@ export function CourseDashboard({
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px]">
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button
@@ -1554,605 +1255,191 @@ export function CourseDashboard({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard
-            icon={Users}
-            title="Total Students"
-            value={stats.totalStudents}
-            subtitle="Enrolled in course"
-          />
-          <StatsCard
-            icon={UserCheck}
-            title="Attendance Rate"
-            value={`${stats.attendanceRate.toFixed(1)}%`}
-            subtitle="Average attendance"
-          />
-          <StatsCard
-            icon={TrendingUp}
-            title="Average Grade"
-            value={stats.averageGrade.toFixed(1)}
-            subtitle={`${stats.passingRate.toFixed(1)}% passing rate`}
-          />
-          <StatsCard
-            icon={UserX}
-            title="Total Absences"
-            value={stats.totalAbsents}
-            subtitle={`${stats.totalLate} late, ${stats.totalExcused} excused`}
-          />
-        </div>
+        {/* Main Content Tabs */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="prelims">Prelims</TabsTrigger>
+            <TabsTrigger value="midterm">Midterm</TabsTrigger>
+            <TabsTrigger value="prefinals">Pre-Finals</TabsTrigger>
+            <TabsTrigger value="finals">Finals</TabsTrigger>
+          </TabsList>
 
-        <div className="space-y-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:w-[400px]">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search students by name or ID..."
-                value={
-                  (table.getColumn("lastName")?.getFilterValue() as string) ??
-                  ""
-                }
-                onChange={(event) =>
-                  table
-                    .getColumn("lastName")
-                    ?.setFilterValue(event.target.value)
-                }
-                className="pl-9"
-              />
-            </div>
-
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                onClick={handleExport}
-                className="gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Export
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowImportDialog(true)}
-                className="gap-2"
-              >
-                <Upload className="w-4 h-4" />
-                Import
-              </Button>
-              <Button
-                onClick={handleOpenAddSheet}
-                className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
-              >
-                <Users className="w-4 h-4" />
-                Add Student
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleOpenRemoveSheet}
-                className="gap-2 border-red-500 text-red-600 hover:bg-red-50"
-              >
-                <UserX className="w-4 h-4" />
-                Remove Student
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleOpenRemoveAllDialog}
-                className="gap-2 border-red-600 text-red-700 hover:bg-red-100"
-              >
-                <Trash2 className="w-4 h-4" />
-                Remove All
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No students found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="flex items-center justify-end">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() => table.previousPage()}
-                    className={
-                      !table.getCanPreviousPage()
-                        ? "pointer-events-none opacity-50"
-                        : "cursor-pointer"
-                    }
-                  />
-                </PaginationItem>
-                {Array.from({ length: table.getPageCount() }, (_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      onClick={() => table.setPageIndex(i)}
-                      isActive={table.getState().pagination.pageIndex === i}
-                      className={
-                        table.getState().pagination.pageIndex === i
-                          ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
-                          : ""
-                      }
-                    >
-                      {i + 1}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() => table.nextPage()}
-                    className={
-                      !table.getCanNextPage()
-                        ? "pointer-events-none opacity-50"
-                        : "cursor-pointer"
-                    }
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
-        </div>
-
-        <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-          <DialogContent
-            className={`p-4 sm:p-6 ${
-              previewData.length > 0 ? "w-[75vw]" : "w-[25vw]"
-            }`}
-          >
-            <DialogHeader>
-              <DialogTitle className="text-xl font-semibold text-[#124A69]">
-                Import Students
-              </DialogTitle>
-              <DialogDescription>
-                Upload a file to batch import students with RFID registration
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="mt-6 space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium mb-1">Important</p>
-                  <p>
-                    Only students with registered RFID cards can be imported.
-                    Students without RFID will be skipped.
-                  </p>
-                </div>
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:w-[400px]">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search students..."
+                  value={
+                    (table.getColumn("lastName")?.getFilterValue() as string) ??
+                    ""
+                  }
+                  onChange={(e) =>
+                    table.getColumn("lastName")?.setFilterValue(e.target.value)
+                  }
+                  className="pl-9"
+                />
               </div>
 
-              <div className="flex items-center gap-4">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                />
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="gap-2 bg-white hover:bg-gray-50"
+                  onClick={handleExport}
+                  className="gap-2"
                 >
-                  <Upload className="h-4 w-4" />
-                  Choose File
+                  <Download className="w-4 h-4" />
+                  Export
                 </Button>
-                {selectedFile && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">
-                      {selectedFile.name}
-                    </span>
-                    <Badge
-                      variant={isValidFile ? "default" : "destructive"}
-                      className={
-                        isValidFile
-                          ? "bg-[#124A69] text-white hover:bg-[#0D3A54]"
-                          : ""
-                      }
-                    >
-                      {isValidFile ? "Valid" : "Invalid"}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedFile(null);
-                        setPreviewData([]);
-                        setIsValidFile(false);
-                        if (fileInputRef.current)
-                          fileInputRef.current.value = "";
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {previewData.length > 0 ? (
-                <div className="border rounded-lg">
-                  <div className="bg-gray-50 p-4 border-b">
-                    <h3 className="font-medium text-gray-700">
-                      Preview Import Data
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Showing {previewData.length}{" "}
-                      {previewData.length === 1 ? "row" : "rows"} from import
-                      file
-                    </p>
-                  </div>
-                  <div className="max-h-[350px] overflow-auto">
-                    <table className="w-full border-collapse">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          {EXPECTED_HEADERS.map((header) => (
-                            <th
-                              key={header}
-                              className="px-4 py-2 text-left text-sm font-medium text-gray-500"
-                            >
-                              {header}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewData.map((row, index) => (
-                          <tr key={index} className="border-t hover:bg-gray-50">
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Student ID"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Last Name"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["First Name"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Middle Initial"]}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center p-6 border rounded-lg bg-gray-50">
-                  <FileSpreadsheet className="w-12 h-12 mx-auto text-gray-400 mb-2" />
-                  <p className="text-gray-500">
-                    No preview available. Select a file to import.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-4">
+                <Button
+                  onClick={() => {
+                    setShowAddSheet(true);
+                    fetchExistingStudents();
+                  }}
+                  className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
+                >
+                  <Users className="w-4 h-4" />
+                  Add Student
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setShowImportDialog(false);
-                    setSelectedFile(null);
-                    setPreviewData([]);
-                    setIsValidFile(false);
+                    setShowRemoveSheet(true);
                   }}
-                  disabled={!!importProgress}
+                  className="gap-2 border-red-500 text-red-600 hover:bg-red-50"
                 >
-                  Cancel
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleImportTemplate}
-                  className="bg-white hover:bg-gray-50"
-                  disabled={!!importProgress}
-                >
-                  Download Template
-                </Button>
-                <Button
-                  className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
-                  onClick={handleImport}
-                  disabled={!selectedFile || !isValidFile || !!importProgress}
-                >
-                  Import Students
+                  <UserX className="w-4 h-4" />
+                  Remove
                 </Button>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
 
-        <Dialog open={showImportStatus} onOpenChange={setShowImportStatus}>
-          <DialogContent className="w-[40vw] p-4 sm:p-6">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-semibold text-[#124A69]">
-                Import Status
-              </DialogTitle>
-              <DialogDescription>
-                {importProgress
-                  ? "Import in progress..."
-                  : "Summary of the import process"}
-              </DialogDescription>
-            </DialogHeader>
+            <AttendanceLegend />
 
-            {importProgress ? (
-              <div className="mt-6 space-y-6">
-                <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border">
-                  {importProgress.hasError ? (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-red-500"
-                    >
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="12" y1="8" x2="12" y2="12"></line>
-                      <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                  ) : (
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#124A69]" />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-700">
-                      {importProgress.status}
-                    </p>
-                    {importProgress.error && (
-                      <p className="mt-2 text-sm text-red-600">
-                        {importProgress.error}
-                      </p>
-                    )}
-                    {importProgress.total > 0 && !importProgress.hasError && (
-                      <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5">
-                        <div
-                          className="bg-[#124A69] h-2.5 rounded-full transition-all duration-300"
-                          style={{
-                            width: `${
-                              (importProgress.current / importProgress.total) *
-                              100
-                            }%`,
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {importProgress.hasError && (
-                  <div className="flex justify-end">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowImportStatus(false);
-                        setImportProgress(null);
-                      }}
-                    >
-                      Close
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              importStatus && (
-                <div className="mt-6 space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                      <h3 className="text-sm font-medium text-green-800">
-                        Successfully Imported
-                      </h3>
-                      <p className="text-2xl font-semibold text-green-600">
-                        {
-                          importStatus.detailedFeedback.filter(
-                            (f) => f.status === "imported"
-                          ).length
-                        }
-                      </p>
-                    </div>
-                    <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                      <h3 className="text-sm font-medium text-amber-800">
-                        Skipped
-                      </h3>
-                      <p className="text-2xl font-semibold text-amber-600">
-                        {
-                          importStatus.detailedFeedback.filter(
-                            (f) => f.status === "skipped"
-                          ).length
-                        }
-                      </p>
-                    </div>
-                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                      <h3 className="text-sm font-medium text-red-800">
-                        Errors
-                      </h3>
-                      <p className="text-2xl font-semibold text-red-600">
-                        {
-                          importStatus.detailedFeedback.filter(
-                            (f) => f.status === "error"
-                          ).length
-                        }
-                      </p>
-                    </div>
-                  </div>
-
-                  {importStatus.detailedFeedback?.length > 0 && (
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="bg-gray-50 p-4 border-b">
-                        <h3 className="font-medium text-gray-700">
-                          Detailed Import Feedback
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Status of each row processed during import.
-                        </p>
-                      </div>
-                      <div className="max-h-[300px] overflow-auto">
-                        <table className="w-full border-collapse">
-                          <thead className="bg-gray-50 sticky top-0">
-                            <tr>
-                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
-                                Row
-                              </th>
-                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
-                                Student ID
-                              </th>
-                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
-                                Status
-                              </th>
-                              <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
-                                Message
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {importStatus.detailedFeedback.map(
-                              (feedback, index) => (
-                                <tr
-                                  key={index}
-                                  className="border-t hover:bg-gray-50"
-                                >
-                                  <td className="px-4 py-2 text-sm text-gray-900">
-                                    {feedback.row}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">
-                                    {feedback.studentId}
-                                  </td>
-                                  <td className="px-4 py-2 text-sm">
-                                    <Badge
-                                      variant={
-                                        feedback.status === "imported"
-                                          ? "default"
-                                          : feedback.status === "skipped"
-                                          ? "secondary"
-                                          : "destructive"
-                                      }
-                                      className={
-                                        feedback.status === "imported"
-                                          ? "bg-green-500 text-white"
-                                          : ""
-                                      }
-                                    >
-                                      {feedback.status.charAt(0).toUpperCase() +
-                                        feedback.status.slice(1)}
-                                    </Badge>
-                                  </td>
-                                  <td
-                                    className={`px-4 py-2 text-sm ${
-                                      feedback.status === "error"
-                                        ? "text-red-600"
-                                        : "text-gray-900"
-                                    }`}
-                                  >
-                                    {feedback.message}
-                                  </td>
-                                </tr>
-                              )
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <TableHead key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows?.length ? (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
                             )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length}
+                        className="h-24 text-center"
+                      >
+                        No students found.
+                      </TableCell>
+                    </TableRow>
                   )}
+                </TableBody>
+              </Table>
+            </div>
 
-                  <div className="flex justify-end gap-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowImportStatus(false);
-                        setShowImportDialog(false);
-                        setSelectedFile(null);
-                        setPreviewData([]);
-                        setIsValidFile(false);
-                        setImportProgress(null);
-                      }}
-                    >
-                      Close
-                    </Button>
-                    <Button
-                      className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
-                      onClick={() => {
-                        setShowImportStatus(false);
-                        setShowImportDialog(true);
-                      }}
-                    >
-                      Import More Students
-                    </Button>
-                  </div>
-                </div>
-              )
-            )}
-          </DialogContent>
-        </Dialog>
+            <div className="flex items-center justify-end">
+              <Pagination className="justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => table.previousPage()}
+                      className={
+                        !table.getCanPreviousPage()
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
+                    />
+                  </PaginationItem>
+                  {Array.from({ length: table.getPageCount() }, (_, i) => (
+                    <PaginationItem key={i}>
+                      <PaginationLink
+                        onClick={() => table.setPageIndex(i)}
+                        isActive={table.getState().pagination.pageIndex === i}
+                        className={
+                          table.getState().pagination.pageIndex === i
+                            ? "bg-[#124A69] text-white"
+                            : ""
+                        }
+                      >
+                        {i + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => table.nextPage()}
+                      className={
+                        !table.getCanNextPage()
+                          ? "pointer-events-none opacity-50"
+                          : "cursor-pointer"
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          </TabsContent>
 
+          {/* Term Grade Tabs */}
+          <TabsContent value="prelims">
+            <TermGradesTab students={tableData} termKey="prelims" />
+          </TabsContent>
+
+          <TabsContent value="midterm">
+            <TermGradesTab students={tableData} termKey="midterm" />
+          </TabsContent>
+
+          <TabsContent value="prefinals">
+            <TermGradesTab students={tableData} termKey="preFinals" />
+          </TabsContent>
+
+          <TabsContent value="finals">
+            <TermGradesTab students={tableData} termKey="finals" />
+          </TabsContent>
+        </Tabs>
+
+        {/* Modals */}
         <AddStudentSheet
           isOpen={showAddSheet}
           onOpenChange={setShowAddSheet}
           existingStudents={existingStudents}
-          isLoading={isLoadingExisting}
+          isLoading={false}
           enrolledStudentIds={tableData.map((s) => s.id)}
-          onSelectStudent={async (student) => {
-            try {
-              await handleSelectExistingStudent(student);
-              setShowAddSheet(false);
-              toast.success("Student added to course successfully!");
-            } catch (error: any) {
-              toast.error(error.message || "Failed to add student to course");
-            }
-          }}
+          onSelectStudent={handleSelectExistingStudent}
         />
 
         <RemoveStudentSheet
           isOpen={showRemoveSheet}
           onOpenChange={setShowRemoveSheet}
           students={studentsWithRecords}
-          isLoading={isLoadingRecords}
+          isLoading={false}
           courseSlug={courseSlug}
-          onRemoveSuccess={fetchCourseData}
-        />
-
-        <RemoveAllStudentsDialog
-          isOpen={showRemoveAllDialog}
-          onOpenChange={setShowRemoveAllDialog}
-          students={studentsWithRecords}
-          isLoading={isLoadingRecords}
-          courseSlug={courseSlug}
-          courseInfo={courseInfo}
           onRemoveSuccess={fetchCourseData}
         />
       </div>
