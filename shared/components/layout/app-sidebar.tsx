@@ -60,8 +60,8 @@ const adminItems = [
 const academicHeadItems = [
   { title: "Dashboard", url: "/dashboard/academic-head", icon: Home },
   { title: "Courses", url: "/main/course", icon: BookOpen },
-  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
   { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
+  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
 ];
 
 const facultyItems = [

@@ -8,7 +8,6 @@ import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import axiosInstance from "@/lib/axios";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Course {
   id: string;
@@ -16,7 +15,6 @@ interface Course {
   code: string;
   section: string;
   slug: string;
-  semester: string;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   attendanceStats?: {
     totalAbsents: number;
@@ -26,7 +24,7 @@ interface Course {
 
 interface CourseShortcutsProps {
   excludeCourseSlug?: string;
-  basePath?: string; // e.g., "/main/attendance/class" or "/main/grading/class-record"
+  basePath?: string;
   title?: string;
   showAttendanceStats?: boolean;
 }
@@ -104,14 +102,7 @@ const getModuleConfig = (pathname: string) => {
       title: "Quick Access",
       showAttendanceStats: false,
     };
-  } else if (pathname.includes("/grades/")) {
-    return {
-      basePath: "/main/grades/class",
-      title: "Quick Access",
-      showAttendanceStats: false,
-    };
   }
-  // Default fallback
   return {
     basePath: "/main/course",
     title: "Quick Access",
@@ -130,7 +121,6 @@ export default function CourseShortcuts({
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Auto-detect module config from pathname if props not provided
   const moduleConfig = getModuleConfig(pathname);
   const basePath = propBasePath || moduleConfig.basePath;
   const title = propTitle || moduleConfig.title;
@@ -142,25 +132,16 @@ export default function CourseShortcuts({
       if (!session?.user?.id) return;
 
       try {
-        // Fetch both semesters
-        const [firstSem, secondSem] = await Promise.all([
-          axiosInstance.get("/courses", {
-            params: { facultyId: session.user.id, semester: "1st Semester" },
-          }),
-          axiosInstance.get("/courses", {
-            params: { facultyId: session.user.id, semester: "2nd Semester" },
-          }),
-        ]);
+        const response = await axiosInstance.get("/courses/active", {
+          params: { facultyId: session.user.id },
+        });
 
-        // Combine and filter out excluded course
-        const allCourses = [
-          ...firstSem.data.courses,
-          ...secondSem.data.courses,
-        ].filter(
-          (course) => !excludeCourseSlug || course.slug !== excludeCourseSlug
+        const filteredCourses = response.data.courses.filter(
+          (course: Course) =>
+            !excludeCourseSlug || course.slug !== excludeCourseSlug
         );
 
-        setCourses(allCourses);
+        setCourses(filteredCourses);
       } catch (error) {
         console.error("Error fetching courses:", error);
         setCourses([]);
@@ -173,9 +154,6 @@ export default function CourseShortcuts({
       fetchCourses();
     }
   }, [status, session?.user?.id, excludeCourseSlug]);
-
-  const firstSemCourses = courses.filter((c) => c.semester === "1st Semester");
-  const secondSemCourses = courses.filter((c) => c.semester === "2nd Semester");
 
   if (isLoading) {
     return (
@@ -205,7 +183,7 @@ export default function CourseShortcuts({
         <CardContent className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <BookOpenText className="mx-auto mb-2 text-white/50" size={40} />
-            <p className="text-sm text-white/70">No courses assigned</p>
+            <p className="text-sm text-white/70">No active courses assigned</p>
           </div>
         </CardContent>
       </Card>
@@ -220,63 +198,15 @@ export default function CourseShortcuts({
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden flex flex-col">
-        <Tabs defaultValue="1st" className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 bg-white/10">
-            <TabsTrigger
-              value="1st"
-              className="data-[state=active]:bg-white/20 text-white"
-            >
-              1st Sem ({firstSemCourses.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="2nd"
-              className="data-[state=active]:bg-white/20 text-white"
-            >
-              2nd Sem ({secondSemCourses.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent
-            value="1st"
-            className="flex-1 overflow-y-auto mt-3 space-y-2"
-          >
-            {firstSemCourses.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-sm text-white/70">No 1st semester courses</p>
-              </div>
-            ) : (
-              firstSemCourses.map((course) => (
-                <CourseShortcut
-                  key={course.id}
-                  course={course}
-                  basePath={basePath}
-                  showAttendanceStats={showAttendanceStats}
-                />
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent
-            value="2nd"
-            className="flex-1 overflow-y-auto mt-3 space-y-2"
-          >
-            {secondSemCourses.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-sm text-white/70">No 2nd semester courses</p>
-              </div>
-            ) : (
-              secondSemCourses.map((course) => (
-                <CourseShortcut
-                  key={course.id}
-                  course={course}
-                  basePath={basePath}
-                  showAttendanceStats={showAttendanceStats}
-                />
-              ))
-            )}
-          </TabsContent>
-        </Tabs>
+      <CardContent className="flex-1 overflow-y-auto flex flex-col space-y-2">
+        {courses.map((course) => (
+          <CourseShortcut
+            key={course.id}
+            course={course}
+            basePath={basePath}
+            showAttendanceStats={showAttendanceStats}
+          />
+        ))}
       </CardContent>
     </Card>
   );

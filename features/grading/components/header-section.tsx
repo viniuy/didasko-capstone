@@ -95,7 +95,7 @@ export function HeaderSection({
           <Button
             variant="outline"
             className={cn(
-              "w-[180px] justify-start text-left font-normal",
+              "w-[230px] justify-start text-left font-normal",
               !selectedDate && "text-muted-foreground"
             )}
             onClick={onDateSelect}

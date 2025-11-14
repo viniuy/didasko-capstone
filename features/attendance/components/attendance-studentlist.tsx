@@ -1852,10 +1852,14 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   };
 
   const renderStudentCards = useMemo(() => {
+    console.log("Current Students:", currentStudents);
     return currentStudents.map((student, index) => (
       <div key={student.id} className="relative">
         <StudentCard
-          student={student}
+          student={{
+            ...student,
+            attendanceRecord: student.attendanceRecords || [],
+          }}
           index={index}
           tempImage={tempImage}
           onImageUpload={(file) => handleImageUpload(student.id, file)}

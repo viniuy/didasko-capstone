@@ -6,6 +6,13 @@ import { CourseResponse } from "@/shared/types/course";
 
 const prisma = new PrismaClient();
 
+// Helper function to generate slug
+function generateSlug(code: string, section: string): string {
+  return `${code.toLowerCase().replace(/\s+/g, "-")}-${section
+    .toLowerCase()
+    .replace(/\s+/g, "-")}`;
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -23,14 +30,20 @@ export async function GET(request: Request) {
     const isCourseActive = searchParams.get("isCourseActive");
 
     // Build where clause based on filters
-    const where: Prisma.CourseWhereInput = {};
+    const where: Prisma.CourseWhereInput = {
+      status: "ACTIVE",
+    };
+
+    // Always filter for active courses if the query param is "true"
+    if (isCourseActive === "true") {
+      where.status = "ACTIVE";
+    }
 
     if (facultyId) where.facultyId = facultyId;
     if (department) where.faculty = { department };
     if (semester) where.semester = semester;
     if (code) where.code = code;
     if (section) where.section = section;
-    if (isCourseActive) where.status = "ACTIVE";
     if (search) {
       where.OR = [
         { title: { contains: search, mode: "insensitive" } },
@@ -38,6 +51,7 @@ export async function GET(request: Request) {
         { room: { contains: search, mode: "insensitive" } },
       ];
     }
+
     // Get courses with related data + attendance
     const courses = await prisma.course.findMany({
       where,
@@ -90,11 +104,9 @@ export async function GET(request: Request) {
             ...s,
             middleInitial: s.middleInitial || undefined,
           })),
-          schedules: course.schedules.map((s) => ({
-            ...s,
-            day: new Date(s.day),
-          })),
-        };
+          schedules: course.schedules,
+          attendance: undefined, // Remove attendance from response
+        } as any;
       }),
       pagination: {
         total: courses.length,

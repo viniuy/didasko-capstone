@@ -117,8 +117,8 @@ export default function AllCourses({ type }: AllCoursesProps) {
     }
 
     try {
-      const response = await axiosInstance.get("/courses/attendance/stats", {
-        params: { facultyId: session.user.id },
+      const response = await axiosInstance.get("/courses/active", {
+        params: { facultyId: session.user.id, isCourseActive: "true" },
       });
 
       const courses = response.data.courses || [];

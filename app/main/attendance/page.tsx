@@ -28,22 +28,9 @@ export default function AttendancePage() {
                 <div className="grid gap-4 md:gap-6 lg:gap-8">
                   <div className="space-y-2">
                     <h2 className="pl-2 pb-1 text-lg sm:text-xl font-bold text-muted-foreground">
-                      1st Semester
+                      Courses
                     </h2>
-                    <SemesterCourses
-                      semester="1st Semester"
-                      type="attendance"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <h2 className="pl-2 pb-1 text-lg sm:text-xl font-bold text-muted-foreground">
-                      2nd Semester
-                    </h2>
-                    <SemesterCourses
-                      semester="2nd Semester"
-                      type="attendance"
-                    />
+                    <SemesterCourses type="attendance" />
                   </div>
                 </div>
               </div>

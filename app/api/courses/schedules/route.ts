@@ -52,6 +52,7 @@ export async function GET(request: Request) {
       where: {
         course: {
           facultyId,
+          status: "ACTIVE",
           ...(semester ? { semester } : {}),
         },
       },
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
       where: {
         course: {
           facultyId,
+          status: "ACTIVE",
           ...(semester ? { semester } : {}),
         },
       },

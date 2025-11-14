@@ -22,7 +22,6 @@ interface Course {
   title: string;
   code: string;
   description: string | null;
-  semester: string;
   section: string;
   slug: string;
   academicYear: string;
@@ -37,8 +36,7 @@ interface Course {
   };
 }
 
-interface SemesterCoursesProps {
-  semester: "1st Semester" | "2nd Semester";
+interface CoursesProps {
   type: "attendance" | "recitation" | "quiz" | "class-record" | "reporting";
 }
 
@@ -51,8 +49,7 @@ const CourseCard = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  console.log("Course data in CourseCard:", course);
-  console.log("Attendance stats in CourseCard:", course.attendanceStats);
+
   const href =
     type === "attendance"
       ? `/main/attendance/class/${course.slug}`
@@ -62,21 +59,7 @@ const CourseCard = ({
       ? `/main/grading/quiz/${course.slug}`
       : type === "reporting"
       ? `/main/grading/reporting/${course.slug}`
-      : type === "class-record"
-      ? `/main/grading/class-record/${course.slug}`
-      : `/main/grading/class-record`;
-
-  useEffect(() => {
-    console.log("CourseCard - course prop updated:", course);
-    console.log(
-      "CourseCard - attendanceStats updated:",
-      course.attendanceStats
-    );
-    console.log(
-      "CourseCard - totalAbsents value:",
-      course.attendanceStats?.totalAbsents
-    );
-  }, [course]);
+      : `/main/grading/class-record/${course.slug}`;
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -94,8 +77,7 @@ const CourseCard = ({
         <CardContent>
           <p className="text-sm">Section {course.section}</p>
           <p className="text-sm font-semibold">
-            Total Number of Absents:{" "}
-            {course.attendanceStats ? course.attendanceStats.totalAbsents : 0}
+            Total Number of Absents: {course.attendanceStats?.totalAbsents ?? 0}
           </p>
           <p className="text-xs text-gray-400">
             {course.attendanceStats?.lastAttendanceDate
@@ -111,9 +93,7 @@ const CourseCard = ({
               className="bg-[#FAEDCB] text-black text-sm min-w-[120px] cursor-pointer"
               disabled={isLoading}
             >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               {type === "attendance"
                 ? "View Attendance"
                 : type === "recitation"
@@ -151,24 +131,19 @@ const LoadingSkeleton = ({ index }: { index: number }) => (
   </Card>
 );
 
-export default function SemesterCourses({
-  semester,
-  type,
-}: SemesterCoursesProps) {
+export default function ActiveCourses({ type }: CoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
-  const isCourseActive = "ACTIVE";
 
-  const fetchSchedules = async () => {
+  const fetchActiveCourses = async () => {
     if (!session?.user?.id) return;
-    console.log("I love savannah", isCourseActive);
     try {
-      const response = await axiosInstance.get("/courses", {
-        params: { facultyId: session.user.id, semester, isCourseActive },
+      const response = await axiosInstance.get("/courses/active", {
+        params: { facultyId: session.user.id, isCourseActive: "true" },
       });
       setCourses(response.data.courses);
     } catch (error) {
@@ -181,7 +156,7 @@ export default function SemesterCourses({
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetchSchedules();
+      fetchActiveCourses();
     }
   }, [status, session?.user?.id]);
 
@@ -208,10 +183,9 @@ export default function SemesterCourses({
       <Card className="p-4 shadow-md rounded-lg">
         <div className="text-center py-8">
           <BookOpenText className="mx-auto mb-4" size={50} />
-          <h2 className="text-xl font-semibold mb-2">No {semester} Subjects</h2>
+          <h2 className="text-xl font-semibold mb-2">No Active Subjects</h2>
           <p className="text-gray-500">
-            You don't have any subjects assigned for the{" "}
-            {semester.toLowerCase()}.
+            You don't have any active subjects assigned currently.
           </p>
         </div>
       </Card>

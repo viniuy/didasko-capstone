@@ -2,6 +2,11 @@ import { AttendanceStatus } from "@prisma/client";
 import { AttendanceStatusWithNotSet } from "@/shared/types/attendance";
 import { Button } from "@/components/ui/button";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -35,6 +40,7 @@ interface StudentCardProps {
     image?: string;
     date?: string;
     semester?: string;
+    attendanceRecord: AttendanceRecord[];
   };
   index: number;
   tempImage: { index: number; dataUrl: string } | null;
@@ -47,6 +53,15 @@ interface StudentCardProps {
   isSelected?: boolean;
   onSelect?: (id: string) => void;
   isSelecting?: boolean;
+}
+
+interface AttendanceRecord {
+  id: string;
+  studentId: string;
+  courseId: string;
+  date: string;
+  status: AttendanceStatus;
+  reason: string | null;
 }
 
 const statusStyles: Record<AttendanceStatusWithNotSet, string> = {
@@ -75,10 +90,10 @@ export function StudentCard({
     index: number;
     name: string;
   } | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+  const excusedReason =
+    student.attendanceRecord.find((r) => r.status === "EXCUSED")?.reason ||
+    "No reason provided";
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -173,21 +188,38 @@ export function StudentCard({
         <div className="w-full">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
-                  statusStyles[student.status]
-                } ${isInCooldown ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={isInCooldown}
-              >
-                {student.status === "NOT_SET"
-                  ? "Select status"
-                  : student.status}
-                {isInCooldown && (
-                  <div className="ml-2 w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                )}
-              </Button>
+              {student.status === "EXCUSED" ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
+                        statusStyles[student.status]
+                      } ${isInCooldown ? "opacity-50 cursor-not-allowed" : ""}`}
+                      disabled={isInCooldown}
+                    >
+                      {student.status}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{excusedReason}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
+                    statusStyles[student.status]
+                  } ${isInCooldown ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={isInCooldown}
+                >
+                  {student.status === "NOT_SET"
+                    ? "Select status"
+                    : student.status}
+                </Button>
+              )}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center">
               <DropdownMenuItem

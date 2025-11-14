@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface StudentAttendance {
   studentId: string;
@@ -31,7 +30,6 @@ interface Course {
   code: string;
   slug: string;
   section?: string;
-  semester?: string;
 }
 
 interface LeaderboardData {
@@ -132,7 +130,6 @@ const CourseAttendanceCard = ({
     const totalRate = leaderboard.reduce((sum, student) => {
       const totalTaken = student.totalPresent + student.totalAbsent;
       if (totalTaken === 0) return sum;
-
       const rate = (student.totalPresent / totalTaken) * 100;
       return sum + rate;
     }, 0);
@@ -154,13 +151,11 @@ const CourseAttendanceCard = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-white truncate">
-                {course.title}
+              <h3 className="text-sm font-semibold text-white truncate max-w-[90px]">
+                {course.code}
               </h3>
               {course.section && (
-                <p className="text-xs text-white/70">
-                  Section {course.section}
-                </p>
+                <p className="text-xs text-white/70">{course.section}</p>
               )}
             </div>
 
@@ -200,7 +195,29 @@ export default function AttendanceLeaderboard({
   const [courseSection, setCourseSection] = useState<string>("");
 
   const isSingleCourse = !!courseSlug;
+  // Single course view remains unchanged
+  const currentLeaderboard = useMemo(() => {
+    if (!isSingleCourse) return [];
 
+    const leaderboard: StudentAttendance[] = allLeaderboards[courseSlug!] || [];
+
+    return [...leaderboard].sort((a, b) => {
+      switch (sortBy) {
+        case "absents":
+          return b.totalAbsent - a.totalAbsent;
+        case "attendance":
+          return b.attendanceRate - a.attendanceRate;
+        case "present":
+          return b.totalPresent - a.totalPresent;
+        case "late":
+          return b.totalLate - a.totalLate;
+        case "excused":
+          return b.totalExcused - a.totalExcused;
+        default:
+          return b.totalAbsent - a.totalAbsent;
+      }
+    });
+  }, [allLeaderboards, isSingleCourse, courseSlug, sortBy]);
   // Fetch course title if courseSlug is provided
   useEffect(() => {
     if (!courseSlug) return;
@@ -237,33 +254,17 @@ export default function AttendanceLeaderboard({
           );
           setAllLeaderboards(response.data.leaderboards || {});
         } else {
-          // Fetch both semesters
-          const [firstSem, secondSem, leaderboardsResponse] = await Promise.all(
-            [
-              axiosInstance.get("/courses", {
-                params: {
-                  facultyId: session.user.id,
-                  semester: "1st Semester",
-                },
-              }),
-              axiosInstance.get("/courses", {
-                params: {
-                  facultyId: session.user.id,
-                  semester: "2nd Semester",
-                },
-              }),
-              axiosInstance.get("/attendance/leaderboard/all", {
-                params: { facultyId: session.user.id },
-              }),
-            ]
-          );
+          // Fetch active courses instead of semester-based
+          const [activeCourses, leaderboardsResponse] = await Promise.all([
+            axiosInstance.get("/courses/active", {
+              params: { facultyId: session.user.id },
+            }),
+            axiosInstance.get("/attendance/leaderboard/all", {
+              params: { facultyId: session.user.id },
+            }),
+          ]);
 
-          const allCourses = [
-            ...firstSem.data.courses,
-            ...secondSem.data.courses,
-          ];
-
-          setCourses(allCourses);
+          setCourses(activeCourses.data.courses || []);
           setAllLeaderboards(leaderboardsResponse.data.leaderboards || {});
         }
       } catch (error) {
@@ -278,32 +279,6 @@ export default function AttendanceLeaderboard({
       fetchAllData();
     }
   }, [status, session?.user?.id, courseSlug, isSingleCourse]);
-
-  const firstSemCourses = courses.filter((c) => c.semester === "1st Semester");
-  const secondSemCourses = courses.filter((c) => c.semester === "2nd Semester");
-
-  const currentLeaderboard = useMemo(() => {
-    if (!isSingleCourse) return [];
-
-    const leaderboard: StudentAttendance[] = allLeaderboards[courseSlug!] || [];
-
-    return [...leaderboard].sort((a, b) => {
-      switch (sortBy) {
-        case "absents":
-          return b.totalAbsent - a.totalAbsent;
-        case "attendance":
-          return b.attendanceRate - a.attendanceRate;
-        case "present":
-          return b.totalPresent - a.totalPresent;
-        case "late":
-          return b.totalLate - a.totalLate;
-        case "excused":
-          return b.totalExcused - a.totalExcused;
-        default:
-          return b.totalAbsent - a.totalAbsent;
-      }
-    });
-  }, [allLeaderboards, isSingleCourse, courseSlug, sortBy]);
 
   if (isLoading) {
     return (
@@ -321,7 +296,6 @@ export default function AttendanceLeaderboard({
     );
   }
 
-  // Render semester tabs view when no courseSlug
   if (!isSingleCourse) {
     return (
       <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
@@ -331,75 +305,30 @@ export default function AttendanceLeaderboard({
             Attendance Overview
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-hidden flex flex-col">
-          <Tabs defaultValue="1st" className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-2 bg-white/10">
-              <TabsTrigger
-                value="1st"
-                className="data-[state=active]:bg-white/20 text-white"
-              >
-                1st Sem ({firstSemCourses.length})
-              </TabsTrigger>
-              <TabsTrigger
-                value="2nd"
-                className="data-[state=active]:bg-white/20 text-white"
-              >
-                2nd Sem ({secondSemCourses.length})
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent
-              value="1st"
-              className="flex-1 overflow-y-auto mt-3 space-y-2"
-            >
-              {firstSemCourses.length === 0 ? (
-                <div className="text-center py-8">
-                  <Trophy className="mx-auto mb-2 text-white/30" size={40} />
-                  <p className="text-sm text-white/70">
-                    No 1st semester courses
-                  </p>
-                </div>
-              ) : (
-                firstSemCourses.map((course) => (
-                  <CourseAttendanceCard
-                    key={course.id}
-                    course={course}
-                    leaderboard={allLeaderboards[course.slug] || []}
-                  />
-                ))
-              )}
-            </TabsContent>
-
-            <TabsContent
-              value="2nd"
-              className="flex-1 overflow-y-auto mt-3 space-y-2"
-            >
-              {secondSemCourses.length === 0 ? (
-                <div className="text-center py-8">
-                  <Trophy className="mx-auto mb-2 text-white/30" size={40} />
-                  <p className="text-sm text-white/70">
-                    No 2nd semester courses
-                  </p>
-                </div>
-              ) : (
-                secondSemCourses.map((course) => (
-                  <CourseAttendanceCard
-                    key={course.id}
-                    course={course}
-                    leaderboard={allLeaderboards[course.slug] || []}
-                  />
-                ))
-              )}
-            </TabsContent>
-          </Tabs>
+        <CardContent className="flex-1 overflow-y-auto flex flex-col space-y-2">
+          {courses.length === 0 ? (
+            <div className="text-center py-8">
+              <Trophy className="mx-auto mb-2 text-white/30" size={40} />
+              <p className="text-sm text-white/70">
+                No active courses assigned
+              </p>
+            </div>
+          ) : (
+            courses.map((course) => (
+              <CourseAttendanceCard
+                key={course.id}
+                course={course}
+                leaderboard={allLeaderboards[course.slug] || []}
+              />
+            ))
+          )}
         </CardContent>
       </Card>
     );
   }
 
-  // Original single course view
   return (
-    <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
+    <Card className="bg-[#124A69] border-white/20 h-full w-full flex flex-col overflow-hidden">
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white text-lg flex flex-col gap-1 -mb-8">
           {isSingleCourse && courseTitle ? (
@@ -422,7 +351,7 @@ export default function AttendanceLeaderboard({
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden flex flex-col">
+      <CardContent className="flex-1 w-full overflow-hidden flex flex-col">
         <div className="flex-shrink-0 space-y-3 mb-3">
           <Select
             value={sortBy}

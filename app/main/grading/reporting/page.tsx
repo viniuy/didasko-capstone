@@ -19,15 +19,9 @@ export default function GradingPage() {
             <div className="flex-1 p-4">
               <div className="mb-8">
                 <h2 className="pl-2 pb-1 text-lg sm:text-xl font-bold text-muted-foreground">
-                  1st Semester
+                  Courses
                 </h2>
-                <SemesterCourses semester="1st Semester" type="reporting" />
-              </div>
-              <div>
-                <h2 className="pl-2 pb-1 text-lg sm:text-xl font-bold text-muted-foreground">
-                  2nd Semester
-                </h2>
-                <SemesterCourses semester="2nd Semester" type="reporting" />
+                <SemesterCourses type="reporting" />
               </div>
             </div>
           </div>
