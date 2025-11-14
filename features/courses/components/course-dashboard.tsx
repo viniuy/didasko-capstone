@@ -80,6 +80,7 @@ import * as XLSX from "xlsx";
 import axiosInstance from "@/lib/axios";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useRouter } from "next/navigation";
+import { StudentImportDialog } from "../dialogs/import-students-dialog";
 
 // ==================== Types ====================
 interface Student {
@@ -1083,6 +1084,7 @@ export function CourseDashboard({
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showRemoveSheet, setShowRemoveSheet] = useState(false);
   const [existingStudents, setExistingStudents] = useState<Student[]>([]);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [studentsWithRecords, setStudentsWithRecords] = useState<
     StudentWithRecords[]
   >([]);
@@ -1293,6 +1295,14 @@ export function CourseDashboard({
                   Export
                 </Button>
                 <Button
+                  onClick={() => setShowImportDialog(true)}
+                  variant="outline"
+                  className="gap-2 border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+                >
+                  <Upload className="w-4 h-4" />
+                  Import Students
+                </Button>
+                <Button
                   onClick={() => {
                     setShowAddSheet(true);
                     fetchExistingStudents();
@@ -1441,6 +1451,13 @@ export function CourseDashboard({
           isLoading={false}
           courseSlug={courseSlug}
           onRemoveSuccess={fetchCourseData}
+        />
+
+        <StudentImportDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+          courseSlug={courseSlug}
+          onImportComplete={fetchCourseData}
         />
       </div>
     </div>

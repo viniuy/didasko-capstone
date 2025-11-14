@@ -1,39 +1,73 @@
-import { NextResponse } from "next/server";
+// app/api/courses/[slug]/students/import/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
+
+interface StudentImportRow {
+  "Student Number": string;
+  "Full Name": string;
+}
+
+interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: Array<{ studentNumber: string; message: string }>;
+  total: number;
+  detailedFeedback: Array<{
+    row: number;
+    studentNumber: string;
+    fullName: string;
+    status: "imported" | "skipped" | "error";
+    message: string;
+  }>;
+}
+
+// Helper function to parse full name
+function parseFullName(fullName: string) {
+  // Expected format: "Dela Cruz, Juan A." or "Santos, Maria B."
+  const parts = fullName.split(",").map((p) => p.trim());
+
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const lastName = parts[0];
+  const firstAndMiddle = parts[1].split(" ");
+
+  const firstName = firstAndMiddle[0];
+  const middleInitial =
+    firstAndMiddle.length > 1
+      ? firstAndMiddle[firstAndMiddle.length - 1].replace(".", "")
+      : "";
+
+  return {
+    lastName,
+    firstName,
+    middleInitial: middleInitial || undefined,
+  };
+}
 
 export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ course_slug: string }> }
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: "Unauthorized - No session" },
-        { status: 401 }
-      );
-    }
-
-    // Await params
-    const { course_slug } = await params;
+    const { slug } = await params;
     const body = await request.json();
+    const { students } = body as { students: StudentImportRow[] };
 
-    if (!Array.isArray(body) || body.length === 0) {
+    if (!students || !Array.isArray(students)) {
       return NextResponse.json(
-        { error: "Invalid input data - must be an array" },
+        { error: "Invalid request body" },
         { status: 400 }
       );
     }
 
-    // Find course using slug
+    // Find the course
     const course = await prisma.course.findUnique({
-      where: { slug: course_slug },
-      select: {
-        id: true,
+      where: { slug },
+      include: {
         students: {
-          select: { id: true, studentId: true },
+          select: { studentId: true },
         },
       },
     });
@@ -42,135 +76,149 @@ export async function POST(
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    const courseId = course.id;
-    const existingStudentIds = new Set(course.students.map((s) => s.studentId));
+    // Get already enrolled student IDs for this course
+    const enrolledStudentIds = new Set(course.students.map((s) => s.studentId));
 
-    let imported = 0;
-    let skipped = 0;
-    const errors: Array<{ studentId: string; message: string }> = [];
-    const detailedFeedback: Array<{
-      row: number;
-      studentId: string;
-      status: string;
-      message: string;
-      id?: string;
-    }> = [];
+    const result: ImportResult = {
+      imported: 0,
+      skipped: 0,
+      errors: [],
+      total: students.length,
+      detailedFeedback: [],
+    };
 
     // Process each student
-    for (let index = 0; index < body.length; index++) {
-      const studentData = body[index];
-      const rowNumber = index + 1;
+    for (let i = 0; i < students.length; i++) {
+      const row = students[i];
+      const rowNumber = i + 2; // +2 because Excel starts at 1 and has header row
+
+      const studentNumber = row["Student Number"]?.toString().trim();
+      const fullName = row["Full Name"]?.trim();
+
+      // Validate required fields
+      if (!studentNumber || !fullName) {
+        result.errors.push({
+          studentNumber: studentNumber || "N/A",
+          message: "Missing required fields",
+        });
+        result.detailedFeedback.push({
+          row: rowNumber,
+          studentNumber: studentNumber || "N/A",
+          fullName: fullName || "N/A",
+          status: "error",
+          message: "Missing Student Number or Full Name",
+        });
+        continue;
+      }
+
+      // Parse the full name
+      const parsedName = parseFullName(fullName);
+      if (!parsedName) {
+        result.errors.push({
+          studentNumber,
+          message: "Invalid name format. Expected: 'Last Name, First Name M.'",
+        });
+        result.detailedFeedback.push({
+          row: rowNumber,
+          studentNumber,
+          fullName,
+          status: "error",
+          message: "Invalid name format. Use: 'Last Name, First Name M.'",
+        });
+        continue;
+      }
 
       try {
-        // Map the frontend field names to backend field names
-        const studentId = studentData["Student ID"]?.toString().trim();
-        const firstName = studentData["First Name"]?.toString().trim();
-        const lastName = studentData["Last Name"]?.toString().trim();
-        const middleInitial =
-          studentData["Middle Initial"]?.toString().trim() || null;
-
-        // Validate required fields
-        if (!studentId || !firstName || !lastName) {
-          skipped++;
-          const missingFields = [];
-          if (!studentId) missingFields.push("Student ID");
-          if (!firstName) missingFields.push("First Name");
-          if (!lastName) missingFields.push("Last Name");
-
-          errors.push({
-            studentId: studentId || "N/A",
-            message: `Missing required fields: ${missingFields.join(", ")}`,
-          });
-
-          detailedFeedback.push({
+        // Check if student already enrolled in this course
+        if (enrolledStudentIds.has(studentNumber)) {
+          result.skipped++;
+          result.detailedFeedback.push({
             row: rowNumber,
-            studentId: studentId || "N/A",
-            status: "error",
-            message: `Missing required fields: ${missingFields.join(", ")}`,
-          });
-          continue;
-        }
-
-        // Check if student is already enrolled in this course
-        if (existingStudentIds.has(studentId)) {
-          skipped++;
-          detailedFeedback.push({
-            row: rowNumber,
-            studentId: studentId,
+            studentNumber,
+            fullName,
             status: "skipped",
             message: "Already enrolled in this course",
           });
           continue;
         }
 
-        // Create or update student in database
-        const savedStudent = await prisma.student.upsert({
-          where: { studentId: studentId },
-          update: {
-            firstName: firstName,
-            lastName: lastName,
-            middleInitial: middleInitial,
-          },
-          create: {
-            studentId: studentId,
-            firstName: firstName,
-            lastName: lastName,
-            middleInitial: middleInitial,
+        // Find student in database and check for RFID
+        const existingStudent = await prisma.student.findUnique({
+          where: { studentId: studentNumber },
+          select: {
+            id: true,
+            studentId: true,
+            rfid_id: true,
+            firstName: true,
+            lastName: true,
           },
         });
 
-        // Connect student to course
+        if (!existingStudent) {
+          // Student doesn't exist in database
+          result.skipped++;
+          result.detailedFeedback.push({
+            row: rowNumber,
+            studentNumber,
+            fullName,
+            status: "skipped",
+            message: "Student not found in database",
+          });
+          continue;
+        }
+
+        if (!existingStudent.rfid_id) {
+          // Student exists but has no RFID
+          result.skipped++;
+          result.detailedFeedback.push({
+            row: rowNumber,
+            studentNumber,
+            fullName,
+            status: "skipped",
+            message: "No RFID card registered",
+          });
+          continue;
+        }
+
+        // Add student to course
         await prisma.course.update({
-          where: { id: courseId },
+          where: { id: course.id },
           data: {
             students: {
-              connect: { id: savedStudent.id },
+              connect: { id: existingStudent.id },
             },
           },
         });
 
-        imported++;
-        existingStudentIds.add(studentId); // Update the set
-
-        detailedFeedback.push({
+        result.imported++;
+        result.detailedFeedback.push({
           row: rowNumber,
-          studentId: studentId,
+          studentNumber,
+          fullName,
           status: "imported",
-          message: "Successfully imported",
-          id: savedStudent.id,
+          message: `Successfully added (RFID: ${existingStudent.rfid_id})`,
         });
-      } catch (err: any) {
-        const studentId = studentData["Student ID"]?.toString() || "N/A";
-        const errorMessage = err?.message || "Unknown error occurred";
-
-        errors.push({
-          studentId: studentId,
-          message: errorMessage,
+      } catch (error) {
+        console.error(`Error processing student ${studentNumber}:`, error);
+        result.errors.push({
+          studentNumber,
+          message: "Database error during import",
         });
-
-        detailedFeedback.push({
+        result.detailedFeedback.push({
           row: rowNumber,
-          studentId: studentId,
+          studentNumber,
+          fullName,
           status: "error",
-          message: errorMessage,
+          message: "Failed to add to course",
         });
       }
     }
 
-    return NextResponse.json({
-      total: body.length,
-      imported,
-      skipped,
-      errors,
-      detailedFeedback,
-    });
-  } catch (error: any) {
-    console.error("Import failed:", error);
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) {
+    console.error("Import error:", error);
     return NextResponse.json(
-      {
-        error: error?.message || "Failed to import students",
-        details: error?.toString(),
-      },
+      { error: "Failed to import students" },
       { status: 500 }
     );
   }

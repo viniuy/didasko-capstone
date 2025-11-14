@@ -1,46 +1,57 @@
+export interface CourseSchedule {
+  id: string;
+  courseId: string;
+  day: string;
+  fromTime: string;
+  toTime: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StudentInCourse {
+  id: string;
+  lastName: string;
+  firstName: string;
+  middleInitial?: string;
+}
+
+export interface FacultyInfo {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+}
+
+export interface AttendanceStats {
+  totalStudents: number;
+  totalPresent: number;
+  totalAbsents: number;
+  totalLate: number;
+  lastAttendanceDate: Date | null;
+  attendanceRate: number;
+}
+
 export interface Course {
   id: string;
   code: string;
   title: string;
-  description?: string;
-  room?: string;
+  room: string;
   semester: string;
+  slug: string;
+  academicYear: string;
+  classNumber: number;
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   section: string;
   facultyId: string | null;
   createdAt: Date;
   updatedAt: Date;
-  faculty: {
-    id: string;
-    name: string;
-    email: string;
-    department: string;
-  } | null;
-  students: Array<{
-    id: string;
-    lastName: string;
-    firstName: string;
-    middleInitial?: string | null;
-  }>;
-  schedules: Array<{
-    id: string;
-    day: Date;
-    fromTime: string;
-    toTime: string;
-  }>;
-}
 
-export interface CourseCreateInput {
-  id?: string;
-  code: string;
-  title: string;
-  room?: string;
-  semester: string;
-  section: string;
-  facultyId: string;
-  academicYear: string;
-}
+  schedules: CourseSchedule[];
+  students: StudentInCourse[];
+  faculty?: FacultyInfo | null;
 
-export interface CourseUpdateInput extends Partial<CourseCreateInput> {}
+  attendanceStats?: AttendanceStats;
+}
 
 export interface CourseResponse {
   courses: Course[];
@@ -50,4 +61,29 @@ export interface CourseResponse {
     limit: number;
     totalPages: number;
   };
+}
+
+export interface CreateCourseInput {
+  code: string;
+  title: string;
+  section: string;
+  room?: string;
+  semester: string;
+  academicYear: string;
+  classNumber?: number | string;
+  status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  facultyId?: string;
+  schedules?: {
+    day: string;
+    fromTime: string;
+    toTime: string;
+  }[];
+}
+
+export interface UpdateSchedulesInput {
+  schedules: {
+    day: string;
+    fromTime: string;
+    toTime: string;
+  }[];
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,9 +9,9 @@ import {
   DialogTitle,
 } from "@/components/ui/svdialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { TimePicker } from "@/components/ui/time-picker";
 import {
   Select,
   SelectContent,
@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Plus, Trash2, CheckCircle, AlertCircle } from "lucide-react";
+import { Calendar, Plus, Trash2, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import axiosInstance from "@/lib/axios";
 import { cn } from "@/lib/utils";
@@ -34,15 +34,17 @@ const DAYS = [
 ];
 
 interface ImportedCourse {
-  id: string;
+  id?: string;
   code: string;
   title: string;
   section: string;
   room: string;
   semester: string;
   academicYear: string;
-  classNumber: string;
+  classNumber: string | number;
   status: string;
+  facultyId?: string;
+  schedules?: Schedule[];
 }
 
 interface ScheduleAssignmentDialogProps {
@@ -50,6 +52,7 @@ interface ScheduleAssignmentDialogProps {
   onOpenChange: (open: boolean) => void;
   courses: ImportedCourse[];
   onComplete: () => void;
+  mode: "create" | "edit" | "import";
 }
 
 interface Schedule {
@@ -58,14 +61,31 @@ interface Schedule {
   toTime: string;
 }
 
+// Helper function to expand short day names to full names
+const expandDayName = (shortDay: string): string => {
+  const dayMap: Record<string, string> = {
+    Mon: "Monday",
+    Tue: "Tuesday",
+    Wed: "Wednesday",
+    Thu: "Thursday",
+    Fri: "Friday",
+    Sat: "Saturday",
+    Sun: "Sunday",
+  };
+  return dayMap[shortDay] || shortDay;
+};
+
 export function ScheduleAssignmentDialog({
   open,
   onOpenChange,
   courses,
   onComplete,
+  mode,
 }: ScheduleAssignmentDialogProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [allSchedules, setAllSchedules] = useState<Record<number, any[]>>({});
+  const [allSchedules, setAllSchedules] = useState<Record<number, Schedule[]>>(
+    {}
+  );
   const [currentSchedules, setCurrentSchedules] = useState<Schedule[]>([
     { day: "", fromTime: "", toTime: "" },
   ]);
@@ -73,6 +93,26 @@ export function ScheduleAssignmentDialog({
 
   const currentCourse = courses[currentIndex];
   const progress = ((currentIndex + 1) / courses.length) * 100;
+
+  // Initialize schedules based on mode
+  useEffect(() => {
+    if (open && currentCourse && mode === "edit" && currentCourse.schedules) {
+      // For edit mode, populate existing schedules
+      const existingSchedules = currentCourse.schedules.map((s) => ({
+        day: expandDayName(s.day),
+        fromTime: s.fromTime,
+        toTime: s.toTime,
+      }));
+      setCurrentSchedules(
+        existingSchedules.length > 0
+          ? existingSchedules
+          : [{ day: "", fromTime: "", toTime: "" }]
+      );
+    } else if (open) {
+      // For create/import mode, start fresh
+      setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
+    }
+  }, [open, currentCourse, mode, currentIndex]);
 
   const addSchedule = () => {
     setCurrentSchedules([
@@ -94,8 +134,15 @@ export function ScheduleAssignmentDialog({
   };
 
   const timeToMinutes = (time: string): number => {
-    const [hours, minutes] = time.split(":").map(Number);
-    return hours * 60 + minutes;
+    if (!time) return 0;
+
+    const [t, period] = time.split(" ");
+    let [h, m] = t.split(":").map(Number);
+
+    if (period === "PM" && h !== 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+
+    return h * 60 + m;
   };
 
   const checkTimeOverlap = (
@@ -113,12 +160,10 @@ export function ScheduleAssignmentDialog({
   };
 
   const validateCurrentSchedules = () => {
-    // Filter out completely empty schedules
     const filledSchedules = currentSchedules.filter(
       (s) => s.day || s.fromTime || s.toTime
     );
 
-    // REQUIRE at least one schedule - no skipping allowed
     const completeSchedules = filledSchedules.filter(
       (s) => s.day && s.fromTime && s.toTime
     );
@@ -128,7 +173,6 @@ export function ScheduleAssignmentDialog({
       return false;
     }
 
-    // Check if all filled schedules are complete
     for (let i = 0; i < filledSchedules.length; i++) {
       const schedule = filledSchedules[i];
       const hasAnyField = schedule.day || schedule.fromTime || schedule.toTime;
@@ -144,7 +188,6 @@ export function ScheduleAssignmentDialog({
       }
     }
 
-    // Validate time ranges
     for (let i = 0; i < completeSchedules.length; i++) {
       const schedule = completeSchedules[i];
       const fromMinutes = timeToMinutes(schedule.fromTime);
@@ -163,7 +206,6 @@ export function ScheduleAssignmentDialog({
       }
     }
 
-    // Check for overlapping schedules
     for (let i = 0; i < completeSchedules.length; i++) {
       for (let j = i + 1; j < completeSchedules.length; j++) {
         const schedule1 = completeSchedules[i];
@@ -189,119 +231,140 @@ export function ScheduleAssignmentDialog({
       return;
     }
 
-    // Filter out empty schedules
     const validSchedules = currentSchedules.filter(
       (s) => s.day && s.fromTime && s.toTime
     );
 
-    console.log(`Saving schedules for course ${currentIndex}:`, validSchedules);
-
-    // Save current course schedules using INDEX instead of ID
     const updatedSchedules = {
       ...allSchedules,
       [currentIndex]: validSchedules.map((s) => ({
-        day: DAYS.find((d) => d.value === s.day)?.short || s.day.slice(0, 3),
+        day: s.day,
         fromTime: s.fromTime,
         toTime: s.toTime,
       })),
     };
     setAllSchedules(updatedSchedules);
 
-    console.log("All schedules so far:", updatedSchedules);
-
     if (currentIndex < courses.length - 1) {
-      // Move to next course
       setCurrentIndex(currentIndex + 1);
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     } else {
-      // All done - submit to backend
-      console.log("All courses completed. Final schedules:", updatedSchedules);
       handleComplete(updatedSchedules);
     }
   };
 
   const handleCancel = () => {
-    // Show warning that no courses will be created
-    if (
-      confirm(
-        "Are you sure? Canceling will discard all imported courses without schedules."
-      )
-    ) {
-      onOpenChange(false);
+    let confirmMessage = "";
 
-      // Reset state
+    if (mode === "create") {
+      confirmMessage =
+        "Are you sure? The course will NOT be created without schedules.";
+    } else if (mode === "edit") {
+      confirmMessage = "Are you sure? Schedule changes will not be saved.";
+    } else if (mode === "import") {
+      confirmMessage =
+        "Are you sure? Canceling will discard all imported courses.";
+    }
+
+    if (confirm(confirmMessage)) {
+      onOpenChange(false);
       setCurrentIndex(0);
       setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
 
-      toast.error("Import canceled. No courses were created.");
+      if (mode === "create") {
+        toast.error("Course creation canceled. No course was created.");
+      } else if (mode === "import") {
+        toast.error("Import canceled. No courses were created.");
+      } else {
+        toast("Schedule editing canceled");
+      }
     }
   };
 
-  const handleComplete = async (schedules: Record<number, any[]>) => {
+  const handleComplete = async (schedules: Record<number, Schedule[]>) => {
     setIsSubmitting(true);
 
     try {
-      // Combine courses with their schedules BEFORE sending to backend
-      const coursesWithSchedules = courses.map((course, index) => ({
-        code: course.code,
-        title: course.title,
-        section: course.section,
-        room: course.room,
-        semester: course.semester,
-        academicYear: course.academicYear,
-        classNumber: course.classNumber,
-        status: course.status,
-        schedules: schedules[index] || [],
-      }));
+      if (mode === "create") {
+        // Create mode: Create course WITH schedules in one transaction
+        const courseData = currentCourse;
+        const schedulesToAdd = schedules[0] || [];
 
-      console.log("Sending to backend:", coursesWithSchedules);
+        const response = await axiosInstance.post("/courses", {
+          ...courseData,
+          schedules: schedulesToAdd.map((s) => ({
+            day: s.day.slice(0, 3), // Convert to short form
+            fromTime: s.fromTime,
+            toTime: s.toTime,
+          })),
+        });
 
-      // Send courses WITH schedules to backend in one request
-      const response = await axiosInstance.post(
-        "/courses/import-with-schedules",
-        {
-          courses: coursesWithSchedules,
-        }
-      );
+        toast.success("Course created with schedules successfully!");
+      } else if (mode === "import") {
+        // Import mode: Create courses with schedules
+        const coursesWithSchedules = courses.map((course, index) => ({
+          code: course.code,
+          title: course.title,
+          section: course.section,
+          room: course.room,
+          semester: course.semester,
+          academicYear: course.academicYear,
+          classNumber: course.classNumber,
+          status: course.status,
+          facultyId: course.facultyId,
+          schedules: schedules[index] || [],
+        }));
 
-      console.log("Backend response:", response.data);
+        const response = await axiosInstance.post(
+          "/courses/import-with-schedules",
+          { courses: coursesWithSchedules }
+        );
 
-      if (response.data.results) {
-        const { success, failed, errors } = response.data.results;
-
-        if (failed > 0) {
-          toast.error(
-            `${success} courses created, ${failed} failed. Check console for details.`
-          );
-          console.error("Import errors:", errors);
+        if (response.data.results) {
+          const { success, failed } = response.data.results;
+          if (failed > 0) {
+            toast.error(`${success} courses created, ${failed} failed.`);
+          } else {
+            toast.success(
+              `Successfully created ${success} courses with schedules!`
+            );
+          }
         } else {
-          toast.success(
-            `Successfully created ${success} courses with schedules!`
-          );
+          toast.success("Courses created successfully with schedules!");
         }
-      } else {
-        toast.success("Courses created successfully with schedules!");
+      } else if (mode === "edit") {
+        // Edit mode: Update schedules for existing course
+        const courseId = currentCourse.id;
+        if (!courseId) {
+          throw new Error("Course ID is missing");
+        }
+
+        const schedulesToUpdate = schedules[0] || [];
+
+        await axiosInstance.put(`/courses/${courseId}/schedules`, {
+          schedules: schedulesToUpdate.map((s) => ({
+            day: s.day.slice(0, 3), // Convert to short form
+            fromTime: s.fromTime,
+            toTime: s.toTime,
+          })),
+        });
+
+        toast.success("Schedules updated successfully!");
       }
 
-      // Call onComplete to refresh the table
       onComplete();
       onOpenChange(false);
-
-      // Reset state
       setCurrentIndex(0);
       setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     } catch (error: any) {
-      console.error("Error creating courses:", error);
-      console.error("Error details:", error?.response?.data);
-
+      console.error("Error handling schedules:", error);
       const errorMessage =
         error?.response?.data?.error ||
         error?.response?.data?.message ||
         error?.message ||
-        "Failed to create courses with schedules";
-
+        "Failed to save schedules";
       toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -309,6 +372,22 @@ export function ScheduleAssignmentDialog({
   };
 
   if (!currentCourse) return null;
+
+  const getDialogTitle = () => {
+    if (mode === "create") return "Add Schedules to New Course";
+    if (mode === "edit") return "Edit Course Schedules";
+    return "Add Required Schedules";
+  };
+
+  const getDialogDescription = () => {
+    if (mode === "create") {
+      return "Add at least one schedule to complete course creation.";
+    }
+    if (mode === "edit") {
+      return "Update the course schedules below.";
+    }
+    return "Each course must have at least one schedule before it can be created.";
+  };
 
   return (
     <Dialog
@@ -323,28 +402,31 @@ export function ScheduleAssignmentDialog({
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-semibold text-[#124A69]">
-              Add Required Schedules
+              {getDialogTitle()}
             </DialogTitle>
-            <Badge className="bg-[#124A69] text-white px-3 py-1">
-              {currentIndex + 1} of {courses.length}
-            </Badge>
+            {mode === "import" && (
+              <Badge className="bg-[#124A69] text-white px-3 py-1">
+                {currentIndex + 1} of {courses.length}
+              </Badge>
+            )}
           </div>
           <DialogDescription className="flex items-start gap-2 text-base">
             <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <span>
-              <strong>Schedules are required!</strong> Each course must have at
-              least one schedule before it can be created.
+              <strong>Schedules are required!</strong> {getDialogDescription()}
             </span>
           </DialogDescription>
         </DialogHeader>
 
-        {/* Progress Bar */}
-        <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
-          <div
-            className="bg-[#124A69] h-2.5 rounded-full transition-all duration-300 ease-in-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        {/* Progress Bar (only for import mode) */}
+        {mode === "import" && (
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
+            <div
+              className="bg-[#124A69] h-2.5 rounded-full transition-all duration-300 ease-in-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
 
         {/* Current Course Info */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-[#124A69] rounded-lg p-5 mb-6 shadow-sm">
@@ -405,7 +487,6 @@ export function ScheduleAssignmentDialog({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Day Selector */}
                   <div className="space-y-2">
                     <Label className="text-xs font-medium text-gray-600">
                       Day of the Week
@@ -434,39 +515,23 @@ export function ScheduleAssignmentDialog({
                     </Select>
                   </div>
 
-                  {/* Start Time */}
                   <div className="space-y-2">
                     <Label className="text-xs font-medium text-gray-600">
                       Start Time
                     </Label>
-                    <Input
-                      type="time"
+                    <TimePicker
                       value={schedule.fromTime}
-                      onChange={(e) =>
-                        updateSchedule(index, "fromTime", e.target.value)
-                      }
-                      className={cn(
-                        "w-full",
-                        schedule.fromTime && "border-[#124A69] bg-blue-50"
-                      )}
+                      onChange={(val) => updateSchedule(index, "fromTime", val)}
                     />
                   </div>
 
-                  {/* End Time */}
                   <div className="space-y-2">
                     <Label className="text-xs font-medium text-gray-600">
                       End Time
                     </Label>
-                    <Input
-                      type="time"
+                    <TimePicker
                       value={schedule.toTime}
-                      onChange={(e) =>
-                        updateSchedule(index, "toTime", e.target.value)
-                      }
-                      className={cn(
-                        "w-full",
-                        schedule.toTime && "border-[#124A69] bg-blue-50"
-                      )}
+                      onChange={(val) => updateSchedule(index, "toTime", val)}
                     />
                   </div>
                 </div>
@@ -493,7 +558,7 @@ export function ScheduleAssignmentDialog({
             disabled={isSubmitting}
             className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50"
           >
-            Cancel Import
+            {mode === "edit" ? "Cancel" : "Cancel Creation"}
           </Button>
 
           <Button
@@ -502,10 +567,14 @@ export function ScheduleAssignmentDialog({
             disabled={isSubmitting}
           >
             {isSubmitting
-              ? "Creating Courses..."
-              : currentIndex < courses.length - 1
+              ? mode === "edit"
+                ? "Updating..."
+                : "Creating..."
+              : mode === "import" && currentIndex < courses.length - 1
               ? "Next Course →"
-              : "Create All Courses"}
+              : mode === "edit"
+              ? "Update Schedules"
+              : "Create Course"}
           </Button>
         </div>
       </DialogContent>

@@ -194,9 +194,28 @@ const CourseCard = ({
 
   const formatTo12Hour = (time: string) => {
     if (!time) return "";
-    const [hours, minutes] = time.split(":").map(Number);
+
+    let raw = time.trim().toLowerCase();
+
+    // Case 1: Already 12-hour format: "2:00 pm"
+    if (raw.includes("am") || raw.includes("pm")) {
+      let [hm, suffix] = raw.split(/(am|pm)/);
+      let [h, m] = hm.trim().split(":").map(Number);
+
+      if (suffix === "pm" && h !== 12) h += 12;
+      if (suffix === "am" && h === 12) h = 0;
+
+      const hour12 = h % 12 || 12;
+      const finalSuffix = suffix.toUpperCase();
+
+      return `${hour12}:${m.toString().padStart(2, "0")} ${finalSuffix}`;
+    }
+
+    // Case 2: 24-hour format: "14:00"
+    const [hours, minutes] = raw.split(":").map(Number);
     const suffix = hours >= 12 ? "PM" : "AM";
     const normalizedHour = hours % 12 || 12;
+
     return `${normalizedHour}:${minutes.toString().padStart(2, "0")} ${suffix}`;
   };
 
@@ -358,6 +377,11 @@ export function CourseDataTable({
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [scheduleDialogCourse, setScheduleDialogCourse] =
     useState<Course | null>(null);
+  const [newCourseForSchedule, setNewCourseForSchedule] = useState<any>(null);
+  const [pendingCourseData, setPendingCourseData] = useState<any>(null);
+  const [scheduleDialogMode, setScheduleDialogMode] = useState<
+    "create" | "edit" | "import"
+  >("import");
 
   // Import/Export State
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -440,47 +464,79 @@ export function CourseDataTable({
     loadAllData();
   }, [initialCourses]);
 
-  const refreshTableData = useCallback(async () => {
+  const refreshTableData = useCallback(async (skipStats = false) => {
     try {
       setIsRefreshing(true);
       const response = await axiosInstance.get("/courses");
-      const data = await response.data;
+      const data = response.data;
 
       if (data.courses) {
-        // Fetch stats for courses with error handling
-        const coursesWithStats = await Promise.all(
-          data.courses.map(async (course: Course) => {
-            try {
-              const statsResponse = await axiosInstance.get(
-                `/courses/${course.slug}/course-stats`
+        if (skipStats) {
+          // Just update the courses without fetching stats - preserve existing stats
+          setTableData((prevData) =>
+            data.courses.map((newCourse: Course) => {
+              const existingCourse = prevData.find(
+                (c) => c.id === newCourse.id
               );
-              return {
-                ...course,
-                stats: statsResponse.data,
-              };
-            } catch (error: any) {
-              // Only log non-404 errors
-              if (error?.response?.status !== 404) {
+              return existingCourse
+                ? { ...newCourse, stats: existingCourse.stats }
+                : {
+                    ...newCourse,
+                    stats: {
+                      passingRate: 0,
+                      attendanceRate: 0,
+                      totalStudents: 0,
+                    },
+                  };
+            })
+          );
+        } else {
+          // Fetch stats only if explicitly requested
+          const coursesWithStats = await Promise.all(
+            data.courses.map(async (course: Course) => {
+              try {
+                // Fix the URL - it should be /stats not /course-stats
+                const statsResponse = await axiosInstance.get(
+                  `/courses/${course.slug}/courses-stats`
+                );
+                return {
+                  ...course,
+                  stats: statsResponse.data,
+                };
+              } catch (error: any) {
+                // Silently handle 404s - course has no stats yet
+                if (error?.response?.status === 404) {
+                  return {
+                    ...course,
+                    stats: {
+                      passingRate: 0,
+                      attendanceRate: 0,
+                      totalStudents: 0,
+                    },
+                  };
+                }
+
+                // Log other errors but still return default stats
                 console.warn(
                   `Could not fetch stats for course ${course.code}:`,
-                  error
+                  error?.response?.status
                 );
+
+                return {
+                  ...course,
+                  stats: {
+                    passingRate: 0,
+                    attendanceRate: 0,
+                    totalStudents: 0,
+                  },
+                };
               }
-              // Return course with default stats (no toast for 404s)
-              return {
-                ...course,
-                stats: {
-                  passingRate: 0,
-                  attendanceRate: 0,
-                  totalStudents: 0,
-                },
-              };
-            }
-          })
-        );
-        setTableData(coursesWithStats);
+            })
+          );
+          setTableData(coursesWithStats);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error refreshing table data:", error);
       toast.error("Failed to refresh course data");
     } finally {
@@ -532,6 +588,7 @@ export function CourseDataTable({
   const handleAddSchedule = (course: Course) => {
     setScheduleDialogCourse(course);
     setImportedCoursesForSchedule([course]);
+    setScheduleDialogMode("edit");
     setShowScheduleAssignment(true);
   };
 
@@ -570,7 +627,7 @@ export function CourseDataTable({
       );
 
       // Refresh table data
-      await refreshTableData();
+      await refreshTableData(true);
       if (onCourseAdded) onCourseAdded();
     } catch (error) {
       console.error("Error archiving courses:", error);
@@ -586,7 +643,7 @@ export function CourseDataTable({
       });
 
       // Refresh table data
-      await refreshTableData();
+      await refreshTableData(true);
       if (onCourseAdded) onCourseAdded();
     } catch (error) {
       console.error("Error unarchiving courses:", error);
@@ -1145,7 +1202,7 @@ export function CourseDataTable({
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     // Refresh table data
-    await refreshTableData();
+    await refreshTableData(false);
     if (onCourseAdded) onCourseAdded();
 
     // Reset all state
@@ -1221,7 +1278,16 @@ export function CourseDataTable({
             {permissions.canCreateCourse && (
               <CourseSheet
                 mode="add"
-                onSuccess={refreshTableData}
+                onSuccess={async (courseData) => {
+                  // Store course data and open schedule dialog
+                  // Course is NOT created yet - waiting for schedules
+                  if (courseData) {
+                    setPendingCourseData(courseData);
+                    setImportedCoursesForSchedule([courseData]);
+                    setScheduleDialogMode("create");
+                    setShowScheduleAssignment(true);
+                  }
+                }}
                 faculties={faculties}
                 userId={userId}
                 userRole={userRole}
@@ -1295,7 +1361,7 @@ export function CourseDataTable({
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between w-full">
+              <div className="flex -mt-3 items-center justify-between w-full">
                 <span className="text-sm text-gray-600 w-[1100%]">
                   {Math.min(
                     (currentPage - 1) * ITEMS_PER_PAGE + 1,
@@ -1444,12 +1510,17 @@ export function CourseDataTable({
           onOpenChange={(open) => {
             setShowScheduleAssignment(open);
             if (!open) {
-              // If user closes without completing, still refresh
               handleScheduleAssignmentComplete();
+              setPendingCourseData(null);
             }
           }}
-          courses={importedCoursesForSchedule}
+          courses={
+            scheduleDialogMode === "create"
+              ? [pendingCourseData]
+              : importedCoursesForSchedule
+          }
           onComplete={handleScheduleAssignmentComplete}
+          mode={scheduleDialogMode}
         />
 
         <CourseSettingsDialog
@@ -1468,7 +1539,7 @@ export function CourseDataTable({
             mode="edit"
             course={editingCourse}
             onSuccess={() => {
-              refreshTableData();
+              refreshTableData(true);
               setEditingCourse(null);
             }}
             faculties={faculties}

@@ -32,7 +32,6 @@ export function TimePicker({
 
   const handleSelect = (h: string, m: string, p: string) => {
     onChange(`${h}:${m} ${p}`);
-    setOpen(false);
   };
 
   return (
