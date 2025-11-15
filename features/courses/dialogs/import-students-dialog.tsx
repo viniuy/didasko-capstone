@@ -11,7 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Download, AlertCircle } from "lucide-react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 const MAX_PREVIEW_ROWS = 100;
 const EXPECTED_HEADERS = ["Student Number", "Full Name"];
@@ -67,57 +68,66 @@ export function StudentImportDialog({
   const [showStatusDialog, setShowStatusDialog] = useState(false);
 
   const validateHeaders = (headers: string[]): boolean => {
-    const trimmedHeaders = headers.map((h) => h.trim());
+    const trimmedHeaders = headers.map((h) => h?.toString().trim() || "");
     return EXPECTED_HEADERS.every((expected) =>
       trimmedHeaders.includes(expected)
     );
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setSelectedFile(file);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
 
-        if (jsonData.length < 2) {
-          setIsValidFile(false);
-          setPreviewData([]);
-          return;
-        }
-
-        const headers = jsonData[0] as string[];
-        const isValid = validateHeaders(headers);
-        setIsValidFile(isValid);
-
-        if (isValid) {
-          const rows = jsonData.slice(1) as any[][];
-          const formattedData: StudentRow[] = rows
-            .filter((row) => row.length > 0 && row[0])
-            .map((row) => ({
-              "Student Number": String(row[0] || "").trim(),
-              "Full Name": String(row[1] || "").trim(),
-            }));
-
-          setPreviewData(formattedData);
-        } else {
-          setPreviewData([]);
-        }
-      } catch (error) {
-        console.error("Error parsing file:", error);
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
         setIsValidFile(false);
         setPreviewData([]);
+        return;
       }
-    };
 
-    reader.readAsArrayBuffer(file);
+      const rows: any[][] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        rows.push(row.values as any[]);
+      });
+
+      if (rows.length < 2) {
+        setIsValidFile(false);
+        setPreviewData([]);
+        return;
+      }
+
+      // First row is headers (skip index 0 as it's undefined in ExcelJS)
+      const headers = rows[0].slice(1).map((h) => h?.toString().trim() || "");
+      const isValid = validateHeaders(headers);
+      setIsValidFile(isValid);
+
+      if (isValid) {
+        const dataRows = rows.slice(1);
+        const formattedData: StudentRow[] = dataRows
+          .filter((row) => row && row.length > 1 && row[1])
+          .map((row) => ({
+            "Student Number": String(row[1] || "").trim(),
+            "Full Name": String(row[2] || "").trim(),
+          }));
+
+        setPreviewData(formattedData);
+      } else {
+        setPreviewData([]);
+      }
+    } catch (error) {
+      console.error("Error parsing file:", error);
+      setIsValidFile(false);
+      setPreviewData([]);
+    }
   };
 
   const handleImport = async () => {
@@ -130,7 +140,6 @@ export function StudentImportDialog({
     });
 
     try {
-      // Send the data to your API endpoint
       const response = await fetch(
         `/api/courses/${courseSlug}/students/import`,
         {
@@ -167,18 +176,101 @@ export function StudentImportDialog({
     }
   };
 
-  const handleDownloadTemplate = () => {
-    const template = [
-      ["Student Number", "Full Name"],
-      ["2021-00001", "Dela Cruz, Juan A."],
-      ["2021-00002", "Santos, Maria B."],
-      ["2021-00003", "Reyes, Pedro C."],
-    ];
+  const handleDownloadTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Student Import Template");
 
-    const ws = XLSX.utils.aoa_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Students Template");
-    XLSX.writeFile(wb, "student_import_template.xlsx");
+      // Title row
+      worksheet.mergeCells("A1:B1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "Student Import Template";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
+
+      // Instructions row
+      worksheet.mergeCells("A2:B2");
+      const infoRow = worksheet.getCell("A2");
+      infoRow.value =
+        "Fill in student information below. Only students with registered RFID will be imported.";
+      infoRow.font = { italic: true, size: 10 };
+      infoRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      // Date row
+      worksheet.mergeCells("A3:B3");
+      const dateRow = worksheet.getCell("A3");
+      dateRow.value = `Template Generated: ${new Date().toLocaleDateString()}`;
+      dateRow.font = { italic: true, size: 9, color: { argb: "FF666666" } };
+      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      worksheet.addRow([]);
+
+      // Header row
+      const headers = ["Student Number", "Full Name"];
+      const headerRow = worksheet.addRow(headers);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Sample data rows
+      const sampleData = [
+        ["2021-00001", "Dela Cruz, Juan A."],
+        ["2021-00002", "Santos, Maria B."],
+        ["2021-00003", "Reyes, Pedro C."],
+      ];
+
+      sampleData.forEach((data, index) => {
+        const row = worksheet.addRow(data);
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+
+        if ((index + 1) % 2 === 0) {
+          row.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF9FAFB" },
+          };
+        }
+      });
+
+      // Set column widths
+      worksheet.columns = [{ width: 20 }, { width: 30 }];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      saveAs(blob, "student_import_template.xlsx");
+    } catch (error) {
+      console.error("Error generating template:", error);
+    }
   };
 
   const resetDialog = () => {

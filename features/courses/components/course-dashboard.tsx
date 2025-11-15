@@ -4,6 +4,15 @@ import React, { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import toast from "react-hot-toast";
 import {
   Search,
@@ -12,6 +21,7 @@ import {
   ArrowLeft,
   Users,
   UserX,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   ColumnDef,
@@ -32,6 +42,7 @@ import { StudentImportDialog } from "../dialogs/import-students-dialog";
 import { AddStudentSheet } from "../sheets/add-student-sheet";
 import { RemoveStudentSheet } from "../sheets/remove-student-sheet";
 import { TermGradesTab } from "./term-grades";
+import { ExportDialog } from "../dialogs/new-export-dialog";
 import {
   LoadingSpinner,
   StudentAvatar,
@@ -85,6 +96,19 @@ export function CourseDashboard({
   const [studentsWithRecords, setStudentsWithRecords] = useState<
     StudentWithRecords[]
   >([]);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    studentId: true,
+    firstName: true,
+    lastName: true,
+    middleInitial: true,
+    attendance: false,
+    prelims: false,
+    midterm: false,
+    preFinals: false,
+    finals: false,
+  });
+  const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   useEffect(() => {
     if (courseSlug) {
@@ -173,7 +197,6 @@ export function CourseDashboard({
 
   const handleSelectExistingStudent = async (student: Student) => {
     try {
-      // Use the same format as your existing POST endpoint
       await axiosInstance.post(`/courses/${courseSlug}/students`, [
         {
           "Student ID": student.studentId,
@@ -188,6 +211,33 @@ export function CourseDashboard({
     } catch (error: any) {
       throw new Error(error?.response?.data?.error || "Failed to add student");
     }
+  };
+
+  const toggleExportOption = (key: string) => {
+    setExportOptions((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const selectAllBasicInfo = () => {
+    setExportOptions((prev) => ({
+      ...prev,
+      studentId: true,
+      firstName: true,
+      lastName: true,
+      middleInitial: true,
+    }));
+  };
+
+  const selectAllGrades = () => {
+    setExportOptions((prev) => ({
+      ...prev,
+      prelims: true,
+      midterm: true,
+      preFinals: true,
+      finals: true,
+    }));
   };
 
   const handleExport = async () => {
@@ -225,13 +275,48 @@ export function CourseDashboard({
 
       worksheet.addRow([]);
 
-      // Header row
-      const headerRow = worksheet.addRow([
-        "Student ID",
-        "Last Name",
-        "First Name",
-        "Middle Initial",
-      ]);
+      // Build header row based on selected options
+      const headers = [];
+      const columnWidths = [];
+
+      if (exportOptions.studentId) {
+        headers.push("Student ID");
+        columnWidths.push({ width: 15 });
+      }
+      if (exportOptions.lastName) {
+        headers.push("Last Name");
+        columnWidths.push({ width: 20 });
+      }
+      if (exportOptions.firstName) {
+        headers.push("First Name");
+        columnWidths.push({ width: 20 });
+      }
+      if (exportOptions.middleInitial) {
+        headers.push("Middle Initial");
+        columnWidths.push({ width: 15 });
+      }
+      if (exportOptions.attendance) {
+        headers.push("Attendance Rate");
+        columnWidths.push({ width: 18 });
+      }
+      if (exportOptions.prelims) {
+        headers.push("Prelims");
+        columnWidths.push({ width: 12 });
+      }
+      if (exportOptions.midterm) {
+        headers.push("Midterm");
+        columnWidths.push({ width: 12 });
+      }
+      if (exportOptions.preFinals) {
+        headers.push("Pre-Finals");
+        columnWidths.push({ width: 12 });
+      }
+      if (exportOptions.finals) {
+        headers.push("Finals");
+        columnWidths.push({ width: 12 });
+      }
+
+      const headerRow = worksheet.addRow(headers);
       headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
       headerRow.fill = {
         type: "pattern",
@@ -252,12 +337,34 @@ export function CourseDashboard({
 
       // Data rows
       tableData.forEach((student, index) => {
-        const row = worksheet.addRow([
-          student.studentId,
-          student.lastName,
-          student.firstName,
-          student.middleInitial || "",
-        ]);
+        const rowData = [];
+
+        if (exportOptions.studentId) rowData.push(student.studentId);
+        if (exportOptions.lastName) rowData.push(student.lastName);
+        if (exportOptions.firstName) rowData.push(student.firstName);
+        if (exportOptions.middleInitial)
+          rowData.push(student.middleInitial || "");
+
+        if (exportOptions.attendance) {
+          const records = student.attendanceRecords || [];
+          const present = records.filter((r) => r.status === "PRESENT").length;
+          const rate =
+            records.length > 0
+              ? `${Math.round((present / records.length) * 100)}%`
+              : "N/A";
+          rowData.push(rate);
+        }
+
+        if (exportOptions.prelims)
+          rowData.push(student.termGrades?.prelims?.numericGrade || "");
+        if (exportOptions.midterm)
+          rowData.push(student.termGrades?.midterm?.numericGrade || "");
+        if (exportOptions.preFinals)
+          rowData.push(student.termGrades?.preFinals?.numericGrade || "");
+        if (exportOptions.finals)
+          rowData.push(student.termGrades?.finals?.numericGrade || "");
+
+        const row = worksheet.addRow(rowData);
 
         row.eachCell((cell) => {
           cell.border = {
@@ -279,12 +386,7 @@ export function CourseDashboard({
       });
 
       // Set column widths
-      worksheet.columns = [
-        { width: 15 },
-        { width: 20 },
-        { width: 20 },
-        { width: 15 },
-      ];
+      worksheet.columns = columnWidths;
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
@@ -296,6 +398,7 @@ export function CourseDashboard({
       saveAs(blob, filename);
 
       toast.success(`Successfully exported ${tableData.length} students`);
+      setShowExportDialog(false);
     } catch (error) {
       console.error("Export error:", error);
       toast.error("Export failed");
@@ -343,6 +446,58 @@ export function CourseDashboard({
           </div>
         </div>
 
+        {/* Search and Action Buttons - Above tabs */}
+        <div className="flex gap-2 flex-wrap justify-between">
+          <div className="relative w-full sm:w-[400px]">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search students..."
+              value={globalSearchQuery}
+              onChange={(e) => {
+                setGlobalSearchQuery(e.target.value);
+                table.getColumn("lastName")?.setFilterValue(e.target.value);
+              }}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => setShowExportDialog(true)}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+            <Button
+              onClick={() => setShowImportDialog(true)}
+              variant="outline"
+              className="gap-2 border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+            >
+              <Upload className="w-4 h-4" />
+              Import Students
+            </Button>
+            <Button
+              onClick={() => {
+                setShowAddSheet(true);
+                fetchExistingStudents();
+              }}
+              className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
+            >
+              <Users className="w-4 h-4" />
+              Add Student
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowRemoveSheet(true)}
+              className="gap-2 border-red-500 text-red-600 hover:bg-red-50"
+            >
+              <UserX className="w-4 h-4" />
+              Remove
+            </Button>
+          </div>
+        </div>
+
         {/* Main Content Tabs */}
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="grid w-full grid-cols-5">
@@ -355,63 +510,9 @@ export function CourseDashboard({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative w-full sm:w-[400px]">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search students..."
-                  value={
-                    (table.getColumn("lastName")?.getFilterValue() as string) ??
-                    ""
-                  }
-                  onChange={(e) =>
-                    table.getColumn("lastName")?.setFilterValue(e.target.value)
-                  }
-                  className="pl-9"
-                />
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  onClick={handleExport}
-                  className="gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Export
-                </Button>
-                <Button
-                  onClick={() => setShowImportDialog(true)}
-                  variant="outline"
-                  className="gap-2 border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
-                >
-                  <Upload className="w-4 h-4" />
-                  Import Students
-                </Button>
-                <Button
-                  onClick={() => {
-                    setShowAddSheet(true);
-                    fetchExistingStudents();
-                  }}
-                  className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
-                >
-                  <Users className="w-4 h-4" />
-                  Add Student
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowRemoveSheet(true)}
-                  className="gap-2 border-red-500 text-red-600 hover:bg-red-50"
-                >
-                  <UserX className="w-4 h-4" />
-                  Remove
-                </Button>
-              </div>
-            </div>
-
             <AttendanceLegend />
 
-            <div className="rounded-md border">
+            <div className="min-h-[56vh] max-h-[56vh] rounded-md border">
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -502,21 +603,44 @@ export function CourseDashboard({
 
           {/* Term Grade Tabs */}
           <TabsContent value="prelims">
-            <TermGradesTab students={tableData} termKey="prelims" />
+            <TermGradesTab
+              students={tableData}
+              termKey="prelims"
+              globalSearchQuery={globalSearchQuery}
+            />
           </TabsContent>
 
           <TabsContent value="midterm">
-            <TermGradesTab students={tableData} termKey="midterm" />
+            <TermGradesTab
+              students={tableData}
+              termKey="midterm"
+              globalSearchQuery={globalSearchQuery}
+            />
           </TabsContent>
 
           <TabsContent value="prefinals">
-            <TermGradesTab students={tableData} termKey="preFinals" />
+            <TermGradesTab
+              students={tableData}
+              termKey="preFinals"
+              globalSearchQuery={globalSearchQuery}
+            />
           </TabsContent>
 
           <TabsContent value="finals">
-            <TermGradesTab students={tableData} termKey="finals" />
+            <TermGradesTab
+              students={tableData}
+              termKey="finals"
+              globalSearchQuery={globalSearchQuery}
+            />
           </TabsContent>
         </Tabs>
+
+        <ExportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          students={tableData}
+          courseInfo={courseInfo}
+        />
 
         {/* Modals */}
         <AddStudentSheet

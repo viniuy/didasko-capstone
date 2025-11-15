@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -27,14 +27,25 @@ import { StudentAvatar } from "./ui-components";
 interface TermGradesTabProps {
   students: StudentWithGrades[];
   termKey: "prelims" | "midterm" | "preFinals" | "finals";
+  globalSearchQuery?: string; // Add this prop
 }
 
-export const TermGradesTab = ({ students, termKey }: TermGradesTabProps) => {
+export const TermGradesTab = ({
+  students,
+  termKey,
+  globalSearchQuery = "", // Default to empty string
+}: TermGradesTabProps) => {
   const termName =
     termKey === "preFinals" ? "PRE-FINALS" : termKey.toUpperCase();
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 10;
+
+  // Sync local search with global search
+  useEffect(() => {
+    setSearchQuery(globalSearchQuery);
+    setCurrentPage(0); // Reset to first page when search changes
+  }, [globalSearchQuery]);
 
   const hasData = students.some((s) => s.termGrades[termKey]);
 
@@ -66,101 +77,10 @@ export const TermGradesTab = ({ students, termKey }: TermGradesTabProps) => {
   const quizColumns = sampleTerm?.quizScores?.map((q) => q.name) || [];
   const hasExam = sampleTerm?.examScore !== undefined;
 
-  const handleExport = () => {
-    try {
-      const ws_data = [
-        [`${termName} Grades Export`],
-        [""],
-        ["Date:", new Date().toLocaleDateString()],
-        [""],
-        [
-          "Student ID",
-          "Last Name",
-          "First Name",
-          ...ptColumns,
-          ...quizColumns,
-          hasExam ? "Exam" : "",
-          "Final %",
-          "Grade",
-          "Remarks",
-        ].filter(Boolean),
-        ...filteredStudents
-          .map((student) => {
-            const termData = student.termGrades[termKey];
-            if (!termData) return [];
-
-            return [
-              student.studentId,
-              student.lastName,
-              student.firstName,
-              ...ptColumns.map((pt) => {
-                const score = termData.ptScores?.find((p) => p.name === pt);
-                return score?.score !== undefined
-                  ? `${score.score}/${score.maxScore}`
-                  : "—";
-              }),
-              ...quizColumns.map((q) => {
-                const score = termData.quizScores?.find(
-                  (quiz) => quiz.name === q
-                );
-                return score?.score !== undefined
-                  ? `${score.score}/${score.maxScore}`
-                  : "—";
-              }),
-              ...(hasExam
-                ? [
-                    termData.examScore?.score !== undefined
-                      ? `${termData.examScore.score}/${termData.examScore.maxScore}`
-                      : "—",
-                  ]
-                : []),
-              termData.totalPercentage?.toFixed(2) || "—",
-              termData.numericGrade?.toFixed(2) || "—",
-              termData.remarks || "—",
-            ];
-          })
-          .filter((row) => row.length > 0),
-      ];
-
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, termName);
-      XLSX.writeFile(
-        wb,
-        `${termName}_grades_${new Date().toISOString().split("T")[0]}.xlsx`
-      );
-      toast.success("Exported successfully");
-    } catch (error) {
-      toast.error("Export failed");
-    }
-  };
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-[400px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search students..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(0);
-            }}
-            className="pl-9"
-          />
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleExport} className="gap-2">
-            <Download className="w-4 h-4" />
-            Export {termName}
-          </Button>
-        </div>
-      </div>
-
       <div className="rounded-md border">
-        <div className="overflow-x-auto">
+        <div className="min-h-[60vh] max-h-[60vh] overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
