@@ -526,16 +526,13 @@ export function ClassRecordTable({
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIMS");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const useDebouncedCallback = (callback: Function, delay: number) => {
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-    return useCallback(
-      (...args: any[]) => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(() => callback(...args), delay);
-      },
-      [callback, delay]
-    );
-  };
+  const pendingScoresRef = useRef<
+    Map<
+      string,
+      { studentId: string; assessmentId: string; score: number | null }
+    >
+  >(new Map());
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const shownMessagesRef = useRef<Set<string>>(new Set());
   const notifyOnce = (message: string) => {
@@ -635,25 +632,44 @@ export function ClassRecordTable({
     localStorage.setItem("didasko-class-record-tutorial", "completed");
   };
 
-  const saveScoreToAPI = useDebouncedCallback(
-    async (studentId: string, assessmentId: string, score: number | null) => {
-      try {
-        toast.loading("Updating Student Grades...");
-        await axiosInstance.put(`/courses/${courseSlug}/assessment-scores`, {
-          studentId,
-          assessmentId,
-          score,
-        });
-        toast.dismiss();
-        toast.success("Grades updated successfully");
-      } catch (error) {
-        toast.dismiss();
-        toast.error("Failed to save grades");
-        console.error(error);
-      }
-    },
-    3000
-  );
+  const savePendingScores = async () => {
+    if (pendingScoresRef.current.size === 0) return;
+
+    const gradesToSave = Array.from(pendingScoresRef.current.values());
+    pendingScoresRef.current.clear();
+
+    try {
+      toast.loading("Saving grades...", { id: "save-grades" });
+      await axiosInstance.post(
+        `/courses/${courseSlug}/assessment-scores/bulk`,
+        { scores: gradesToSave }
+      );
+      toast.success("Grades saved successfully", { id: "save-grades" });
+    } catch (error) {
+      toast.error("Failed to save grades", { id: "save-grades" });
+      console.error(error);
+    }
+  };
+
+  const queueScoreForSaving = (
+    studentId: string,
+    assessmentId: string,
+    score: number | null
+  ) => {
+    // Add to pending scores
+    const key = `${studentId}:${assessmentId}`;
+    pendingScoresRef.current.set(key, { studentId, assessmentId, score });
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set new timeout to save after 2 seconds of no changes
+    saveTimeoutRef.current = setTimeout(() => {
+      savePendingScores();
+    }, 1000);
+  };
 
   const saveBulkScoresToAPI = async (
     grades: Array<{
@@ -663,19 +679,14 @@ export function ClassRecordTable({
     }>
   ) => {
     try {
-      toast.loading("Updating Student Grades...");
-      // Send all scores in one POST request
+      toast.loading("Updating grades...", { id: "bulk-save" });
       await axiosInstance.post(
         `/courses/${courseSlug}/assessment-scores/bulk`,
-        {
-          scores: grades,
-        }
+        { scores: grades }
       );
-      toast.dismiss();
-      toast.success("Grades updated successfully");
+      toast.success("Grades updated successfully", { id: "bulk-save" });
     } catch (error) {
-      toast.dismiss();
-      toast.error("Failed to save grades");
+      toast.error("Failed to save grades", { id: "bulk-save" });
       console.error(error);
     }
   };
@@ -736,7 +747,15 @@ export function ClassRecordTable({
       updated.set(key, { studentId, assessmentId, score });
     }
     setScores(updated);
-    saveScoreToAPI(studentId, assessmentId, score);
+    queueScoreForSaving(studentId, assessmentId, score);
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      if (pendingScoresRef.current.size > 0) {
+        savePendingScores();
+      }
+    };
   };
 
   const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
