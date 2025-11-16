@@ -46,60 +46,6 @@ function IndividualRecitationContent({ course_slug }: { course_slug: string }) {
     }
   }, [course_slug]);
 
-  if (loading) {
-    return (
-      <SidebarProvider open={open} onOpenChange={setOpen}>
-        <div className="relative h-screen w-screen overflow-hidden">
-          <AppSidebar />
-          <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
-            <div className="flex flex-col flex-grow px-4">
-              <Header />
-              <div className="flex items-center justify-between mb-8">
-                <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
-                  Recitation
-                </h1>
-                <h1 className="text-2xl font-bold tracking-tight text-[#A0A0A0]">
-                  {format(new Date(), "EEEE, MMMM d")}
-                </h1>
-              </div>
-              <div className="flex-1 overflow-y-auto pb-6">
-                <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#A0A0A0]" />
-                  <div className="text-center space-y-2 mt-4">
-                    <p className="text-lg font-medium text-[#A0A0A0]">
-                      Loading Course Information
-                    </p>
-                    <p className="text-sm text-[#A0A0A0]/70">
-                      Please wait while we fetch your course details...
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </main>
-        </div>
-      </SidebarProvider>
-    );
-  }
-
-  if (!course) {
-    return (
-      <SidebarProvider open={open} onOpenChange={setOpen}>
-        <div className="relative h-screen w-screen overflow-hidden">
-          <AppSidebar />
-          <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
-            <div className="flex flex-col flex-grow px-4">
-              <Header />
-              <div className="flex items-center justify-center h-full">
-                <p className="text-muted-foreground">Course not found</p>
-              </div>
-            </div>
-          </main>
-        </div>
-      </SidebarProvider>
-    );
-  }
-
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="relative h-screen w-screen overflow-hidden">
@@ -117,15 +63,45 @@ function IndividualRecitationContent({ course_slug }: { course_slug: string }) {
             </div>
 
             <div className="flex-1 overflow-y-auto pb-6">
-              <GradingTable
-                courseId={course.id}
-                courseCode={course.code}
-                courseSection={course.section}
-                courseSlug={course.slug}
-                selectedDate={selectedDate}
-                onDateSelect={setSelectedDate}
-                isRecitationCriteria={true}
-              />
+              {loading ? (
+                <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px]">
+                  <div className="flex flex-col items-center gap-4 mt-40">
+                    <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
+                      Loading Recitation Data...
+                    </h2>
+                    <p
+                      className="text-lg text-gray-600 animate-pulse"
+                      style={{ animationDelay: "150ms" }}
+                    >
+                      Please sit tight while we are getting things ready for
+                      you...
+                    </p>
+                    <div className="flex gap-2 mt-4">
+                      {[0, 150, 300].map((delay, i) => (
+                        <div
+                          key={i}
+                          className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+                          style={{ animationDelay: `${delay}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : !course ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-muted-foreground">Course not found</p>
+                </div>
+              ) : (
+                <GradingTable
+                  courseId={course.id}
+                  courseCode={course.code}
+                  courseSection={course.section}
+                  courseSlug={course.slug}
+                  selectedDate={selectedDate}
+                  onDateSelect={setSelectedDate}
+                  isRecitationCriteria={true}
+                />
+              )}
             </div>
           </div>
 

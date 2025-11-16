@@ -34,7 +34,6 @@ import {
   gradesService,
   groupsService,
 } from "@/lib/services/client";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import GradingTableHeader from "./grading-table-header";
 import GradingTableRow from "./grading-table-row";
 import * as XLSX from "xlsx";
@@ -359,6 +358,8 @@ export function GradingTable({
     ],
   });
   const [criteriaLoading, setCriteriaLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true); // New: Initial loading state
+  const [hasSelectedCriteria, setHasSelectedCriteria] = useState(false); // New: Track if criteria has been selected
   const [loadingMessage, setLoadingMessage] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState<{
@@ -385,6 +386,7 @@ export function GradingTable({
   const [totalStudents, setTotalStudents] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [isLoadingGroup, setIsLoadingGroup] = useState(false);
   const [previousScores, setPreviousScores] = useState<Record<
     string,
     any
@@ -456,11 +458,16 @@ export function GradingTable({
         // 1. Fetch students (only if groupId changed or refreshKey changed)
         let studentsData: Student[] = [];
         if (isGroupView && groupId) {
-          const studentsRes = await groupsService.getGroupStudents(
-            courseSlug,
-            groupId
-          );
-          studentsData = studentsRes.students || [];
+          setIsLoadingGroup(true);
+          try {
+            const studentsRes = await groupsService.getGroupStudents(
+              courseSlug,
+              groupId
+            );
+            studentsData = studentsRes.students || [];
+          } finally {
+            setIsLoadingGroup(false);
+          }
         } else {
           const studentsRes = await coursesService.getStudents(courseSlug);
           studentsData = studentsRes.students || [];
@@ -529,6 +536,8 @@ export function GradingTable({
         setSelectedReport("");
         setShowCriteriaDialog(false);
         setSavedReports([]);
+        setInitialLoading(false);
+        setHasSelectedCriteria(false);
         return;
       }
 
@@ -540,12 +549,20 @@ export function GradingTable({
         selected.setHours(0, 0, 0, 0);
         if (reportDate.getTime() === selected.getTime()) {
           // Active report matches selected date, no need to refetch
+          setInitialLoading(false);
           return;
         }
       }
 
+      // If criteria has already been selected, don't show dialog again
+      if (hasSelectedCriteria && activeReport) {
+        setInitialLoading(false);
+        return;
+      }
+
+      setInitialLoading(true);
       setCriteriaLoading(true);
-      setShowCriteriaDialog(true); // Always show dialog to let user select
+
       try {
         // Fetch all criteria for this course
         let allReports;
@@ -570,6 +587,23 @@ export function GradingTable({
           return reportDate.getTime() === selected.getTime();
         });
         setSavedReports(filteredReports);
+
+        // Auto-select the first report if one exists and no criteria has been selected
+        if (
+          filteredReports.length > 0 &&
+          !hasSelectedCriteria &&
+          !activeReport
+        ) {
+          const firstReport = filteredReports[0];
+          setActiveReport(firstReport);
+          setRubricDetails(firstReport.rubrics);
+          setSelectedReport(firstReport.id);
+          setHasSelectedCriteria(true);
+          setShowCriteriaDialog(false);
+        } else if (!hasSelectedCriteria) {
+          // Only show dialog if no criteria has been selected yet and no report was auto-selected
+          setShowCriteriaDialog(true);
+        }
       } catch (error) {
         console.error("Error fetching criteria:", error);
         toast.error("Failed to load saved criteria", {
@@ -582,6 +616,7 @@ export function GradingTable({
         });
       } finally {
         setCriteriaLoading(false);
+        setInitialLoading(false);
       }
     };
     checkExistingCriteria();
@@ -593,11 +628,14 @@ export function GradingTable({
     isRecitationCriteria,
     courseSlug,
     activeReport?.id,
+    hasSelectedCriteria,
   ]);
 
-  // Reset scores when date changes
+  // Reset scores and criteria selection when date changes
   useEffect(() => {
     setScores({});
+    setHasSelectedCriteria(false); // Reset when date changes
+    setActiveReport(null); // Reset active report when date changes
   }, [selectedDate]);
 
   // Update originalScores when scores are first loaded
@@ -734,6 +772,7 @@ export function GradingTable({
       if (selected) {
         setActiveReport(selected);
         setRubricDetails(selected.rubrics);
+        setHasSelectedCriteria(true); // Mark criteria as selected
       }
       setShowCriteriaDialog(false);
       // Add a small delay to ensure smooth transition
@@ -1163,6 +1202,7 @@ export function GradingTable({
       setActiveReport(created);
       setRubricDetails(created.rubrics);
       setSelectedReport(created.id);
+      setHasSelectedCriteria(true); // Mark criteria as selected
       setShowCriteriaDialog(false);
       setNewReport({
         name: "",
@@ -2238,11 +2278,6 @@ export function GradingTable({
     setShowImageDialog(true);
   };
 
-  // Show main loading spinner when initially loading
-  if (isLoading && Object.keys(scores).length === 0 && students.length === 0) {
-    return <LoadingSpinner />;
-  }
-
   return (
     <div className="min-h-screen w-full p-0">
       <div className="max-w-6xl mx-auto">
@@ -2254,7 +2289,10 @@ export function GradingTable({
           onSearchChange={setSearchQuery}
           onFilterClick={() => setIsFilterOpen(true)}
           onDateSelect={() => onDateSelect?.(selectedDate)}
-          onManageReport={() => setShowCriteriaDialog(true)}
+          onManageReport={() => {
+            setShowCriteriaDialog(true);
+            // Allow reopening dialog when manually triggered
+          }}
           filterCount={
             Number(gradeFilter.passed) +
             Number(gradeFilter.failed) +
@@ -2356,7 +2394,7 @@ export function GradingTable({
                 />
                 {isGroupView ? (
                   <tbody>
-                    {isLoadingStudents ? (
+                    {isLoadingGroup || isLoadingStudents ? (
                       <tr>
                         <td
                           colSpan={rubricDetails.length + 3}
@@ -2364,7 +2402,11 @@ export function GradingTable({
                         >
                           <div className="flex flex-col items-center gap-2">
                             <Loader2 className="h-8 w-8 animate-spin text-[#124A69]" />
-                            <p className="text-gray-500">Loading students...</p>
+                            <p className="text-gray-500">
+                              {isLoadingGroup
+                                ? "Loading group data..."
+                                : "Loading students..."}
+                            </p>
                           </div>
                         </td>
                       </tr>

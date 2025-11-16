@@ -6,6 +6,7 @@ import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { format } from "date-fns";
+import { Loader2 } from "lucide-react";
 import { GroupHeader } from "@/features/groups/components/group-header";
 import { GroupGrid } from "@/features/groups/components/group-grid";
 import type {
@@ -146,29 +147,55 @@ export default function GroupGradingPage({
             </div>
 
             <div className="flex-1 overflow-y-auto pb-6">
-              <div className="bg-white rounded-lg shadow-md">
-                <GroupHeader
-                  courseCode={course?.code || ""}
-                  courseSection={course?.section || ""}
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                />
-
-                <div className="p-6">
-                  <GroupGrid
-                    groups={filteredGroups}
-                    isLoading={isLoading || isLoadingData}
-                    courseCode={resolvedParams.course_slug}
-                    courseSection={course?.section || ""}
-                    excludedStudentIds={excludedStudentIds}
-                    nextGroupNumber={nextGroupNumber}
-                    onGroupAdded={refreshData}
-                    students={students}
-                    groupMeta={groupMeta}
-                    totalStudents={students.length}
-                  />
+              {isLoadingData ? (
+                <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px]">
+                  <div className="flex flex-col items-center gap-4 mt-40">
+                    <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
+                      Loading Student Groups...
+                    </h2>
+                    <p
+                      className="text-lg text-gray-600 animate-pulse"
+                      style={{ animationDelay: "150ms" }}
+                    >
+                      Please sit tight while we are getting things ready for
+                      you...
+                    </p>
+                    <div className="flex gap-2 mt-4">
+                      {[0, 150, 300].map((delay, i) => (
+                        <div
+                          key={i}
+                          className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+                          style={{ animationDelay: `${delay}ms` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow-md">
+                  <GroupHeader
+                    courseCode={course?.code || ""}
+                    courseSection={course?.section || ""}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                  />
+
+                  <div className="p-6">
+                    <GroupGrid
+                      groups={filteredGroups}
+                      isLoading={isLoading}
+                      courseCode={resolvedParams.course_slug}
+                      courseSection={course?.section || ""}
+                      excludedStudentIds={excludedStudentIds}
+                      nextGroupNumber={nextGroupNumber}
+                      onGroupAdded={refreshData}
+                      students={students}
+                      groupMeta={groupMeta}
+                      totalStudents={students.length}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
