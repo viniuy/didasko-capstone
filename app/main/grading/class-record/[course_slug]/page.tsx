@@ -6,7 +6,7 @@ import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
-import axiosInstance from "@/lib/axios";
+import { coursesService } from "@/lib/services/client";
 import { ClassRecordTable } from "@/features/grading/components/class-record";
 
 export default function GradebookCoursePage({
@@ -32,11 +32,10 @@ export default function GradebookCoursePage({
     const fetchCourseId = async () => {
       try {
         console.log("Fetching course ID for slug:", resolvedParams.course_slug);
-        const response = await axiosInstance.get(
-          `/courses/${resolvedParams.course_slug}`
+        const course = await coursesService.getBySlug(
+          resolvedParams.course_slug
         );
-        if (response.data) {
-          const course = response.data;
+        if (course) {
           const fetchedCourseId = course.id;
           setCourseId(fetchedCourseId);
           setCourseInfo({

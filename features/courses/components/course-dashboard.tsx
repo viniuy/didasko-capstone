@@ -36,8 +36,8 @@ import {
 } from "@tanstack/react-table";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import axiosInstance from "@/lib/axios";
 import { useRouter } from "next/navigation";
+import { coursesService, studentsService } from "@/lib/services/client";
 import { StudentImportDialog } from "../dialogs/import-students-dialog";
 import { AddStudentSheet } from "../sheets/add-student-sheet";
 import { RemoveStudentSheet } from "../sheets/remove-student-sheet";
@@ -119,10 +119,8 @@ export function CourseDashboard({
   const fetchCourseData = async () => {
     try {
       setIsLoading(true);
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/course-analytics`
-      );
-      const { course, stats, students } = response.data;
+      const response = await coursesService.getAnalytics(courseSlug);
+      const { course, stats, students } = response;
       setCourseInfo(course);
       setStats(stats);
       setTableData(students);
@@ -146,9 +144,9 @@ export function CourseDashboard({
 
   const fetchExistingStudents = async () => {
     try {
-      const response = await axiosInstance.get("/students");
+      const response = await studentsService.getStudents();
       setExistingStudents(
-        (response.data.students || []).filter((s: Student) => s.rfid_id)
+        (response.students || []).filter((s: Student) => s.rfid_id)
       );
     } catch (error) {
       toast.error("Failed to load students");
@@ -197,7 +195,7 @@ export function CourseDashboard({
 
   const handleSelectExistingStudent = async (student: Student) => {
     try {
-      await axiosInstance.post(`/courses/${courseSlug}/students`, [
+      await studentsService.importToCourse(courseSlug, [
         {
           "Student ID": student.studentId,
           "First Name": student.firstName,

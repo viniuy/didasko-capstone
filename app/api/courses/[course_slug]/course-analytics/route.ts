@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { getCourseAnalytics } from "@/lib/services";
 
 // ==================== Types ====================
 interface TermGradeData {
@@ -269,80 +267,8 @@ export async function GET(
 
     const { course_slug } = await params;
 
-    // Fetch course with all related data
-    const course = await prisma.course.findUnique({
-      where: { slug: course_slug },
-      include: {
-        faculty: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            department: true,
-          },
-        },
-        students: {
-          select: {
-            id: true,
-            studentId: true,
-            lastName: true,
-            firstName: true,
-            middleInitial: true,
-            image: true,
-            rfid_id: true,
-          },
-        },
-        schedules: true,
-        attendance: {
-          include: {
-            student: {
-              select: {
-                id: true,
-                studentId: true,
-              },
-            },
-          },
-        },
-        termConfigs: {
-          include: {
-            termGrades: {
-              include: {
-                student: {
-                  select: {
-                    id: true,
-                    studentId: true,
-                  },
-                },
-              },
-            },
-            assessments: {
-              include: {
-                scores: {
-                  include: {
-                    student: {
-                      select: {
-                        id: true,
-                        studentId: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        grades: {
-          include: {
-            student: {
-              select: {
-                id: true,
-                studentId: true,
-              },
-            },
-          },
-        },
-      },
-    });
+    // Fetch course with all related data using service
+    const course = await getCourseAnalytics(course_slug);
 
     if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
@@ -419,7 +345,5 @@ export async function GET(
       { error: "Failed to fetch course analytics" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

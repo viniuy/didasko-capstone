@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { prisma } from "@/lib/prisma";
+import { getAssessmentScores } from "@/lib/services";
 
 export async function GET(
   req: NextRequest,
@@ -15,66 +15,11 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const course = await prisma.course.findUnique({
-      where: { slug: course_slug },
-      select: { id: true },
-    });
+    const scoresMap = await getAssessmentScores(course_slug);
 
-    if (!course) {
+    if (!scoresMap) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
-
-    // 1. Get all assessment scores
-    const assessmentScores = await prisma.assessmentScore.findMany({
-      where: {
-        assessment: {
-          termConfig: {
-            courseId: course.id,
-          },
-        },
-      },
-      select: {
-        studentId: true,
-        assessmentId: true,
-        score: true,
-      },
-    });
-
-    // 2. Get all criteria scores (from Grade model)
-    const criteriaScores = await prisma.grade.findMany({
-      where: {
-        courseId: course.id,
-      },
-      select: {
-        studentId: true,
-        criteriaId: true,
-        value: true, // This is the percentage (0-100)
-      },
-    });
-
-    // 3. Transform to Map-friendly format
-    const scoresMap: Record<string, any> = {};
-
-    // Add assessment scores with format: studentId:assessmentId
-    assessmentScores.forEach((score) => {
-      const key = `${score.studentId}:${score.assessmentId}`;
-      scoresMap[key] = {
-        studentId: score.studentId,
-        assessmentId: score.assessmentId,
-        score: score.score, // Raw score
-      };
-    });
-
-    // 4. Add criteria scores with format: studentId:criteria:criteriaId
-    // Store as percentage (0-100)
-    criteriaScores.forEach((grade) => {
-      const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
-      scoresMap[key] = {
-        studentId: grade.studentId,
-        assessmentId: `criteria:${grade.criteriaId}`,
-        score: grade.value, // Percentage value (0-100)
-      };
-    });
 
     return NextResponse.json(scoresMap);
   } catch (error) {
@@ -85,6 +30,8 @@ export async function GET(
     );
   }
 }
+
+import { saveAssessmentScore } from "@/lib/services";
 
 // PUT - Save or update a single assessment score
 export async function PUT(
@@ -108,68 +55,27 @@ export async function PUT(
       );
     }
 
-    // Verify assessment exists
-    const assessment = await prisma.assessment.findUnique({
-      where: { id: assessmentId },
-      select: { maxScore: true },
-    });
-
-    if (!assessment) {
-      return NextResponse.json(
-        { error: "Assessment not found" },
-        { status: 404 }
-      );
-    }
-
-    // Validate score doesn't exceed max
-    if (score !== null && score > assessment.maxScore) {
-      return NextResponse.json(
-        { error: `Score cannot exceed max score of ${assessment.maxScore}` },
-        { status: 400 }
-      );
-    }
-
-    // If score is null, delete the record
-    if (score === null) {
-      await prisma.assessmentScore.deleteMany({
-        where: {
-          studentId,
-          assessmentId,
-        },
-      });
-      return NextResponse.json({ success: true, deleted: true });
-    }
-
-    // Upsert the score
-    const assessmentScore = await prisma.assessmentScore.upsert({
-      where: {
-        assessmentId_studentId: {
-          assessmentId,
-          studentId,
-        },
-      },
-      create: {
+    try {
+      const result = await saveAssessmentScore({
         studentId,
         assessmentId,
         score,
-      },
-      update: {
-        score,
-      },
-    });
+      });
 
-    return NextResponse.json({
-      success: true,
-      score: {
-        studentId: assessmentScore.studentId,
-        assessmentId: assessmentScore.assessmentId,
-        score: assessmentScore.score,
-      },
-    });
-  } catch (error) {
+      return NextResponse.json(result);
+    } catch (error: any) {
+      if (error.message.includes("not found")) {
+        return NextResponse.json({ error: error.message }, { status: 404 });
+      }
+      if (error.message.includes("cannot exceed")) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
+  } catch (error: any) {
     console.error("Error saving assessment score:", error);
     return NextResponse.json(
-      { error: "Failed to save score" },
+      { error: error.message || "Failed to save score" },
       { status: 500 }
     );
   }

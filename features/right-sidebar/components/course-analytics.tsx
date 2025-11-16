@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UserCheck, TrendingUp, UserX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import axiosInstance from "@/lib/axios";
+import { coursesService } from "@/lib/services/client";
 
 interface CourseStats {
   totalStudents: number;
@@ -67,11 +67,9 @@ export default function CourseAnalytics({
   const fetchStats = async () => {
     try {
       setIsLoading(true);
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/course-analytics`
-      );
-      setStats(response.data.stats);
-      setCourseInfo(response.data.course);
+      const response = await coursesService.getAnalytics(courseSlug);
+      setStats(response.stats);
+      setCourseInfo(response.course);
     } catch (error) {
       console.error("Failed to load course stats:", error);
     } finally {

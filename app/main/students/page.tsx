@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import toast from "react-hot-toast";
+import { studentsService } from "@/lib/services/client";
 
 interface Student {
   id: string;
@@ -108,23 +109,20 @@ export default function StudentsPage() {
   // Fetch all students from API
   const fetchStudents = async () => {
     try {
-      const response = await fetch("/api/students");
-      if (response.ok) {
-        const data = await response.json();
-        const studentList = Array.isArray(data) ? data : data.students || [];
+      const data = await studentsService.getStudents();
+      const studentList = Array.isArray(data) ? data : data.students || [];
 
-        const mappedStudents: Student[] = studentList.map((s: any) => ({
-          id: s.id,
-          rfid_id: s.rfid_id || null,
-          lastName: s.lastName,
-          firstName: s.firstName,
-          middleInitial: s.middleInitial || "",
-          studentImage: s.image,
-          studentId: s.studentId,
-        }));
+      const mappedStudents: Student[] = studentList.map((s: any) => ({
+        id: s.id,
+        rfid_id: s.rfid_id || null,
+        lastName: s.lastName,
+        firstName: s.firstName,
+        middleInitial: s.middleInitial || "",
+        studentImage: s.image,
+        studentId: s.studentId,
+      }));
 
-        setStudents(mappedStudents);
-      }
+      setStudents(mappedStudents);
     } catch (error) {
       console.error("Error fetching students:", error);
       toast.error("Failed to load students");
@@ -278,17 +276,8 @@ export default function StudentsPage() {
         }
 
         try {
-          const response = await fetch("/api/students", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(studentData),
-          });
-
-          if (response.ok) {
-            successCount++;
-          } else {
-            errorCount++;
-          }
+          await studentsService.create(studentData);
+          successCount++;
         } catch (error) {
           errorCount++;
         }
@@ -470,31 +459,16 @@ export default function StudentsPage() {
       let response;
       if (viewMode === "editing" && selectedStudent?.id) {
         // Update existing student
-        response = await fetch(`/api/students/${selectedStudent.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(studentData),
-        });
+        await studentsService.update(selectedStudent.id, studentData);
+        toast.success("Student updated successfully!");
       } else {
         // Create new student
-        response = await fetch("/api/students", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(studentData),
-        });
+        await studentsService.create(studentData);
+        toast.success("Student created successfully!");
       }
 
-      if (response.ok) {
-        const result = await response.json();
-        const action = viewMode === "editing" ? "updated" : "created";
-        toast.success(`Student ${action} successfully!`);
-
-        await fetchStudents();
-        resetToIdle();
-      } else {
-        const errorData = await response.json();
-        toast.error(`Error: ${errorData.error}`);
-      }
+      await fetchStudents();
+      resetToIdle();
     } catch (error) {
       console.error("Error submitting student:", error);
       toast.error("Failed to save student. Please try again.");
@@ -510,20 +484,10 @@ export default function StudentsPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/students/rfid/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rfid: parseInt(scannedRfid, 10),
-          studentId: selectedStudent.id,
-        }),
+      await studentsService.assignRfid({
+        rfid: parseInt(scannedRfid, 10),
+        studentId: selectedStudent.id,
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to assign RFID");
-      }
 
       toast.success(`RFID assigned successfully!`);
       await fetchStudents();

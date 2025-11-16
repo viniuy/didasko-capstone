@@ -11,7 +11,7 @@ import { toast } from "react-hot-toast";
 import { Group } from "@/shared/types/groups";
 import { GradingTable } from "@/features/grading/components/grading-table";
 import { useRouter } from "next/navigation";
-import axiosInstance from "@/lib/axios";
+import { coursesService, groupsService } from "@/lib/services/client";
 
 interface Course {
   id: string;
@@ -63,32 +63,33 @@ export default function GroupGradingPage({
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const [courseRes, groupRes] = await Promise.all([
-          axiosInstance.get(`/courses/${resolvedParams.course_slug}`),
-          axiosInstance.get(
-            `/courses/${resolvedParams.course_slug}/groups/${resolvedParams.group_id}`
+        const [course, groupData] = await Promise.all([
+          coursesService.getBySlug(resolvedParams.course_slug),
+          groupsService.getGroup(
+            resolvedParams.course_slug,
+            resolvedParams.group_id
           ),
         ]);
-        setCourse(courseRes.data);
-        if (groupRes.data) {
+        setCourse(course);
+        if (groupData) {
           const transformedGroup: Group = {
-            id: groupRes.data.id,
-            number: groupRes.data.number,
-            name: groupRes.data.name,
-            students: groupRes.data.students.map((student: any) => ({
+            id: groupData.id,
+            number: groupData.number,
+            name: groupData.name,
+            students: groupData.students.map((student: any) => ({
               id: student.id,
               firstName: student.firstName,
               lastName: student.lastName,
               middleInitial: student.middleInitial,
               image: student.image,
             })),
-            leader: groupRes.data.leader
+            leader: groupData.leader
               ? {
-                  id: groupRes.data.leader.id,
-                  firstName: groupRes.data.leader.firstName,
-                  lastName: groupRes.data.leader.lastName,
-                  middleInitial: groupRes.data.leader.middleInitial,
-                  image: groupRes.data.leader.image,
+                  id: groupData.leader.id,
+                  firstName: groupData.leader.firstName,
+                  lastName: groupData.leader.lastName,
+                  middleInitial: groupData.leader.middleInitial,
+                  image: groupData.leader.image,
                 }
               : null,
           };

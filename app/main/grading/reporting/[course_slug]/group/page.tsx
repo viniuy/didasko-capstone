@@ -8,7 +8,13 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { format } from "date-fns";
 import { GroupHeader } from "@/features/groups/components/group-header";
 import { GroupGrid } from "@/features/groups/components/group-grid";
-import type { Student, GroupMeta, Group, Course } from "@/features/groups/types";
+import type {
+  Student,
+  GroupMeta,
+  Group,
+  Course,
+} from "@/features/groups/types";
+import { groupsService } from "@/lib/services/client";
 
 export default function GroupGradingPage({
   params,
@@ -21,7 +27,7 @@ export default function GroupGradingPage({
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [groups, setGroups] = React.useState<Group[]>([]);
-  
+
   // State for students and group metadata
   const [students, setStudents] = React.useState<Student[]>([]);
   const [groupMeta, setGroupMeta] = React.useState<GroupMeta>({
@@ -39,37 +45,23 @@ export default function GroupGradingPage({
         setIsLoading(true);
         setIsLoadingData(true);
 
-        // Fetch course
-        const courseResponse = await fetch(
-          `/api/courses/${resolvedParams.course_slug}`
+        // Fetch all data using batched service
+        const { course, groups, students, meta } =
+          await groupsService.getCourseWithGroupsData(
+            resolvedParams.course_slug
+          );
+
+        setCourse(course);
+        setGroups(groups || []);
+        setStudents(students || []);
+        setGroupMeta(
+          meta || {
+            names: [],
+            numbers: [],
+            usedNames: [],
+            usedNumbers: [],
+          }
         );
-        if (!courseResponse.ok) throw new Error("Failed to fetch course");
-        const courseData = await courseResponse.json();
-        setCourse(courseData);
-
-        // Fetch groups, students, and metadata in parallel
-        const [groupsRes, studentsRes, metaRes] = await Promise.all([
-          fetch(`/api/courses/${resolvedParams.course_slug}/groups`),
-          fetch(`/api/courses/${resolvedParams.course_slug}/students`),
-          fetch(`/api/courses/${resolvedParams.course_slug}/groups/meta`),
-        ]);
-
-        if (!groupsRes.ok) throw new Error("Failed to fetch groups");
-        if (!studentsRes.ok) throw new Error("Failed to fetch students");
-        if (!metaRes.ok) throw new Error("Failed to fetch metadata");
-
-        const groupsData = await groupsRes.json();
-        const studentsData = await studentsRes.json();
-        const metaData = await metaRes.json();
-
-        setGroups(groupsData);
-        setStudents(studentsData.students || []);
-        setGroupMeta(metaData || {
-          names: [],
-          numbers: [],
-          usedNames: [],
-          usedNumbers: [],
-        });
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -99,7 +91,7 @@ export default function GroupGradingPage({
 
   // Compute all student IDs already in a group
   const excludedStudentIds = groups.flatMap((g) => g.students.map((s) => s.id));
-  
+
   // Compute next group number (max + 1)
   const maxGroupNumber =
     groups.length > 0
@@ -112,28 +104,21 @@ export default function GroupGradingPage({
     try {
       setIsLoading(true);
 
-      const [groupsRes, studentsRes, metaRes] = await Promise.all([
-        fetch(`/api/courses/${resolvedParams.course_slug}/groups`),
-        fetch(`/api/courses/${resolvedParams.course_slug}/students`),
-        fetch(`/api/courses/${resolvedParams.course_slug}/groups/meta`),
-      ]);
+      // Fetch all data using batched service
+      const { course, groups, students, meta } =
+        await groupsService.getCourseWithGroupsData(resolvedParams.course_slug);
 
-      if (!groupsRes.ok) throw new Error("Failed to fetch groups");
-      if (!studentsRes.ok) throw new Error("Failed to fetch students");
-      if (!metaRes.ok) throw new Error("Failed to fetch metadata");
-
-      const groupsData = await groupsRes.json();
-      const studentsData = await studentsRes.json();
-      const metaData = await metaRes.json();
-
-      setGroups(groupsData);
-      setStudents(studentsData.students || []);
-      setGroupMeta(metaData || {
-        names: [],
-        numbers: [],
-        usedNames: [],
-        usedNumbers: [],
-      });
+      setCourse(course);
+      setGroups(groups || []);
+      setStudents(students || []);
+      setGroupMeta(
+        meta || {
+          names: [],
+          numbers: [],
+          usedNames: [],
+          usedNumbers: [],
+        }
+      );
     } catch (error) {
       console.error("Error refreshing data:", error);
     } finally {

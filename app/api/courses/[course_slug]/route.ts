@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { prisma } from "@/lib/prisma";
-import { Course, CourseUpdateInput } from "@/shared/types/course";
+import { getCourseBySlug, updateCourse, deleteCourse } from "@/lib/services";
+import { CourseUpdateInput } from "@/shared/types/course";
+
 //@ts-ignore
 export async function GET(request: Request, { params }: { params }) {
   const { course_slug } = await params;
@@ -12,23 +13,7 @@ export async function GET(request: Request, { params }: { params }) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const course = await prisma.course.findUnique({
-    where: { slug: course_slug },
-    include: {
-      faculty: {
-        select: { id: true, name: true, email: true, department: true },
-      },
-      students: {
-        select: {
-          id: true,
-          lastName: true,
-          firstName: true,
-          middleInitial: true,
-        },
-      },
-      schedules: true,
-    },
-  });
+  const course = await getCourseBySlug(course_slug);
 
   if (!course)
     return NextResponse.json({ error: "Course not found" }, { status: 404 });
@@ -66,30 +51,8 @@ export async function PUT(
       );
     }
 
-    // Generate new slug
-    const newSlug = `${code}-${academicYear}-${section}`.toLowerCase();
-
-    // Check if new slug already exists (excluding current course)
-    const existingCourse = await prisma.course.findFirst({
-      where: {
-        slug: newSlug,
-        NOT: { slug: course_slug },
-      },
-    });
-
-    if (existingCourse) {
-      return NextResponse.json(
-        {
-          error:
-            "Course with this code, academic year, and section already exists",
-        },
-        { status: 400 }
-      );
-    }
-
-    const course = await prisma.course.update({
-      where: { slug: course_slug },
-      data: {
+    try {
+      const course = await updateCourse(course_slug, {
         code,
         title,
         room,
@@ -97,34 +60,19 @@ export async function PUT(
         section,
         facultyId,
         academicYear,
-        slug: newSlug,
-      },
-      include: {
-        faculty: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            department: true,
-          },
-        },
-        students: {
-          select: {
-            id: true,
-            lastName: true,
-            firstName: true,
-            middleInitial: true,
-          },
-        },
-        schedules: true,
-      },
-    });
+      });
 
-    return NextResponse.json(course);
-  } catch (error) {
+      return NextResponse.json(course);
+    } catch (error: any) {
+      if (error.message.includes("already exists")) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
+  } catch (error: any) {
     console.error("Error updating course:", error);
     return NextResponse.json(
-      { error: "Failed to update course" },
+      { error: error.message || "Failed to update course" },
       { status: 500 }
     );
   }
@@ -139,9 +87,7 @@ export async function DELETE(request: Request, { params }: { params }) {
 
     const { course_slug } = await params;
 
-    await prisma.course.delete({
-      where: { slug: course_slug },
-    });
+    await deleteCourse(course_slug);
 
     return NextResponse.json({ message: "Course deleted successfully" });
   } catch (error) {

@@ -30,8 +30,8 @@ import { CourseSheet } from "./course-sheet";
 import { CourseStatus } from "@prisma/client";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
-import axiosInstance from "@/lib/axios";
 import { useRouter } from "next/navigation";
+import { coursesService, usersService } from "@/lib/services/client";
 import {
   Pagination,
   PaginationContent,
@@ -410,12 +410,12 @@ export function CourseDataTable({
       try {
         setIsInitialLoading(true);
 
-        const [facultyResponse] = await Promise.all([
-          axiosInstance.get("/users?role=FACULTY"),
-        ]);
+        const facultyResponse = await usersService.getUsers({
+          role: "FACULTY",
+        });
 
-        if (Array.isArray(facultyResponse.data)) {
-          setFaculties(facultyResponse.data);
+        if (Array.isArray(facultyResponse)) {
+          setFaculties(facultyResponse);
         }
 
         // Fetch stats for all courses
@@ -423,12 +423,10 @@ export function CourseDataTable({
           const coursesWithStats = await Promise.all(
             initialCourses.map(async (course) => {
               try {
-                const statsResponse = await axiosInstance.get(
-                  `/courses/${course.slug}/courses-stats`
-                );
+                const stats = await coursesService.getStats(course.slug);
                 return {
                   ...course,
-                  stats: statsResponse.data,
+                  stats,
                 };
               } catch (error: any) {
                 // Silently handle 404s (courses without stats yet)
@@ -467,14 +465,14 @@ export function CourseDataTable({
   const refreshTableData = useCallback(async (skipStats = false) => {
     try {
       setIsRefreshing(true);
-      const response = await axiosInstance.get("/courses");
-      const data = response.data;
+      const data = await coursesService.getCourses();
 
-      if (data.courses) {
+      if (data && Array.isArray(data)) {
+        const courses = data;
         if (skipStats) {
           // Just update the courses without fetching stats - preserve existing stats
           setTableData((prevData) =>
-            data.courses.map((newCourse: Course) => {
+            courses.map((newCourse: Course) => {
               const existingCourse = prevData.find(
                 (c) => c.id === newCourse.id
               );
@@ -493,15 +491,12 @@ export function CourseDataTable({
         } else {
           // Fetch stats only if explicitly requested
           const coursesWithStats = await Promise.all(
-            data.courses.map(async (course: Course) => {
+            courses.map(async (course: Course) => {
               try {
-                // Fix the URL - it should be /stats not /course-stats
-                const statsResponse = await axiosInstance.get(
-                  `/courses/${course.slug}/courses-stats`
-                );
+                const stats = await coursesService.getStats(course.slug);
                 return {
                   ...course,
-                  stats: statsResponse.data,
+                  stats,
                 };
               } catch (error: any) {
                 // Silently handle 404s - course has no stats yet
@@ -1109,8 +1104,10 @@ export function CourseDataTable({
         const semester = row["Semester"]?.trim() || "1st Semester";
 
         // Check if course already exists in database
-        const response = await axiosInstance.get("/courses");
-        const existingCourses = response.data.courses || [];
+        const existingCoursesResponse = await coursesService.getCourses();
+        const existingCourses = Array.isArray(existingCoursesResponse)
+          ? existingCoursesResponse
+          : existingCoursesResponse.courses || [];
 
         const isDuplicate = existingCourses.some(
           (c: any) =>

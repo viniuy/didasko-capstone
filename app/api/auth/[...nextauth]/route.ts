@@ -3,7 +3,6 @@ import AzureADProvider from "next-auth/providers/azure-ad";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
-// Ensure required env vars exist
 const requiredEnv = [
   "AZURE_AD_CLIENT_ID",
   "AZURE_AD_CLIENT_SECRET",
@@ -123,15 +122,15 @@ const handler = NextAuth({
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: token.email },
-            select: { 
-              id: true, 
-              role: true, 
-              name: true, 
+            select: {
+              id: true,
+              role: true,
+              name: true,
               image: true,
               department: true,
             },
           });
-          
+
           if (dbUser) {
             token.id = dbUser.id;
             token.role = dbUser.role as Role;
@@ -153,10 +152,12 @@ const handler = NextAuth({
         session.user.id = token.id as string;
         session.user.role = token.role as "ADMIN" | "ACADEMIC_HEAD" | "FACULTY";
         session.user.name = token.name;
-        session.user.image = typeof token.image === "string" ? token.image : null;
+        session.user.image =
+          typeof token.image === "string" ? token.image : null;
         session.user.email = token.email;
-        session.user.department = typeof token.department === "string" ? token.department : null;
-        
+        session.user.department =
+          typeof token.department === "string" ? token.department : null;
+
         if (token.selectedRole) {
           session.user.selectedRole = token.selectedRole;
         }

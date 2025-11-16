@@ -3,8 +3,8 @@
 import { User, BookOpen, GraduationCap, Users } from "lucide-react";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { useEffect, useState } from "react";
-import axiosInstance from "axios";
 import { useSession } from "next-auth/react";
+import { statsService } from "@/lib/services/client";
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -35,8 +35,7 @@ const StatCard = ({ icon, count, label, isLoading = false }: StatCardProps) => {
 
 async function getFacultyStats() {
   try {
-    const response = await axiosInstance.get("/api/stats/faculty-stats");
-    return response.data;
+    return await statsService.getFacultyStats();
   } catch (error) {
     console.error("Error fetching faculty stats:", error);
     return { totalStudents: 0, totalCourses: 0, totalClasses: 0 };
@@ -45,8 +44,7 @@ async function getFacultyStats() {
 
 async function getFacultyCount() {
   try {
-    const response = await axiosInstance.get("/api/stats/faculty-count");
-    return response.data;
+    return await statsService.getFacultyCount();
   } catch (error) {
     console.error("Error fetching faculty count:", error);
     return { fullTime: 0, partTime: 0 };

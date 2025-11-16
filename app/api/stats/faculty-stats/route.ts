@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
+import { getFacultyStats } from "@/lib/services";
 
 export async function GET() {
   try {
@@ -11,36 +11,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get all courses assigned to the faculty member
-    const courses = await prisma.course.findMany({
-      where: {
-        facultyId: session.user.id,
-      },
-      include: {
-        students: true,
-        schedules: true,
-      },
-    });
+    const stats = await getFacultyStats(session.user.id);
 
-    // Calculate totals
-    const uniqueStudentIds = new Set();
-    courses.forEach((course) => {
-      course.students.forEach((student) => {
-        uniqueStudentIds.add(student.id);
-      });
-    });
-    const totalStudents = uniqueStudentIds.size;
-    const totalCourses = courses.length;
-    const totalClasses = courses.reduce(
-      (acc, course) => acc + course.schedules.length,
-      0
-    );
-
-    return NextResponse.json({
-      totalStudents,
-      totalCourses,
-      totalClasses,
-    });
+    return NextResponse.json(stats);
   } catch (error) {
     console.error("Error fetching faculty stats:", error);
     return NextResponse.json(

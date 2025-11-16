@@ -6,7 +6,7 @@ import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { GradingTable } from "@/features/grading/components/grading-table";
-import axios from "axios";
+import { coursesService } from "@/lib/services/client";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 
@@ -32,8 +32,8 @@ function IndividualRecitationContent({ course_slug }: { course_slug: string }) {
   useEffect(() => {
     const fetchCourse = async () => {
       try {
-        const response = await axios.get(`/api/courses/${course_slug}`);
-        setCourse(response.data);
+        const course = await coursesService.getBySlug(course_slug);
+        setCourse(course);
       } catch (error) {
         console.error("Error fetching course:", error);
       } finally {

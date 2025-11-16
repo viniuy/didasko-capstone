@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getCriteriaLinks } from "@/lib/services";
 
 export async function GET(
   req: NextRequest,
@@ -8,51 +8,13 @@ export async function GET(
   try {
     const { course_slug } = params;
 
-    const course = await prisma.course.findUnique({
-      where: { slug: course_slug },
-      select: { id: true },
-    });
+    const result = await getCriteriaLinks(course_slug);
 
-    if (!course) {
+    if (!result) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    const [recitations, groupReportings, individualReportings] =
-      await Promise.all([
-        // ✅ Recitations → isRecitation=true
-        prisma.criteria.findMany({
-          where: {
-            courseId: course.id,
-            isRecitationCriteria: true,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-
-        // ✅ Group Reporting → isGroupCriteria=true
-        prisma.criteria.findMany({
-          where: {
-            courseId: course.id,
-            isGroupCriteria: true,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-
-        // ✅ Individual Reporting → BOTH false
-        prisma.criteria.findMany({
-          where: {
-            courseId: course.id,
-            isRecitationCriteria: false,
-            isGroupCriteria: false,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-      ]);
-
-    return NextResponse.json({
-      recitations,
-      groupReportings,
-      individualReportings,
-    });
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("Failed to load criteria links:", error);
     return NextResponse.json(

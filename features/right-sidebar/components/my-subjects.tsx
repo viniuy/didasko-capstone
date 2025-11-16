@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
-import axiosInstance from "@/lib/axios";
+import { coursesService } from "@/lib/services/client";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Course {
@@ -132,11 +132,11 @@ export default function CourseShortcuts({
       if (!session?.user?.id) return;
 
       try {
-        const response = await axiosInstance.get("/courses/active", {
-          params: { facultyId: session.user.id },
+        const response = await coursesService.getActiveCourses({
+          facultyId: session.user.id,
         });
 
-        const filteredCourses = response.data.courses.filter(
+        const filteredCourses = (response.courses || []).filter(
           (course: Course) =>
             !excludeCourseSlug || course.slug !== excludeCourseSlug
         );

@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { ArrowLeft, User, Users, Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { coursesService } from "@/lib/services/client";
 
 interface Course {
   id: string;
@@ -33,8 +33,8 @@ function ReportingTypeContent({ course_slug }: { course_slug: string }) {
     const fetchCourse = async () => {
       try {
         setIsLoading(true);
-        const response = await axios.get(`/api/courses/${course_slug}`);
-        setCourse(response.data);
+        const course = await coursesService.getBySlug(course_slug);
+        setCourse(course);
       } catch (error) {
         console.error("Error fetching course:", error);
       } finally {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
-import axiosInstance from "@/lib/axios";
+import { gradingService } from "@/lib/services/client";
 import React from "react";
 import {
   Search,
@@ -546,23 +546,23 @@ export function ClassRecordTable({
       if (!courseSlug) return;
       setLoading(true);
       try {
-        const [studentsRes, configRes, scoresRes, criteriaLinksRes] =
-          await Promise.all([
-            axiosInstance.get(`/courses/${courseSlug}/students`),
-            axiosInstance.get(`/courses/${courseSlug}/term-configs`),
-            axiosInstance.get(`/courses/${courseSlug}/assessment-scores`),
-            axiosInstance.get(`/courses/${courseSlug}/criteria/link`),
-          ]);
-        const studentList = studentsRes.data?.students || [];
+        const classRecordData = await gradingService.getClassRecordData(
+          courseSlug
+        );
+        const studentList = classRecordData.students || [];
         setStudents(studentList);
-        if (configRes.data && Object.keys(configRes.data).length > 0) {
-          setTermConfigs(configRes.data);
+        if (
+          classRecordData.termConfigs &&
+          Object.keys(classRecordData.termConfigs).length > 0
+        ) {
+          setTermConfigs(classRecordData.termConfigs);
         }
+        setAssessmentScores(classRecordData.assessmentScores || {});
         const {
           recitations = [],
           groupReportings = [],
           individualReportings = [],
-        } = criteriaLinksRes.data || {};
+        } = classRecordData.criteriaLinks || {};
         const recitationList = recitations.map((item: any) => ({
           id: item.id,
           name: item.name,
@@ -897,7 +897,7 @@ export function ClassRecordTable({
     try {
       toast.loading("Saving term configurations...");
       const payload = { termConfigs: configs };
-      await axiosInstance.post(`/courses/${courseSlug}/term-configs`, payload);
+      await gradingService.saveTermConfigs(courseSlug, payload.termConfigs);
       toast.dismiss();
       setTermConfigs(configs);
       toast.success("Settings saved successfully!");
