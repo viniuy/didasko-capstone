@@ -36,6 +36,8 @@ export function GroupCard({
   const handleDelete = async () => {
     try {
       setIsDeleting(true);
+      console.log("🗑️ Deleting group:", group.id);
+
       const response = await fetch(
         `/api/courses/${courseCode}/groups/${group.id}`,
         {
@@ -47,12 +49,20 @@ export function GroupCard({
         throw new Error("Failed to delete group");
       }
 
-      toast.success("Group disbanded successfully");
+      console.log("✅ API responded, waiting for DB...");
+
+      // Wait longer to ensure database transaction completes
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      console.log("🔄 Refreshing data...");
       if (onGroupDeleted) {
-        onGroupDeleted();
+        await onGroupDeleted();
       }
+
+      console.log("✅ Refresh complete");
+      toast.success("Group disbanded successfully");
     } catch (error) {
-      console.error("Error deleting group:", error);
+      console.error("❌ Error deleting group:", error);
       toast.error("Failed to delete group");
     } finally {
       setIsDeleting(false);
@@ -68,17 +78,17 @@ export function GroupCard({
 
   return (
     <>
-      <Card className="w-65 h-80 p-6 flex flex-col items-center shadow-lg relative">
+      <Card className="w-full sm:w-65 h-72 sm:h-80 p-4 sm:p-6 flex flex-col items-center shadow-lg relative mx-auto max-w-[280px] sm:max-w-none">
         <button
           onClick={() => setShowConfirmDialog(true)}
-          className="absolute top-2 right-2 p-1 rounded-full hover:bg-red-100 transition-colors"
+          className="absolute top-2 right-2 p-1.5 sm:p-1 rounded-full hover:bg-red-100 transition-colors touch-manipulation"
           title="Disband group"
         >
-          <Trash2 className="h-4 w-4 text-red-500" />
+          <Trash2 className="h-5 w-5 sm:h-4 sm:w-4 text-red-500" />
         </button>
-        <div className="mb-4">
+        <div className="mb-3 sm:mb-4">
           <svg
-            className="h-20 w-20 text-gray-400"
+            className="h-16 w-16 sm:h-20 sm:w-20 text-gray-400"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
@@ -90,23 +100,23 @@ export function GroupCard({
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-[#124A69] text-center -mb-2">
+        <h2 className="text-xl sm:text-2xl font-bold text-[#124A69] text-center -mb-2">
           Group {group.number}
         </h2>
         {group.name ? (
-          <p className="text-xl text-[#124A69] font-sm text-center -mt-3">
+          <p className="text-lg sm:text-xl text-[#124A69] font-sm text-center -mt-3 px-2">
             {group.name}
           </p>
         ) : (
           <div
-            className="text-xl text-[#124A69] font-sm text-center -mt-3"
+            className="text-lg sm:text-xl text-[#124A69] font-sm text-center -mt-3"
             style={{ visibility: "hidden" }}
           >
             &nbsp;
           </div>
         )}
         <Button
-          className="w-full bg-[#124A69] text-white font-semibold rounded mt-7"
+          className="w-full bg-[#124A69] text-white font-semibold rounded mt-5 sm:mt-7 text-sm sm:text-base py-5 sm:py-auto touch-manipulation"
           onClick={handleViewGroup}
           disabled={isViewing}
         >
@@ -122,21 +132,23 @@ export function GroupCard({
       </Card>
 
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-[90vw] sm:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            <AlertDialogTitle className="text-base sm:text-lg">
               Are you sure you want to disband this group?
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-sm">
               This action cannot be undone. This will permanently delete the
               group and remove all student associations.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="w-full sm:w-auto">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-[#124A69] hover:bg-gray-600 text-white"
+              className="bg-[#124A69] hover:bg-gray-600 text-white w-full sm:w-auto"
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Disband Group"}

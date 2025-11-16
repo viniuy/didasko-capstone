@@ -40,7 +40,7 @@ interface TutorialStep {
 
 const tutorialSteps: TutorialStep[] = [
   {
-    target: "[data-tutorial='term-tabs']",
+    target: "[data-tutorial='term-tabs-settings']",
     title: "Step 1: Select a Term",
     content:
       "Choose which term you want to configure. Each term can have different weights and assessments.",
@@ -563,7 +563,7 @@ export function SettingsModal({
         )}
 
         {/* Term Tabs */}
-        <div className="flex border-b" data-tutorial="term-tabs">
+        <div className="flex border-b" data-tutorial="term-tabs-settings">
           {(["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const).map(
             (term) => {
               const termErrors = validationErrors.filter((e) =>

@@ -48,10 +48,10 @@ function parseFullName(fullName: string) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Promise<{ course_slug: string }> }
 ) {
   try {
-    const { slug } = await params;
+    const { course_slug } = await params;
     const body = await request.json();
     const { students } = body as { students: StudentImportRow[] };
 
@@ -64,7 +64,7 @@ export async function POST(
 
     // Find the course
     const course = await prisma.course.findUnique({
-      where: { slug },
+      where: { slug: course_slug },
       include: {
         students: {
           select: { studentId: true },

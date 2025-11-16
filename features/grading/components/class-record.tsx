@@ -12,6 +12,14 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { SettingsModal } from "./SettingsModal";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -525,6 +533,8 @@ export function ClassRecordTable({
   const [search, setSearch] = useState("");
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIMS");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(7);
 
   const pendingScoresRef = useRef<
     Map<
@@ -557,7 +567,19 @@ export function ClassRecordTable({
         ) {
           setTermConfigs(classRecordData.termConfigs);
         }
-        setAssessmentScores(classRecordData.assessmentScores || {});
+        // Convert assessment scores object to Map format
+        const assessmentScoresMap = new Map<string, StudentScore>();
+        const assessmentScoresData = classRecordData.assessmentScores || {};
+        Object.entries(assessmentScoresData).forEach(
+          ([key, value]: [string, any]) => {
+            assessmentScoresMap.set(key, {
+              studentId: value.studentId,
+              assessmentId: value.assessmentId,
+              score: value.score,
+            });
+          }
+        );
+        setScores(assessmentScoresMap);
         const {
           recitations = [],
           groupReportings = [],
@@ -590,10 +612,9 @@ export function ClassRecordTable({
           ...individualList,
         ]);
         const scoresMap = new Map(
-          Object.entries(scoresRes.data).map(([key, value]: any) => [
-            key,
-            value,
-          ])
+          Object.entries(classRecordData.assessmentScores || {}).map(
+            ([key, value]: [string, any]) => [key, value]
+          )
         );
         setScores(scoresMap);
         await new Promise((resolve) => setTimeout(resolve, 300));
@@ -640,10 +661,7 @@ export function ClassRecordTable({
 
     try {
       toast.loading("Saving grades...", { id: "save-grades" });
-      await axiosInstance.post(
-        `/courses/${courseSlug}/assessment-scores/bulk`,
-        { scores: gradesToSave }
-      );
+      await gradingService.saveAssessmentScoresBulk(courseSlug, gradesToSave);
       toast.success("Grades saved successfully", { id: "save-grades" });
     } catch (error) {
       toast.error("Failed to save grades", { id: "save-grades" });
@@ -680,10 +698,7 @@ export function ClassRecordTable({
   ) => {
     try {
       toast.loading("Updating grades...", { id: "bulk-save" });
-      await axiosInstance.post(
-        `/courses/${courseSlug}/assessment-scores/bulk`,
-        { scores: grades }
-      );
+      await gradingService.saveAssessmentScoresBulk(courseSlug, grades);
       toast.success("Grades updated successfully", { id: "bulk-save" });
     } catch (error) {
       toast.error("Failed to save grades", { id: "bulk-save" });
@@ -888,6 +903,17 @@ export function ClassRecordTable({
     });
   }, [students, search]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedStudents = filtered.slice(startIndex, endIndex);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   const studentName = (s: Student) =>
     `${s.lastName}, ${s.firstName}${
       s.middleInitial ? ` ${s.middleInitial}.` : ""
@@ -1036,7 +1062,7 @@ export function ClassRecordTable({
 
   if (activeTerm === "SUMMARY") {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px]">
+      <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px] flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">{courseCode}</h1>
@@ -1092,7 +1118,7 @@ export function ClassRecordTable({
           ))}
         </div>
 
-        <div className="w-full overflow-x-auto">
+        <div className="w-full overflow-x-auto flex-1 min-h-0">
           <table className="table-fixed w-full border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
@@ -1134,7 +1160,7 @@ export function ClassRecordTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((student) => {
+              {paginatedStudents.map((student) => {
                 const finalGrade = computeFinalGrade(student.id);
                 return (
                   <tr key={student.id} className="hover:bg-gray-50">
@@ -1202,6 +1228,59 @@ export function ClassRecordTable({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-4 w-full">
+              <span className="text-sm text-gray-600">
+                Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)}{" "}
+                of {filtered.length} student{filtered.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <Pagination className="flex justify-end">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    className={
+                      currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                    }
+                  />
+                </PaginationItem>
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <PaginationItem key={i}>
+                    <PaginationLink
+                      onClick={() => setCurrentPage(i + 1)}
+                      isActive={currentPage === i + 1}
+                      className={
+                        currentPage === i + 1
+                          ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                          : ""
+                      }
+                    >
+                      {i + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                    }
+                    className={
+                      currentPage === totalPages
+                        ? "pointer-events-none opacity-50"
+                        : ""
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
 
         <SettingsModal
           isOpen={settingsOpen}
@@ -1274,7 +1353,7 @@ export function ClassRecordTable({
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px]">
+    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px] flex flex-col">
       <Tutorial
         isActive={showTutorial}
         currentStep={tutorialStep}
@@ -1370,7 +1449,10 @@ export function ClassRecordTable({
           </button>
         </div>
       ) : (
-        <div className="w-full overflow-x-auto" data-tutorial="grade-table">
+        <div
+          className="w-full overflow-x-auto flex-1 min-h-0"
+          data-tutorial="grade-table"
+        >
           <table className="table-fixed w-full border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
@@ -1495,7 +1577,7 @@ export function ClassRecordTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((student) => {
+              {paginatedStudents.map((student) => {
                 const termGrade = computeTermGrade(student.id, activeTerm);
                 return (
                   <tr key={student.id} className="hover:bg-gray-50">
@@ -1663,6 +1745,59 @@ export function ClassRecordTable({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination for Term Grades */}
+      {filtered.length > 0 && currentConfig && (
+        <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-200">
+          <div className="flex items-center gap-4 w-full">
+            <span className="text-sm text-gray-600">
+              Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)} of{" "}
+              {filtered.length} student{filtered.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <Pagination className="flex justify-end">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(prev - 1, 1))
+                  }
+                  className={
+                    currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                  }
+                />
+              </PaginationItem>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <PaginationItem key={i}>
+                  <PaginationLink
+                    onClick={() => setCurrentPage(i + 1)}
+                    isActive={currentPage === i + 1}
+                    className={
+                      currentPage === i + 1
+                        ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                        : ""
+                    }
+                  >
+                    {i + 1}
+                  </PaginationLink>
+                </PaginationItem>
+              ))}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                  }
+                  className={
+                    currentPage === totalPages
+                      ? "pointer-events-none opacity-50"
+                      : ""
+                  }
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       )}
 

@@ -2,6 +2,87 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
+import { getAssessmentScores } from "@/lib/services";
+
+// Helper: Compute term grade from assessment scores
+function computeTermGradeFromScores(
+  termConfig: any,
+  assessmentScores: Record<string, any>,
+  studentId: string
+): number | null {
+  const ptAssessments = termConfig.assessments.filter(
+    (a: any) => a.type === "PT" && a.enabled
+  );
+  const quizAssessments = termConfig.assessments.filter(
+    (a: any) => a.type === "QUIZ" && a.enabled
+  );
+  const examAssessment = termConfig.assessments.find(
+    (a: any) => a.type === "EXAM" && a.enabled
+  );
+
+  // Calculate PT average percentage
+  const ptPercentages: number[] = [];
+  ptAssessments.forEach((pt: any) => {
+    const key = `${studentId}:${pt.id}`;
+    const scoreData = assessmentScores[key];
+    if (
+      scoreData?.score !== null &&
+      scoreData?.score !== undefined &&
+      pt.maxScore > 0
+    ) {
+      const percentage = (scoreData.score / pt.maxScore) * 100;
+      ptPercentages.push(percentage);
+    }
+  });
+  const ptAvg =
+    ptPercentages.length > 0
+      ? ptPercentages.reduce((a, b) => a + b, 0) / ptAssessments.length
+      : 0;
+
+  // Calculate Quiz average percentage
+  const quizPercentages: number[] = [];
+  quizAssessments.forEach((quiz: any) => {
+    const key = `${studentId}:${quiz.id}`;
+    const scoreData = assessmentScores[key];
+    if (
+      scoreData?.score !== null &&
+      scoreData?.score !== undefined &&
+      quiz.maxScore > 0
+    ) {
+      const percentage = (scoreData.score / quiz.maxScore) * 100;
+      quizPercentages.push(percentage);
+    }
+  });
+  const quizAvg =
+    quizPercentages.length > 0
+      ? quizPercentages.reduce((a, b) => a + b, 0) / quizAssessments.length
+      : 0;
+
+  // Calculate Exam percentage
+  let examPercentage: number | null = null;
+  if (examAssessment) {
+    const key = `${studentId}:${examAssessment.id}`;
+    const scoreData = assessmentScores[key];
+    if (
+      scoreData?.score !== null &&
+      scoreData?.score !== undefined &&
+      examAssessment.maxScore > 0
+    ) {
+      examPercentage = (scoreData.score / examAssessment.maxScore) * 100;
+    }
+  }
+
+  // If no exam score, can't compute term grade
+  if (examPercentage === null) return null;
+
+  // Calculate weighted total
+  const ptWeighted = (ptAvg / 100) * termConfig.ptWeight;
+  const quizWeighted = (quizAvg / 100) * termConfig.quizWeight;
+  const examWeighted = (examPercentage / 100) * termConfig.examWeight;
+  const totalPercentage = ptWeighted + quizWeighted + examWeighted;
+
+  return totalPercentage;
+}
 
 export async function GET(request: Request) {
   try {
@@ -20,6 +101,14 @@ export async function GET(request: Request) {
         status: "ACTIVE",
       },
       include: {
+        students: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            studentId: true,
+          },
+        },
         termConfigs: {
           include: {
             termGrades: {
@@ -34,10 +123,24 @@ export async function GET(request: Request) {
                 },
               },
             },
+            assessments: {
+              orderBy: [{ type: "asc" }, { order: "asc" }],
+            },
           },
         },
       },
     });
+
+    // Get assessment scores for all courses
+    const allAssessmentScores: Record<string, Record<string, any>> = {};
+    await Promise.all(
+      courses.map(async (course) => {
+        const scores = await getAssessmentScores(course.slug);
+        if (scores) {
+          allAssessmentScores[course.slug] = scores;
+        }
+      })
+    );
 
     // Aggregate student performance across all courses and terms
     const studentPerformanceMap = new Map<
@@ -55,39 +158,62 @@ export async function GET(request: Request) {
     >();
 
     courses.forEach((course) => {
-      course.termConfigs.forEach((termConfig) => {
-        termConfig.termGrades.forEach((termGrade) => {
-          const studentKey = termGrade.studentId;
+      const courseAssessmentScores = allAssessmentScores[course.slug] || {};
 
-          if (!studentPerformanceMap.has(studentKey)) {
-            studentPerformanceMap.set(studentKey, {
-              studentId: termGrade.student.id,
-              studentName: `${termGrade.student.firstName} ${termGrade.student.lastName}`,
-              studentNumber: termGrade.student.studentId,
-              totalGrades: [],
-              prelimsGrades: [],
-              midtermGrades: [],
-              prefinalsGrades: [],
-              finalsGrades: [],
-            });
+      course.students.forEach((student) => {
+        const studentKey = student.id;
+
+        if (!studentPerformanceMap.has(studentKey)) {
+          studentPerformanceMap.set(studentKey, {
+            studentId: student.id,
+            studentName: `${student.firstName} ${student.lastName}`,
+            studentNumber: student.studentId,
+            totalGrades: [],
+            prelimsGrades: [],
+            midtermGrades: [],
+            prefinalsGrades: [],
+            finalsGrades: [],
+          });
+        }
+
+        const studentData = studentPerformanceMap.get(studentKey)!;
+
+        course.termConfigs.forEach((termConfig) => {
+          // Try to get saved term grade first
+          const savedTermGrade = termConfig.termGrades.find(
+            (tg: any) => tg.studentId === studentKey
+          );
+
+          let grade: number | null = null;
+
+          if (
+            savedTermGrade?.totalPercentage !== null &&
+            savedTermGrade?.totalPercentage !== undefined
+          ) {
+            // Use saved term grade
+            grade = savedTermGrade.totalPercentage;
+          } else {
+            // Compute from assessment scores
+            grade = computeTermGradeFromScores(
+              termConfig,
+              courseAssessmentScores,
+              studentKey
+            );
           }
 
-          const studentData = studentPerformanceMap.get(studentKey)!;
-
-          // Add grades based on term
-          if (termGrade.totalPercentage !== null) {
-            studentData.totalGrades.push(termGrade.totalPercentage);
+          if (grade !== null) {
+            studentData.totalGrades.push(grade);
 
             // Categorize by term
             const term = termConfig.term.toUpperCase();
             if (term === "PRELIMS") {
-              studentData.prelimsGrades.push(termGrade.totalPercentage);
+              studentData.prelimsGrades.push(grade);
             } else if (term === "MIDTERM") {
-              studentData.midtermGrades.push(termGrade.totalPercentage);
+              studentData.midtermGrades.push(grade);
             } else if (term === "PRE-FINALS") {
-              studentData.prefinalsGrades.push(termGrade.totalPercentage);
+              studentData.prefinalsGrades.push(grade);
             } else if (term === "FINALS") {
-              studentData.finalsGrades.push(termGrade.totalPercentage);
+              studentData.finalsGrades.push(grade);
             }
           }
         });

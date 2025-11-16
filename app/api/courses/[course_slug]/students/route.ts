@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getCourseStudentsWithAttendance } from "@/lib/services";
+import { prisma } from "@/lib/prisma";
 //@ts-ignore
 export async function GET(request: Request, { params }: { params }) {
   try {
@@ -220,6 +221,117 @@ export async function POST(
     return NextResponse.json(
       {
         error: error?.message || "Failed to import students",
+        details: error?.toString(),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ course_slug: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: "Unauthorized - No session" },
+        { status: 401 }
+      );
+    }
+
+    const { course_slug } = await params;
+    const body = await request.json();
+    const { studentIds } = body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      return NextResponse.json(
+        { error: "Invalid student IDs" },
+        { status: 400 }
+      );
+    }
+
+    // Find the course
+    const course = await prisma.course.findUnique({
+      where: { slug: course_slug },
+      select: { id: true },
+    });
+
+    if (!course) {
+      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    // Remove students from course (disconnect relationship)
+    await prisma.course.update({
+      where: { id: course.id },
+      data: {
+        students: {
+          disconnect: studentIds.map((id) => ({ id })),
+        },
+      },
+    });
+
+    // Optionally: Delete related records (attendance, grades, etc.)
+    // WARNING: This will permanently delete data
+    await Promise.all([
+      // Delete attendance records
+      prisma.attendance.deleteMany({
+        where: {
+          courseId: course.id,
+          studentId: { in: studentIds },
+        },
+      }),
+      // Delete term grades
+      prisma.termGrade.deleteMany({
+        where: {
+          termConfig: { courseId: course.id },
+          studentId: { in: studentIds },
+        },
+      }),
+      // Delete assessment scores
+      prisma.assessmentScore.deleteMany({
+        where: {
+          assessment: {
+            termConfig: { courseId: course.id },
+          },
+          studentId: { in: studentIds },
+        },
+      }),
+      // Delete quiz scores
+      prisma.quizScore.deleteMany({
+        where: {
+          quiz: { courseId: course.id },
+          studentId: { in: studentIds },
+        },
+      }),
+      // Delete grade scores
+      prisma.gradeScore.deleteMany({
+        where: {
+          courseId: course.id,
+          studentId: { in: studentIds },
+        },
+      }),
+      // Delete grades
+      prisma.grade.deleteMany({
+        where: {
+          courseId: course.id,
+          studentId: { in: studentIds },
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully removed ${studentIds.length} student${
+        studentIds.length > 1 ? "s" : ""
+      }`,
+    });
+  } catch (error: any) {
+    console.error("Error removing students:", error);
+    return NextResponse.json(
+      {
+        error: error?.message || "Failed to remove students",
         details: error?.toString(),
       },
       { status: 500 }

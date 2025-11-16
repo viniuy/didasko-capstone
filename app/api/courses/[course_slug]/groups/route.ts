@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getGroups, createGroup } from "@/lib/services";
+import { revalidatePath } from "next/cache";
+
 //@ts-ignore
 export async function POST(request: Request, context: { params }) {
   try {
@@ -24,7 +26,17 @@ export async function POST(request: Request, context: { params }) {
         leaderId,
       });
 
-      return NextResponse.json(group);
+      // Revalidate the cache for this course's pages
+      revalidatePath(`/main/grading/reporting/${course_slug}`);
+
+      // Add a small delay to ensure DB transaction completes
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      return NextResponse.json(group, {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      });
     } catch (error: any) {
       if (error.message.includes("already exists")) {
         return NextResponse.json({ error: error.message }, { status: 400 });
@@ -42,6 +54,7 @@ export async function POST(request: Request, context: { params }) {
     );
   }
 }
+
 //@ts-ignore
 export async function GET(request: Request, context: { params }) {
   try {
@@ -59,7 +72,11 @@ export async function GET(request: Request, context: { params }) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    return NextResponse.json(groups);
+    return NextResponse.json(groups, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    });
   } catch (error) {
     console.error("Error fetching groups:", error);
     return NextResponse.json(

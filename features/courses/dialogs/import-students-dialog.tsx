@@ -179,39 +179,9 @@ export function StudentImportDialog({
   const handleDownloadTemplate = async () => {
     try {
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Student Import Template");
+      const worksheet = workbook.addWorksheet("Students");
 
-      // Title row
-      worksheet.mergeCells("A1:B1");
-      const titleRow = worksheet.getCell("A1");
-      titleRow.value = "Student Import Template";
-      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-      titleRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      titleRow.alignment = { vertical: "middle", horizontal: "center" };
-      worksheet.getRow(1).height = 30;
-
-      // Instructions row
-      worksheet.mergeCells("A2:B2");
-      const infoRow = worksheet.getCell("A2");
-      infoRow.value =
-        "Fill in student information below. Only students with registered RFID will be imported.";
-      infoRow.font = { italic: true, size: 10 };
-      infoRow.alignment = { vertical: "middle", horizontal: "center" };
-
-      // Date row
-      worksheet.mergeCells("A3:B3");
-      const dateRow = worksheet.getCell("A3");
-      dateRow.value = `Template Generated: ${new Date().toLocaleDateString()}`;
-      dateRow.font = { italic: true, size: 9, color: { argb: "FF666666" } };
-      dateRow.alignment = { vertical: "middle", horizontal: "center" };
-
-      worksheet.addRow([]);
-
-      // Header row
+      // Header row (row 1)
       const headers = ["Student Number", "Full Name"];
       const headerRow = worksheet.addRow(headers);
       headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -272,7 +242,6 @@ export function StudentImportDialog({
       console.error("Error generating template:", error);
     }
   };
-
   const resetDialog = () => {
     setSelectedFile(null);
     setPreviewData([]);

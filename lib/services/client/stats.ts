@@ -10,9 +10,14 @@ export const statsService = {
     axiosInstance.get("/stats/faculty-count").then((res) => res.data),
 
   // Get grades leaderboard
-  getGradesLeaderboard: (courseSlug?: string) => {
-    const url = courseSlug
-      ? `/stats/grades/leaderboard/${courseSlug}`
+  getGradesLeaderboard: (courseSlug?: string, facultyId?: string) => {
+    if (courseSlug) {
+      return axiosInstance
+        .get(`/stats/grades/leaderboard/${courseSlug}`)
+        .then((res) => res.data);
+    }
+    const url = facultyId
+      ? `/stats/grades/leaderboard?facultyId=${facultyId}`
       : "/stats/grades/leaderboard";
     return axiosInstance.get(url).then((res) => res.data);
   },

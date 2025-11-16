@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Medal, Award, TrendingUp, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import axiosInstance from "@/lib/axios";
+import { statsService } from "@/lib/services/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -145,20 +145,20 @@ export default function GradingLeaderboard({
       if (!session?.user?.id) return;
 
       try {
-        const endpoint = courseSlug
-          ? `/stats/grades/leaderboard/${courseSlug}`
-          : `/stats/grades/leaderboard?facultyId=${session.user.id}`;
-
-        const response = await axiosInstance.get(endpoint);
+        const leaderboardData = await statsService.getGradesLeaderboard(
+          courseSlug,
+          courseSlug ? undefined : session.user.id
+        );
+        const data = Array.isArray(leaderboardData) ? leaderboardData : [];
 
         // Sort by current grade for top performers
-        const sorted = [...response.data].sort(
+        const sorted = [...data].sort(
           (a, b) => b.currentGrade - a.currentGrade
         );
         setTopPerformers(sorted.slice(0, 10));
 
         // Sort by improvement for most improved
-        const improved = [...response.data]
+        const improved = [...data]
           .filter((s) => s.improvement > 0)
           .sort((a, b) => b.improvement - a.improvement);
         setMostImproved(improved.slice(0, 10));

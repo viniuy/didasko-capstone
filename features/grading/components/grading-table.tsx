@@ -34,6 +34,7 @@ import {
   gradesService,
   groupsService,
 } from "@/lib/services/client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import GradingTableHeader from "./grading-table-header";
 import GradingTableRow from "./grading-table-row";
 import * as XLSX from "xlsx";
@@ -68,6 +69,7 @@ import {
 import { HeaderSection } from "./header-section";
 import { BottomActionBar } from "./bottom-action-bar";
 import { EmptyState } from "./empty-state";
+import axiosInstance from "@/lib/axios";
 
 interface Student {
   id: string;
@@ -89,6 +91,7 @@ interface GradingTableProps {
   groupId?: string;
   isGroupView?: boolean;
   isRecitationCriteria?: boolean;
+  refreshKey?: number; // Add refresh key to trigger refetch when groups change
 }
 
 interface GradingReport {
@@ -330,6 +333,7 @@ export function GradingTable({
   groupId,
   isGroupView = false,
   isRecitationCriteria = false,
+  refreshKey = 0,
 }: GradingTableProps) {
   const { data: session } = useSession();
   const [students, setStudents] = useState<Student[]>([]);
@@ -434,12 +438,22 @@ export function GradingTable({
   };
 
   // Fetch grades when both date and criteria are available
+  // Optimized to reduce redundant calls
   useEffect(() => {
     const fetchData = async () => {
-      if (!courseId || !selectedDate || !activeReport) return;
+      if (!courseId || !selectedDate || !activeReport) {
+        // Clear data if prerequisites not met
+        if (!selectedDate || !activeReport) {
+          setStudents([]);
+          setScores({});
+        }
+        return;
+      }
+
       setIsLoading(true);
+      setIsLoadingStudents(true);
       try {
-        // 1. Fetch students
+        // 1. Fetch students (only if groupId changed or refreshKey changed)
         let studentsData: Student[] = [];
         if (isGroupView && groupId) {
           const studentsRes = await groupsService.getGroupStudents(
@@ -452,6 +466,7 @@ export function GradingTable({
           studentsData = studentsRes.students || [];
         }
         setStudents(studentsData);
+        setIsLoadingStudents(false);
 
         // 2. Fetch grades for the selected date/criteria
         const formattedDate = selectedDate.toISOString().split("T")[0];
@@ -486,6 +501,7 @@ export function GradingTable({
         toast.error("Failed to fetch data");
       } finally {
         setIsLoading(false);
+        setIsLoadingStudents(false);
       }
     };
 
@@ -493,14 +509,18 @@ export function GradingTable({
   }, [
     courseId,
     selectedDate,
-    activeReport,
+    activeReport?.id, // Only depend on id to avoid unnecessary refetches
     courseCode,
     courseSection,
     groupId,
     isGroupView,
+    courseSlug,
+    rubricDetails.length,
+    refreshKey, // Add refreshKey to trigger refetch when groups change
   ]);
 
   // Check for existing criteria when date is selected or on mount
+  // Optimized to only fetch when necessary
   useEffect(() => {
     const checkExistingCriteria = async () => {
       if (!selectedDate) {
@@ -508,8 +528,22 @@ export function GradingTable({
         setRubricDetails([]);
         setSelectedReport("");
         setShowCriteriaDialog(false);
+        setSavedReports([]);
         return;
       }
+
+      // Don't show dialog if we already have an active report for this date
+      if (activeReport) {
+        const reportDate = new Date(activeReport.date);
+        reportDate.setHours(0, 0, 0, 0);
+        const selected = new Date(selectedDate);
+        selected.setHours(0, 0, 0, 0);
+        if (reportDate.getTime() === selected.getTime()) {
+          // Active report matches selected date, no need to refetch
+          return;
+        }
+      }
+
       setCriteriaLoading(true);
       setShowCriteriaDialog(true); // Always show dialog to let user select
       try {
@@ -551,7 +585,15 @@ export function GradingTable({
       }
     };
     checkExistingCriteria();
-  }, [selectedDate, courseId, isGroupView, groupId, isRecitationCriteria]);
+  }, [
+    selectedDate,
+    courseId,
+    isGroupView,
+    groupId,
+    isRecitationCriteria,
+    courseSlug,
+    activeReport?.id,
+  ]);
 
   // Reset scores when date changes
   useEffect(() => {
@@ -2195,6 +2237,11 @@ export function GradingTable({
     setSelectedStudent(student);
     setShowImageDialog(true);
   };
+
+  // Show main loading spinner when initially loading
+  if (isLoading && Object.keys(scores).length === 0 && students.length === 0) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="min-h-screen w-full p-0">

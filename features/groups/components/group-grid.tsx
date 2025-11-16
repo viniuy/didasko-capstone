@@ -66,7 +66,7 @@ export function GroupGrid({
 
   if (groups.length === 0) {
     return (
-      <div className="flex flex-row gap-12 items-center justify-center mb-8">
+      <div className="flex flex-col sm:flex-row gap-6 sm:gap-12 items-center justify-center mb-8 px-4">
         <AddGroupModal
           courseCode={courseCode}
           excludedStudentIds={excludedStudentIds}
@@ -77,7 +77,7 @@ export function GroupGrid({
           students={students}
           groupMeta={groupMeta}
         />
-        <WheelRandomizer 
+        <WheelRandomizer
           students={students}
           excludedStudentIds={excludedStudentIds}
           courseCode={courseCode}
@@ -92,8 +92,8 @@ export function GroupGrid({
   const currentGroups = groups.slice(startIndex, endIndex);
 
   return (
-    <div className="flex flex-col gap-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 items-start justify-center min-h-[610px] max-h-[610px]">
+    <div className="flex flex-col gap-8 px-2 sm:px-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 items-start justify-center min-h-[400px] sm:min-h-[610px]">
         {currentGroups.map((group) => (
           <GroupCard
             key={group.id}
@@ -104,7 +104,7 @@ export function GroupGrid({
           />
         ))}
         {currentPage === totalPages && (
-          <div className="flex flex-col gap-2 ml-9 mt-3">
+          <div className="flex flex-col gap-2 sm:ml-9 mt-3">
             <AddGroupModal
               courseCode={courseCode}
               excludedStudentIds={excludedStudentIds}
@@ -115,18 +115,17 @@ export function GroupGrid({
               students={students}
               groupMeta={groupMeta}
             />
-            {/* <RandomizerButton disabled /> */}
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-end w-full mt-4 -mb-3 gap-4">
-        <span className="text-sm text-gray-600 w-1700">
+      <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end w-full mt-4 -mb-3 gap-4">
+        <span className="text-xs sm:text-sm text-gray-600 order-2 sm:order-1 w-full">
           Showing {startIndex + 1}-{Math.min(endIndex, groups.length)} of{" "}
           {groups.length} groups
         </span>
-        <Pagination>
-          <PaginationContent>
+        <Pagination className="order-1 sm:order-2 justify-end">
+          <PaginationContent className="flex-wrap justify-center">
             <PaginationItem>
               <PaginationPrevious
                 onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
@@ -136,7 +135,7 @@ export function GroupGrid({
               />
             </PaginationItem>
             {[...Array(totalPages)].map((_, i) => (
-              <PaginationItem key={i}>
+              <PaginationItem key={i} className="hidden sm:inline-block">
                 <PaginationLink
                   isActive={currentPage === i + 1}
                   onClick={() => setCurrentPage(i + 1)}
@@ -150,6 +149,12 @@ export function GroupGrid({
                 </PaginationLink>
               </PaginationItem>
             ))}
+            {/* Mobile: Show only current page number */}
+            <PaginationItem className="sm:hidden">
+              <span className="px-3 py-2 text-sm">
+                {currentPage} / {totalPages}
+              </span>
+            </PaginationItem>
             <PaginationItem>
               <PaginationNext
                 onClick={() =>

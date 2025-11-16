@@ -55,6 +55,7 @@ import { ScheduleAssignmentDialog } from "../dialogs/schedule-assignment-dialog"
 import { CourseSettingsDialog } from "../dialogs/course-settings-dialog"; // Adjust path as needed
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import axiosInstance from "@/lib/axios";
 
 interface CourseStats {
   passingRate: number;

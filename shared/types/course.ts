@@ -7,6 +7,16 @@ export interface CourseSchedule {
   createdAt: Date;
   updatedAt: Date;
 }
+export interface CourseUpdateInput {
+  code: string;
+  title: string;
+  room: string;
+  semester: string;
+  section: string;
+  facultyId: string;
+  academicYear: string;
+  status: "ACTIVE" | "ARCHIVED";
+}
 
 export interface StudentInCourse {
   id: string;
@@ -40,7 +50,7 @@ export interface Course {
   slug: string;
   academicYear: string;
   classNumber: number;
-  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  status: "ACTIVE" | "ARCHIVED";
   section: string;
   facultyId: string | null;
   createdAt: Date;
@@ -67,13 +77,13 @@ export interface CreateCourseInput {
   code: string;
   title: string;
   section: string;
-  room?: string;
+  room: string;
   semester: string;
   academicYear: string;
-  classNumber?: number | string;
-  status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
-  facultyId?: string;
-  schedules?: {
+  classNumber: number;
+  status: "ACTIVE" | "ARCHIVED";
+  facultyId: string;
+  schedules: {
     day: string;
     fromTime: string;
     toTime: string;

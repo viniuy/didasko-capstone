@@ -25,6 +25,12 @@ export const gradingService = {
       .put(`/courses/${courseSlug}/assessment-scores`, data)
       .then((res) => res.data),
 
+  // Save assessment scores in bulk
+  saveAssessmentScoresBulk: (courseSlug: string, scores: any[]) =>
+    axiosInstance
+      .post(`/courses/${courseSlug}/assessment-scores/bulk`, { scores })
+      .then((res) => res.data),
+
   // Get class record data (batched)
   getClassRecordData: async (courseSlug: string) => {
     const [students, termConfigs, assessmentScores, criteriaLinks] =

@@ -59,21 +59,23 @@ const buildAssessmentScores = (
   studentId: string,
   type: string
 ) => {
+  if (!assessments || !Array.isArray(assessments)) return [];
   return assessments
     .filter((a) => a.type === type && a.enabled)
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
     .map((assessment) => {
-      const score = assessment.scores.find(
-        (s: any) => s.student.id === studentId
+      const score = assessment.scores?.find(
+        (s: any) => s.student?.id === studentId
       );
       return {
         id: assessment.id,
         name: assessment.name,
-        score: score?.score,
+        score: score?.score ?? null,
         maxScore: assessment.maxScore,
-        percentage: score
-          ? (score.score / assessment.maxScore) * 100
-          : undefined,
+        percentage:
+          score && assessment.maxScore > 0
+            ? (score.score / assessment.maxScore) * 100
+            : undefined,
       };
     });
 };
@@ -85,7 +87,7 @@ const buildTermGrades = (termConfigs: any[], studentId: string) => {
   const termGrades: Record<string, TermGradeData | undefined> = {
     prelims: undefined,
     midterm: undefined,
-    preFinals: undefined,
+    prefinals: undefined,
     finals: undefined,
   };
 
@@ -93,7 +95,7 @@ const buildTermGrades = (termConfigs: any[], studentId: string) => {
     const termKey = getTermKey(termConfig.term);
 
     // Get student's computed term grade
-    const studentTermGrade = termConfig.termGrades.find(
+    const studentTermGrade = termConfig.termGrades?.find(
       (tg: any) => tg.student.id === studentId
     );
 
@@ -110,26 +112,27 @@ const buildTermGrades = (termConfigs: any[], studentId: string) => {
     );
 
     // Build exam score
-    const examAssessment = termConfig.assessments.find(
+    const examAssessment = termConfig.assessments?.find(
       (a: any) => a.type === "EXAM" && a.enabled
     );
     const examScore = examAssessment
       ? {
           id: examAssessment.id,
           name: examAssessment.name,
-          score: examAssessment.scores.find(
-            (s: any) => s.student.id === studentId
-          )?.score,
+          score:
+            examAssessment.scores?.find((s: any) => s.student?.id === studentId)
+              ?.score ?? null,
           maxScore: examAssessment.maxScore,
-          percentage: examAssessment.scores.find(
-            (s: any) => s.student.id === studentId
-          )
-            ? (examAssessment.scores.find(
-                (s: any) => s.student.id === studentId
-              )!.score /
-                examAssessment.maxScore) *
-              100
-            : undefined,
+          percentage:
+            examAssessment.scores?.find(
+              (s: any) => s.student?.id === studentId
+            ) && examAssessment.maxScore > 0
+              ? (examAssessment.scores.find(
+                  (s: any) => s.student?.id === studentId
+                )!.score /
+                  examAssessment.maxScore) *
+                100
+              : undefined,
         }
       : undefined;
 
@@ -257,7 +260,7 @@ const calculateCourseStats = (attendance: any[], studentAnalytics: any[]) => {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { course_slug: string } }
+  { params }: { params: Promise<{ course_slug: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -277,7 +280,7 @@ export async function GET(
     // Calculate student analytics
     const studentAnalytics = course.students.map((student) => {
       // Filter attendance for this student
-      const studentAttendance = course.attendance.filter(
+      const studentAttendance = (course.attendance || []).filter(
         (a) => a.student.id === student.id
       );
 
@@ -285,7 +288,7 @@ export async function GET(
       const attendanceStats = calculateAttendanceStats(studentAttendance);
 
       // Build term grades structure
-      const termGrades = buildTermGrades(course.termConfigs, student.id);
+      const termGrades = buildTermGrades(course.termConfigs || [], student.id);
 
       // Calculate average grade
       const gradeStats = calculateAverageGrade(termGrades);
@@ -301,7 +304,7 @@ export async function GET(
         attendanceRecords: studentAttendance
           .map((a) => ({
             id: a.id,
-            date: a.date.toISOString(),
+            date: typeof a.date === "string" ? a.date : a.date.toISOString(),
             status: a.status,
           }))
           .sort(
@@ -316,7 +319,7 @@ export async function GET(
     // Calculate course-wide statistics
     const stats = {
       totalStudents: course.students.length,
-      ...calculateCourseStats(course.attendance, studentAnalytics),
+      ...calculateCourseStats(course.attendance || [], studentAnalytics),
     };
 
     // Course info

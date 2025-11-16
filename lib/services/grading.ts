@@ -272,6 +272,175 @@ export async function saveAssessmentScore(data: {
   };
 }
 
+// Save multiple assessment scores in bulk
+export async function saveAssessmentScoresBulk(
+  courseSlug: string,
+  scores: Array<{
+    studentId: string;
+    assessmentId: string;
+    score: number | null;
+  }>
+) {
+  if (!Array.isArray(scores)) {
+    throw new Error("scores must be an array");
+  }
+
+  // Find course
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
+
+  if (!course) {
+    throw new Error("Course not found");
+  }
+
+  // Validate all scores and get assessment max scores
+  const assessmentIds = [...new Set(scores.map((s) => s.assessmentId))];
+  const assessments = await prisma.assessment.findMany({
+    where: {
+      id: { in: assessmentIds },
+      termConfig: { courseId: course.id },
+    },
+    select: { id: true, maxScore: true },
+  });
+
+  const assessmentMaxScores = new Map(
+    assessments.map((a) => [a.id, a.maxScore])
+  );
+
+  // Validate each score
+  for (const scoreData of scores) {
+    const maxScore = assessmentMaxScores.get(scoreData.assessmentId);
+    if (!maxScore) {
+      throw new Error(`Invalid assessment ID: ${scoreData.assessmentId}`);
+    }
+    if (scoreData.score !== null && scoreData.score > maxScore) {
+      throw new Error(
+        `Score ${scoreData.score} exceeds max score ${maxScore} for assessment ${scoreData.assessmentId}`
+      );
+    }
+  }
+
+  // Use transaction to save all scores
+  const results = await prisma.$transaction(
+    scores.map((scoreData) => {
+      if (scoreData.score === null) {
+        // Delete if score is null
+        return prisma.assessmentScore.deleteMany({
+          where: {
+            studentId: scoreData.studentId,
+            assessmentId: scoreData.assessmentId,
+          },
+        });
+      }
+
+      // Upsert the score
+      return prisma.assessmentScore.upsert({
+        where: {
+          assessmentId_studentId: {
+            assessmentId: scoreData.assessmentId,
+            studentId: scoreData.studentId,
+          },
+        },
+        create: {
+          studentId: scoreData.studentId,
+          assessmentId: scoreData.assessmentId,
+          score: scoreData.score,
+        },
+        update: {
+          score: scoreData.score,
+        },
+      });
+    })
+  );
+
+  return {
+    success: true,
+    savedCount: results.length,
+  };
+}
+
+// Helper: Compute term grade from assessment scores
+function computeTermGradeFromScores(
+  termConfig: any,
+  assessmentScores: Record<string, any>,
+  studentId: string
+): number | null {
+  const ptAssessments = termConfig.assessments.filter(
+    (a: any) => a.type === "PT" && a.enabled
+  );
+  const quizAssessments = termConfig.assessments.filter(
+    (a: any) => a.type === "QUIZ" && a.enabled
+  );
+  const examAssessment = termConfig.assessments.find(
+    (a: any) => a.type === "EXAM" && a.enabled
+  );
+
+  // Calculate PT average percentage
+  const ptPercentages: number[] = [];
+  ptAssessments.forEach((pt: any) => {
+    const key = `${studentId}:${pt.id}`;
+    const scoreData = assessmentScores[key];
+    if (
+      scoreData?.score !== null &&
+      scoreData?.score !== undefined &&
+      pt.maxScore > 0
+    ) {
+      const percentage = (scoreData.score / pt.maxScore) * 100;
+      ptPercentages.push(percentage);
+    }
+  });
+  const ptAvg =
+    ptPercentages.length > 0
+      ? ptPercentages.reduce((a, b) => a + b, 0) / ptAssessments.length
+      : 0;
+
+  // Calculate Quiz average percentage
+  const quizPercentages: number[] = [];
+  quizAssessments.forEach((quiz: any) => {
+    const key = `${studentId}:${quiz.id}`;
+    const scoreData = assessmentScores[key];
+    if (
+      scoreData?.score !== null &&
+      scoreData?.score !== undefined &&
+      quiz.maxScore > 0
+    ) {
+      const percentage = (scoreData.score / quiz.maxScore) * 100;
+      quizPercentages.push(percentage);
+    }
+  });
+  const quizAvg =
+    quizPercentages.length > 0
+      ? quizPercentages.reduce((a, b) => a + b, 0) / quizAssessments.length
+      : 0;
+
+  // Calculate Exam percentage
+  let examPercentage: number | null = null;
+  if (examAssessment) {
+    const key = `${studentId}:${examAssessment.id}`;
+    const scoreData = assessmentScores[key];
+    if (
+      scoreData?.score !== null &&
+      scoreData?.score !== undefined &&
+      examAssessment.maxScore > 0
+    ) {
+      examPercentage = (scoreData.score / examAssessment.maxScore) * 100;
+    }
+  }
+
+  // If no exam score, can't compute term grade
+  if (examPercentage === null) return null;
+
+  // Calculate weighted total
+  const ptWeighted = (ptAvg / 100) * termConfig.ptWeight;
+  const quizWeighted = (quizAvg / 100) * termConfig.quizWeight;
+  const examWeighted = (examPercentage / 100) * termConfig.examWeight;
+  const totalPercentage = ptWeighted + quizWeighted + examWeighted;
+
+  return totalPercentage;
+}
+
 // Batched: Get class record data (students, term-configs, assessment-scores, criteria-links)
 export async function getClassRecordData(courseSlug: string) {
   return unstable_cache(
