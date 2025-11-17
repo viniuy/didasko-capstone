@@ -35,6 +35,7 @@ const DAYS = [
 
 interface ImportedCourse {
   id?: string;
+  slug?: string;
   code: string;
   title: string;
   section: string;
@@ -90,6 +91,7 @@ export function ScheduleAssignmentDialog({
     { day: "", fromTime: "", toTime: "" },
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
 
   const currentCourse = courses[currentIndex];
   const progress = ((currentIndex + 1) / courses.length) * 100;
@@ -193,6 +195,24 @@ export function ScheduleAssignmentDialog({
       const fromMinutes = timeToMinutes(schedule.fromTime);
       const toMinutes = timeToMinutes(schedule.toTime);
 
+      // Validate time range: 7am (420 minutes) to 8pm (1200 minutes)
+      const MIN_TIME = 7 * 60; // 7:00 AM
+      const MAX_TIME = 20 * 60; // 8:00 PM
+
+      if (fromMinutes < MIN_TIME || fromMinutes > MAX_TIME) {
+        toast.error(
+          `Schedule ${i + 1}: Start time must be between 7:00 AM and 8:00 PM`
+        );
+        return false;
+      }
+
+      if (toMinutes < MIN_TIME || toMinutes > MAX_TIME) {
+        toast.error(
+          `Schedule ${i + 1}: End time must be between 7:00 AM and 8:00 PM`
+        );
+        return false;
+      }
+
       if (fromMinutes >= toMinutes) {
         toast.error(`Schedule ${i + 1}: End time must be after start time`);
         return false;
@@ -267,7 +287,7 @@ export function ScheduleAssignmentDialog({
     }
 
     if (confirm(confirmMessage)) {
-      onOpenChange(false);
+      setIsCanceling(true);
       setCurrentIndex(0);
       setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
@@ -279,6 +299,10 @@ export function ScheduleAssignmentDialog({
       } else {
         toast("Schedule editing canceled");
       }
+
+      // Close dialog without calling onComplete
+      onOpenChange(false);
+      setIsCanceling(false);
     }
   };
 
@@ -300,7 +324,7 @@ export function ScheduleAssignmentDialog({
           })),
         });
 
-        toast.success("Course created with schedules successfully!");
+        // Don't show toast here - onComplete will handle it for create/import modes
       } else if (mode === "import") {
         // Import mode: Create courses with schedules
         const coursesWithSchedules = courses.map((course, index) => ({
@@ -325,24 +349,20 @@ export function ScheduleAssignmentDialog({
           const { success, failed } = response.data.results;
           if (failed > 0) {
             toast.error(`${success} courses created, ${failed} failed.`);
-          } else {
-            toast.success(
-              `Successfully created ${success} courses with schedules!`
-            );
           }
-        } else {
-          toast.success("Courses created successfully with schedules!");
+          // Don't show success toast here - onComplete will handle it
         }
+        // Don't show success toast here - onComplete will handle it
       } else if (mode === "edit") {
         // Edit mode: Update schedules for existing course
-        const courseId = currentCourse.id;
-        if (!courseId) {
-          throw new Error("Course ID is missing");
+        const courseSlug = currentCourse.slug;
+        if (!courseSlug) {
+          throw new Error("Course slug is missing");
         }
 
         const schedulesToUpdate = schedules[0] || [];
 
-        await axiosInstance.put(`/courses/${courseId}/schedules`, {
+        await axiosInstance.put(`/courses/${courseSlug}/schedules`, {
           schedules: schedulesToUpdate.map((s) => ({
             day: s.day.slice(0, 3), // Convert to short form
             fromTime: s.fromTime,
@@ -353,7 +373,10 @@ export function ScheduleAssignmentDialog({
         toast.success("Schedules updated successfully!");
       }
 
-      onComplete();
+      // Only call onComplete if we're not canceling
+      if (!isCanceling) {
+        onComplete();
+      }
       onOpenChange(false);
       setCurrentIndex(0);
       setAllSchedules({});
@@ -393,7 +416,7 @@ export function ScheduleAssignmentDialog({
     <Dialog
       open={open}
       onOpenChange={(open) => {
-        if (!open) {
+        if (!open && !isSubmitting) {
           handleCancel();
         }
       }}

@@ -135,9 +135,22 @@ export function CourseSheet({
       return;
     }
 
+    // Validate academic year format
+    if (!/^\d{4}-\d{4}$/.test(formData.academicYear.trim())) {
+      toast.error(
+        "Academic year must be in format YYYY-YYYY (e.g., 2024-2025)"
+      );
+      return;
+    }
+
     const classNumber = parseInt(formData.classNumber);
     if (isNaN(classNumber) || classNumber < 1) {
       toast.error("Class number must be a positive number");
+      return;
+    }
+
+    if (classNumber > 9999999999999) {
+      toast.error("Class number cannot exceed 9999999999999");
       return;
     }
 
@@ -237,7 +250,7 @@ export function CourseSheet({
                 handleChange("code", e.target.value.toUpperCase())
               }
               placeholder="e.g., CS101"
-              maxLength={20}
+              maxLength={15}
               required
             />
           </div>
@@ -251,7 +264,7 @@ export function CourseSheet({
               value={formData.title}
               onChange={(e) => handleChange("title", e.target.value)}
               placeholder="e.g., Introduction to Programming"
-              maxLength={100}
+              maxLength={80}
               required
             />
           </div>
@@ -284,7 +297,7 @@ export function CourseSheet({
                   handleChange("room", e.target.value.toUpperCase())
                 }
                 placeholder="e.g., A101"
-                maxLength={20}
+                maxLength={15}
                 required
               />
             </div>
@@ -316,11 +329,24 @@ export function CourseSheet({
               <Input
                 id="academicYear"
                 value={formData.academicYear}
-                onChange={(e) => handleChange("academicYear", e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Only allow format: 0000-0000
+                  const academicYearPattern = /^(\d{0,4})(-?)(\d{0,4})$/;
+                  if (academicYearPattern.test(value) || value === "") {
+                    handleChange("academicYear", value);
+                  }
+                }}
                 placeholder="e.g., 2024-2025"
-                maxLength={20}
+                maxLength={9}
                 required
               />
+              {formData.academicYear &&
+                !/^\d{4}-\d{4}$/.test(formData.academicYear) && (
+                  <p className="text-xs text-red-500">
+                    Format must be YYYY-YYYY (e.g., 2024-2025)
+                  </p>
+                )}
             </div>
           </div>
 
@@ -333,9 +359,35 @@ export function CourseSheet({
                 id="classNumber"
                 type="number"
                 min="1"
-                max="999999999"
+                max="9999999999999"
                 value={formData.classNumber}
-                onChange={(e) => handleChange("classNumber", e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Only allow positive integers
+                  if (
+                    value === "" ||
+                    (/^\d+$/.test(value) && parseInt(value) <= 9999999999999)
+                  ) {
+                    handleChange("classNumber", value);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Prevent non-numeric keys except backspace, delete, tab, escape, enter
+                  if (
+                    !/[0-9]/.test(e.key) &&
+                    ![
+                      "Backspace",
+                      "Delete",
+                      "Tab",
+                      "Escape",
+                      "Enter",
+                      "ArrowLeft",
+                      "ArrowRight",
+                    ].includes(e.key)
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
                 required
               />
             </div>

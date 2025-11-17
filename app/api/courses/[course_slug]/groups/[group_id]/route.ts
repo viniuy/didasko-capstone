@@ -72,9 +72,12 @@ export async function DELETE(request: Request, { params }: { params }) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
+    const resolvedParams = await Promise.resolve(params);
+    const { course_slug, group_id } = resolvedParams;
+
     // Get the course
     const course = await prisma.course.findUnique({
-      where: { slug: params.course_slug },
+      where: { slug: course_slug },
     });
 
     if (!course) {
@@ -84,7 +87,7 @@ export async function DELETE(request: Request, { params }: { params }) {
     // Get the group
     const group = await prisma.group.findFirst({
       where: {
-        id: params.group_id,
+        id: group_id,
         courseId: course.id,
       },
     });
@@ -96,7 +99,7 @@ export async function DELETE(request: Request, { params }: { params }) {
     // Delete the group and its associations
     await prisma.group.delete({
       where: {
-        id: params.group_id,
+        id: group_id,
       },
     });
 

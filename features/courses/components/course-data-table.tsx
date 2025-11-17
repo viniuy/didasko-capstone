@@ -1191,7 +1191,11 @@ export function CourseDataTable({
   }, [selectedFile, isValidFile, previewData]);
 
   const handleScheduleAssignmentComplete = useCallback(async () => {
-    toast.success("All courses have been created with schedules!");
+    // Only show success message for create/import modes, not for edit mode
+    // Edit mode already shows its own success message in the dialog
+    if (scheduleDialogMode === "create" || scheduleDialogMode === "import") {
+      toast.success("All courses have been created with schedules!");
+    }
 
     // Show loading state
     setIsRefreshing(true);
@@ -1213,7 +1217,7 @@ export function CourseDataTable({
     // Also reset import status
     setShowImportStatus(false);
     setImportStatus(null);
-  }, [refreshTableData, onCourseAdded]);
+  }, [refreshTableData, onCourseAdded, scheduleDialogMode]);
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
       <h1 className="text-2xl sm:text-3xl font-bold text-[#124A69] mb-5">
@@ -1507,8 +1511,9 @@ export function CourseDataTable({
           open={showScheduleAssignment}
           onOpenChange={(open) => {
             setShowScheduleAssignment(open);
+            // Only call handleScheduleAssignmentComplete if dialog was closed after successful completion
+            // The dialog will call onComplete() itself when saving, not when canceling
             if (!open) {
-              handleScheduleAssignmentComplete();
               setPendingCourseData(null);
             }
           }}

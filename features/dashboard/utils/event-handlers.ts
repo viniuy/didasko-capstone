@@ -14,11 +14,21 @@ import {
 } from "@/lib/actions/events";
 import { startOfDay, isPast, isSameDay } from "date-fns";
 
-// Function to normalize date by removing time portion
+// Function to normalize date by removing time portion while preserving local timezone
 function normalizeDate(date: Date | string): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const d = typeof date === "string" ? new Date(date) : date;
+  // Create a new date using local timezone components to avoid UTC conversion
+  // This ensures the date stays in local time when sent to the database
+  const localDate = new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+  return localDate;
 }
 
 export async function handleSaveNewEvent({
@@ -73,7 +83,7 @@ export async function handleSaveNewEvent({
         const bufferTime = new Date(now.getTime() + 5 * 60000);
 
         if (eventTime.getTime() <= bufferTime.getTime()) {
-          onError("Event time must be at least 5 minutes in the future");
+          onError("Start time must be 5 minutes from now");
           return;
         }
       }
@@ -107,9 +117,7 @@ export async function handleSaveNewEvent({
 
           if (eventTime.getTime() <= bufferTime.getTime()) {
             onError(
-              `Additional date #${
-                i + 1
-              } time must be at least 5 minutes in the future`
+              `Additional date #${i + 1} start time must be 5 minutes from now`
             );
             return;
           }
@@ -310,7 +318,7 @@ export async function handleUpdateEvent({
         const bufferTime = new Date(now.getTime() + 5 * 60000);
 
         if (eventTime.getTime() <= bufferTime.getTime()) {
-          onError("Event time must be at least 5 minutes in the future");
+          onError("Start time must be 5 minutes from now");
           return;
         }
       }

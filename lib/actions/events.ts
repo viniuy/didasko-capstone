@@ -14,9 +14,20 @@ const getEventModel = (): EventModel => {
   throw new Error("Event model not found in Prisma client");
 };
 
-// Normalize date to start of day
+// Normalize date to start of day while preserving local timezone
 function normalizeDate(date: Date): Date {
-  return startOfDay(date);
+  // Use local timezone components to avoid UTC conversion
+  // This ensures the date represents the local date, not UTC
+  const localDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+  return localDate;
 }
 
 export async function getEvents() {

@@ -5,8 +5,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
+const SELECTED_ROLE_KEY = "admin_selected_role";
+
 export default function RedirectingPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const [showRoleSelection, setShowRoleSelection] = useState(false);
 
@@ -20,10 +22,45 @@ export default function RedirectingPage() {
         return;
       }
 
-      // If user is admin, show role selection
+      // If user is admin, check for previously selected role
       if (role === "ADMIN") {
-        setShowRoleSelection(true);
-        return;
+        // Check localStorage for previously selected role
+        const savedRole = localStorage.getItem(SELECTED_ROLE_KEY);
+
+        // Check session for selectedRole (from JWT token)
+        const sessionSelectedRole = session?.user?.selectedRole;
+
+        // If localStorage has a saved role but session doesn't, restore it
+        if (savedRole && !sessionSelectedRole) {
+          update({ selectedRole: savedRole as "ADMIN" | "FACULTY" }).then(
+            () => {
+              // After updating, redirect based on saved role
+              const roleMap: Record<string, string> = {
+                ADMIN: "/dashboard/admin",
+                FACULTY: "/dashboard/faculty",
+              };
+              router.replace(roleMap[savedRole] || "/dashboard/admin");
+            }
+          );
+          return;
+        }
+
+        // Use session selectedRole first, then localStorage, then show selection
+        const effectiveRole = sessionSelectedRole || savedRole;
+
+        if (effectiveRole === "FACULTY") {
+          // Admin has selected faculty role - redirect to faculty dashboard
+          router.replace("/dashboard/faculty");
+          return;
+        } else if (effectiveRole === "ADMIN") {
+          // Admin has explicitly selected admin role - redirect to admin dashboard
+          router.replace("/dashboard/admin");
+          return;
+        } else {
+          // No previous selection - show role selection
+          setShowRoleSelection(true);
+          return;
+        }
       }
 
       // For other roles, proceed with normal redirection
@@ -35,7 +72,7 @@ export default function RedirectingPage() {
       const path = roleMap[role] || "/dashboard";
       router.replace(path);
     }
-  }, [session, status, router]);
+  }, [session, status, router, update]);
 
   const handleRoleSelection = async (selectedRole: "ADMIN" | "FACULTY") => {
     const roleMap: Record<string, string> = {
@@ -43,10 +80,14 @@ export default function RedirectingPage() {
       FACULTY: "/dashboard/faculty",
     };
 
-    // Update the session with the selected role
-    if (session?.user) {
-      session.user.role = selectedRole;
-    }
+    // Store in localStorage as backup
+    localStorage.setItem(SELECTED_ROLE_KEY, selectedRole);
+
+    // Update the session using NextAuth's update() method
+    // This will trigger the JWT callback with trigger === "update"
+    await update({
+      selectedRole: selectedRole,
+    });
 
     router.replace(roleMap[selectedRole]);
   };

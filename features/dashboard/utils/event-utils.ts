@@ -146,7 +146,15 @@ export function groupEventsByDate(events: any[]): GroupedEvent[] {
   const groupedEvents: Record<string, EventItem[]> = {};
 
   events.forEach((event: any) => {
-    const dateKey = format(new Date(event.date), "yyyy-MM-dd");
+    // Parse date and ensure it's in local timezone
+    const eventDate = new Date(event.date);
+    // Create a local date to avoid UTC conversion issues
+    const localDate = new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate()
+    );
+    const dateKey = format(localDate, "yyyy-MM-dd");
 
     if (!groupedEvents[dateKey]) {
       groupedEvents[dateKey] = [];
@@ -156,7 +164,7 @@ export function groupEventsByDate(events: any[]): GroupedEvent[] {
       id: event.id,
       title: event.title,
       description: event.description,
-      date: new Date(event.date),
+      date: localDate,
       fromTime: event.fromTime,
       toTime: event.toTime,
       role: event.role as Role,
@@ -165,10 +173,15 @@ export function groupEventsByDate(events: any[]): GroupedEvent[] {
 
   // Convert to array and sort by date
   const sortedEvents: GroupedEvent[] = Object.keys(groupedEvents).map(
-    (dateKey) => ({
-      date: new Date(dateKey),
-      items: groupedEvents[dateKey],
-    })
+    (dateKey) => {
+      // Parse date key and create local date
+      const [year, month, day] = dateKey.split("-").map(Number);
+      const localDate = new Date(year, month - 1, day);
+      return {
+        date: localDate,
+        items: groupedEvents[dateKey],
+      };
+    }
   );
 
   sortedEvents.sort((a, b) => a.date.getTime() - b.date.getTime());

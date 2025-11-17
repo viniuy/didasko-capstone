@@ -193,7 +193,7 @@ export default function UpcomingEvents() {
       const bufferTime = new Date(now.getTime() + 5 * 60000);
 
       if (selectedTime.getTime() <= bufferTime.getTime()) {
-        setTimeError("Event time must be at least 5 minutes in the future");
+        setTimeError("Start time must be 5 minutes from now");
         return false;
       }
     }
@@ -356,11 +356,29 @@ export default function UpcomingEvents() {
 
   // Function to handle edit click
   function handleEditClick(event: EventItem) {
+    // Ensure date is properly converted to local Date object
+    let eventDate: Date | null = null;
+    if (event.date) {
+      // If it's already a Date object, use it directly
+      if (event.date instanceof Date) {
+        eventDate = new Date(event.date);
+      } else {
+        // If it's a string, parse it and create a local date
+        const parsedDate = new Date(event.date);
+        // Create a new date in local timezone to avoid UTC conversion issues
+        eventDate = new Date(
+          parsedDate.getFullYear(),
+          parsedDate.getMonth(),
+          parsedDate.getDate()
+        );
+      }
+    }
+
     setEditData({
       id: event.id,
       title: event.title,
       description: event.description || "",
-      date: event.date,
+      date: eventDate,
       fromTime: event.fromTime || "",
       toTime: event.toTime || "",
       dates: [],
@@ -376,11 +394,29 @@ export default function UpcomingEvents() {
 
   // Function to handle opening edit modal
   function handleOpenEdit(event: EventItem) {
+    // Ensure date is properly converted to local Date object
+    let eventDate: Date | null = null;
+    if (event.date) {
+      // If it's already a Date object, use it directly
+      if (event.date instanceof Date) {
+        eventDate = new Date(event.date);
+      } else {
+        // If it's a string, parse it and create a local date
+        const parsedDate = new Date(event.date);
+        // Create a new date in local timezone to avoid UTC conversion issues
+        eventDate = new Date(
+          parsedDate.getFullYear(),
+          parsedDate.getMonth(),
+          parsedDate.getDate()
+        );
+      }
+    }
+
     setEditData({
       id: event.id,
       title: event.title,
       description: event.description || "",
-      date: event.date,
+      date: eventDate,
       fromTime: event.fromTime || "",
       toTime: event.toTime || "",
       dates: [],
