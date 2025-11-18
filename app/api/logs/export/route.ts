@@ -6,6 +6,7 @@ import { Role } from "@prisma/client";
 import { requirePermission, handleAuthError } from "@/lib/authz";
 import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
+import { logAction } from "@/lib/audit";
 
 export const POST = withLogging(
   { action: "AUDIT_LOGS_EXPORT", module: "Audit Logs" },
@@ -83,6 +84,33 @@ export const POST = withLogging(
           createdAt: "desc",
         },
       });
+
+      // Log export operation
+      try {
+        await logAction({
+          userId: session.user.id,
+          action: "AUDIT_LOGS_EXPORTED",
+          module: "Audit Logs",
+          reason: `Exported ${logs.length} audit log(s)${
+            startDate && endDate ? ` from ${startDate} to ${endDate}` : ""
+          }${action ? ` filtered by action: ${action}` : ""}${
+            userId ? ` for user: ${userId}` : ""
+          }`,
+          after: {
+            exportType: "audit_logs",
+            count: logs.length,
+            filters: {
+              startDate: startDate || null,
+              endDate: endDate || null,
+              action: action || null,
+              userId: userId || null,
+            },
+          },
+        });
+      } catch (error) {
+        console.error("Error logging export:", error);
+        // Don't fail export if logging fails
+      }
 
       return NextResponse.json(logs);
     } catch (error) {

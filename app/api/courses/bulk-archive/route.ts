@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { PrismaClient, CourseStatus } from "@prisma/client";
+import { logAction } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
@@ -31,6 +32,12 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Get courses before update for logging
+    const coursesBefore = await prisma.course.findMany({
+      where: { id: { in: courseIds } },
+      select: { id: true, code: true, title: true, status: true },
+    });
+
     // Update all courses with the new status
     const result = await prisma.course.updateMany({
       where: {
@@ -43,6 +50,48 @@ export async function PATCH(request: NextRequest) {
         updatedAt: new Date(),
       },
     });
+
+    // Log course archive/activate
+    try {
+      const action =
+        status === "ARCHIVED"
+          ? "COURSE_ARCHIVED"
+          : status === "ACTIVE"
+          ? "COURSE_ACTIVATED"
+          : "COURSE_STATUS_CHANGED";
+      await logAction({
+        userId: session.user.id,
+        action,
+        module: "Course Management",
+        reason: `${
+          action === "COURSE_ARCHIVED"
+            ? "Archived"
+            : action === "COURSE_ACTIVATED"
+            ? "Activated"
+            : "Changed status"
+        } ${result.count} course(s)`,
+        before: {
+          courses: coursesBefore.map((c) => ({
+            id: c.id,
+            code: c.code,
+            title: c.title,
+            status: c.status,
+          })),
+        },
+        after: {
+          courses: coursesBefore.map((c) => ({
+            id: c.id,
+            code: c.code,
+            title: c.title,
+            status: status as CourseStatus,
+          })),
+          count: result.count,
+        },
+      });
+    } catch (error) {
+      console.error("Error logging course status change:", error);
+      // Don't fail operation if logging fails
+    }
 
     return NextResponse.json({
       success: true,

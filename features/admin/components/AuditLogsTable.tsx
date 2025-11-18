@@ -341,9 +341,6 @@ export default function AuditLogsTable({
                       Module
                     </TableHead>
                     <TableHead className="text-[#124A69] font-semibold">
-                      IP Address
-                    </TableHead>
-                    <TableHead className="text-[#124A69] font-semibold">
                       Details
                     </TableHead>
                   </TableRow>
@@ -410,9 +407,6 @@ export default function AuditLogsTable({
                               <span>{log.module}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="font-mono text-sm">
-                            {log.ip || "N/A"}
-                          </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
@@ -436,7 +430,7 @@ export default function AuditLogsTable({
                         </TableRow>
                         {isExpanded && (
                           <TableRow>
-                            <TableCell colSpan={6} className="bg-muted/50">
+                            <TableCell colSpan={5} className="bg-muted/50">
                               <div className="space-y-4 py-4 px-2">
                                 {log.reason && (
                                   <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
@@ -448,30 +442,75 @@ export default function AuditLogsTable({
                                     </div>
                                   </div>
                                 )}
-                                {log.before && (
-                                  <div>
-                                    <div className="font-semibold mb-2 text-[#124A69] flex items-center gap-2">
-                                      <span>⬅️</span> Previous State
-                                    </div>
-                                    <div className="bg-red-50 border border-red-200 rounded p-3">
-                                      <pre className="text-xs text-gray-800 overflow-auto max-h-48 font-mono">
-                                        {JSON.stringify(log.before, null, 2)}
-                                      </pre>
-                                    </div>
-                                  </div>
-                                )}
-                                {log.after && (
-                                  <div>
-                                    <div className="font-semibold mb-2 text-[#124A69] flex items-center gap-2">
-                                      <span>➡️</span> New State
-                                    </div>
-                                    <div className="bg-green-50 border border-green-200 rounded p-3">
-                                      <pre className="text-xs text-gray-800 overflow-auto max-h-48 font-mono">
-                                        {JSON.stringify(log.after, null, 2)}
-                                      </pre>
-                                    </div>
-                                  </div>
-                                )}
+                                {log.before &&
+                                  (() => {
+                                    // Filter out status codes and technical fields
+                                    const filteredBefore = Object.fromEntries(
+                                      Object.entries(log.before).filter(
+                                        ([key]) =>
+                                          ![
+                                            "status",
+                                            "duration",
+                                            "error",
+                                            "_count",
+                                          ].includes(key.toLowerCase())
+                                      )
+                                    );
+                                    if (
+                                      Object.keys(filteredBefore).length === 0
+                                    )
+                                      return null;
+                                    return (
+                                      <div>
+                                        <div className="font-semibold mb-2 text-[#124A69] flex items-center gap-2">
+                                          <span>⬅️</span> Previous State
+                                        </div>
+                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
+                                          <pre className="text-xs text-gray-800 dark:text-gray-200 overflow-auto max-h-48 font-mono">
+                                            {JSON.stringify(
+                                              filteredBefore,
+                                              null,
+                                              2
+                                            )}
+                                          </pre>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                {log.after &&
+                                  (() => {
+                                    // Filter out status codes and technical fields, show user actions
+                                    const filteredAfter = Object.fromEntries(
+                                      Object.entries(log.after).filter(
+                                        ([key]) =>
+                                          ![
+                                            "status",
+                                            "duration",
+                                            "error",
+                                            "_count",
+                                          ].includes(key.toLowerCase())
+                                      )
+                                    );
+                                    if (Object.keys(filteredAfter).length === 0)
+                                      return null;
+                                    return (
+                                      <div>
+                                        <div className="font-semibold mb-2 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-2">
+                                          <span>➡️</span> New State / Action
+                                          Details
+                                        </div>
+                                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-3">
+                                          <pre className="text-xs text-gray-800 dark:text-gray-200 overflow-auto max-h-48 font-mono">
+                                            {JSON.stringify(
+                                              filteredAfter,
+                                              null,
+                                              2
+                                            )}
+                                          </pre>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                 {!log.before && !log.after && !log.reason && (
                                   <div className="text-sm text-muted-foreground text-center py-4">
                                     No additional details available for this log

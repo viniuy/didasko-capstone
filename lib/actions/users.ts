@@ -3,6 +3,9 @@
 import { prisma } from "@/lib/db";
 import { UserStatus, Role, WorkType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { logAction } from "@/lib/audit";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
 
 export async function updateUserStatus(userId: string, status: UserStatus) {
   try {
@@ -53,7 +56,7 @@ export async function addUser(userData: AddUserParams) {
     }
 
     // Create the user
-    await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         name: userData.name,
         email: userData.email,
@@ -63,6 +66,29 @@ export async function addUser(userData: AddUserParams) {
         role: userData.role,
       },
     });
+
+    // Log user creation
+    try {
+      const session = await getServerSession(authOptions);
+      await logAction({
+        userId: session?.user?.id || null,
+        action: "USER_CREATED",
+        module: "User Management",
+        reason: `User created: ${newUser.name} (${newUser.email}) with role ${newUser.role}`,
+        after: {
+          id: newUser.id,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          department: newUser.department,
+          status: newUser.status,
+          workType: newUser.workType,
+        },
+      });
+    } catch (error) {
+      console.error("Error logging user creation:", error);
+      // Don't fail user creation if logging fails
+    }
 
     revalidatePath("/dashboard/admin");
     return { success: true };
@@ -84,6 +110,24 @@ export async function editUser(
   }
 ) {
   try {
+    // Get user before update for logging
+    const userBefore = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        department: true,
+        status: true,
+        workType: true,
+      },
+    });
+
+    if (!userBefore) {
+      return { success: false, error: "User not found" };
+    }
+
     // Check if email already exists (if email is being changed)
     if (data.email) {
       const existingUser = await prisma.user.findFirst({
@@ -101,10 +145,53 @@ export async function editUser(
     }
 
     // Update the user
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data: data,
     });
+
+    // Log user edit - determine action type
+    try {
+      const session = await getServerSession(authOptions);
+      let action = "USER_EDITED";
+      let reason = `User edited: ${updatedUser.name} (${updatedUser.email})`;
+
+      if (data.role && data.role !== userBefore.role) {
+        action = "USER_ROLE_CHANGED";
+        reason = `User role changed: ${updatedUser.name} (${updatedUser.email}) from ${userBefore.role} to ${data.role}`;
+      } else if (data.status && data.status !== userBefore.status) {
+        action = data.status === "ACTIVE" ? "USER_ACTIVATED" : "USER_ARCHIVED";
+        reason = `User ${
+          data.status === "ACTIVE" ? "activated" : "archived"
+        }: ${updatedUser.name} (${updatedUser.email})`;
+      }
+
+      await logAction({
+        userId: session?.user?.id || null,
+        action,
+        module: "User Management",
+        reason,
+        before: {
+          name: userBefore.name,
+          email: userBefore.email,
+          role: userBefore.role,
+          department: userBefore.department,
+          status: userBefore.status,
+          workType: userBefore.workType,
+        },
+        after: {
+          name: updatedUser.name,
+          email: updatedUser.email,
+          role: updatedUser.role,
+          department: updatedUser.department,
+          status: updatedUser.status,
+          workType: updatedUser.workType,
+        },
+      });
+    } catch (error) {
+      console.error("Error logging user edit:", error);
+      // Don't fail user edit if logging fails
+    }
 
     revalidatePath("/dashboard/admin");
     return { success: true };

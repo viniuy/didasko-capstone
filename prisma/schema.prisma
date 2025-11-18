@@ -489,13 +489,14 @@ model AuditLog {
 }
 
 model BreakGlassSession {
-  id          String   @id @default(uuid())
-  userId      String   @unique @map("user_id")
-  reason      String   @db.Text
-  activatedAt DateTime @default(now()) @map("activated_at")
-  expiresAt   DateTime @map("expires_at")
-  activatedBy String?  @map("activated_by")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  reason        String   @db.Text
+  activatedAt   DateTime @default(now()) @map("activated_at")
+  expiresAt     DateTime? @map("expires_at")
+  activatedBy   String?  @map("activated_by")
+  originalRole  Role     @map("original_role")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
   @@map("break_glass_sessions")

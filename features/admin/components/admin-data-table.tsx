@@ -37,7 +37,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { UserSheet } from "./user-sheet";
-import { editUser, deleteUser } from "@/lib/actions/users";
+import { editUser } from "@/lib/actions/users";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -322,139 +322,7 @@ export function AdminDataTable({
     []
   );
 
-  const handleDeleteUser = useCallback(async () => {
-    if (!userToDelete) return;
-
-    try {
-      setIsRefreshing(true);
-      const result = await deleteUser(userToDelete.id);
-
-      if (result.success) {
-        toast.success("User deleted successfully");
-        await refreshTableData();
-      } else {
-        if (
-          result.error?.includes("not found") ||
-          result.error?.includes("does not exist")
-        ) {
-          toast.error("User no longer exists. The table will be refreshed.");
-          await refreshTableData();
-        } else {
-          toast.error(result.error || "Failed to delete user");
-        }
-      }
-    } catch (error) {
-      toast.error("An error occurred while deleting the user");
-    } finally {
-      setUserToDelete(null);
-      setIsDeleteDialogOpen(false);
-    }
-  }, [userToDelete, refreshTableData]);
-
   //Done
-  const handleExport = useCallback(async () => {
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Users");
-
-      // Title row
-      worksheet.mergeCells("A1:H1");
-      const titleRow = worksheet.getCell("A1");
-      titleRow.value = "USER MANAGEMENT DATA";
-      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-      titleRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      titleRow.alignment = { vertical: "middle", horizontal: "center" };
-      worksheet.getRow(1).height = 30;
-
-      // Date row
-      worksheet.mergeCells("A2:H2");
-      const dateRow = worksheet.getCell("A2");
-      dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
-      dateRow.font = { italic: true, size: 11 };
-      dateRow.alignment = { vertical: "middle", horizontal: "center" };
-
-      worksheet.addRow([]);
-
-      // Header row
-      const headerRow = worksheet.addRow(EXPECTED_HEADERS);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
-      headerRow.height = 25;
-
-      headerRow.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
-
-      // Data rows
-      tableData.forEach((user: User) => {
-        const row = worksheet.addRow([
-          user.name || "",
-          user.email || "",
-          user.department || "",
-          formatEnumValue(user.workType),
-          formatEnumValue(user.role),
-          formatEnumValue(user.status),
-        ]);
-
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFD3D3D3" } },
-            left: { style: "thin", color: { argb: "FFD3D3D3" } },
-            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
-            right: { style: "thin", color: { argb: "FFD3D3D3" } },
-          };
-          cell.alignment = { vertical: "middle" };
-        });
-
-        if (row.number % 2 === 0) {
-          row.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFF9FAFB" },
-          };
-        }
-      });
-
-      // Set column widths
-      worksheet.columns = [
-        { width: 20 },
-        { width: 30 },
-        { width: 20 },
-        { width: 15 },
-        { width: 15 },
-        { width: 15 },
-      ];
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const filename = `user_data_${
-        new Date().toISOString().split("T")[0]
-      }.xlsx`;
-      saveAs(blob, filename);
-
-      toast.success("User data exported successfully");
-      setShowExportPreview(false);
-    } catch (error) {
-      console.error("Export error:", error);
-      toast.error("Failed to export data");
-    }
-  }, [tableData]);
 
   //Done
   const handleImportTemplate = useCallback(async () => {
@@ -1074,6 +942,144 @@ export function AdminDataTable({
     },
   });
 
+  //Done
+  const handleExport = useCallback(async () => {
+    try {
+      // Log export operation
+      try {
+        // Extract filter values from table state
+        const emailFilter = table.getColumn("email")?.getFilterValue() as
+          | string
+          | undefined;
+        const roleFilter = columnFilters.find((f) => f.id === "role")?.value as
+          | string
+          | undefined;
+        const departmentFilter = columnFilters.find(
+          (f) => f.id === "department"
+        )?.value as string | undefined;
+        const statusFilter = columnFilters.find((f) => f.id === "status")
+          ?.value as string | undefined;
+
+        await fetch("/api/users/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            count: tableData.length,
+            filters: {
+              search: emailFilter || null,
+              role: roleFilter || null,
+              department: departmentFilter || null,
+              status: statusFilter || null,
+            },
+          }),
+        });
+      } catch (error) {
+        console.error("Error logging export:", error);
+        // Continue with export even if logging fails
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Users");
+
+      // Title row
+      worksheet.mergeCells("A1:H1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "USER MANAGEMENT DATA";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
+
+      // Date row
+      worksheet.mergeCells("A2:H2");
+      const dateRow = worksheet.getCell("A2");
+      dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
+      dateRow.font = { italic: true, size: 11 };
+      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      worksheet.addRow([]);
+
+      // Header row
+      const headerRow = worksheet.addRow(EXPECTED_HEADERS);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Data rows
+      tableData.forEach((user: User) => {
+        const row = worksheet.addRow([
+          user.name || "",
+          user.email || "",
+          user.department || "",
+          formatEnumValue(user.workType),
+          formatEnumValue(user.role),
+          formatEnumValue(user.status),
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+
+        if (row.number % 2 === 0) {
+          row.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF9FAFB" },
+          };
+        }
+      });
+
+      // Set column widths
+      worksheet.columns = [
+        { width: 20 },
+        { width: 30 },
+        { width: 20 },
+        { width: 15 },
+        { width: 15 },
+        { width: 15 },
+      ];
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const filename = `user_data_${
+        new Date().toISOString().split("T")[0]
+      }.xlsx`;
+      saveAs(blob, filename);
+
+      toast.success("User data exported successfully");
+      setShowExportPreview(false);
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export data");
+    }
+  }, [tableData, table, columnFilters]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1276,9 +1282,6 @@ export function AdminDataTable({
               onClick={() => setIsDeleteDialogOpen(false)}
             >
               Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteUser}>
-              Delete
             </Button>
           </div>
         </DialogContent>

@@ -3,6 +3,9 @@
 import { prisma } from "@/lib/prisma";
 import { CourseStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { logAction } from "@/lib/audit";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
 
 interface ScheduleInput {
   day: string;
@@ -24,7 +27,7 @@ interface CourseInput {
 }
 
 /** CREATE COURSE */
-export async function createCourse(data: CourseInput) {
+export async function createCourse(data: CourseInput, isFromImport = false) {
   try {
     // require at least one schedule (if you want that)
     if (!data.schedules || data.schedules.length === 0) {
@@ -102,6 +105,33 @@ export async function createCourse(data: CourseInput) {
 
       revalidatePath("/admin/courses");
 
+      // Log course creation
+      try {
+        const session = await getServerSession(authOptions);
+        await logAction({
+          userId: session?.user?.id || null,
+          action: "COURSE_CREATED",
+          module: "Course Management",
+          reason: `Course created: ${newCourse.code} - ${newCourse.title}${
+            isFromImport ? " (via import)" : ""
+          }`,
+          after: {
+            id: newCourse.id,
+            code: newCourse.code,
+            title: newCourse.title,
+            section: newCourse.section,
+            semester: newCourse.semester,
+            academicYear: newCourse.academicYear,
+            status: newCourse.status,
+            facultyId: newCourse.facultyId,
+            source: isFromImport ? "import" : "manual",
+          },
+        });
+      } catch (error) {
+        console.error("Error logging course creation:", error);
+        // Don't fail course creation if logging fails
+      }
+
       return { success: true, data: newCourse };
     } catch (prismaError: any) {
       // Handle Prisma unique constraint errors gracefully
@@ -141,7 +171,11 @@ export async function createCourse(data: CourseInput) {
 /** UPDATE COURSE */
 interface CourseUpdateData extends Partial<CourseInput> {}
 
-export async function editCourse(courseId: string, data: CourseUpdateData) {
+export async function editCourse(
+  courseId: string,
+  data: CourseUpdateData,
+  isFromImport = false
+) {
   try {
     const existingCourse = await prisma.course.findUnique({
       where: { id: courseId },
@@ -238,6 +272,38 @@ export async function editCourse(courseId: string, data: CourseUpdateData) {
       }
 
       revalidatePath("/admin/courses");
+
+      // Log course edit
+      try {
+        const session = await getServerSession(authOptions);
+        await logAction({
+          userId: session?.user?.id || null,
+          action: "COURSE_EDITED",
+          module: "Course Management",
+          reason: `Course edited: ${updatedCourse.code} - ${
+            updatedCourse.title
+          }${isFromImport ? " (via import)" : ""}`,
+          before: {
+            code: existingCourse.code,
+            title: existingCourse.title,
+            section: existingCourse.section,
+            status: existingCourse.status,
+            facultyId: existingCourse.facultyId,
+          },
+          after: {
+            code: updatedCourse.code,
+            title: updatedCourse.title,
+            section: updatedCourse.section,
+            status: updatedCourse.status,
+            facultyId: updatedCourse.facultyId,
+            source: isFromImport ? "import" : "manual",
+          },
+        });
+      } catch (error) {
+        console.error("Error logging course edit:", error);
+        // Don't fail course edit if logging fails
+      }
+
       return { success: true, data: updatedCourse };
     } catch (prismaError: any) {
       // Handle Prisma unique constraint errors gracefully

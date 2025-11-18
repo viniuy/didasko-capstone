@@ -17,6 +17,7 @@ import {
   Edit,
   CalendarPlus,
   Settings2,
+  Archive,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -411,12 +412,16 @@ export function CourseDataTable({
       try {
         setIsInitialLoading(true);
 
-        const facultyResponse = await usersService.getUsers({
-          role: "FACULTY",
-        });
+        // Use getFaculty instead of getUsers to avoid permission issues
+        // getFaculty only requires authentication, not VIEW_USERS permission
+        const facultyResponse = await usersService.getFaculty();
 
         if (Array.isArray(facultyResponse)) {
-          setFaculties(facultyResponse);
+          // Filter to only FACULTY role (exclude ACADEMIC_HEAD if needed)
+          const facultyOnly = facultyResponse.filter(
+            (user: any) => user.role === "FACULTY"
+          );
+          setFaculties(facultyOnly);
         }
 
         // Fetch stats for all courses
@@ -1254,8 +1259,8 @@ export function CourseDataTable({
               onClick={() => setShowSettingsDialog(true)}
               className="gap-2"
             >
-              <Settings2 className="h-4 w-4" />
-              Settings
+              <Archive className="h-4 w-4" />
+              Archive
             </Button>
             {permissions.canExportData && (
               <Button

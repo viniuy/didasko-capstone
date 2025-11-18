@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { deactivateBreakGlass } from "@/lib/breakGlass";
-import { getClientIp } from "@/lib/utils/ip";
 import { requireAdmin, handleAuthError } from "@/lib/authz";
 import { withLogging } from "@/lib/withLogging";
 
@@ -11,32 +10,52 @@ export const POST = withLogging(
   async (req: NextRequest) => {
     try {
       const session = await getServerSession(authOptions);
-      const ip = getClientIp(req);
 
       if (!session?.user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
       const body = await req.json();
-      const userId = body?.userId || session.user.id; // Default to current user if not provided
+      const userId = body?.userId;
+
+      if (!userId) {
+        return NextResponse.json(
+          { error: "userId is required" },
+          { status: 400 }
+        );
+      }
 
       // ADMIN can deactivate for anyone
-      // ACADEMIC_HEAD can only deactivate for themselves
+      // ACADEMIC_HEAD can deactivate any active break-glass session (they activated it)
       if (session.user.role === "ADMIN") {
         // Admin can deactivate for any user
-        await deactivateBreakGlass(userId, session.user.id, ip);
+        await deactivateBreakGlass(userId, session.user.id);
       } else if (session.user.role === "ACADEMIC_HEAD") {
-        // Academic Head can only deactivate for themselves
-        if (userId !== session.user.id) {
+        // Academic Head can deactivate any break-glass session they activated
+        const { prisma } = await import("@/lib/prisma");
+        const sessionData = await prisma.breakGlassSession.findUnique({
+          where: { userId },
+        });
+
+        if (!sessionData) {
+          return NextResponse.json(
+            { error: "Break-glass session not found" },
+            { status: 404 }
+          );
+        }
+
+        // Verify Academic Head activated this session
+        if (sessionData.activatedBy !== session.user.id) {
           return NextResponse.json(
             {
               error:
-                "Academic Head can only deactivate break-glass for themselves",
+                "You can only deactivate break-glass sessions you activated",
             },
             { status: 403 }
           );
         }
-        await deactivateBreakGlass(userId, session.user.id, ip);
+
+        await deactivateBreakGlass(userId, session.user.id);
       } else {
         return NextResponse.json(
           { error: "Only Admin and Academic Head can deactivate break-glass" },

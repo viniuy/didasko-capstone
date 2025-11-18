@@ -279,6 +279,16 @@ export function AppSidebar() {
     try {
       const loadingToast = toast.loading("Logging out...");
 
+      // Log logout before clearing session
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+        });
+      } catch (error) {
+        console.error("Logout logging error:", error);
+        // Continue with logout even if logging fails
+      }
+
       // Clear the selected role from localStorage
       localStorage.removeItem("admin_selected_role");
 

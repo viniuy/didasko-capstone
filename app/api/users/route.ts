@@ -8,7 +8,6 @@ import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
 import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
-import { getClientIp } from "@/lib/utils/ip";
 import { canManageUser } from "@/lib/roles";
 
 export const GET = withLogging(
@@ -75,8 +74,6 @@ export const POST = withLogging(
         await requirePermission(session.user, Permission.MANAGE_USERS);
       }
 
-      const ip = getClientIp(req);
-
       try {
         const user = await createUser({
           email,
@@ -97,8 +94,9 @@ export const POST = withLogging(
             email: user.email,
             name: user.name,
             role: user.role,
+            department: user.department,
           },
-          ip,
+          reason: `Created ${role} user: ${user.name} (${user.email})`,
         });
 
         return NextResponse.json(user);
@@ -160,8 +158,6 @@ export const DELETE = withLogging(
         role: targetUser.role,
       };
 
-      const ip = getClientIp(req);
-
       await deleteUser(id);
 
       // Log deletion with explicit action
@@ -170,8 +166,7 @@ export const DELETE = withLogging(
         action: "USER_DELETED",
         module: "User Management",
         before,
-        reason: `User deleted by ${session.user.name || session.user.email}`,
-        ip,
+        reason: `Deleted user: ${targetUser.name} (${targetUser.email}) - ${targetUser.role}`,
       });
 
       return NextResponse.json({

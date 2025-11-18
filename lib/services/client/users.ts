@@ -1,7 +1,7 @@
 import axiosInstance from "@/lib/axios";
 
 export const usersService = {
-  // Get users
+  // Get users (requires VIEW_USERS permission)
   getUsers: (filters?: {
     email?: string;
     search?: string;
@@ -9,6 +9,9 @@ export const usersService = {
     department?: string;
   }) =>
     axiosInstance.get("/users", { params: filters }).then((res) => res.data),
+
+  // Get faculty users (only requires authentication, no special permission)
+  getFaculty: () => axiosInstance.get("/users/faculty").then((res) => res.data),
 
   // Create user
   create: (data: any) =>

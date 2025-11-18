@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { logAction } from "@/lib/audit";
 
 const requiredEnv = [
   "AZURE_AD_CLIENT_ID",
@@ -96,6 +97,19 @@ const handler = NextAuth({
         }
 
         console.info(`Sign-in success for ${user.email}`);
+
+        // Log login
+        await logAction({
+          userId: dbUser.id,
+          action: "USER_LOGIN",
+          module: "Authentication",
+          reason: `User logged in: ${dbUser.name} (${dbUser.email})`,
+          after: {
+            role: dbUser.role,
+            department: dbUser.department,
+          },
+        });
+
         return true;
       } catch (err) {
         console.error("Sign-in error:", err);

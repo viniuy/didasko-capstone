@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { PrismaClient } from "@prisma/client";
+import { logAction } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
@@ -142,6 +143,26 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Log student registration
+    try {
+      await logAction({
+        userId: session.user.id,
+        action: "STUDENT_REGISTERED",
+        module: "Student Management",
+        reason: `Student registered: ${newStudent.firstName} ${newStudent.lastName} (${newStudent.studentId})${courseId ? ` in course ${newStudent.coursesEnrolled[0]?.code || courseId}` : ""}`,
+        after: {
+          id: newStudent.id,
+          studentId: newStudent.studentId,
+          name: `${newStudent.firstName} ${newStudent.lastName}`,
+          courseId: courseId || null,
+          rfid_id: newStudent.rfid_id,
+        },
+      });
+    } catch (error) {
+      console.error("Error logging student registration:", error);
+      // Don't fail student creation if logging fails
+    }
 
     return NextResponse.json(newStudent, { status: 201 });
   } catch (error) {

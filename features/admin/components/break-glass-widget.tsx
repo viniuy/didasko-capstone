@@ -15,25 +15,56 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ShieldAlert,
-  Clock,
   AlertTriangle,
   CheckCircle2,
   XCircle,
+  User,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { Role } from "@prisma/client";
 
+interface FacultyMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface BreakGlassStatus {
   isActive: boolean;
+  sessions?: Array<{
+    id: string;
+    reason: string;
+    activatedAt: Date;
+    activatedBy: string | null;
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    };
+  }>;
   session: {
     id: string;
     reason: string;
     activatedAt: Date;
-    expiresAt: Date;
     activatedBy: string | null;
+    user?: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    };
   } | null;
 }
 
@@ -43,6 +74,9 @@ export function BreakGlassWidget() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [selectedFacultyId, setSelectedFacultyId] = useState<string>("");
+  const [facultyList, setFacultyList] = useState<FacultyMember[]>([]);
+  const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
 
   // Only show for Academic Head
@@ -71,7 +105,33 @@ export function BreakGlassWidget() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch faculty list when dialog opens
+  useEffect(() => {
+    if (isDialogOpen) {
+      setIsLoadingFaculty(true);
+      fetch("/api/users/faculty")
+        .then((res) => res.json())
+        .then((data) => {
+          // Filter to only FACULTY role (exclude ACADEMIC_HEAD)
+          const facultyOnly = data.filter(
+            (user: FacultyMember) => user.role === "FACULTY"
+          );
+          setFacultyList(facultyOnly);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch faculty:", err);
+          toast.error("Failed to load faculty list");
+        })
+        .finally(() => setIsLoadingFaculty(false));
+    }
+  }, [isDialogOpen]);
+
   const handleActivate = async () => {
+    if (!selectedFacultyId) {
+      toast.error("Please select a faculty member to promote");
+      return;
+    }
+
     if (!reason.trim()) {
       toast.error(
         "Please provide a reason for activating break-glass override"
@@ -87,7 +147,7 @@ export function BreakGlassWidget() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: session?.user?.id,
+          facultyUserId: selectedFacultyId,
           reason: reason.trim(),
         }),
       });
@@ -97,9 +157,13 @@ export function BreakGlassWidget() {
         throw new Error(error.error || "Failed to activate break-glass");
       }
 
-      toast.success("Break-glass override activated successfully");
+      const result = await response.json();
+      toast.success(
+        result.message || "Break-glass override activated successfully"
+      );
       setIsDialogOpen(false);
       setReason("");
+      setSelectedFacultyId("");
       await fetchStatus();
     } catch (error: any) {
       toast.error(error.message || "Failed to activate break-glass override");
@@ -108,7 +172,7 @@ export function BreakGlassWidget() {
     }
   };
 
-  const handleDeactivate = async () => {
+  const handleDeactivate = async (userId: string) => {
     try {
       const response = await fetch("/api/break-glass/deactivate", {
         method: "POST",
@@ -116,7 +180,7 @@ export function BreakGlassWidget() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: session?.user?.id,
+          userId,
         }),
       });
 
@@ -177,60 +241,54 @@ export function BreakGlassWidget() {
               <h3 className="font-semibold text-[#124A69] mb-1">
                 Break-Glass Override
               </h3>
-              {isActive && sessionData ? (
-                <div className="space-y-1">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-medium">Active</span> - Expires in{" "}
-                    {formatDistanceToNow(new Date(sessionData.expiresAt), {
-                      addSuffix: false,
-                    })}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    Activated:{" "}
-                    {format(
-                      new Date(sessionData.activatedAt),
-                      "MMM dd, yyyy HH:mm"
-                    )}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    Expires:{" "}
-                    {format(
-                      new Date(sessionData.expiresAt),
-                      "MMM dd, yyyy HH:mm"
-                    )}
-                  </p>
-                  {sessionData.reason && (
-                    <Alert className="mt-2 bg-blue-50 border-blue-200">
-                      <AlertTriangle className="w-4 h-4 text-blue-600" />
-                      <AlertDescription className="text-xs text-blue-800">
-                        {sessionData.reason}
-                      </AlertDescription>
-                    </Alert>
-                  )}
+              {isActive && status?.sessions && status.sessions.length > 0 ? (
+                <div className="space-y-3">
+                  {status.sessions.map((session) => (
+                    <div key={session.id} className="space-y-1">
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        <span className="font-medium">Active:</span>{" "}
+                        {session.user?.name || "Unknown"} (promoted to Admin)
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Activated:{" "}
+                        {format(
+                          new Date(session.activatedAt),
+                          "MMM dd, yyyy HH:mm"
+                        )}
+                      </p>
+                      {session.reason && (
+                        <Alert className="mt-2 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                          <AlertTriangle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                            {session.reason}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      <Button
+                        onClick={() => handleDeactivate(session.user.id)}
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <XCircle className="w-4 h-4 mr-1" />
+                        Deactivate
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-600">
-                  Activate elevated privileges for 1 hour
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Select a Faculty member to temporarily promote to Admin
                 </p>
               )}
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {isActive ? (
-              <Button
-                onClick={handleDeactivate}
-                variant="outline"
-                size="sm"
-                className="border-red-500 text-red-600 hover:bg-red-50"
-              >
-                <XCircle className="w-4 h-4 mr-1" />
-                Deactivate
-              </Button>
-            ) : (
+            {!isActive && (
               <Button
                 onClick={() => setIsDialogOpen(true)}
                 size="sm"
-                className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                className="bg-[#124A69] dark:bg-[#1a5f7f] hover:bg-[#0a2f42] dark:hover:bg-[#134f6b] text-white"
               >
                 <ShieldAlert className="w-4 h-4 mr-1" />
                 Activate
@@ -249,15 +307,15 @@ export function BreakGlassWidget() {
               Activate Break-Glass Override
             </DialogTitle>
             <DialogDescription>
-              Break-glass override grants you elevated privileges for 1 hour.
-              All actions will be logged for security auditing.
+              Select a Faculty member to temporarily promote to Admin. All
+              actions will be logged for security auditing.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <Alert className="bg-yellow-50 border-yellow-200">
-              <AlertTriangle className="w-4 h-4 text-yellow-600" />
-              <AlertDescription className="text-sm text-yellow-800">
+            <Alert className="bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+              <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+              <AlertDescription className="text-sm text-yellow-800 dark:text-yellow-200">
                 <strong>Warning:</strong> This action will be logged and
                 audited. Only activate when necessary for legitimate business
                 purposes.
@@ -265,30 +323,80 @@ export function BreakGlassWidget() {
             </Alert>
 
             <div className="space-y-2">
-              <Label htmlFor="reason" className="text-[#124A69] font-semibold">
+              <Label
+                htmlFor="faculty"
+                className="text-[#124A69] dark:text-[#4da6d1] font-semibold"
+              >
+                Select Faculty Member <span className="text-red-500">*</span>
+              </Label>
+              {isLoadingFaculty ? (
+                <div className="text-sm text-gray-500">Loading faculty...</div>
+              ) : (
+                <Select
+                  value={selectedFacultyId}
+                  onValueChange={setSelectedFacultyId}
+                >
+                  <SelectTrigger className="w-full border-[#124A69] dark:border-[#4da6d1]">
+                    <SelectValue placeholder="Select a faculty member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {facultyList.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-gray-500">
+                        No faculty members available
+                      </div>
+                    ) : (
+                      facultyList.map((faculty) => (
+                        <SelectItem key={faculty.id} value={faculty.id}>
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4" />
+                            <span>{faculty.name}</span>
+                            <span className="text-xs text-gray-500">
+                              ({faculty.email})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                The selected faculty member will be temporarily promoted to
+                Admin role.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label
+                htmlFor="reason"
+                className="text-[#124A69] dark:text-[#4da6d1] font-semibold"
+              >
                 Reason for Activation <span className="text-red-500">*</span>
               </Label>
               <Textarea
                 id="reason"
-                placeholder="Please provide a detailed reason for activating break-glass override..."
+                placeholder="Please provide a detailed reason for promoting this faculty member to Admin..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={4}
-                className="border-[#124A69] focus:ring-[#124A69]"
+                className="border-[#124A69] dark:border-[#4da6d1] focus:ring-[#124A69] dark:focus:ring-[#4da6d1]"
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 This reason will be recorded in the audit logs.
               </p>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
               <div className="flex items-start gap-2">
-                <Clock className="w-4 h-4 text-blue-600 mt-0.5" />
-                <div className="text-xs text-blue-800">
-                  <p className="font-medium mb-1">Duration: 1 hour</p>
+                <ShieldAlert className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                <div className="text-xs text-blue-800 dark:text-blue-200">
+                  <p className="font-medium mb-1">
+                    Manual Deactivation Required
+                  </p>
                   <p>
-                    The override will automatically expire after 1 hour. You can
-                    manually deactivate it at any time.
+                    The promoted faculty member will remain as Admin until you
+                    manually deactivate the break-glass override. The role will
+                    be automatically restored to Faculty upon deactivation.
                   </p>
                 </div>
               </div>
@@ -301,14 +409,20 @@ export function BreakGlassWidget() {
               onClick={() => {
                 setIsDialogOpen(false);
                 setReason("");
+                setSelectedFacultyId("");
               }}
             >
               Cancel
             </Button>
             <Button
               onClick={handleActivate}
-              disabled={!reason.trim() || isActivating}
-              className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
+              disabled={
+                !selectedFacultyId ||
+                !reason.trim() ||
+                isActivating ||
+                isLoadingFaculty
+              }
+              className="bg-[#124A69] dark:bg-[#1a5f7f] hover:bg-[#0a2f42] dark:hover:bg-[#134f6b] text-white"
             >
               {isActivating ? (
                 <>
@@ -318,7 +432,7 @@ export function BreakGlassWidget() {
               ) : (
                 <>
                   <ShieldAlert className="w-4 h-4 mr-2" />
-                  Activate Override
+                  Promote to Admin
                 </>
               )}
             </Button>

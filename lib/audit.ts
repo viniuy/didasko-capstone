@@ -60,7 +60,6 @@ export interface LogActionParams {
   before?: any;
   after?: any;
   reason?: string | null;
-  ip?: string | null;
 }
 
 /**
@@ -69,7 +68,7 @@ export interface LogActionParams {
  */
 export async function logAction(params: LogActionParams): Promise<void> {
   try {
-    const { userId, action, module, before, after, reason, ip } = params;
+    const { userId, action, module, before, after, reason } = params;
 
     // Validate required fields
     if (!action || !module) {
@@ -86,7 +85,6 @@ export async function logAction(params: LogActionParams): Promise<void> {
     // Truncate action and module to max length
     const truncatedAction = action.substring(0, 100);
     const truncatedModule = module.substring(0, 100);
-    const truncatedIp = ip ? ip.substring(0, 45) : null;
 
     const prisma = getAuditPrisma();
 
@@ -98,7 +96,7 @@ export async function logAction(params: LogActionParams): Promise<void> {
         before: sanitizedBefore,
         after: sanitizedAfter,
         reason: reason || null,
-        ip: truncatedIp,
+        ip: null, // IP address removed per user request
       },
     });
   } catch (error) {

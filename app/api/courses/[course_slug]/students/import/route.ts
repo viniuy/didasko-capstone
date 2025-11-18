@@ -1,6 +1,9 @@
 // app/api/courses/[slug]/students/import/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { logAction } from "@/lib/audit";
 
 interface StudentImportRow {
   "Student Number": string;
@@ -51,6 +54,11 @@ export async function POST(
   { params }: { params: Promise<{ course_slug: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { course_slug } = await params;
     const body = await request.json();
     const { students } = body as { students: StudentImportRow[] };
@@ -212,6 +220,28 @@ export async function POST(
           message: "Failed to add to course",
         });
       }
+    }
+
+    // Log import operation
+    try {
+      await logAction({
+        userId: session.user.id,
+        action: "STUDENTS_IMPORTED",
+        module: "Student Management",
+        reason: `Imported ${result.imported} student(s) to course ${course.code} (${course.code}). Skipped: ${result.skipped}, Errors: ${result.errors.length}`,
+        after: {
+          courseId: course.id,
+          courseCode: course.code,
+          imported: result.imported,
+          skipped: result.skipped,
+          errors: result.errors.length,
+          total: result.total,
+          source: "import",
+        },
+      });
+    } catch (error) {
+      console.error("Error logging import:", error);
+      // Don't fail import if logging fails
     }
 
     return NextResponse.json(result, { status: 200 });
