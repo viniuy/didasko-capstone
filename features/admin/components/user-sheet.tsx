@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Permission, Role, WorkType } from "@prisma/client";
+import { UserStatus, Role, WorkType } from "@prisma/client";
 import { addUser } from "@/lib/actions/users";
 import { Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -49,7 +49,7 @@ const userSchema = z.object({
   department: z.string().min(1, "Department is required"),
   workType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT"]),
   role: z.enum(["ADMIN", "FACULTY", "ACADEMIC_HEAD"]),
-  permission: z.enum(["GRANTED", "DENIED"]),
+  status: z.enum(["ACTIVE", "ARCHIVED"]),
 });
 
 interface UserSheetProps {
@@ -61,7 +61,7 @@ interface UserSheetProps {
     department: string;
     workType: WorkType;
     role: Role;
-    permission: Permission;
+    status: UserStatus;
   };
   onSuccess?: () => Promise<void> | void;
   onClose?: () => void;
@@ -73,7 +73,7 @@ interface UserSheetProps {
       department?: string;
       workType?: WorkType;
       role?: Role;
-      permission?: Permission;
+      status?: UserStatus;
     }
   ) => Promise<void>;
 }
@@ -95,7 +95,7 @@ export function UserSheet({
       mode === "edit" ? user?.department || DEPARTMENTS[0] : DEPARTMENTS[0],
     workType: mode === "edit" ? user?.workType || "FULL_TIME" : "FULL_TIME",
     role: mode === "edit" ? user?.role || "FACULTY" : "FACULTY",
-    permission: mode === "edit" ? user?.permission || "GRANTED" : "GRANTED",
+    status: mode === "edit" ? user?.status || "ACTIVE" : "ACTIVE",
   };
 
   const form = useForm<z.infer<typeof userSchema>>({
@@ -131,7 +131,7 @@ export function UserSheet({
           department: values.department,
           workType: values.workType,
           role: values.role,
-          permission: values.permission,
+          status: values.status,
         });
         toast.success("User updated successfully!", { id: toastId });
         setOpen(false);
@@ -254,7 +254,7 @@ export function UserSheet({
                     }
                     defaultValue={form.getValues("department")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent>
@@ -282,7 +282,7 @@ export function UserSheet({
                     }
                     defaultValue={form.getValues("workType")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select work type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -313,7 +313,7 @@ export function UserSheet({
                     }
                     defaultValue={form.getValues("role")}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -332,28 +332,28 @@ export function UserSheet({
                 </div>
 
                 <div className="space-y-1 flex-1">
-                  <Label htmlFor="permission">
-                    Permission <span className="text-red-500">*</span>
+                  <Label htmlFor="status">
+                    Status <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     onValueChange={(value) =>
-                      form.setValue("permission", value as Permission)
+                      form.setValue("status", value as UserStatus)
                     }
-                    defaultValue={form.getValues("permission")}
+                    defaultValue={form.getValues("status")}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select permission" />
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={Permission.GRANTED}>
-                        Granted
+                      <SelectItem value={UserStatus.ACTIVE}>Active</SelectItem>
+                      <SelectItem value={UserStatus.ARCHIVED}>
+                        Archived
                       </SelectItem>
-                      <SelectItem value={Permission.DENIED}>Denied</SelectItem>
                     </SelectContent>
                   </Select>
-                  {form.formState.errors.permission && (
+                  {form.formState.errors.status && (
                     <p className="text-sm text-red-500">
-                      {form.formState.errors.permission.message}
+                      {form.formState.errors.status.message}
                     </p>
                   )}
                 </div>

@@ -1,23 +1,20 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { Permission, Role, WorkType } from "@prisma/client";
+import { UserStatus, Role, WorkType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
-export async function updateUserPermission(
-  userId: string,
-  permission: Permission
-) {
+export async function updateUserStatus(userId: string, status: UserStatus) {
   try {
     await prisma.user.update({
       where: { id: userId },
-      data: { permission },
+      data: { status },
     });
     revalidatePath("/dashboard/admin");
     return { success: true };
   } catch (error) {
-    console.error("Error updating user permission:", error);
-    return { success: false, error: "Failed to update user permission" };
+    console.error("Error updating user status:", error);
+    return { success: false, error: "Failed to update user status" };
   }
 }
 
@@ -40,7 +37,7 @@ interface AddUserParams {
   email: string;
   department: string;
   workType: WorkType;
-  permission: Permission;
+  status: UserStatus;
   role: Role;
 }
 
@@ -62,7 +59,7 @@ export async function addUser(userData: AddUserParams) {
         email: userData.email,
         department: userData.department,
         workType: userData.workType,
-        permission: userData.permission,
+        status: userData.status,
         role: userData.role,
       },
     });
@@ -83,7 +80,7 @@ export async function editUser(
     department?: string;
     workType?: WorkType;
     role?: Role;
-    permission?: Permission;
+    status?: UserStatus;
   }
 ) {
   try {

@@ -24,7 +24,7 @@ export async function getUsers(filters: {
             role: true,
             department: true,
             workType: true,
-            permission: true,
+            status: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -116,7 +116,7 @@ export async function createUser(data: {
   department: string;
   workType: "FULL_TIME" | "PART_TIME" | "CONTRACT";
   role: "ADMIN" | "FACULTY" | "ACADEMIC_HEAD";
-  permission: "GRANTED" | "DENIED";
+  status: "ACTIVE" | "ARCHIVED";
 }) {
   // Check if email already exists
   const existingUser = await prisma.user.findUnique({
@@ -134,7 +134,7 @@ export async function createUser(data: {
       department: data.department,
       workType: data.workType,
       role: data.role,
-      permission: data.permission,
+      status: data.status,
     },
     select: {
       id: true,
@@ -159,7 +159,7 @@ export async function updateUser(
     department?: string;
     workType?: "FULL_TIME" | "PART_TIME" | "CONTRACT";
     role?: "ADMIN" | "FACULTY" | "ACADEMIC_HEAD";
-    permission?: "GRANTED" | "DENIED";
+    status?: "ACTIVE" | "ARCHIVED";
   }
 ) {
   return prisma.user.update({

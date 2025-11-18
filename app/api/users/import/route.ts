@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Role, WorkType, Permission } from "@prisma/client";
+import { Role, WorkType, UserStatus } from "@prisma/client";
 
 interface ImportResult {
   success: boolean;
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
         const department = row["Department"]?.trim();
         const workType = row["Work Type"]?.trim();
         const role = row["Role"]?.trim();
-        const permission = row["Permission"]?.trim();
+        const status = row["Status"]?.trim();
 
         if (!email.endsWith("@alabang.sti.edu.ph")) {
           console.log(`Row ${rowNumber}: Invalid email domain: ${email}`);
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
           !department ||
           !workType ||
           !role ||
-          !permission
+          !status
         ) {
           console.log(`Row ${rowNumber}: Missing required fields`, {
             email,
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
             department,
             workType,
             role,
-            permission,
+            status,
           });
           result.errors.push({
             row: rowNumber,
@@ -169,10 +169,12 @@ export async function POST(request: Request) {
             throw new Error(`Invalid role: ${role}`);
           }
 
-          // Convert permission to enum
-          const permissionEnum = permission.toUpperCase() as Permission;
-          if (!Object.values(Permission).includes(permissionEnum)) {
-            throw new Error(`Invalid permission: ${permission}`);
+          // Convert status to enum
+          const statusEnum = status
+            .toUpperCase()
+            .replace(/\s+/g, "_") as UserStatus;
+          if (!Object.values(UserStatus).includes(statusEnum)) {
+            throw new Error(`Invalid status: ${status}`);
           }
 
           console.log(`Creating user with data:`, {
@@ -181,7 +183,7 @@ export async function POST(request: Request) {
             department,
             workType: workTypeEnum,
             role: roleEnum,
-            permission: permissionEnum,
+            status: statusEnum,
           });
 
           // Create user in database
@@ -192,7 +194,7 @@ export async function POST(request: Request) {
               department,
               workType: workTypeEnum,
               role: roleEnum,
-              permission: permissionEnum,
+              status: statusEnum,
             },
           });
 

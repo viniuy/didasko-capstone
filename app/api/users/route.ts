@@ -45,10 +45,10 @@ export async function POST(request: Request) {
     }
 
     const body: UserCreateInput = await request.json();
-    const { email, name, department, workType, role, permission } = body;
+    const { email, name, department, workType, role, status } = body;
 
     // Validate required fields
-    if (!email || !name || !department || !workType || !role || !permission) {
+    if (!email || !name || !department || !workType || !role || !status) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
         department,
         workType,
         role,
-        permission,
+        status,
       });
 
       return NextResponse.json(user);

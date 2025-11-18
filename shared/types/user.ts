@@ -1,4 +1,4 @@
-import { Role, WorkType, Permission } from "@prisma/client";
+import { Role, WorkType, UserStatus } from "@prisma/client";
 
 export interface User {
   id: string;
@@ -7,7 +7,7 @@ export interface User {
   department: string;
   workType: WorkType;
   role: Role;
-  permission: Permission;
+  status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,7 +18,7 @@ export interface UserCreateInput {
   department: string;
   workType: WorkType;
   role: Role;
-  permission: Permission;
+  status: UserStatus;
 }
 
 export interface UserUpdateInput extends Partial<UserCreateInput> {}

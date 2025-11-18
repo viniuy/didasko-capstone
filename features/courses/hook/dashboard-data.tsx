@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
-import { Permission, Role, WorkType } from "@prisma/client";
+import { UserStatus, Role, WorkType } from "@prisma/client";
 
 export async function getDashboardData() {
   const users = await prisma.user.findMany({
@@ -15,12 +15,12 @@ export async function getDashboardData() {
     where: { workType: WorkType.PART_TIME, role: Role.FACULTY },
   });
 
-  const grantedCount = await prisma.user.count({
-    where: { permission: Permission.GRANTED },
+  const activeCount = await prisma.user.count({
+    where: { status: UserStatus.ACTIVE },
   });
 
-  const deniedCount = await prisma.user.count({
-    where: { permission: Permission.DENIED },
+  const archivedCount = await prisma.user.count({
+    where: { status: UserStatus.ARCHIVED },
   });
 
   const totalUsers = await prisma.user.count();
@@ -29,8 +29,8 @@ export async function getDashboardData() {
     users,
     fullTimeCount,
     partTimeCount,
-    grantedCount,
-    deniedCount,
+    activeCount,
+    archivedCount,
     totalUsers,
   };
 }

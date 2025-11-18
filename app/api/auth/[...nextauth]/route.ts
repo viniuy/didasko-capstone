@@ -49,7 +49,7 @@ const handler = NextAuth({
             email: true,
             name: true,
             role: true,
-            permission: true,
+            status: true,
             department: true,
             image: true,
           },
@@ -60,8 +60,8 @@ const handler = NextAuth({
           return false;
         }
 
-        if (dbUser.permission !== "GRANTED") {
-          console.warn(`Permission denied for user: ${user.email}`);
+        if (dbUser.status !== "ACTIVE") {
+          console.warn(`User is archived for user: ${user.email}`);
           return false;
         }
 

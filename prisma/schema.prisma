@@ -15,7 +15,7 @@ model User {
   department      String
   workType        WorkType   @map("work_type")
   role            Role
-  permission      Permission @default(DENIED)
+  status          UserStatus @default(ACTIVE)
   image           String?
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
@@ -441,9 +441,9 @@ enum WorkType {
   CONTRACT
 }
 
-enum Permission {
-  GRANTED
-  DENIED
+enum UserStatus {
+  ACTIVE
+  ARCHIVED
 }
 
 enum CourseStatus {

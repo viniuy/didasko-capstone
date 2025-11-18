@@ -1,4 +1,4 @@
-import { PrismaClient, Role, WorkType, Permission } from "@prisma/client";
+import { PrismaClient, Role, WorkType, UserStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -9,7 +9,7 @@ const facultyMembers = [
     department: "IT Department",
     workType: WorkType.FULL_TIME,
     role: Role.ACADEMIC_HEAD,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Darryl Pauline Nietes",
@@ -17,7 +17,7 @@ const facultyMembers = [
     department: "BA Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Rod Mark Rufino",
@@ -25,7 +25,7 @@ const facultyMembers = [
     department: "TM Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Jerryfel Laraga",
@@ -33,7 +33,7 @@ const facultyMembers = [
     department: "HM Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Justin Joseph Gorospe",
@@ -41,7 +41,7 @@ const facultyMembers = [
     department: "SHS Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Manuel Jojo Simon",
@@ -49,7 +49,7 @@ const facultyMembers = [
     department: "IT Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Arvin Marlin",
@@ -57,7 +57,7 @@ const facultyMembers = [
     department: "BA Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "John Renaund Baybay",
@@ -65,7 +65,7 @@ const facultyMembers = [
     department: "TM Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Ma. Diana Moral",
@@ -73,7 +73,7 @@ const facultyMembers = [
     department: "HM Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
   {
     name: "Redmond Laurel",
@@ -81,7 +81,7 @@ const facultyMembers = [
     department: "SHS Department",
     workType: WorkType.FULL_TIME,
     role: Role.FACULTY,
-    permission: Permission.GRANTED,
+    status: UserStatus.ACTIVE,
   },
 ];
 

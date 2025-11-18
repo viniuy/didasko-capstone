@@ -58,7 +58,7 @@ async function initializeFaculty(facultyMember: FacultyMember) {
       department: facultyMember.department,
       workType: facultyMember.workType,
       role: facultyMember.role,
-      permission: "GRANTED",
+      status: "ACTIVE",
     },
   });
   console.log(`Created user account for ${facultyMember.email}`);

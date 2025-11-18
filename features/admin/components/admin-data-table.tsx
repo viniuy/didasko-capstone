@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Role, WorkType, Permission } from "@prisma/client";
+import { Role, WorkType, UserStatus } from "@prisma/client";
 import {
   Select,
   SelectContent,
@@ -56,7 +56,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/svdialog";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 import axiosInstance from "@/lib/axios";
 import {
   Pagination,
@@ -86,8 +87,8 @@ interface User {
   department: string;
   workType: WorkType;
   role: Role;
-  permission: Permission;
-  [key: string]: string | WorkType | Role | Permission;
+  status: UserStatus;
+  [key: string]: string | WorkType | Role | UserStatus;
 }
 
 interface AdminDataTableProps {
@@ -101,7 +102,7 @@ interface CsvRow {
   Department: string;
   "Work Type": string;
   Role: string;
-  Permission: string;
+  Status: string;
   [key: string]: string;
 }
 
@@ -125,7 +126,7 @@ const EXPECTED_HEADERS = [
   "Department",
   "Work Type",
   "Role",
-  "Permission",
+  "Status",
 ];
 
 const getInitials = (name: string) => {
@@ -221,7 +222,7 @@ export function AdminDataTable({
   const [isRoleUpdating, setIsRoleUpdating] = useState<Record<string, boolean>>(
     {}
   );
-  const [isPermissionUpdating, setIsPermissionUpdating] = useState<
+  const [isStatusUpdating, setIsStatusUpdating] = useState<
     Record<string, boolean>
   >({});
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -291,31 +292,31 @@ export function AdminDataTable({
     []
   );
 
-  const handlePermissionChange = useCallback(
-    async (userId: string, newPermission: Permission) => {
+  const handleStatusChange = useCallback(
+    async (userId: string, newStatus: UserStatus) => {
       try {
-        setIsPermissionUpdating((prev) => ({ ...prev, [userId]: true }));
-        const result = await editUser(userId, { permission: newPermission });
+        setIsStatusUpdating((prev) => ({ ...prev, [userId]: true }));
+        const result = await editUser(userId, { status: newStatus });
 
         if (result.success) {
           setTableData((prevData) =>
             prevData.map((user) =>
-              user.id === userId ? { ...user, permission: newPermission } : user
+              user.id === userId ? { ...user, status: newStatus } : user
             )
           );
-          toast.success(`Permission ${newPermission.toLowerCase()}`, {
+          toast.success(`Status updated to ${formatEnumValue(newStatus)}`, {
             duration: 3000,
             position: "top-center",
           });
         } else {
-          throw new Error(result.error || "Failed to update permission");
+          throw new Error(result.error || "Failed to update status");
         }
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to update permission"
+          error instanceof Error ? error.message : "Failed to update status"
         );
       } finally {
-        setIsPermissionUpdating((prev) => ({ ...prev, [userId]: false }));
+        setIsStatusUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
     []
@@ -351,247 +352,380 @@ export function AdminDataTable({
   }, [userToDelete, refreshTableData]);
 
   //Done
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     try {
-      const header = [
-        ["USER MANAGEMENT DATA"],
-        [""],
-        ["Date:", new Date().toLocaleDateString()],
-        [""],
-        EXPECTED_HEADERS,
-      ];
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Users");
 
-      const userRows = tableData.map((user: User) => {
-        return [
-          user.id,
+      // Title row
+      worksheet.mergeCells("A1:H1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "USER MANAGEMENT DATA";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
+
+      // Date row
+      worksheet.mergeCells("A2:H2");
+      const dateRow = worksheet.getCell("A2");
+      dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
+      dateRow.font = { italic: true, size: 11 };
+      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      worksheet.addRow([]);
+
+      // Header row
+      const headerRow = worksheet.addRow(EXPECTED_HEADERS);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Data rows
+      tableData.forEach((user: User) => {
+        const row = worksheet.addRow([
           user.name || "",
           user.email || "",
           user.department || "",
           formatEnumValue(user.workType),
           formatEnumValue(user.role),
-          user.permission.toLowerCase(),
-        ];
+          formatEnumValue(user.status),
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+
+        if (row.number % 2 === 0) {
+          row.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF9FAFB" },
+          };
+        }
       });
 
-      const ws = XLSX.utils.aoa_to_sheet([...header, ...userRows]);
-      ws["!cols"] = [
-        { wch: 20 },
-        { wch: 20 },
-        { wch: 15 },
-        { wch: 30 },
-        { wch: 20 },
-        { wch: 15 },
-        { wch: 15 },
-        { wch: 15 },
+      // Set column widths
+      worksheet.columns = [
+        { width: 20 },
+        { width: 30 },
+        { width: 20 },
+        { width: 15 },
+        { width: 15 },
+        { width: 15 },
       ];
-      ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Users");
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const filename = `user_data_${
         new Date().toISOString().split("T")[0]
       }.xlsx`;
-      XLSX.writeFile(wb, filename);
+      saveAs(blob, filename);
 
       toast.success("User data exported successfully");
       setShowExportPreview(false);
     } catch (error) {
+      console.error("Export error:", error);
       toast.error("Failed to export data");
     }
   }, [tableData]);
 
   //Done
-  const handleImportTemplate = useCallback(() => {
+  const handleImportTemplate = useCallback(async () => {
     try {
-      const header = [
-        ["USER MANAGEMENT TEMPLATE"],
-        [""],
-        ["Date:", new Date().toLocaleDateString()],
-        [""],
-        ["IMPORTANT NOTES:"],
-        ["1. All email addresses MUST be from @alabang.sti.edu.ph domain"],
-        ["2. Example: john.doe@alabang.sti.edu.ph"],
-        ["3. Do not include empty rows"],
-        ["4. All fields are required"],
-        [""],
-        EXPECTED_HEADERS,
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Template");
+
+      // Title
+      worksheet.mergeCells("A1:F1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "USER MANAGEMENT TEMPLATE";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
+
+      // Date row
+      worksheet.mergeCells("A2:F2");
+      const dateRow = worksheet.getCell("A2");
+      dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
+      dateRow.font = { italic: true, size: 11 };
+      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+      // Instructions
+      worksheet.mergeCells("A3:F3");
+      const instructionTitle = worksheet.getCell("A3");
+      instructionTitle.value = "IMPORTANT INSTRUCTIONS";
+      instructionTitle.font = {
+        bold: true,
+        size: 12,
+        color: { argb: "FFD97706" },
+      };
+      instructionTitle.alignment = { vertical: "middle", horizontal: "left" };
+
+      const instructions = [
+        "1. All email addresses MUST be from @alabang.sti.edu.ph domain",
+        "2. Example: john.doe@alabang.sti.edu.ph",
+        "3. Do not include empty rows",
+        "4. All fields are required - do not leave any cell empty",
+        "5. Do not modify or delete the header row",
+        "6. Delete these instruction rows before importing",
+        "7. Work Type must be exactly: Full Time or Part Time",
+        "8. Role must be exactly: Admin, Faculty, or Academic Head",
+        "9. Status must be exactly: Active or Archived",
       ];
 
-      const exampleRow = [
-        "John A. Smith",
-        "john.smith@alabang.sti.edu.ph",
-        "IT Department",
-        "Full Time",
-        "Faculty",
-        "Granted",
+      instructions.forEach((instruction, index) => {
+        worksheet.mergeCells(`A${4 + index}:F${4 + index}`);
+        const cell = worksheet.getCell(`A${4 + index}`);
+        cell.value = instruction;
+        cell.font = { size: 10 };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFFFFACD" },
+        };
+      });
+
+      worksheet.addRow([]);
+
+      // Header
+      const headerRow = worksheet.addRow(EXPECTED_HEADERS);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Examples
+      const examples = [
+        [
+          "John A. Smith",
+          "john.smith@alabang.sti.edu.ph",
+          "IT Department",
+          "Full Time",
+          "Faculty",
+          "Granted",
+        ],
+        [
+          "Jane B. Doe",
+          "jane.doe@alabang.sti.edu.ph",
+          "Mathematics Department",
+          "Part Time",
+          "Faculty",
+          "Granted",
+        ],
+        [
+          "Robert C. Johnson",
+          "robert.johnson@alabang.sti.edu.ph",
+          "Computer Science Department",
+          "Full Time",
+          "Academic Head",
+          "Granted",
+        ],
       ];
 
-      const ws = XLSX.utils.aoa_to_sheet([...header, exampleRow]);
-      ws["!cols"] = [
-        { wch: 20 },
-        { wch: 30 },
-        { wch: 20 },
-        { wch: 10 },
-        { wch: 10 },
-        { wch: 10 },
-      ];
-      ws["!merges"] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } },
-        { s: { r: 5, c: 0 }, e: { r: 5, c: 3 } },
-        { s: { r: 6, c: 0 }, e: { r: 6, c: 3 } },
-        { s: { r: 7, c: 0 }, e: { r: 7, c: 3 } },
-        { s: { r: 8, c: 0 }, e: { r: 8, c: 3 } },
+      examples.forEach((example) => {
+        const row = worksheet.addRow(example);
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+        row.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE8F4F8" },
+        };
+      });
+
+      worksheet.columns = [
+        { width: 20 },
+        { width: 30 },
+        { width: 20 },
+        { width: 15 },
+        { width: 15 },
+        { width: 15 },
       ];
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Template");
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const filename = `user_import_template_${
         new Date().toISOString().split("T")[0]
       }.xlsx`;
-      XLSX.writeFile(wb, filename);
+      saveAs(blob, filename);
 
       toast.success("Template downloaded successfully");
     } catch (error) {
+      console.error("Template error:", error);
       toast.error("Failed to generate template");
     }
   }, []);
 
-  const readFile = useCallback((file: File): Promise<CsvRow[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        try {
-          const data = e.target?.result;
-          if (!data) {
-            reject(new Error("No data found in file"));
-            return;
-          }
-
-          let rawData: string[][];
-
-          if (file.name.toLowerCase().endsWith(".csv")) {
-            const csvData = data.toString();
-            rawData = csvData
-              .split("\n")
-              .map((line) =>
-                line
-                  .split(",")
-                  .map((cell) => cell.trim().replace(/^["\']|["\']$/g, ""))
-              );
-          } else {
-            const workbook = XLSX.read(data, { type: "binary" });
-            if (!workbook.SheetNames.length) {
-              reject(new Error("No sheets found in the file"));
-              return;
-            }
-            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const csvString = XLSX.utils.sheet_to_csv(worksheet, {
-              blankrows: false,
-              forceQuotes: true,
-            });
-            rawData = csvString
-              .split("\n")
-              .map((line) =>
-                line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""))
-              );
-          }
-
-          let headerRowIndex = -1;
-          for (let i = 0; i < rawData.length; i++) {
-            const row = rawData[i];
-            if (!Array.isArray(row) || row.length < EXPECTED_HEADERS.length)
-              continue;
-
-            const isHeaderRow = EXPECTED_HEADERS.every((header, index) => {
-              const cellValue =
-                typeof row[index] === "string" || typeof row[index] === "number"
-                  ? String(row[index]).trim().toLowerCase()
-                  : "";
-              return cellValue === header.toLowerCase();
-            });
-
-            if (isHeaderRow) {
-              headerRowIndex = i;
-              break;
-            }
-          }
-
-          if (headerRowIndex === -1) {
-            resolve([]);
-            return;
-          }
-
-          const headers = rawData[headerRowIndex].map(
-            (h) => h?.toString().trim() || ""
-          );
-          const dataRowsRaw = rawData
-            .slice(headerRowIndex + 1)
-            .filter(
-              (row) =>
-                Array.isArray(row) &&
-                row.some(
-                  (cell) =>
-                    cell !== null &&
-                    cell !== undefined &&
-                    cell.toString().trim() !== ""
-                )
-            );
-
-          const formattedData: CsvRow[] = dataRowsRaw.map((row) => {
-            const rowData: Record<string, string> = {};
-            headers.forEach((header, index) => {
-              rowData[header] =
-                row[index] !== null && row[index] !== undefined
-                  ? String(row[index]).trim()
-                  : "";
-            });
-            return rowData as CsvRow;
-          });
-
-          const requiredFields = [
-            "Full Name",
-            "Email",
-            "Department",
-            "Work Type",
-            "Role",
-            "Permission",
-          ];
-
-          const validFormattedData = formattedData.filter(
-            (row): row is CsvRow =>
-              requiredFields.every(
-                (field) => row[field] && row[field].toString().trim() !== ""
-              )
-          );
-
-          if (validFormattedData.length === 0) {
-            reject(
-              new Error(
-                "No valid data rows found in file. Please check that there are rows with all required information below the header."
-              )
-            );
-            return;
-          }
-
-          resolve(validFormattedData);
-        } catch (error) {
-          reject(
-            new Error(
-              "Error parsing file. Please make sure you are using a valid file and template format."
-            )
-          );
-        }
-      };
-
-      reader.onerror = () => reject(new Error("Error reading file"));
+  const readFile = useCallback(async (file: File): Promise<CsvRow[]> => {
+    try {
+      let rawData: string[][];
 
       if (file.name.toLowerCase().endsWith(".csv")) {
-        reader.readAsText(file);
+        const text = await file.text();
+        rawData = text
+          .split("\n")
+          .map((line) =>
+            line
+              .split(",")
+              .map((cell) => cell.trim().replace(/^["\']|["\']$/g, ""))
+          );
       } else {
-        reader.readAsBinaryString(file);
+        const workbook = new ExcelJS.Workbook();
+        const arrayBuffer = await file.arrayBuffer();
+        await workbook.xlsx.load(arrayBuffer);
+
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) {
+          throw new Error("No worksheet found in file");
+        }
+
+        const rows: any[][] = [];
+        worksheet.eachRow((row) => {
+          const rowValues = row.values as any[];
+          rows.push(rowValues.slice(1));
+        });
+
+        rawData = rows.map((row) =>
+          row.map((cell) =>
+            cell !== null && cell !== undefined ? String(cell).trim() : ""
+          )
+        );
       }
-    });
+
+      let headerRowIndex = -1;
+      for (let i = 0; i < rawData.length; i++) {
+        const row = rawData[i];
+        if (!Array.isArray(row) || row.length < EXPECTED_HEADERS.length)
+          continue;
+
+        const isHeaderRow = EXPECTED_HEADERS.every((header, index) => {
+          const cellValue =
+            typeof row[index] === "string" || typeof row[index] === "number"
+              ? String(row[index]).trim().toLowerCase()
+              : "";
+          return cellValue === header.toLowerCase();
+        });
+
+        if (isHeaderRow) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        return [];
+      }
+
+      const headers = rawData[headerRowIndex].map(
+        (h) => h?.toString().trim() || ""
+      );
+      const dataRowsRaw = rawData
+        .slice(headerRowIndex + 1)
+        .filter(
+          (row) =>
+            Array.isArray(row) &&
+            row.some(
+              (cell) =>
+                cell !== null &&
+                cell !== undefined &&
+                cell.toString().trim() !== ""
+            )
+        );
+
+      const formattedData: CsvRow[] = dataRowsRaw.map((row) => {
+        const rowData: Record<string, string> = {};
+        headers.forEach((header, index) => {
+          rowData[header] =
+            row[index] !== null && row[index] !== undefined
+              ? String(row[index]).trim()
+              : "";
+        });
+        return rowData as CsvRow;
+      });
+
+      const requiredFields = [
+        "Full Name",
+        "Email",
+        "Department",
+        "Work Type",
+        "Role",
+        "Status",
+      ];
+
+      const validFormattedData = formattedData.filter((row): row is CsvRow =>
+        requiredFields.every(
+          (field) => row[field] && row[field].toString().trim() !== ""
+        )
+      );
+
+      if (validFormattedData.length === 0) {
+        throw new Error(
+          "No valid data rows found in file. Please check that there are rows with all required information below the header."
+        );
+      }
+
+      return validFormattedData;
+    } catch (error) {
+      throw new Error(
+        error instanceof Error && error.message.includes("No valid data")
+          ? error.message
+          : "Error parsing file. Please make sure you are using a valid file and template format."
+      );
+    }
   }, []);
 
   const handleFilePreview = useCallback(
@@ -828,19 +962,19 @@ export function AdminDataTable({
         ),
       },
       {
-        accessorKey: "permission",
-        header: "Permission",
+        accessorKey: "status",
+        header: "Status",
         cell: ({ row }) => (
           <Select
-            value={row.original.permission}
-            onValueChange={(value: Permission) =>
-              handlePermissionChange(row.original.id, value)
+            value={row.original.status}
+            onValueChange={(value: UserStatus) =>
+              handleStatusChange(row.original.id, value)
             }
-            disabled={isPermissionUpdating[row.original.id]}
+            disabled={isStatusUpdating[row.original.id]}
           >
             <SelectTrigger className="w-[130px]">
               <SelectValue>
-                {isPermissionUpdating[row.original.id] ? (
+                {isStatusUpdating[row.original.id] ? (
                   <div className="flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
                     <span>Updating...</span>
@@ -849,31 +983,29 @@ export function AdminDataTable({
                   <div className="flex items-center gap-2">
                     <div
                       className={`h-2 w-2 rounded-full ${
-                        row.original.permission === "GRANTED"
+                        row.original.status === "ACTIVE"
                           ? "bg-green-500"
-                          : "bg-red-500"
+                          : "bg-gray-500"
                       }`}
                     />
                     <span>
-                      {row.original.permission === "GRANTED"
-                        ? "Granted"
-                        : "Denied"}
+                      {row.original.status === "ACTIVE" ? "Active" : "Archived"}
                     </span>
                   </div>
                 )}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="GRANTED">
+              <SelectItem value="ACTIVE">
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-green-500" />
-                  <span>Granted</span>
+                  <span>Active</span>
                 </div>
               </SelectItem>
-              <SelectItem value="DENIED">
+              <SelectItem value="ARCHIVED">
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-red-500" />
-                  <span>Denied</span>
+                  <div className="h-2 w-2 rounded-full bg-gray-500" />
+                  <span>Archived</span>
                 </div>
               </SelectItem>
             </SelectContent>
@@ -918,9 +1050,9 @@ export function AdminDataTable({
     ],
     [
       isRoleUpdating,
-      isPermissionUpdating,
+      isStatusUpdating,
       handleRoleChange,
-      handlePermissionChange,
+      handleStatusChange,
       imageMap,
     ]
   );
@@ -1153,33 +1285,41 @@ export function AdminDataTable({
       </Dialog>
 
       <Dialog open={showExportPreview} onOpenChange={setShowExportPreview}>
-        <DialogContent className="w-[90vw] max-w-[800px] p-4 sm:p-6">
+        <DialogContent className="w-[90vw] max-w-[1200px] p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-[#124A69]">
-              Export to Excel
+              Export Users to Excel
             </DialogTitle>
             <DialogDescription>
-              Preview of data to be exported:
+              Preview of {tableData.length}{" "}
+              {tableData.length === 1 ? "user" : "users"} to be exported
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-6 max-h-[400px] overflow-auto">
-            <table className="w-full border-collapse">
-              <thead className="bg-gray-50">
-                <tr>
-                  {EXPECTED_HEADERS.map((header) => (
-                    <th
-                      key={header}
-                      className="px-4 py-2 text-left text-sm font-medium text-gray-500"
-                    >
-                      {header}
+
+          <div className="mt-6 border rounded-lg">
+            <div className="max-h-[450px] overflow-auto">
+              <table className="w-full border-collapse">
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b">
+                      #
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tableData.slice(0, MAX_PREVIEW_ROWS).map((user, index) => {
-                  return (
-                    <tr key={index}>
+                    {EXPECTED_HEADERS.map((header) => (
+                      <th
+                        key={header}
+                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-nowrap"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableData.slice(0, MAX_PREVIEW_ROWS).map((user, index) => (
+                    <tr key={index} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        {index + 1}
+                      </td>
                       <td className="px-4 py-2 text-sm text-gray-900">
                         {user.name}
                       </td>
@@ -1196,37 +1336,49 @@ export function AdminDataTable({
                         {formatEnumValue(user.role)}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-900">
-                        {user.permission.toLowerCase()}
+                        {formatEnumValue(user.status)}
                       </td>
                     </tr>
-                  );
-                })}
-                {tableData.length > MAX_PREVIEW_ROWS && (
-                  <tr className="border-t">
-                    <td
-                      colSpan={8}
-                      className="px-4 py-2 text-sm text-gray-500 text-center"
-                    >
-                      And {tableData.length - MAX_PREVIEW_ROWS} more users...
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  ))}
+                  {tableData.length > MAX_PREVIEW_ROWS && (
+                    <tr className="border-t bg-gray-50">
+                      <td
+                        colSpan={7}
+                        className="px-4 py-3 text-sm text-gray-600 text-center font-medium"
+                      >
+                        + {tableData.length - MAX_PREVIEW_ROWS} more{" "}
+                        {tableData.length - MAX_PREVIEW_ROWS === 1
+                          ? "user"
+                          : "users"}{" "}
+                        will be exported
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="mt-6 flex justify-end gap-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowExportPreview(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
-              onClick={handleExport}
-            >
-              Export to Excel
-            </Button>
+
+          <div className="mt-6 flex justify-between items-center">
+            <p className="text-sm text-gray-600">
+              Total users to export:{" "}
+              <span className="font-semibold">{tableData.length}</span>
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowExportPreview(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                onClick={handleExport}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export to Excel
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1324,7 +1476,7 @@ export function AdminDataTable({
                             {row["Role"]}
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Permission"]}
+                            {row["Status"]}
                           </td>
                         </tr>
                       ))}

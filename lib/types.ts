@@ -4,9 +4,9 @@ export enum WorkType {
   CONTRACTUAL = "CONTRACTUAL",
 }
 
-export enum Permission {
-  GRANTED = "GRANTED",
-  DENIED = "DENIED",
+export enum UserStatus {
+  ACTIVE = "ACTIVE",
+  ARCHIVED = "ARCHIVED",
 }
 
 export enum Role {
@@ -48,7 +48,7 @@ export interface User {
   role: Role;
   department: string;
   workType: WorkType;
-  permission: Permission;
+  status: UserStatus;
   coursesTeaching: Course[];
   createdAt: Date;
   updatedAt: Date;
