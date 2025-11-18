@@ -11,6 +11,9 @@ export default function RedirectingPage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
   const [showRoleSelection, setShowRoleSelection] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [showRedirecting, setShowRedirecting] = useState(false);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -74,11 +77,40 @@ export default function RedirectingPage() {
     }
   }, [session, status, router, update]);
 
+  // Trigger fade-in animation when role selection appears
+  useEffect(() => {
+    if (showRoleSelection) {
+      // Small delay to ensure the element is rendered before animating
+      const timer = setTimeout(() => {
+        setIsMounted(true);
+      }, 10);
+      return () => clearTimeout(timer);
+    } else {
+      setIsMounted(false);
+    }
+  }, [showRoleSelection]);
+
+  // Trigger fade-in animation for redirecting text when exiting
+  useEffect(() => {
+    if (isExiting) {
+      // Small delay to ensure the element is rendered before animating
+      const timer = setTimeout(() => {
+        setShowRedirecting(true);
+      }, 10);
+      return () => clearTimeout(timer);
+    } else {
+      setShowRedirecting(false);
+    }
+  }, [isExiting]);
+
   const handleRoleSelection = async (selectedRole: "ADMIN" | "FACULTY") => {
     const roleMap: Record<string, string> = {
       ADMIN: "/dashboard/admin",
       FACULTY: "/dashboard/faculty",
     };
+
+    // Trigger exit animation
+    setIsExiting(true);
 
     // Store in localStorage as backup
     localStorage.setItem(SELECTED_ROLE_KEY, selectedRole);
@@ -89,29 +121,53 @@ export default function RedirectingPage() {
       selectedRole: selectedRole,
     });
 
-    router.replace(roleMap[selectedRole]);
+    // Wait for animation to complete before navigating
+    setTimeout(() => {
+      router.replace(roleMap[selectedRole]);
+    }, 500); // Match the animation duration
   };
 
   if (showRoleSelection) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-6">
-        <h2 className="text-2xl font-semibold text-[#124A69] mb-4">
-          Select Your Role
-        </h2>
-        <div className="flex gap-4">
-          <Button
-            onClick={() => handleRoleSelection("ADMIN")}
-            className="bg-[#124A69] text-white hover:bg-[#0d3a56] px-6 py-3"
-          >
-            Continue as Admin
-          </Button>
-          <Button
-            onClick={() => handleRoleSelection("FACULTY")}
-            className="bg-[#124A69] text-white hover:bg-[#0d3a56] px-6 py-3"
-          >
-            Continue as Faculty
-          </Button>
+      <div className="flex flex-col items-center justify-center h-screen gap-6 relative">
+        <div
+          className={`flex flex-col items-center gap-6 transition-all duration-500 ease-in-out ${
+            isExiting
+              ? "opacity-0 translate-y-8"
+              : isMounted
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 translate-y-4"
+          }`}
+        >
+          <h2 className="text-2xl font-semibold text-[#124A69] mb-4">
+            Select Your Role
+          </h2>
+          <div className="flex gap-4">
+            <Button
+              onClick={() => handleRoleSelection("ADMIN")}
+              className="bg-[#124A69] text-white hover:bg-[#0d3a56] px-6 py-3"
+            >
+              Continue as Admin
+            </Button>
+            <Button
+              onClick={() => handleRoleSelection("FACULTY")}
+              className="bg-[#124A69] text-white hover:bg-[#0d3a56] px-6 py-3"
+            >
+              Continue as Faculty
+            </Button>
+          </div>
         </div>
+        {isExiting && (
+          <div
+            className={`absolute flex flex-col items-center transition-all duration-500 ease-in-out ${
+              showRedirecting
+                ? "opacity-100 translate-y-0"
+                : "opacity-0 translate-y-4"
+            }`}
+          >
+            <p className="text-lg text-gray-600">Redirecting...</p>
+          </div>
+        )}
       </div>
     );
   }
