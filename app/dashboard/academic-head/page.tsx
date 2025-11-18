@@ -23,6 +23,7 @@ export default function AcademicHeadDashboard() {
             <div className="px-4">
               <Header />
               <Greet />
+
               <Stats />
               <div className="space-y-4">
                 <h2 className="pl-2 pb-1 text-2xl font-bold text-muted-foreground">

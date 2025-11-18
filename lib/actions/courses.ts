@@ -54,6 +54,17 @@ export async function createCourse(data: CourseInput) {
 
     const slug = data.code.toLowerCase().replace(/\s+/g, "-");
 
+    // Check for duplicate slug before creating
+    const existingSlug = await prisma.course.findUnique({
+      where: { slug },
+    });
+    if (existingSlug) {
+      return {
+        success: false,
+        error: "A course with this code already exists (slug conflict)",
+      };
+    }
+
     // Build create payload excluding schedules, then attach schedules via nested write
     const createData: any = {
       code: data.code,
@@ -68,29 +79,56 @@ export async function createCourse(data: CourseInput) {
       status: data.status ?? CourseStatus.ACTIVE,
     };
 
-    const newCourse = await prisma.course.create({
-      data: {
-        ...createData,
-        schedules: {
-          // createMany is slightly faster and fine if you don't need returned schedule IDs in this nested call,
-          // but Prisma returns schedules only when you include them separately. create with nested create works too.
-          createMany: {
-            data: data.schedules.map((s) => ({
-              day: s.day,
-              fromTime: s.fromTime,
-              toTime: s.toTime,
-            })),
+    try {
+      const newCourse = await prisma.course.create({
+        data: {
+          ...createData,
+          schedules: {
+            // createMany is slightly faster and fine if you don't need returned schedule IDs in this nested call,
+            // but Prisma returns schedules only when you include them separately. create with nested create works too.
+            createMany: {
+              data: data.schedules.map((s) => ({
+                day: s.day,
+                fromTime: s.fromTime,
+                toTime: s.toTime,
+              })),
+            },
           },
         },
-      },
-      include: {
-        schedules: true,
-      },
-    });
+        include: {
+          schedules: true,
+        },
+      });
 
-    revalidatePath("/admin/courses");
+      revalidatePath("/admin/courses");
 
-    return { success: true, data: newCourse };
+      return { success: true, data: newCourse };
+    } catch (prismaError: any) {
+      // Handle Prisma unique constraint errors gracefully
+      if (prismaError.code === "P2002") {
+        const target = prismaError.meta?.target;
+        if (Array.isArray(target) && target.includes("slug")) {
+          return {
+            success: false,
+            error:
+              "A course with this code already exists. Please use a different course code.",
+          };
+        }
+        if (Array.isArray(target) && target.includes("code")) {
+          return {
+            success: false,
+            error: "A course with this code already exists.",
+          };
+        }
+        return {
+          success: false,
+          error:
+            "A course with these details already exists. Please check for duplicates.",
+        };
+      }
+      // Re-throw if it's not a unique constraint error
+      throw prismaError;
+    }
   } catch (err) {
     console.error("createCourse error:", err);
     return {
@@ -112,14 +150,28 @@ export async function editCourse(courseId: string, data: CourseUpdateData) {
 
     // if changing code, ensure uniqueness
     if (data.code && data.code !== existingCourse.code) {
-      const dup = await prisma.course.findFirst({
+      // Check for duplicate code
+      const dupCode = await prisma.course.findFirst({
         where: { code: data.code, id: { not: courseId } },
       });
-      if (dup)
+      if (dupCode) {
         return {
           success: false,
           error: "A course with this code already exists",
         };
+      }
+
+      // Check for duplicate slug (since slug is generated from code)
+      const newSlug = data.code.toLowerCase().replace(/\s+/g, "-");
+      const dupSlug = await prisma.course.findUnique({
+        where: { slug: newSlug },
+      });
+      if (dupSlug && dupSlug.id !== courseId) {
+        return {
+          success: false,
+          error: "A course with this code already exists (slug conflict)",
+        };
+      }
     }
 
     if (data.facultyId) {
@@ -151,41 +203,68 @@ export async function editCourse(courseId: string, data: CourseUpdateData) {
 
     // If schedules are provided, we replace existing schedules with new ones inside a transaction
     let updatedCourse;
-    if (data.schedules) {
-      await prisma.$transaction(async (tx) => {
-        // delete existing schedules for this course
-        await tx.courseSchedule.deleteMany({ where: { courseId } });
+    try {
+      if (data.schedules) {
+        await prisma.$transaction(async (tx) => {
+          // delete existing schedules for this course
+          await tx.courseSchedule.deleteMany({ where: { courseId } });
 
-        // insert new schedules (use createMany for performance)
-        if (data.schedules && data.schedules.length > 0) {
-          await tx.courseSchedule.createMany({
-            data: data.schedules.map((s) => ({
-              courseId,
-              day: s.day,
-              fromTime: s.fromTime,
-              toTime: s.toTime,
-            })),
+          // insert new schedules (use createMany for performance)
+          if (data.schedules && data.schedules.length > 0) {
+            await tx.courseSchedule.createMany({
+              data: data.schedules.map((s) => ({
+                courseId,
+                day: s.day,
+                fromTime: s.fromTime,
+                toTime: s.toTime,
+              })),
+            });
+          }
+
+          // update the course scalars
+          updatedCourse = await tx.course.update({
+            where: { id: courseId },
+            data: updateData,
+            include: { schedules: true },
           });
-        }
-
-        // update the course scalars
-        updatedCourse = await tx.course.update({
+        });
+      } else {
+        // no schedule changes — simple update
+        updatedCourse = await prisma.course.update({
           where: { id: courseId },
           data: updateData,
           include: { schedules: true },
         });
-      });
-    } else {
-      // no schedule changes — simple update
-      updatedCourse = await prisma.course.update({
-        where: { id: courseId },
-        data: updateData,
-        include: { schedules: true },
-      });
-    }
+      }
 
-    revalidatePath("/admin/courses");
-    return { success: true, data: updatedCourse };
+      revalidatePath("/admin/courses");
+      return { success: true, data: updatedCourse };
+    } catch (prismaError: any) {
+      // Handle Prisma unique constraint errors gracefully
+      if (prismaError.code === "P2002") {
+        const target = prismaError.meta?.target;
+        if (Array.isArray(target) && target.includes("slug")) {
+          return {
+            success: false,
+            error:
+              "A course with this code already exists. Please use a different course code.",
+          };
+        }
+        if (Array.isArray(target) && target.includes("code")) {
+          return {
+            success: false,
+            error: "A course with this code already exists.",
+          };
+        }
+        return {
+          success: false,
+          error:
+            "A course with these details already exists. Please check for duplicates.",
+        };
+      }
+      // Re-throw if it's not a unique constraint error
+      throw prismaError;
+    }
   } catch (err) {
     console.error("editCourse error:", err);
     return {

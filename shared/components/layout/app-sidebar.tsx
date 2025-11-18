@@ -2,6 +2,7 @@
 
 import {
   Home,
+  LayoutDashboard,
   LogOut,
   CalendarCheck,
   ClipboardList,
@@ -14,6 +15,7 @@ import {
   BookOpen,
   Users,
   BookCopy,
+  Activity,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import EditProfileModal from "@/shared/components/profile/components/EditProfileModal";
@@ -52,20 +54,26 @@ import { toast } from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
 
 const adminItems = [
-  { title: "Dashboard", url: "/dashboard/admin", icon: Home },
+  { title: "Dashboard", url: "/dashboard/admin", icon: LayoutDashboard },
   { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Students", url: "/main/students", icon: Users },
+  { title: "Audit Logs", url: "/main/logs", icon: Activity },
 ];
 
 const academicHeadItems = [
-  { title: "Dashboard", url: "/dashboard/academic-head", icon: Home },
+  {
+    title: "Dashboard",
+    url: "/dashboard/academic-head",
+    icon: LayoutDashboard,
+  },
   { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
+  { title: "Audit Logs", url: "/main/logs", icon: Activity },
 ];
 
 const facultyItems = [
-  { title: "Dashboard", url: "/dashboard/faculty", icon: Home },
+  { title: "Dashboard", url: "/dashboard/faculty", icon: LayoutDashboard },
   { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
 ];
@@ -132,6 +140,7 @@ export function AppSidebar() {
       "/main/course",
       "/main/accounts",
       "/main/students",
+      "/main/logs",
     ],
     ACADEMIC_HEAD: [
       "/dashboard/academic-head",
@@ -141,6 +150,7 @@ export function AppSidebar() {
       "/main/grading/reporting",
       "/main/grading/recitation",
       "/main/course",
+      "/main/logs",
     ],
     FACULTY: [
       "/dashboard/faculty",

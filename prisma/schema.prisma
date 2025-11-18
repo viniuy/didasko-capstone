@@ -9,21 +9,23 @@ datasource db {
 }
 
 model User {
-  id              String     @id @default(uuid())
-  name            String
-  email           String     @unique
-  department      String
-  workType        WorkType   @map("work_type")
-  role            Role
-  status          UserStatus @default(ACTIVE)
-  image           String?
-  createdAt       DateTime   @default(now()) @map("created_at")
-  updatedAt       DateTime   @updatedAt @map("updated_at")
-  accounts        Account[]
-  sessions        Session[]
-  coursesTeaching Course[]   @relation("FacultyCourses")
-  criteria        Criteria[]
-  notes           Note[]
+  id                String             @id @default(uuid())
+  name              String
+  email             String             @unique
+  department        String
+  workType          WorkType           @map("work_type")
+  role              Role
+  status            UserStatus         @default(ACTIVE)
+  image             String?
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  accounts          Account[]
+  sessions          Session[]
+  coursesTeaching   Course[]           @relation("FacultyCourses")
+  criteria          Criteria[]
+  notes             Note[]
+  auditLogs         AuditLog[]
+  breakGlassSession BreakGlassSession?
 
   @@map("users")
 }
@@ -463,4 +465,38 @@ enum AssessmentType {
   PT
   QUIZ
   EXAM
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  action    String   @db.VarChar(100)
+  module    String   @db.VarChar(100)
+  before    Json?
+  after     Json?
+  reason    String?  @db.Text
+  ip        String?  @db.VarChar(45)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+  @@index([module, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+model BreakGlassSession {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  reason      String   @db.Text
+  activatedAt DateTime @default(now()) @map("activated_at")
+  expiresAt   DateTime @map("expires_at")
+  activatedBy String?  @map("activated_by")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("break_glass_sessions")
 }
