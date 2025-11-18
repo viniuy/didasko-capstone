@@ -146,13 +146,16 @@ export function groupEventsByDate(events: any[]): GroupedEvent[] {
   const groupedEvents: Record<string, EventItem[]> = {};
 
   events.forEach((event: any) => {
-    // Parse date and ensure it's in local timezone
+    // Parse date from database (stored as UTC)
     const eventDate = new Date(event.date);
-    // Create a local date to avoid UTC conversion issues
+    // Use UTC methods to get the date components that were originally stored
+    // This ensures Nov 20 UTC is read as Nov 20, not converted to local time
     const localDate = new Date(
-      eventDate.getFullYear(),
-      eventDate.getMonth(),
-      eventDate.getDate()
+      Date.UTC(
+        eventDate.getUTCFullYear(),
+        eventDate.getUTCMonth(),
+        eventDate.getUTCDate()
+      )
     );
     const dateKey = format(localDate, "yyyy-MM-dd");
 

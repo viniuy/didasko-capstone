@@ -83,27 +83,27 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
     };
 
     try {
-      const newCourse = await prisma.course.create({
-        data: {
-          ...createData,
-          schedules: {
-            // createMany is slightly faster and fine if you don't need returned schedule IDs in this nested call,
-            // but Prisma returns schedules only when you include them separately. create with nested create works too.
-            createMany: {
-              data: data.schedules.map((s) => ({
-                day: s.day,
-                fromTime: s.fromTime,
-                toTime: s.toTime,
-              })),
-            },
+    const newCourse = await prisma.course.create({
+      data: {
+        ...createData,
+        schedules: {
+          // createMany is slightly faster and fine if you don't need returned schedule IDs in this nested call,
+          // but Prisma returns schedules only when you include them separately. create with nested create works too.
+          createMany: {
+            data: data.schedules.map((s) => ({
+              day: s.day,
+              fromTime: s.fromTime,
+              toTime: s.toTime,
+            })),
           },
         },
-        include: {
-          schedules: true,
-        },
-      });
+      },
+      include: {
+        schedules: true,
+      },
+    });
 
-      revalidatePath("/admin/courses");
+    revalidatePath("/admin/courses");
 
       // Log course creation
       try {
@@ -140,7 +140,7 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
         // Don't fail course creation if logging fails
       }
 
-      return { success: true, data: newCourse };
+    return { success: true, data: newCourse };
     } catch (prismaError: any) {
       // Handle Prisma unique constraint errors gracefully
       if (prismaError.code === "P2002") {
@@ -246,45 +246,45 @@ export async function editCourse(
     // If schedules are provided, we replace existing schedules with new ones inside a transaction
     let updatedCourse;
     try {
-      if (data.schedules) {
-        await prisma.$transaction(async (tx) => {
-          // delete existing schedules for this course
-          await tx.courseSchedule.deleteMany({ where: { courseId } });
+    if (data.schedules) {
+      await prisma.$transaction(async (tx) => {
+        // delete existing schedules for this course
+        await tx.courseSchedule.deleteMany({ where: { courseId } });
 
-          // insert new schedules (use createMany for performance)
-          if (data.schedules && data.schedules.length > 0) {
-            await tx.courseSchedule.createMany({
-              data: data.schedules.map((s) => ({
-                courseId,
-                day: s.day,
-                fromTime: s.fromTime,
-                toTime: s.toTime,
-              })),
-            });
-          }
-
-          // update the course scalars
-          updatedCourse = await tx.course.update({
-            where: { id: courseId },
-            data: updateData,
-            include: { schedules: true },
+        // insert new schedules (use createMany for performance)
+        if (data.schedules && data.schedules.length > 0) {
+          await tx.courseSchedule.createMany({
+            data: data.schedules.map((s) => ({
+              courseId,
+              day: s.day,
+              fromTime: s.fromTime,
+              toTime: s.toTime,
+            })),
           });
-        });
-      } else {
-        // no schedule changes — simple update
-        updatedCourse = await prisma.course.update({
+        }
+
+        // update the course scalars
+        updatedCourse = await tx.course.update({
           where: { id: courseId },
           data: updateData,
           include: { schedules: true },
         });
-      }
+      });
+    } else {
+      // no schedule changes — simple update
+      updatedCourse = await prisma.course.update({
+        where: { id: courseId },
+        data: updateData,
+        include: { schedules: true },
+      });
+    }
 
       // Ensure updatedCourse is defined before proceeding
       if (!updatedCourse) {
         return { success: false, error: "Failed to update course" };
       }
 
-      revalidatePath("/admin/courses");
+    revalidatePath("/admin/courses");
 
       // Log course edit
       try {
@@ -325,7 +325,7 @@ export async function editCourse(
         // Don't fail course edit if logging fails
       }
 
-      return { success: true, data: updatedCourse };
+    return { success: true, data: updatedCourse };
     } catch (prismaError: any) {
       // Handle Prisma unique constraint errors gracefully
       if (prismaError.code === "P2002") {

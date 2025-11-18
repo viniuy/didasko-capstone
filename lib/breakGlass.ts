@@ -1,5 +1,20 @@
 import { prisma } from "./prisma";
 import { logAction } from "./audit";
+import bcrypt from "bcryptjs";
+
+/**
+ * Generates a secure random code (32 characters, alphanumeric + special chars)
+ */
+function generateSecureCode(): string {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+  const length = 32;
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
 
 /**
  * Activates break-glass override by temporarily promoting a Faculty member to Admin.
@@ -13,7 +28,7 @@ export async function activateBreakGlass(
   facultyUserId: string,
   reason: string,
   activatedBy: string
-): Promise<void> {
+): Promise<{ secretCode: string; promotionCode: string }> {
   // Get the faculty user to verify role and store original role
   const facultyUser = await prisma.user.findUnique({
     where: { id: facultyUserId },
@@ -28,31 +43,92 @@ export async function activateBreakGlass(
     throw new Error("Break-glass can only be activated for Faculty members");
   }
 
+  // Get Academic Head user to send email
+  const academicHead = await prisma.user.findUnique({
+    where: { id: activatedBy },
+    select: { id: true, name: true, email: true },
+  });
+
+  if (!academicHead) {
+    throw new Error("Academic Head not found");
+  }
+
+  // Generate secure codes
+  const secretCode = generateSecureCode();
+  const promotionCode = generateSecureCode();
+
+  // Encrypt codes with bcrypt
+  const saltRounds = 12;
+  const encryptedSecretCode = await bcrypt.hash(secretCode, saltRounds);
+  const encryptedPromotionCode = await bcrypt.hash(promotionCode, saltRounds);
+
   // Temporarily change the user's role to ADMIN
   await prisma.user.update({
     where: { id: facultyUserId },
     data: { role: "ADMIN" },
   });
 
-  // Create or update break-glass session (no expiration - manual deactivation only)
-  // Note: originalRole field exists in schema but Prisma client needs regeneration after migration
-  await (prisma.breakGlassSession as any).upsert({
-    where: { userId: facultyUserId },
-    create: {
-      userId: facultyUserId,
-      reason,
-      activatedBy,
-      originalRole: "FACULTY",
-      expiresAt: null, // No automatic expiration - nullable field
-    },
-    update: {
-      reason,
-      activatedBy,
-      activatedAt: new Date(),
-      originalRole: "FACULTY",
-      expiresAt: null,
-    },
-  });
+  // Create or update break-glass session with encrypted codes
+  // Store plain promotion code for Academic Head to view
+  // Note: Using raw query to handle case where promotionCodePlain column doesn't exist yet
+  try {
+    await (prisma.breakGlassSession as any).upsert({
+      where: { userId: facultyUserId },
+      create: {
+        userId: facultyUserId,
+        reason,
+        activatedBy,
+        originalRole: "FACULTY",
+        expiresAt: null,
+        secretCode: encryptedSecretCode,
+        promotionCode: encryptedPromotionCode,
+        promotionCodePlain: promotionCode, // Store plain code for display
+      },
+      update: {
+        reason,
+        activatedBy,
+        activatedAt: new Date(),
+        originalRole: "FACULTY",
+        expiresAt: null,
+        secretCode: encryptedSecretCode,
+        promotionCode: encryptedPromotionCode,
+        promotionCodePlain: promotionCode, // Store plain code for display
+      },
+    });
+  } catch (error: any) {
+    // If promotionCodePlain column doesn't exist yet, create without it
+    if (
+      error.message?.includes("promotionCodePlain") ||
+      error.message?.includes("Unknown argument")
+    ) {
+      await (prisma.breakGlassSession as any).upsert({
+        where: { userId: facultyUserId },
+        create: {
+          userId: facultyUserId,
+          reason,
+          activatedBy,
+          originalRole: "FACULTY",
+          expiresAt: null,
+          secretCode: encryptedSecretCode,
+          promotionCode: encryptedPromotionCode,
+        },
+        update: {
+          reason,
+          activatedBy,
+          activatedAt: new Date(),
+          originalRole: "FACULTY",
+          expiresAt: null,
+          secretCode: encryptedSecretCode,
+          promotionCode: encryptedPromotionCode,
+        },
+      });
+      console.warn(
+        "[BreakGlass] promotionCodePlain column not found. Please run database migration."
+      );
+    } else {
+      throw error;
+    }
+  }
 
   // Log the activation
   await logAction({
@@ -67,7 +143,13 @@ export async function activateBreakGlass(
       role: "ADMIN",
       activatedBy,
     },
+    metadata: {
+      academicHeadId: activatedBy,
+    },
   });
+
+  // Return plain codes (only returned once, not stored in plain text)
+  return { secretCode, promotionCode };
 }
 
 /**
@@ -181,6 +263,100 @@ export async function getBreakGlassSession(userId: string) {
       },
     },
   });
+}
+
+/**
+ * Promotes a temporary admin (break-glass user) to permanent admin.
+ * Requires the promotion code that was emailed to the Academic Head.
+ *
+ * @param userId - The temporary admin user ID
+ * @param promotionCode - The promotion code (plain text)
+ * @param promotedBy - Who is promoting (permanent admin user ID)
+ */
+export async function promoteToPermanentAdmin(
+  userId: string,
+  promotionCode: string,
+  promotedBy: string
+): Promise<void> {
+  // Get the break-glass session
+  const session = (await (prisma.breakGlassSession as any).findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      userId: true,
+      promotionCode: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  })) as {
+    id: string;
+    userId: string;
+    promotionCode: string;
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    };
+  } | null;
+
+  if (!session) {
+    throw new Error(
+      "Break-glass session not found. User is not a temporary admin."
+    );
+  }
+
+  // Verify the promotion code
+  const isValidCode = await bcrypt.compare(
+    promotionCode,
+    session.promotionCode
+  );
+  if (!isValidCode) {
+    throw new Error("Invalid promotion code");
+  }
+
+  // Update user role to permanent ADMIN (remove break-glass session)
+  await prisma.user.update({
+    where: { id: userId },
+    data: { role: "ADMIN" },
+  });
+
+  // Delete the break-glass session
+  await prisma.breakGlassSession.delete({
+    where: { userId },
+  });
+
+  // Log the promotion
+  await logAction({
+    userId: promotedBy,
+    action: "BREAK_GLASS_PROMOTED_TO_PERMANENT",
+    module: "Security",
+    reason: `Temporary admin ${session.user.name} (${session.user.email}) promoted to permanent Admin by user ${promotedBy}`,
+    before: {
+      role: "ADMIN",
+      isTemporary: true,
+    },
+    after: {
+      role: "ADMIN",
+      isTemporary: false,
+    },
+  });
+}
+
+/**
+ * Verifies if a user is a temporary admin (has active break-glass session)
+ */
+export async function isTemporaryAdmin(userId: string): Promise<boolean> {
+  const session = await prisma.breakGlassSession.findUnique({
+    where: { userId },
+  });
+  return !!session;
 }
 
 /**

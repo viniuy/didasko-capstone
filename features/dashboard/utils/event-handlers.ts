@@ -17,18 +17,15 @@ import { startOfDay, isPast, isSameDay } from "date-fns";
 // Function to normalize date by removing time portion while preserving local timezone
 function normalizeDate(date: Date | string): Date {
   const d = typeof date === "string" ? new Date(date) : date;
-  // Create a new date using local timezone components to avoid UTC conversion
-  // This ensures the date stays in local time when sent to the database
-  const localDate = new Date(
-    d.getFullYear(),
-    d.getMonth(),
-    d.getDate(),
-    0,
-    0,
-    0,
-    0
-  );
-  return localDate;
+  // Get local date components
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const day = d.getDate();
+
+  // Create date using UTC to preserve the local date value
+  // This ensures Nov 20 stays as Nov 20 when stored in UTC
+  const utcDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  return utcDate;
 }
 
 export async function handleSaveNewEvent({

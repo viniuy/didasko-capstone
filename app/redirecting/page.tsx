@@ -25,45 +25,74 @@ export default function RedirectingPage() {
         return;
       }
 
-      // If user is admin, check for previously selected role
+      // If user is admin, check if they're a temp admin first
       if (role === "ADMIN") {
-        // Check localStorage for previously selected role
-        const savedRole = localStorage.getItem(SELECTED_ROLE_KEY);
-
-        // Check session for selectedRole (from JWT token)
-        const sessionSelectedRole = session?.user?.selectedRole;
-
-        // If localStorage has a saved role but session doesn't, restore it
-        if (savedRole && !sessionSelectedRole) {
-          update({ selectedRole: savedRole as "ADMIN" | "FACULTY" }).then(
-            () => {
-              // After updating, redirect based on saved role
-              const roleMap: Record<string, string> = {
-                ADMIN: "/dashboard/admin",
-                FACULTY: "/dashboard/faculty",
-              };
-              router.replace(roleMap[savedRole] || "/dashboard/admin");
+        // Check if user is a temporary admin (break-glass active)
+        const checkTempAdmin = async () => {
+          try {
+            const response = await fetch(
+              `/api/break-glass/status?userId=${session?.user?.id}`
+            );
+            if (response.ok) {
+              const data = await response.json();
+              if (data.isActive) {
+                // Temp admin - redirect to admin dashboard immediately
+                router.replace("/dashboard/admin");
+                return true;
+              }
             }
-          );
-          return;
-        }
+          } catch (error) {
+            console.error("Error checking temp admin status:", error);
+          }
+          return false;
+        };
 
-        // Use session selectedRole first, then localStorage, then show selection
-        const effectiveRole = sessionSelectedRole || savedRole;
+        // Check for temp admin status
+        checkTempAdmin().then((isTempAdmin) => {
+          if (isTempAdmin) {
+            return; // Already redirected
+          }
 
-        if (effectiveRole === "FACULTY") {
-          // Admin has selected faculty role - redirect to faculty dashboard
-          router.replace("/dashboard/faculty");
-          return;
-        } else if (effectiveRole === "ADMIN") {
-          // Admin has explicitly selected admin role - redirect to admin dashboard
-          router.replace("/dashboard/admin");
-          return;
-        } else {
-          // No previous selection - show role selection
-          setShowRoleSelection(true);
-          return;
-        }
+          // Continue with normal admin flow
+          // Check localStorage for previously selected role
+          const savedRole = localStorage.getItem(SELECTED_ROLE_KEY);
+
+          // Check session for selectedRole (from JWT token)
+          const sessionSelectedRole = session?.user?.selectedRole;
+
+          // If localStorage has a saved role but session doesn't, restore it
+          if (savedRole && !sessionSelectedRole) {
+            update({ selectedRole: savedRole as "ADMIN" | "FACULTY" }).then(
+              () => {
+                // After updating, redirect based on saved role
+                const roleMap: Record<string, string> = {
+                  ADMIN: "/dashboard/admin",
+                  FACULTY: "/dashboard/faculty",
+                };
+                router.replace(roleMap[savedRole] || "/dashboard/admin");
+              }
+            );
+            return;
+          }
+
+          // Use session selectedRole first, then localStorage, then show selection
+          const effectiveRole = sessionSelectedRole || savedRole;
+
+          if (effectiveRole === "FACULTY") {
+            // Admin has selected faculty role - redirect to faculty dashboard
+            router.replace("/dashboard/faculty");
+            return;
+          } else if (effectiveRole === "ADMIN") {
+            // Admin has explicitly selected admin role - redirect to admin dashboard
+            router.replace("/dashboard/admin");
+            return;
+          } else {
+            // No previous selection - show role selection
+            setShowRoleSelection(true);
+            return;
+          }
+        });
+        return;
       }
 
       // For other roles, proceed with normal redirection

@@ -143,6 +143,22 @@ export function CourseSheet({
       return;
     }
 
+    // Validate academic year values: first year must be less than second year, and difference must be exactly 1
+    const [firstYear, secondYear] = formData.academicYear
+      .trim()
+      .split("-")
+      .map(Number);
+    if (firstYear >= secondYear) {
+      toast.error("First year must be less than second year (e.g., 2024-2025)");
+      return;
+    }
+    if (secondYear - firstYear !== 1) {
+      toast.error(
+        "Academic year must have exactly 1 year difference (e.g., 2024-2025)"
+      );
+      return;
+    }
+
     const classNumber = parseInt(formData.classNumber);
     if (isNaN(classNumber) || classNumber < 1) {
       toast.error("Class number must be a positive number");
@@ -347,6 +363,28 @@ export function CourseSheet({
                     Format must be YYYY-YYYY (e.g., 2024-2025)
                   </p>
                 )}
+              {formData.academicYear &&
+                /^\d{4}-\d{4}$/.test(formData.academicYear) &&
+                (() => {
+                  const [firstYear, secondYear] = formData.academicYear
+                    .split("-")
+                    .map(Number);
+                  if (firstYear >= secondYear) {
+                    return (
+                      <p className="text-xs text-red-500">
+                        First year must be less than second year
+                      </p>
+                    );
+                  }
+                  if (secondYear - firstYear !== 1) {
+                    return (
+                      <p className="text-xs text-red-500">
+                        Academic year must have exactly 1 year difference
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
             </div>
           </div>
 

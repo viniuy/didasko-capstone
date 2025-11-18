@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { logAction } from "@/lib/audit";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
+import { isTemporaryAdmin } from "@/lib/breakGlass";
 
 export async function updateUserStatus(userId: string, status: UserStatus) {
   try {
@@ -46,6 +47,23 @@ interface AddUserParams {
 
 export async function addUser(userData: AddUserParams) {
   try {
+    const session = await getServerSession(authOptions);
+
+    // Check if current user is a temporary admin
+    if (session?.user?.id) {
+      const isTempAdmin = await isTemporaryAdmin(session.user.id);
+
+      if (isTempAdmin) {
+        // Temp admins can only create FACULTY users
+        if (userData.role !== "FACULTY") {
+          return {
+            success: false,
+            error: "Temporary admins can only create Faculty users",
+          };
+        }
+      }
+    }
+
     // Check if email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: userData.email },
@@ -118,7 +136,9 @@ export async function editUser(
   }
 ) {
   try {
-    // Get user before update for logging
+    const session = await getServerSession(authOptions);
+
+    // Get user before update for logging and permission checks
     const userBefore = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -134,6 +154,38 @@ export async function editUser(
 
     if (!userBefore) {
       return { success: false, error: "User not found" };
+    }
+
+    // Check if current user is a temporary admin
+    if (session?.user?.id) {
+      const isTempAdmin = await isTemporaryAdmin(session.user.id);
+
+      if (isTempAdmin) {
+        // Temp admins cannot change roles of ADMIN or ACADEMIC_HEAD users
+        if (
+          userBefore.role === "ADMIN" ||
+          userBefore.role === "ACADEMIC_HEAD"
+        ) {
+          if (data.role && data.role !== userBefore.role) {
+            return {
+              success: false,
+              error:
+                "Temporary admins cannot change roles of Admin or Academic Head users",
+            };
+          }
+        }
+
+        // Temp admins cannot assign FACULTY users to ACADEMIC_HEAD or ADMIN roles
+        if (userBefore.role === "FACULTY" && data.role) {
+          if (data.role === "ACADEMIC_HEAD" || data.role === "ADMIN") {
+            return {
+              success: false,
+              error:
+                "Temporary admins cannot promote Faculty to Academic Head or Admin",
+            };
+          }
+        }
+      }
     }
 
     // Check if email already exists (if email is being changed)

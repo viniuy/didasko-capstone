@@ -47,6 +47,7 @@ interface BreakGlassStatus {
     reason: string;
     activatedAt: Date;
     activatedBy: string | null;
+    promotionCodePlain: string | null;
     user: {
       id: string;
       name: string;
@@ -59,6 +60,7 @@ interface BreakGlassStatus {
     reason: string;
     activatedAt: Date;
     activatedBy: string | null;
+    promotionCodePlain?: string | null;
     user?: {
       id: string;
       name: string;
@@ -261,6 +263,29 @@ export function BreakGlassCompact() {
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 italic">
                           "{session.reason.substring(0, 50)}
                           {session.reason.length > 50 ? "..." : ""}"
+                        </div>
+                      )}
+                      {session.promotionCodePlain && (
+                        <div className="mt-2 p-2 bg-[#124A69]/10 dark:bg-[#124A69]/20 border border-[#124A69]/30 rounded">
+                          <div className="text-[9px] font-semibold text-[#124A69] dark:text-[#4da6d1] mb-1">
+                            Secret Code:
+                          </div>
+                          <div className="font-mono text-[10px] text-gray-900 dark:text-gray-100 break-all">
+                            {session.promotionCodePlain}
+                          </div>
+                          <Button
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                session.promotionCodePlain!
+                              );
+                              toast.success("Code copied to clipboard");
+                            }}
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 text-[9px] mt-1 text-[#124A69] hover:bg-[#124A69]/10 dark:hover:bg-[#124A69]/30 p-1"
+                          >
+                            Copy Code
+                          </Button>
                         </div>
                       )}
                       <Button

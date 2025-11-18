@@ -35,6 +35,7 @@ import {
   Upload,
   ChevronDown,
   ArrowUpDown,
+  ShieldCheck,
 } from "lucide-react";
 import { UserSheet } from "./user-sheet";
 import { editUser } from "@/lib/actions/users";
@@ -48,7 +49,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +80,9 @@ import {
   getPaginationRowModel,
 } from "@tanstack/react-table";
 import { supabase } from "@/lib/supabaseClient";
+import { useSession } from "next-auth/react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 interface User {
   id: string;
   name: string;
@@ -228,8 +231,86 @@ export function AdminDataTable({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [showPromoteDialog, setShowPromoteDialog] = useState(false);
+  const [userToPromote, setUserToPromote] = useState<User | null>(null);
+  const [promotionCode, setPromotionCode] = useState("");
+  const [isPromoting, setIsPromoting] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<Role | null>(null);
+  const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: session } = useSession();
+
+  // Check if current user is temporary admin on mount
+  useEffect(() => {
+    const checkCurrentUser = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(
+            `/api/break-glass/status?userId=${session.user.id}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setIsCurrentUserTempAdmin(!!data.isActive);
+            setCurrentUserRole(session.user.role as Role);
+          }
+        } catch (error) {
+          console.error("Error checking temp admin status:", error);
+        }
+      }
+    };
+    checkCurrentUser();
+  }, [session]);
+
+  // Check if a user is a temporary admin
+  const checkIsTempAdmin = async (userId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/break-glass/status?userId=${userId}`);
+      if (response.ok) {
+        const data = await response.json();
+        return !!data.isActive;
+      }
+    } catch (error) {
+      console.error("Error checking temp admin status:", error);
+    }
+    return false;
+  };
+
+  const handlePromote = async () => {
+    if (!userToPromote || !promotionCode.trim()) {
+      toast.error("Please enter the secret code");
+      return;
+    }
+
+    setIsPromoting(true);
+    try {
+      const response = await fetch("/api/break-glass/promote", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: userToPromote.id,
+          promotionCode: promotionCode.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to promote user");
+      }
+
+      toast.success("User has been promoted to permanent Admin");
+      setShowPromoteDialog(false);
+      setPromotionCode("");
+      setUserToPromote(null);
+      await refreshTableData();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to promote user");
+    } finally {
+      setIsPromoting(false);
+    }
+  };
 
   const refreshTableData = useCallback(async () => {
     try {
@@ -801,33 +882,59 @@ export function AdminDataTable({
       {
         accessorKey: "role",
         header: "Role",
-        cell: ({ row }) => (
-          <Select
-            value={row.original.role}
-            onValueChange={(value: Role) =>
-              handleRoleChange(row.original.id, value)
-            }
-            disabled={isRoleUpdating[row.original.id]}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue>
-                {isRoleUpdating[row.original.id] ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
-                    <span>Updating...</span>
-                  </div>
-                ) : (
-                  formatEnumValue(row.original.role)
+        cell: ({ row }) => {
+          // Check if current user is temp admin and if target user is ADMIN/ACADEMIC_HEAD
+          const isTargetAdminOrHead =
+            row.original.role === "ADMIN" ||
+            row.original.role === "ACADEMIC_HEAD";
+          const isDisabledForTempAdmin =
+            isCurrentUserTempAdmin && isTargetAdminOrHead;
+
+          return (
+            <Select
+              value={row.original.role}
+              onValueChange={(value: Role) => {
+                // Prevent temp admin from assigning ADMIN or ACADEMIC_HEAD roles
+                if (
+                  isCurrentUserTempAdmin &&
+                  (value === "ADMIN" || value === "ACADEMIC_HEAD")
+                ) {
+                  toast.error(
+                    "Temporary admins cannot assign Admin or Academic Head roles"
+                  );
+                  return;
+                }
+                handleRoleChange(row.original.id, value);
+              }}
+              disabled={
+                isRoleUpdating[row.original.id] || isDisabledForTempAdmin
+              }
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue>
+                  {isRoleUpdating[row.original.id] ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
+                      <span>Updating...</span>
+                    </div>
+                  ) : (
+                    formatEnumValue(row.original.role)
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {/* Temp admins cannot see or select ADMIN/ACADEMIC_HEAD */}
+                {!isCurrentUserTempAdmin && (
+                  <>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
+                    <SelectItem value="ACADEMIC_HEAD">Academic Head</SelectItem>
+                  </>
                 )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ADMIN">Admin</SelectItem>
-              <SelectItem value="FACULTY">Faculty</SelectItem>
-              <SelectItem value="ACADEMIC_HEAD">Academic Head</SelectItem>
-            </SelectContent>
-          </Select>
-        ),
+                <SelectItem value="FACULTY">Faculty</SelectItem>
+              </SelectContent>
+            </Select>
+          );
+        },
       },
       {
         accessorKey: "status",
@@ -900,6 +1007,26 @@ export function AdminDataTable({
                 <Pencil className="h-4 w-4" />
                 Edit User
               </DropdownMenuItem>
+              {/* Show promotion option only for permanent admins viewing temporary admins */}
+              {!isCurrentUserTempAdmin &&
+                currentUserRole === "ADMIN" &&
+                row.original.role === "ADMIN" && (
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 text-[#124A69]"
+                    onClick={async () => {
+                      const isTempAdmin = await checkIsTempAdmin(
+                        row.original.id
+                      );
+                      if (isTempAdmin) {
+                        setUserToPromote(row.original);
+                        setShowPromoteDialog(true);
+                      }
+                    }}
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Promote to Permanent Admin
+                  </DropdownMenuItem>
+                )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="flex items-center gap-2 text-red-600"
@@ -1747,6 +1874,83 @@ export function AdminDataTable({
               </div>
             )
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Promotion Dialog */}
+      <Dialog open={showPromoteDialog} onOpenChange={setShowPromoteDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#124A69]">
+              <ShieldCheck className="w-5 h-5" />
+              Promote to Permanent Admin
+            </DialogTitle>
+            <DialogDescription>
+              Enter the secret code that was emailed to the Academic Head who
+              activated the break-glass override for{" "}
+              <strong>{userToPromote?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 dark:border-blue-600 p-3 rounded">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                <strong>Note:</strong> This action will permanently promote the
+                temporary admin to a permanent Admin role. The secret code was
+                sent to the Academic Head's email when the break-glass override
+                was activated.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="promotionCode">
+                Secret Code <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="promotionCode"
+                type="text"
+                placeholder="Enter the 32-character secret code"
+                value={promotionCode}
+                onChange={(e) => setPromotionCode(e.target.value)}
+                className="font-mono"
+                maxLength={32}
+              />
+              <p className="text-xs text-gray-500">
+                The code should be 32 characters long and was sent via email.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPromoteDialog(false);
+                setPromotionCode("");
+                setUserToPromote(null);
+              }}
+              disabled={isPromoting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+              onClick={handlePromote}
+              disabled={isPromoting || !promotionCode.trim()}
+            >
+              {isPromoting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  Promoting...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  Promote
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

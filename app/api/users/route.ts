@@ -9,6 +9,7 @@ import { withLogging } from "@/lib/withLogging";
 import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
 import { canManageUser } from "@/lib/roles";
+import { isTemporaryAdmin } from "@/lib/breakGlass";
 
 export const GET = withLogging(
   { action: "USER_LIST", module: "User Management" },
@@ -65,13 +66,26 @@ export const POST = withLogging(
         );
       }
 
-      // Check permissions based on role being created
-      if (role === "ADMIN") {
-        await requirePermission(session.user, Permission.MANAGE_ADMINS);
-      } else if (role === "FACULTY") {
-        await requirePermission(session.user, Permission.MANAGE_FACULTY);
+      // Check if current user is a temporary admin
+      const isTempAdmin = await isTemporaryAdmin(session.user.id);
+
+      if (isTempAdmin) {
+        // Temp admins can only create FACULTY users
+        if (role !== "FACULTY") {
+          return NextResponse.json(
+            { error: "Temporary admins can only create Faculty users" },
+            { status: 403 }
+          );
+        }
       } else {
-        await requirePermission(session.user, Permission.MANAGE_USERS);
+        // Check permissions based on role being created (only for permanent admins)
+        if (role === "ADMIN") {
+          await requirePermission(session.user, Permission.MANAGE_ADMINS);
+        } else if (role === "FACULTY") {
+          await requirePermission(session.user, Permission.MANAGE_FACULTY);
+        } else {
+          await requirePermission(session.user, Permission.MANAGE_USERS);
+        }
       }
 
       try {

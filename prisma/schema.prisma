@@ -495,14 +495,17 @@ model AuditLog {
 }
 
 model BreakGlassSession {
-  id            String   @id @default(uuid())
-  userId        String   @unique @map("user_id")
-  reason        String   @db.Text
-  activatedAt   DateTime @default(now()) @map("activated_at")
-  expiresAt     DateTime? @map("expires_at")
-  activatedBy   String?  @map("activated_by")
-  originalRole  Role     @map("original_role")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  reason            String   @db.Text
+  activatedAt       DateTime @default(now()) @map("activated_at")
+  expiresAt         DateTime? @map("expires_at")
+  activatedBy       String?  @map("activated_by")
+  originalRole      Role     @map("original_role")
+  secretCode        String   @map("secret_code") @db.Text // Encrypted secret code for activation
+  promotionCode     String   @map("promotion_code") @db.Text // Encrypted code for permanent promotion
+  promotionCodePlain String?  @map("promotion_code_plain") @db.VarChar(50) // Plain code for display (only visible to Academic Head)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
   @@map("break_glass_sessions")

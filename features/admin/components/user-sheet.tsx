@@ -25,6 +25,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
+import { useSession } from "next-auth/react";
 
 // Available departments
 const DEPARTMENTS = ["IT Department", "BA Department", "HM Department"];
@@ -85,8 +86,30 @@ export function UserSheet({
   onClose,
   onSave,
 }: UserSheetProps) {
+  const { data: session } = useSession();
   const [open, setOpen] = useState(mode === "edit");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
+
+  // Check if current user is temporary admin
+  useEffect(() => {
+    const checkTempAdmin = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(
+            `/api/break-glass/status?userId=${session.user.id}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setIsCurrentUserTempAdmin(!!data.isActive);
+          }
+        } catch (error) {
+          console.error("Error checking temp admin status:", error);
+        }
+      }
+    };
+    checkTempAdmin();
+  }, [session]);
 
   const initialFormData = {
     name: mode === "edit" ? user?.name || "" : "",
@@ -308,20 +331,40 @@ export function UserSheet({
                     Role <span className="text-red-500">*</span>
                   </Label>
                   <Select
-                    onValueChange={(value) =>
-                      form.setValue("role", value as Role)
-                    }
+                    onValueChange={(value) => {
+                      // Prevent temp admin from assigning ADMIN or ACADEMIC_HEAD roles
+                      if (
+                        isCurrentUserTempAdmin &&
+                        (value === "ADMIN" || value === "ACADEMIC_HEAD")
+                      ) {
+                        toast.error(
+                          "Temporary admins cannot assign Admin or Academic Head roles"
+                        );
+                        return;
+                      }
+                      form.setValue("role", value as Role);
+                    }}
                     defaultValue={form.getValues("role")}
+                    disabled={
+                      isCurrentUserTempAdmin &&
+                      mode === "edit" &&
+                      (user?.role === "ADMIN" || user?.role === "ACADEMIC_HEAD")
+                    }
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={Role.FACULTY}>Faculty</SelectItem>
-                      <SelectItem value={Role.ADMIN}>Admin</SelectItem>
-                      <SelectItem value={Role.ACADEMIC_HEAD}>
-                        Academic Head
-                      </SelectItem>
+                      {/* Temp admins can only create FACULTY users */}
+                      {!isCurrentUserTempAdmin && (
+                        <>
+                          <SelectItem value={Role.ADMIN}>Admin</SelectItem>
+                          <SelectItem value={Role.ACADEMIC_HEAD}>
+                            Academic Head
+                          </SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                   {form.formState.errors.role && (
