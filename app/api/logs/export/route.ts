@@ -85,8 +85,10 @@ export const POST = withLogging(
         },
       });
 
-      // Log export operation
+      // Log export operation with metadata
       try {
+        const { generateBatchId } = await import("@/lib/audit");
+        const batchId = generateBatchId();
         await logAction({
           userId: session.user.id,
           action: "AUDIT_LOGS_EXPORTED",
@@ -96,15 +98,25 @@ export const POST = withLogging(
           }${action ? ` filtered by action: ${action}` : ""}${
             userId ? ` for user: ${userId}` : ""
           }`,
+          batchId,
+          status: "SUCCESS",
           after: {
             exportType: "audit_logs",
             count: logs.length,
+            fileFormat: "Excel",
+          },
+          metadata: {
+            exportType: "audit_logs",
+            fileFormat: "xlsx",
+            recordCount: logs.length,
             filters: {
               startDate: startDate || null,
               endDate: endDate || null,
               action: action || null,
               userId: userId || null,
             },
+            dataRange:
+              startDate && endDate ? `${startDate} to ${endDate}` : "All time",
           },
         });
       } catch (error) {

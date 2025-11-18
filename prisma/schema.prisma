@@ -468,16 +468,20 @@ enum AssessmentType {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String?  @map("user_id")
-  action    String   @db.VarChar(100)
-  module    String   @db.VarChar(100)
-  before    Json?
-  after     Json?
-  reason    String?  @db.Text
-  ip        String?  @db.VarChar(45)
-  createdAt DateTime @default(now()) @map("created_at")
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  action       String   @db.VarChar(100)
+  module       String   @db.VarChar(100)
+  before       Json?
+  after        Json?
+  reason       String?  @db.Text
+  ip           String?  @db.VarChar(45)
+  batchId      String?  @map("batch_id") @db.VarChar(100)
+  status       String?  @db.VarChar(20) // SUCCESS, FAILED, PENDING
+  errorMessage String?  @map("error_message") @db.Text
+  metadata     Json?    // Additional context: file name, size, filters, etc.
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([module])
@@ -485,6 +489,8 @@ model AuditLog {
   @@index([createdAt])
   @@index([module, createdAt])
   @@index([userId, createdAt])
+  @@index([batchId])
+  @@index([status])
   @@map("audit_logs")
 }
 

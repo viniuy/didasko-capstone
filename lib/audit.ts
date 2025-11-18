@@ -60,15 +60,37 @@ export interface LogActionParams {
   before?: any;
   after?: any;
   reason?: string | null;
+  batchId?: string | null; // For import/export batch tracking
+  status?: "SUCCESS" | "FAILED" | "PENDING" | null;
+  errorMessage?: string | null;
+  metadata?: any; // Additional context: file name, size, filters, user agent, etc.
 }
 
 /**
  * Logs an action to the audit log.
  * NEVER throws errors - logs to console instead.
  */
+/**
+ * Generates a unique batch ID for import/export operations
+ */
+export function generateBatchId(): string {
+  return `batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export async function logAction(params: LogActionParams): Promise<void> {
   try {
-    const { userId, action, module, before, after, reason } = params;
+    const {
+      userId,
+      action,
+      module,
+      before,
+      after,
+      reason,
+      batchId,
+      status,
+      errorMessage,
+      metadata,
+    } = params;
 
     // Validate required fields
     if (!action || !module) {
@@ -81,10 +103,16 @@ export async function logAction(params: LogActionParams): Promise<void> {
     // Sanitize before/after objects
     const sanitizedBefore = sanitizeObject(before);
     const sanitizedAfter = sanitizeObject(after);
+    const sanitizedMetadata = sanitizeObject(metadata);
 
     // Truncate action and module to max length
     const truncatedAction = action.substring(0, 100);
     const truncatedModule = module.substring(0, 100);
+    const truncatedBatchId = batchId ? batchId.substring(0, 100) : null;
+    const truncatedStatus = status ? status.substring(0, 20) : null;
+    const truncatedErrorMessage = errorMessage
+      ? errorMessage.substring(0, 5000)
+      : null;
 
     const prisma = getAuditPrisma();
 
@@ -97,6 +125,10 @@ export async function logAction(params: LogActionParams): Promise<void> {
         after: sanitizedAfter,
         reason: reason || null,
         ip: null, // IP address removed per user request
+        batchId: truncatedBatchId,
+        status: truncatedStatus,
+        errorMessage: truncatedErrorMessage,
+        metadata: sanitizedMetadata,
       },
     });
   } catch (error) {

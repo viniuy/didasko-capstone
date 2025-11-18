@@ -70,6 +70,7 @@ export async function PATCH(request: NextRequest) {
             ? "Activated"
             : "Changed status"
         } ${result.count} course(s)`,
+        status: "SUCCESS",
         before: {
           courses: coursesBefore.map((c) => ({
             id: c.id,
@@ -86,6 +87,12 @@ export async function PATCH(request: NextRequest) {
             status: status as CourseStatus,
           })),
           count: result.count,
+        },
+        metadata: {
+          entityType: "Course",
+          bulkOperation: true,
+          affectedCount: result.count,
+          newStatus: status,
         },
       });
     } catch (error) {

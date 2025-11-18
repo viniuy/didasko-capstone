@@ -52,6 +52,9 @@ interface AuditLog {
   after: any;
   reason: string | null;
   ip: string | null;
+  metadata: any;
+  batchId: string | null;
+  status: string | null;
   createdAt: Date;
   user: {
     id: string;
@@ -232,6 +235,228 @@ export default function AuditLogsTable({
     return `Action in ${module}`;
   };
 
+  // Format field names to be more user-friendly
+  const formatFieldName = (key: string): string => {
+    const fieldMap: Record<string, string> = {
+      entityType: "Type",
+      entityId: "ID",
+      entityName: "Name",
+      courseName: "Course Name",
+      courseCode: "Course Code",
+      courseSlug: "Course Slug",
+      description: "Description",
+      department: "Department",
+      semester: "Semester",
+      academicYear: "Academic Year",
+      status: "Status",
+      isActive: "Active",
+      isArchived: "Archived",
+      email: "Email",
+      name: "Name",
+      role: "Role",
+      studentId: "Student ID",
+      studentName: "Student Name",
+      rfidCardNumber: "RFID Card Number",
+      registrationSource: "Registration Source",
+      loginMethod: "Login Method",
+      logoutType: "Logout Type",
+      sessionCreated: "Session Created",
+      sessionEnded: "Session Ended",
+      importType: "Import Type",
+      exportType: "Export Type",
+      fileFormat: "File Format",
+      recordCount: "Total Records",
+      successCount: "Successful",
+      errorCount: "Errors",
+      skippedCount: "Skipped",
+      fileName: "File Name",
+      fileSize: "File Size",
+      filters: "Filters",
+      dataRange: "Data Range",
+      courseEnrolled: "Course Enrolled",
+      hasRfid: "Has RFID",
+      isReassignment: "Reassignment",
+      previousRole: "Previous Role",
+      newRole: "New Role",
+      roleChanged: "Role Changed",
+      statusChanged: "Status Changed",
+      createdRole: "Created Role",
+      createdDepartment: "Created Department",
+      bulkOperation: "Bulk Operation",
+      affectedCount: "Affected Count",
+      newStatus: "New Status",
+      scheduleCount: "Schedule Count",
+      scheduleUpdated: "Schedule Updated",
+      importedUsers: "Imported Users",
+      importedCourses: "Imported Courses",
+      exportedAt: "Exported At",
+    };
+
+    // Check if we have a friendly name
+    if (fieldMap[key]) {
+      return fieldMap[key];
+    }
+
+    // Otherwise, format the key: convert camelCase to Title Case
+    return key
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (str) => str.toUpperCase())
+      .trim();
+  };
+
+  // Format file size to human-readable format
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  };
+
+  // Format value to be more readable
+  const formatValue = (value: any, key?: string): string => {
+    if (value === null || value === undefined) {
+      return "N/A";
+    }
+    if (typeof value === "boolean") {
+      return value ? "Yes" : "No";
+    }
+    if (typeof value === "number") {
+      // Format file size if the key suggests it
+      if (
+        key &&
+        key.toLowerCase().includes("size") &&
+        key.toLowerCase().includes("file")
+      ) {
+        return formatFileSize(value);
+      }
+      // Format large numbers with commas
+      return value.toLocaleString();
+    }
+    if (typeof value === "string") {
+      // Check if string is a date
+      const dateValue = new Date(value);
+      if (!isNaN(dateValue.getTime()) && value.length > 10) {
+        try {
+          return format(dateValue, "MMM dd, yyyy HH:mm:ss");
+        } catch {
+          // If parsing fails, return as string
+        }
+      }
+      return value;
+    }
+    if (typeof value === "object") {
+      if (Array.isArray(value)) {
+        if (value.length === 0) return "None";
+        // If it's an array of simple values, show them
+        if (value.every((v) => typeof v !== "object")) {
+          return value.join(", ");
+        }
+        return `${value.length} item(s)`;
+      }
+      if (value instanceof Date) {
+        return format(new Date(value), "MMM dd, yyyy HH:mm:ss");
+      }
+      // For objects, return a summary
+      return JSON.stringify(value);
+    }
+    return String(value);
+  };
+
+  // Render organized details in a beginner-friendly format
+  const renderOrganizedDetails = (data: any, title: string, icon: string) => {
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    // Filter out technical fields
+    const filteredData = Object.fromEntries(
+      Object.entries(data).filter(
+        ([key]) =>
+          ![
+            "status",
+            "duration",
+            "error",
+            "_count",
+            "id",
+            "createdAt",
+            "updatedAt",
+            "userId",
+          ].includes(key.toLowerCase())
+      )
+    );
+
+    if (Object.keys(filteredData).length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="text-xs font-semibold mb-1.5 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-1.5">
+          <span className="text-[10px]">{icon}</span> {title}
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {Object.entries(filteredData).map(([key, value]) => (
+              <div key={key} className="space-y-0.5">
+                <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  {formatFieldName(key)}
+                </div>
+                <div className="text-xs text-gray-900 dark:text-gray-100">
+                  {typeof value === "object" && !Array.isArray(value) ? (
+                    <div className="space-y-0.5 pl-1.5 border-l border-gray-300 dark:border-gray-600">
+                      {Object.entries(value as Record<string, any>).map(
+                        ([subKey, subValue]) => (
+                          <div key={subKey} className="text-[10px]">
+                            <span className="text-gray-500 dark:text-gray-400">
+                              {formatFieldName(subKey)}:
+                            </span>{" "}
+                            <span>{formatValue(subValue, subKey)}</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    formatValue(value, key)
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render metadata in an organized way
+  const renderMetadata = (metadata: any) => {
+    if (!metadata || typeof metadata !== "object") {
+      return null;
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="text-xs font-semibold mb-1.5 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-1.5">
+          <span className="text-[10px]">📊</span> Additional Information
+        </div>
+        <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {Object.entries(metadata).map(([key, value]) => (
+              <div key={key} className="space-y-0.5">
+                <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  {formatFieldName(key)}
+                </div>
+                <div className="text-xs text-gray-900 dark:text-gray-100">
+                  {formatValue(value, key)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Handle export with filters
   const handleExport = async (filters: {
     startDate?: Date;
@@ -383,16 +608,8 @@ export default function AuditLogsTable({
                           <TableCell>
                             <div className="space-y-1">
                               <Badge
-                                variant={getActionBadgeVariant(log.action)}
-                                className={
-                                  getActionBadgeVariant(log.action) ===
-                                  "destructive"
-                                    ? "bg-red-100 text-red-800 border-red-200"
-                                    : getActionBadgeVariant(log.action) ===
-                                      "secondary"
-                                    ? "bg-blue-100 text-blue-800 border-blue-200"
-                                    : "bg-[#124A69] text-white border-[#124A69]"
-                                }
+                                variant="default"
+                                className="bg-[#124A69] text-white border-[#124A69] dark:bg-[#4da6d1] dark:text-white dark:border-[#4da6d1]"
                               >
                                 {formatActionName(log.action)}
                               </Badge>
@@ -431,92 +648,74 @@ export default function AuditLogsTable({
                         {isExpanded && (
                           <TableRow>
                             <TableCell colSpan={5} className="bg-muted/50">
-                              <div className="space-y-4 py-4 px-2">
-                                {log.reason && (
-                                  <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
-                                    <div className="font-semibold mb-1 text-[#124A69] flex items-center gap-2">
-                                      <span>📝</span> Reason
+                              <div className="space-y-2 py-2 px-2">
+                                {/* Status Badge */}
+                                {log.status && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+                                      Status:
+                                    </span>
+                                    <Badge
+                                      variant="secondary"
+                                      className="bg-[#124A69]/10 text-[#124A69] dark:bg-[#4da6d1]/20 dark:text-[#4da6d1] border border-[#124A69]/20 dark:border-[#4da6d1]/30 text-[10px] px-1.5 py-0.5"
+                                    >
+                                      {log.status}
+                                    </Badge>
+                                  </div>
+                                )}
+
+                                {/* Batch ID for import/export operations */}
+                                {log.batchId && (
+                                  <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-1.5">
+                                    <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">
+                                      Batch ID
                                     </div>
-                                    <div className="text-sm text-gray-700 mt-1">
+                                    <div className="text-xs font-mono text-gray-900 dark:text-gray-100">
+                                      {log.batchId}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Reason */}
+                                {log.reason && (
+                                  <div className="bg-gray-50 dark:bg-gray-900/30 border-l-2 border-[#124A69] dark:border-[#4da6d1] p-1.5 rounded">
+                                    <div className="text-xs font-semibold mb-0.5 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-1.5">
+                                      <span className="text-[10px]">📝</span>{" "}
+                                      Reason
+                                    </div>
+                                    <div className="text-xs text-gray-700 dark:text-gray-300">
                                       {log.reason}
                                     </div>
                                   </div>
                                 )}
-                                {log.before &&
-                                  (() => {
-                                    // Filter out status codes and technical fields
-                                    const filteredBefore = Object.fromEntries(
-                                      Object.entries(log.before).filter(
-                                        ([key]) =>
-                                          ![
-                                            "status",
-                                            "duration",
-                                            "error",
-                                            "_count",
-                                          ].includes(key.toLowerCase())
-                                      )
-                                    );
-                                    if (
-                                      Object.keys(filteredBefore).length === 0
-                                    )
-                                      return null;
-                                    return (
-                                      <div>
-                                        <div className="font-semibold mb-2 text-[#124A69] flex items-center gap-2">
-                                          <span>⬅️</span> Previous State
-                                        </div>
-                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
-                                          <pre className="text-xs text-gray-800 dark:text-gray-200 overflow-auto max-h-48 font-mono">
-                                            {JSON.stringify(
-                                              filteredBefore,
-                                              null,
-                                              2
-                                            )}
-                                          </pre>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                {log.after &&
-                                  (() => {
-                                    // Filter out status codes and technical fields, show user actions
-                                    const filteredAfter = Object.fromEntries(
-                                      Object.entries(log.after).filter(
-                                        ([key]) =>
-                                          ![
-                                            "status",
-                                            "duration",
-                                            "error",
-                                            "_count",
-                                          ].includes(key.toLowerCase())
-                                      )
-                                    );
-                                    if (Object.keys(filteredAfter).length === 0)
-                                      return null;
-                                    return (
-                                      <div>
-                                        <div className="font-semibold mb-2 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-2">
-                                          <span>➡️</span> New State / Action
-                                          Details
-                                        </div>
-                                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-3">
-                                          <pre className="text-xs text-gray-800 dark:text-gray-200 overflow-auto max-h-48 font-mono">
-                                            {JSON.stringify(
-                                              filteredAfter,
-                                              null,
-                                              2
-                                            )}
-                                          </pre>
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                {!log.before && !log.after && !log.reason && (
-                                  <div className="text-sm text-muted-foreground text-center py-4">
-                                    No additional details available for this log
-                                    entry
-                                  </div>
+
+                                {/* Previous State */}
+                                {renderOrganizedDetails(
+                                  log.before,
+                                  "Previous State",
+                                  "⬅️"
                                 )}
+
+                                {/* New State / Action Details */}
+                                {renderOrganizedDetails(
+                                  log.after,
+                                  "New State / Action Details",
+                                  "➡️"
+                                )}
+
+                                {/* Metadata */}
+                                {renderMetadata(log.metadata)}
+
+                                {/* Empty State */}
+                                {!log.before &&
+                                  !log.after &&
+                                  !log.reason &&
+                                  !log.metadata && (
+                                    <div className="text-xs text-muted-foreground text-center py-2">
+                                      No additional details available for this
+                                      log entry
+                                    </div>
+                                  )}
                               </div>
                             </TableCell>
                           </TableRow>

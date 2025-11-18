@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { logAction } from "@/lib/audit";
+import { logAction, generateBatchId } from "@/lib/audit";
 
 interface StudentImportRow {
   "Student Number": string;
@@ -62,6 +62,9 @@ export async function POST(
     const { course_slug } = await params;
     const body = await request.json();
     const { students } = body as { students: StudentImportRow[] };
+
+    // Generate batch ID for this import operation
+    const batchId = generateBatchId();
 
     if (!students || !Array.isArray(students)) {
       return NextResponse.json(
@@ -222,13 +225,15 @@ export async function POST(
       }
     }
 
-    // Log import operation
+    // Log import operation with batch tracking
     try {
       await logAction({
         userId: session.user.id,
         action: "STUDENTS_IMPORTED",
         module: "Student Management",
-        reason: `Imported ${result.imported} student(s) to course ${course.code} (${course.code}). Skipped: ${result.skipped}, Errors: ${result.errors.length}`,
+        reason: `Imported ${result.imported} student(s) to course ${course.code}. Skipped: ${result.skipped}, Errors: ${result.errors.length}`,
+        batchId,
+        status: result.errors.length > 0 ? "FAILED" : "SUCCESS",
         after: {
           courseId: course.id,
           courseCode: course.code,
@@ -237,6 +242,14 @@ export async function POST(
           errors: result.errors.length,
           total: result.total,
           source: "import",
+        },
+        metadata: {
+          importType: "students",
+          courseSlug: course_slug,
+          recordCount: result.total,
+          successCount: result.imported,
+          errorCount: result.errors.length,
+          skippedCount: result.skipped,
         },
       });
     } catch (error) {

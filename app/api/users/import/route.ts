@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role, WorkType, UserStatus } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { logAction, generateBatchId } from "@/lib/audit";
 
 interface ImportResult {
   success: boolean;
@@ -27,6 +30,16 @@ interface ImportResult {
 
 export async function POST(request: Request) {
   console.log("Starting import process...");
+
+  // Get session for audit logging
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Generate batch ID for this import operation
+  const batchId = generateBatchId();
+
   const result: ImportResult = {
     success: false,
     total: 0,
@@ -234,6 +247,39 @@ export async function POST(request: Request) {
     result.success =
       result.imported > 0 || result.skipped > 0 || result.errors.length > 0;
     console.log("Import process completed:", result);
+
+    // Log import operation with batch tracking
+    try {
+      await logAction({
+        userId: session.user.id,
+        action: "USERS_IMPORTED",
+        module: "User Management",
+        reason: `Imported ${result.imported} user(s). Skipped: ${result.skipped}, Errors: ${result.errors.length}`,
+        batchId,
+        status: result.errors.length > 0 ? "FAILED" : "SUCCESS",
+        after: {
+          imported: result.imported,
+          skipped: result.skipped,
+          errors: result.errors.length,
+          total: result.total,
+          source: "import",
+        },
+        metadata: {
+          importType: "users",
+          recordCount: result.total,
+          successCount: result.imported,
+          errorCount: result.errors.length,
+          skippedCount: result.skipped,
+          importedUsers: result.importedUsers.map((u) => ({
+            name: u.name,
+            email: u.email,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Error logging import:", error);
+      // Don't fail import if logging fails
+    }
 
     // Always return a 200 status with the result
     return NextResponse.json({

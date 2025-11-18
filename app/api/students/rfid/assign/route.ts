@@ -75,6 +75,7 @@ export async function POST(request: Request) {
         action: "STUDENT_RFID_ASSIGNED",
         module: "Student Management",
         reason: `RFID ${rfidInt} assigned to student: ${updatedStudent.firstName} ${updatedStudent.lastName} (${updatedStudent.studentId})`,
+        status: "SUCCESS",
         before: {
           studentId: studentBefore.studentId,
           name: `${studentBefore.firstName} ${studentBefore.lastName}`,
@@ -84,6 +85,13 @@ export async function POST(request: Request) {
           studentId: updatedStudent.studentId,
           name: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
           rfid_id: updatedStudent.rfid_id,
+        },
+        metadata: {
+          entityType: "Student",
+          entityId: updatedStudent.id,
+          entityName: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
+          rfidCardNumber: rfidInt,
+          isReassignment: studentBefore.rfid_id !== null,
         },
       });
     } catch (error) {

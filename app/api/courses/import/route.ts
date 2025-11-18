@@ -3,18 +3,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { PrismaClient, CourseStatus } from "@prisma/client";
+import { logAction, generateBatchId } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
 interface ImportRow {
   "Course Code": string;
   "Course Title": string;
-  "Room": string;
-  "Semester": string;
+  Room: string;
+  Semester: string;
   "Academic Year": string;
   "Class Number": string;
-  "Section": string;
-  "Status": string;
+  Section: string;
+  Status: string;
 }
 
 interface ImportResult {
@@ -47,7 +48,7 @@ function generateSlug(code: string, section: string): string {
 // Helper function to validate and normalize status
 function normalizeStatus(status: string): CourseStatus {
   const statusUpper = status.trim().toUpperCase();
-  
+
   // Handle various input formats
   if (statusUpper === "ACTIVE" || statusUpper === "ACT") {
     return CourseStatus.ACTIVE;
@@ -56,7 +57,7 @@ function normalizeStatus(status: string): CourseStatus {
   } else if (statusUpper === "ARCHIVED" || statusUpper === "ARCH") {
     return CourseStatus.ARCHIVED;
   }
-  
+
   // Default to ACTIVE
   return CourseStatus.ACTIVE;
 }
@@ -64,29 +65,34 @@ function normalizeStatus(status: string): CourseStatus {
 // Helper function to normalize semester
 function normalizeSemester(semester: string): string {
   const semesterLower = semester.trim().toLowerCase();
-  
-  if (semesterLower.includes("1st") || semesterLower.includes("first") || semesterLower === "1") {
+
+  if (
+    semesterLower.includes("1st") ||
+    semesterLower.includes("first") ||
+    semesterLower === "1"
+  ) {
     return "1st Semester";
-  } else if (semesterLower.includes("2nd") || semesterLower.includes("second") || semesterLower === "2") {
+  } else if (
+    semesterLower.includes("2nd") ||
+    semesterLower.includes("second") ||
+    semesterLower === "2"
+  ) {
     return "2nd Semester";
   }
-  
+
   return semester.trim();
 }
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session || !session.user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await request.json();
-    
+
     if (!Array.isArray(body)) {
       return NextResponse.json(
         { error: "Invalid data format. Expected an array of course data." },
@@ -147,10 +153,11 @@ export async function POST(request: NextRequest) {
         const title = row["Course Title"].trim();
         const room = row["Room"]?.trim().toUpperCase() || "TBA";
         const semester = normalizeSemester(row["Semester"] || "1st Semester");
-        const academicYear = row["Academic Year"]?.trim() || new Date().getFullYear().toString();
+        const academicYear =
+          row["Academic Year"]?.trim() || new Date().getFullYear().toString();
         const section = row["Section"]?.trim().toUpperCase() || "A";
         const status = normalizeStatus(row["Status"] || "ACTIVE");
-        
+
         // Parse and validate class number
         let classNumber = 1;
         if (row["Class Number"]) {
@@ -235,21 +242,22 @@ export async function POST(request: NextRequest) {
           room: newCourse.room,
           slug: newCourse.slug,
         });
-        
+
         results.detailedFeedback.push({
           row: rowNumber,
           code: newCourse.code,
           status: "success",
           message: "Course imported successfully (schedules pending)",
         });
-
       } catch (error) {
         console.error(`Error importing course at row ${rowNumber}:`, error);
-        
+
         results.skipped++;
         results.errors.push({
           code: row["Course Code"] || "N/A",
-          message: `Row ${rowNumber}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          message: `Row ${rowNumber}: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
         });
         results.detailedFeedback.push({
           row: rowNumber,
@@ -261,13 +269,12 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(results);
-
   } catch (error) {
     console.error("Import error:", error);
     return NextResponse.json(
-      { 
+      {
         error: "Failed to import courses",
-        details: error instanceof Error ? error.message : "Unknown error"
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );
@@ -280,12 +287,9 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Return import template structure
@@ -298,22 +302,21 @@ export async function GET(request: NextRequest) {
         "Academic Year",
         "Class Number",
         "Section",
-        "Status"
+        "Status",
       ],
       validStatuses: ["ACTIVE", "INACTIVE", "ARCHIVED"],
       validSemesters: ["1st Semester", "2nd Semester"],
       example: {
         "Course Code": "CS101",
         "Course Title": "Introduction to Programming",
-        "Room": "A101",
-        "Semester": "1st Semester",
+        Room: "A101",
+        Semester: "1st Semester",
         "Academic Year": "2024-2025",
         "Class Number": "1",
-        "Section": "A",
-        "Status": "Active"
-      }
+        Section: "A",
+        Status: "Active",
+      },
     });
-
   } catch (error) {
     console.error("Error fetching import info:", error);
     return NextResponse.json(
@@ -329,6 +332,9 @@ export async function POST_IMPORT(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Generate batch ID for this import operation
+    const batchId = generateBatchId();
 
     const body = await request.json();
     const coursesData = body; // Array of course data from Excel
@@ -375,7 +381,9 @@ export async function POST_IMPORT(request: NextRequest) {
           where: {
             code: row["Course Code"].trim().toUpperCase(),
             section: row["Section"]?.trim().toUpperCase() || "A",
-            academicYear: row["Academic Year"]?.trim() || new Date().getFullYear().toString(),
+            academicYear:
+              row["Academic Year"]?.trim() ||
+              new Date().getFullYear().toString(),
           },
         });
 
@@ -410,12 +418,16 @@ export async function POST_IMPORT(request: NextRequest) {
             title: row["Course Title"].trim(),
             room: row["Room"]?.trim().toUpperCase() || "TBA",
             semester: row["Semester"]?.trim() || "1st Semester",
-            academicYear: row["Academic Year"]?.trim() || new Date().getFullYear().toString(),
+            academicYear:
+              row["Academic Year"]?.trim() ||
+              new Date().getFullYear().toString(),
             classNumber: parseInt(row["Class Number"]) || 1,
             section: row["Section"]?.trim().toUpperCase() || "A",
             status: status as any,
             facultyId: session.user.id,
-            slug: `${row["Course Code"].trim().toLowerCase()}-${row["Section"]?.trim().toLowerCase() || "a"}-${Date.now()}`,
+            slug: `${row["Course Code"].trim().toLowerCase()}-${
+              row["Section"]?.trim().toLowerCase() || "a"
+            }-${Date.now()}`,
           },
           include: {
             faculty: {
@@ -433,7 +445,7 @@ export async function POST_IMPORT(request: NextRequest) {
           room: newCourse.room,
           slug: newCourse.slug,
         });
-        
+
         results.detailedFeedback.push({
           row: rowNumber,
           code: newCourse.code,
@@ -453,6 +465,40 @@ export async function POST_IMPORT(request: NextRequest) {
           message: error instanceof Error ? error.message : "Unknown error",
         });
       }
+    }
+
+    // Log import operation with batch tracking
+    try {
+      await logAction({
+        userId: session.user.id,
+        action: "COURSES_IMPORTED",
+        module: "Course Management",
+        reason: `Imported ${results.imported} course(s). Skipped: ${results.skipped}, Errors: ${results.errors.length}`,
+        batchId,
+        status: results.errors.length > 0 ? "FAILED" : "SUCCESS",
+        after: {
+          imported: results.imported,
+          skipped: results.skipped,
+          errors: results.errors.length,
+          total: results.total,
+          source: "import",
+        },
+        metadata: {
+          importType: "courses",
+          recordCount: results.total,
+          successCount: results.imported,
+          errorCount: results.errors.length,
+          skippedCount: results.skipped,
+          importedCourses: results.importedCourses.map((c: any) => ({
+            code: c.code,
+            title: c.title,
+            section: c.section,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error("Error logging import:", error);
+      // Don't fail import if logging fails
     }
 
     return NextResponse.json(results);

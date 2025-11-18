@@ -75,6 +75,7 @@ export async function addUser(userData: AddUserParams) {
         action: "USER_CREATED",
         module: "User Management",
         reason: `User created: ${newUser.name} (${newUser.email}) with role ${newUser.role}`,
+        status: "SUCCESS",
         after: {
           id: newUser.id,
           name: newUser.name,
@@ -83,6 +84,13 @@ export async function addUser(userData: AddUserParams) {
           department: newUser.department,
           status: newUser.status,
           workType: newUser.workType,
+        },
+        metadata: {
+          entityType: "User",
+          entityId: newUser.id,
+          entityName: newUser.name,
+          createdRole: newUser.role,
+          createdDepartment: newUser.department,
         },
       });
     } catch (error) {
@@ -171,6 +179,7 @@ export async function editUser(
         action,
         module: "User Management",
         reason,
+        status: "SUCCESS",
         before: {
           name: userBefore.name,
           email: userBefore.email,
@@ -186,6 +195,17 @@ export async function editUser(
           department: updatedUser.department,
           status: updatedUser.status,
           workType: updatedUser.workType,
+        },
+        metadata: {
+          entityType: "User",
+          entityId: updatedUser.id,
+          entityName: updatedUser.name,
+          roleChanged: data.role && data.role !== userBefore.role,
+          statusChanged: data.status && data.status !== userBefore.status,
+          previousRole:
+            data.role && data.role !== userBefore.role ? userBefore.role : null,
+          newRole:
+            data.role && data.role !== userBefore.role ? data.role : null,
         },
       });
     } catch (error) {

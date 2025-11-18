@@ -104,9 +104,15 @@ const handler = NextAuth({
           action: "USER_LOGIN",
           module: "Authentication",
           reason: `User logged in: ${dbUser.name} (${dbUser.email})`,
+          status: "SUCCESS",
           after: {
             role: dbUser.role,
             department: dbUser.department,
+            loginMethod: account?.provider || "unknown",
+          },
+          metadata: {
+            loginMethod: account?.provider || "unknown",
+            sessionCreated: true,
           },
         });
 

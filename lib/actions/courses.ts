@@ -115,6 +115,7 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
           reason: `Course created: ${newCourse.code} - ${newCourse.title}${
             isFromImport ? " (via import)" : ""
           }`,
+          status: "SUCCESS",
           after: {
             id: newCourse.id,
             code: newCourse.code,
@@ -125,6 +126,13 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
             status: newCourse.status,
             facultyId: newCourse.facultyId,
             source: isFromImport ? "import" : "manual",
+          },
+          metadata: {
+            entityType: "Course",
+            entityId: newCourse.id,
+            entityName: `${newCourse.code} - ${newCourse.title}`,
+            source: isFromImport ? "import" : "manual",
+            scheduleCount: newCourse.schedules?.length || 0,
           },
         });
       } catch (error) {
@@ -271,6 +279,11 @@ export async function editCourse(
         });
       }
 
+      // Ensure updatedCourse is defined before proceeding
+      if (!updatedCourse) {
+        return { success: false, error: "Failed to update course" };
+      }
+
       revalidatePath("/admin/courses");
 
       // Log course edit
@@ -283,6 +296,7 @@ export async function editCourse(
           reason: `Course edited: ${updatedCourse.code} - ${
             updatedCourse.title
           }${isFromImport ? " (via import)" : ""}`,
+          status: "SUCCESS",
           before: {
             code: existingCourse.code,
             title: existingCourse.title,
@@ -297,6 +311,13 @@ export async function editCourse(
             status: updatedCourse.status,
             facultyId: updatedCourse.facultyId,
             source: isFromImport ? "import" : "manual",
+          },
+          metadata: {
+            entityType: "Course",
+            entityId: updatedCourse.id,
+            entityName: `${updatedCourse.code} - ${updatedCourse.title}`,
+            source: isFromImport ? "import" : "manual",
+            scheduleUpdated: !!data.schedules,
           },
         });
       } catch (error) {

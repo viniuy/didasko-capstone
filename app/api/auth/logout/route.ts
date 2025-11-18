@@ -14,8 +14,13 @@ export async function POST(req: NextRequest) {
         action: "USER_LOGOUT",
         module: "Authentication",
         reason: `User logged out: ${session.user.name} (${session.user.email})`,
+        status: "SUCCESS",
         before: {
           role: session.user.role,
+        },
+        metadata: {
+          logoutType: "manual",
+          sessionEnded: true,
         },
       });
     }

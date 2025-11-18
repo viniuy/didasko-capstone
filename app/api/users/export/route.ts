@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { logAction } from "@/lib/audit";
+import { logAction, generateBatchId } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,18 +13,28 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { count, filters } = body;
 
-    // Log export operation
+    // Generate batch ID for this export
+    const batchId = generateBatchId();
+
+    // Log export operation with metadata
     await logAction({
       userId: session.user.id,
       action: "USERS_EXPORTED",
       module: "User Management",
-      reason: `Exported ${count || 0} user(s)${
-        filters ? ` with filters: ${JSON.stringify(filters)}` : ""
-      }`,
+      reason: `Exported ${count || 0} user(s)${filters ? ` with filters` : ""}`,
+      batchId,
+      status: "SUCCESS",
       after: {
         exportType: "users",
         count: count || 0,
+        fileFormat: "Excel",
+      },
+      metadata: {
+        exportType: "users",
+        fileFormat: "xlsx",
+        recordCount: count || 0,
         filters: filters || null,
+        exportedAt: new Date().toISOString(),
       },
     });
 

@@ -150,13 +150,30 @@ export async function POST(request: NextRequest) {
         userId: session.user.id,
         action: "STUDENT_REGISTERED",
         module: "Student Management",
-        reason: `Student registered: ${newStudent.firstName} ${newStudent.lastName} (${newStudent.studentId})${courseId ? ` in course ${newStudent.coursesEnrolled[0]?.code || courseId}` : ""}`,
+        reason: `Student registered: ${newStudent.firstName} ${
+          newStudent.lastName
+        } (${newStudent.studentId})${
+          courseId
+            ? ` in course ${newStudent.coursesEnrolled[0]?.code || courseId}`
+            : ""
+        }`,
+        status: "SUCCESS",
         after: {
           id: newStudent.id,
           studentId: newStudent.studentId,
           name: `${newStudent.firstName} ${newStudent.lastName}`,
           courseId: courseId || null,
           rfid_id: newStudent.rfid_id,
+        },
+        metadata: {
+          entityType: "Student",
+          entityId: newStudent.id,
+          entityName: `${newStudent.firstName} ${newStudent.lastName}`,
+          registrationSource: "manual",
+          hasRfid: !!newStudent.rfid_id,
+          courseEnrolled: courseId
+            ? newStudent.coursesEnrolled[0]?.code || courseId
+            : null,
         },
       });
     } catch (error) {
