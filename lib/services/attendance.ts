@@ -1,7 +1,7 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
-// Cached: Get attendance for a course on a specific date
+// Get attendance for a course on a specific date
+// Note: Not cached to ensure fresh data after saves
 export async function getAttendance(
   courseSlug: string,
   date: string,
@@ -10,76 +10,68 @@ export async function getAttendance(
   const { page = 1, limit = 10 } = options || {};
   const skip = (page - 1) * limit;
 
-  const cacheKey = `attendance-${courseSlug}-${date}-${page}-${limit}`;
+  const startDate = new Date(date + "T00:00:00.000Z");
+  const endDate = new Date(date + "T23:59:59.999Z");
 
-  return unstable_cache(
-    async () => {
-      const startDate = new Date(date + "T00:00:00.000Z");
-      const endDate = new Date(date + "T23:59:59.999Z");
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+  });
 
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-      });
+  if (!course) return null;
 
-      if (!course) return null;
-
-      const [total, attendanceRecords] = await Promise.all([
-        prisma.attendance.count({
-          where: {
-            courseId: course.id,
-            date: {
-              gte: startDate,
-              lte: endDate,
-            },
-          },
-        }),
-        prisma.attendance.findMany({
-          where: {
-            courseId: course.id,
-            date: {
-              gte: startDate,
-              lte: endDate,
-            },
-          },
-          include: {
-            student: {
-              select: {
-                id: true,
-                lastName: true,
-                firstName: true,
-                middleInitial: true,
-              },
-            },
-            course: {
-              select: {
-                id: true,
-                code: true,
-                title: true,
-                section: true,
-                slug: true,
-                academicYear: true,
-              },
-            },
-          },
-          skip,
-          take: limit,
-          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-        }),
-      ]);
-
-      return {
-        attendance: attendanceRecords,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
+  const [total, attendanceRecords] = await Promise.all([
+    prisma.attendance.count({
+      where: {
+        courseId: course.id,
+        date: {
+          gte: startDate,
+          lte: endDate,
         },
-      };
+      },
+    }),
+    prisma.attendance.findMany({
+      where: {
+        courseId: course.id,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            lastName: true,
+            firstName: true,
+            middleInitial: true,
+          },
+        },
+        course: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            section: true,
+            slug: true,
+            academicYear: true,
+          },
+        },
+      },
+      skip,
+      take: limit,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    }),
+  ]);
+
+  return {
+    attendance: attendanceRecords,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     },
-    [cacheKey],
-    { revalidate: 30 }
-  )();
+  };
 }
 
 // Create attendance record
@@ -209,72 +201,62 @@ export async function clearAttendance(courseSlug: string, date: string) {
 }
 
 // Get attendance dates for a course
+// Note: Not cached to ensure fresh data after saves
 export async function getAttendanceDates(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-        select: { id: true },
-      });
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
 
-      if (!course) return [];
+  if (!course) return [];
 
-      const dates = await prisma.attendance.findMany({
-        where: { courseId: course.id },
-        select: { date: true },
-        distinct: ["date"],
-        orderBy: { date: "desc" },
-      });
+  const dates = await prisma.attendance.findMany({
+    where: { courseId: course.id },
+    select: { date: true },
+    distinct: ["date"],
+    orderBy: { date: "desc" },
+  });
 
-      return dates.map((d) => d.date.toISOString().split("T")[0]);
-    },
-    [`attendance-dates-${courseSlug}`],
-    { revalidate: 30 }
-  )();
+  return dates.map((d) => d.date.toISOString().split("T")[0]);
 }
 
 // Get attendance stats for a course
+// Note: Not cached to ensure fresh data after saves
 export async function getAttendanceStats(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-        select: { id: true },
-      });
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
 
-      if (!course) return null;
+  if (!course) return null;
 
-      const attendanceRecords = await prisma.attendance.findMany({
-        where: { courseId: course.id },
-      });
+  const attendanceRecords = await prisma.attendance.findMany({
+    where: { courseId: course.id },
+  });
 
-      const totalRecords = attendanceRecords.length;
-      const totalPresent = attendanceRecords.filter(
-        (a) => a.status === "PRESENT"
-      ).length;
-      const totalAbsents = attendanceRecords.filter(
-        (a) => a.status === "ABSENT"
-      ).length;
-      const totalLate = attendanceRecords.filter(
-        (a) => a.status === "LATE"
-      ).length;
-      const totalExcused = attendanceRecords.filter(
-        (a) => a.status === "EXCUSED"
-      ).length;
+  const totalRecords = attendanceRecords.length;
+  const totalPresent = attendanceRecords.filter(
+    (a) => a.status === "PRESENT"
+  ).length;
+  const totalAbsents = attendanceRecords.filter(
+    (a) => a.status === "ABSENT"
+  ).length;
+  const totalLate = attendanceRecords.filter(
+    (a) => a.status === "LATE"
+  ).length;
+  const totalExcused = attendanceRecords.filter(
+    (a) => a.status === "EXCUSED"
+  ).length;
 
-      const attendanceRate =
-        totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : 0;
+  const attendanceRate =
+    totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : 0;
 
-      return {
-        totalRecords,
-        totalPresent,
-        totalAbsents,
-        totalLate,
-        totalExcused,
-        attendanceRate,
-      };
-    },
-    [`attendance-stats-${courseSlug}`],
-    { revalidate: 30 }
-  )();
+  return {
+    totalRecords,
+    totalPresent,
+    totalAbsents,
+    totalLate,
+    totalExcused,
+    attendanceRate,
+  };
 }

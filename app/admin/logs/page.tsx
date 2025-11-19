@@ -8,10 +8,16 @@ import AuditLogsTable from "@/features/admin/components/AuditLogsTable";
 
 interface PageProps {
   searchParams: Promise<{
+    p?: string;
     page?: string;
     module?: string;
     action?: string;
     userId?: string;
+    actions?: string;
+    faculty?: string;
+    modules?: string;
+    startDate?: string;
+    endDate?: string;
   }>;
 }
 
@@ -38,9 +44,9 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
   // Await searchParams (Next.js 15 requirement)
   const params = await searchParams;
 
-  // Parse search params
-  const page = parseInt(params.page || "1", 10);
-  const pageSize = 50;
+  // Parse search params - use 'p' instead of 'page'
+  const page = parseInt(params.p || params.page || "1", 10);
+  const pageSize = 9;
   const skip = (page - 1) * pageSize;
 
   // Build where clause
@@ -62,23 +68,55 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
     };
   }
 
-  // Apply search filters
-  if (params.module) {
-    where.module = {
-      contains: params.module,
-      mode: "insensitive",
+  // Apply new filter parameters (preferred over old single filters)
+  if (params.actions) {
+    const actionList = params.actions.split(",");
+    where.action = {
+      in: actionList,
     };
-  }
-
-  if (params.action) {
+  } else if (params.action) {
+    // Fallback to old single action filter for backward compatibility
     where.action = {
       contains: params.action,
       mode: "insensitive",
     };
   }
 
-  if (params.userId) {
+  if (params.faculty) {
+    const facultyList = params.faculty.split(",");
+    where.userId = {
+      in: facultyList,
+    };
+  } else if (params.userId) {
+    // Fallback to old single userId filter for backward compatibility
     where.userId = params.userId;
+  }
+
+  if (params.modules) {
+    const moduleList = params.modules.split(",");
+    where.module = {
+      in: moduleList,
+    };
+  } else if (params.module) {
+    // Fallback to old single module filter for backward compatibility
+    where.module = {
+      contains: params.module,
+      mode: "insensitive",
+    };
+  }
+
+  // Apply date range filter
+  if (params.startDate || params.endDate) {
+    where.createdAt = {};
+    if (params.startDate) {
+      where.createdAt.gte = new Date(params.startDate);
+    }
+    if (params.endDate) {
+      // Set end date to end of day
+      const endDate = new Date(params.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      where.createdAt.lte = endDate;
+    }
   }
 
   // Fetch logs

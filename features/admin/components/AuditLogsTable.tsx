@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from "date-fns";
 import { Role } from "@prisma/client";
@@ -32,8 +32,10 @@ import {
   BookOpen,
   Activity,
   Download,
+  Filter,
 } from "lucide-react";
 import { ExportModal } from "../modal/export-modal";
+import { AuditLogsFilterSheet } from "./AuditLogsFilterSheet";
 import {
   Pagination,
   PaginationContent,
@@ -118,11 +120,82 @@ export default function AuditLogsTable({
     searchParams.get("module") || "all"
   );
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [faculty, setFaculty] = useState<
+    Array<{ id: string; name: string | null; email: string | null }>
+  >([]);
+  const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
 
-  // Get unique modules from logs
+  // Parse filters from URL params
+  const parsedFilters = useMemo(() => {
+    const actions = searchParams.get("actions")
+      ? searchParams.get("actions")!.split(",")
+      : [];
+    const faculty = searchParams.get("faculty")
+      ? searchParams.get("faculty")!.split(",")
+      : [];
+    const modules = searchParams.get("modules")
+      ? searchParams.get("modules")!.split(",")
+      : [];
+    const startDate = searchParams.get("startDate")
+      ? new Date(searchParams.get("startDate")!)
+      : undefined;
+    const endDate = searchParams.get("endDate")
+      ? new Date(searchParams.get("endDate")!)
+      : undefined;
+
+    return {
+      actions,
+      faculty,
+      modules,
+      startDate,
+      endDate,
+    };
+  }, [searchParams]);
+
+  const [filters, setFilters] = useState(parsedFilters);
+
+  // Sync filters with URL params when they change
+  useEffect(() => {
+    setFilters(parsedFilters);
+  }, [parsedFilters]);
+
+  // Get unique modules and actions from logs
   const uniqueModules = Array.from(
     new Set(logs.map((log) => log.module))
   ).sort();
+  const uniqueActions = Array.from(
+    new Set(logs.map((log) => log.action))
+  ).sort();
+
+  // Fetch faculty data once when component mounts
+  useEffect(() => {
+    const fetchFaculty = async () => {
+      setIsLoadingFaculty(true);
+      try {
+        const response = await fetch("/api/users/faculty");
+        if (!response.ok) {
+          throw new Error("Failed to fetch faculty");
+        }
+        const data = await response.json();
+        setFaculty(data);
+      } catch (error) {
+        console.error("Error fetching faculty:", error);
+      } finally {
+        setIsLoadingFaculty(false);
+      }
+    };
+
+    fetchFaculty();
+  }, []);
+
+  // Count active filters
+  const activeFilterCount =
+    filters.actions.length +
+    filters.faculty.length +
+    filters.modules.length +
+    (filters.startDate ? 1 : 0) +
+    (filters.endDate ? 1 : 0);
 
   const toggleRow = (logId: string) => {
     const newExpanded = new Set(expandedRows);
@@ -144,25 +217,52 @@ export default function AuditLogsTable({
     } else {
       params.delete("action");
     }
-    params.set("page", "1");
-    router.push(`${currentPath}?${params.toString()}`);
-  };
-
-  const handleModuleChange = (module: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (module !== "all") {
-      params.set("module", module);
-    } else {
-      params.delete("module");
-    }
-    params.set("page", "1");
+    params.delete("p"); // Remove page param, defaults to 1
     router.push(`${currentPath}?${params.toString()}`);
   };
 
   const handlePageChange = (page: number) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("page", page.toString());
+    if (page === 1) {
+      params.delete("p"); // Don't show page=1 in URL
+    } else {
+      params.set("p", page.toString());
+    }
     router.push(`${currentPath}?${params.toString()}`);
+  };
+
+  const handleApplyFilters = () => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    // Clear existing filter params
+    params.delete("actions");
+    params.delete("faculty");
+    params.delete("modules");
+    params.delete("startDate");
+    params.delete("endDate");
+    params.delete("action"); // Clear old single action filter
+    params.delete("module"); // Clear old single module filter
+    params.delete("p"); // Reset to page 1 (don't show in URL)
+
+    // Set new filter params
+    if (filters.actions.length > 0) {
+      params.set("actions", filters.actions.join(","));
+    }
+    if (filters.faculty.length > 0) {
+      params.set("faculty", filters.faculty.join(","));
+    }
+    if (filters.modules.length > 0) {
+      params.set("modules", filters.modules.join(","));
+    }
+    if (filters.startDate) {
+      params.set("startDate", filters.startDate.toISOString());
+    }
+    if (filters.endDate) {
+      params.set("endDate", filters.endDate.toISOString());
+    }
+
+    router.push(`${currentPath}?${params.toString()}`);
+    setFilterSheetOpen(false);
   };
 
   const getActionBadgeVariant = (
@@ -235,73 +335,9 @@ export default function AuditLogsTable({
     return `Action in ${module}`;
   };
 
-  // Format field names to be more user-friendly
+  // Keep field names as-is for technical display
   const formatFieldName = (key: string): string => {
-    const fieldMap: Record<string, string> = {
-      entityType: "Type",
-      entityId: "ID",
-      entityName: "Name",
-      courseName: "Course Name",
-      courseCode: "Course Code",
-      courseSlug: "Course Slug",
-      description: "Description",
-      department: "Department",
-      semester: "Semester",
-      academicYear: "Academic Year",
-      status: "Status",
-      isActive: "Active",
-      isArchived: "Archived",
-      email: "Email",
-      name: "Name",
-      role: "Role",
-      studentId: "Student ID",
-      studentName: "Student Name",
-      rfidCardNumber: "RFID Card Number",
-      registrationSource: "Registration Source",
-      loginMethod: "Login Method",
-      logoutType: "Logout Type",
-      sessionCreated: "Session Created",
-      sessionEnded: "Session Ended",
-      importType: "Import Type",
-      exportType: "Export Type",
-      fileFormat: "File Format",
-      recordCount: "Total Records",
-      successCount: "Successful",
-      errorCount: "Errors",
-      skippedCount: "Skipped",
-      fileName: "File Name",
-      fileSize: "File Size",
-      filters: "Filters",
-      dataRange: "Data Range",
-      courseEnrolled: "Course Enrolled",
-      hasRfid: "Has RFID",
-      isReassignment: "Reassignment",
-      previousRole: "Previous Role",
-      newRole: "New Role",
-      roleChanged: "Role Changed",
-      statusChanged: "Status Changed",
-      createdRole: "Created Role",
-      createdDepartment: "Created Department",
-      bulkOperation: "Bulk Operation",
-      affectedCount: "Affected Count",
-      newStatus: "New Status",
-      scheduleCount: "Schedule Count",
-      scheduleUpdated: "Schedule Updated",
-      importedUsers: "Imported Users",
-      importedCourses: "Imported Courses",
-      exportedAt: "Exported At",
-    };
-
-    // Check if we have a friendly name
-    if (fieldMap[key]) {
-      return fieldMap[key];
-    }
-
-    // Otherwise, format the key: convert camelCase to Title Case
-    return key
-      .replace(/([A-Z])/g, " $1")
-      .replace(/^./, (str) => str.toUpperCase())
-      .trim();
+    return key;
   };
 
   // Format file size to human-readable format
@@ -313,146 +349,68 @@ export default function AuditLogsTable({
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
-  // Format value to be more readable
+  // Format value for technical display
   const formatValue = (value: any, key?: string): string => {
     if (value === null || value === undefined) {
-      return "N/A";
+      return "null";
     }
     if (typeof value === "boolean") {
-      return value ? "Yes" : "No";
+      return value.toString();
     }
     if (typeof value === "number") {
-      // Format file size if the key suggests it
-      if (
-        key &&
-        key.toLowerCase().includes("size") &&
-        key.toLowerCase().includes("file")
-      ) {
-        return formatFileSize(value);
-      }
-      // Format large numbers with commas
-      return value.toLocaleString();
+      return value.toString();
     }
     if (typeof value === "string") {
-      // Check if string is a date
-      const dateValue = new Date(value);
-      if (!isNaN(dateValue.getTime()) && value.length > 10) {
-        try {
-          return format(dateValue, "MMM dd, yyyy HH:mm:ss");
-        } catch {
-          // If parsing fails, return as string
-        }
-      }
       return value;
     }
     if (typeof value === "object") {
       if (Array.isArray(value)) {
-        if (value.length === 0) return "None";
-        // If it's an array of simple values, show them
-        if (value.every((v) => typeof v !== "object")) {
-          return value.join(", ");
-        }
-        return `${value.length} item(s)`;
+        return JSON.stringify(value);
       }
       if (value instanceof Date) {
-        return format(new Date(value), "MMM dd, yyyy HH:mm:ss");
+        return value.toISOString();
       }
-      // For objects, return a summary
-      return JSON.stringify(value);
+      return JSON.stringify(value, null, 2);
     }
     return String(value);
   };
 
-  // Render organized details in a beginner-friendly format
-  const renderOrganizedDetails = (data: any, title: string, icon: string) => {
+  // Render technical details in compact format
+  const renderOrganizedDetails = (data: any, title: string) => {
     if (!data || typeof data !== "object") {
       return null;
     }
 
-    // Filter out technical fields
-    const filteredData = Object.fromEntries(
-      Object.entries(data).filter(
-        ([key]) =>
-          ![
-            "status",
-            "duration",
-            "error",
-            "_count",
-            "id",
-            "createdAt",
-            "updatedAt",
-            "userId",
-          ].includes(key.toLowerCase())
-      )
-    );
-
-    if (Object.keys(filteredData).length === 0) {
+    if (Object.keys(data).length === 0) {
       return null;
     }
 
     return (
-      <div className="space-y-2">
-        <div className="text-xs font-semibold mb-1.5 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-1.5">
-          <span className="text-[10px]">{icon}</span> {title}
+      <div className="space-y-1">
+        <div className="text-xs font-semibold text-[#124A69] dark:text-[#4da6d1] uppercase tracking-wide">
+          {title}
         </div>
-        <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {Object.entries(filteredData).map(([key, value]) => (
-              <div key={key} className="space-y-0.5">
-                <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  {formatFieldName(key)}
-                </div>
-                <div className="text-xs text-gray-900 dark:text-gray-100">
-                  {typeof value === "object" && !Array.isArray(value) ? (
-                    <div className="space-y-0.5 pl-1.5 border-l border-gray-300 dark:border-gray-600">
-                      {Object.entries(value as Record<string, any>).map(
-                        ([subKey, subValue]) => (
-                          <div key={subKey} className="text-[10px]">
-                            <span className="text-gray-500 dark:text-gray-400">
-                              {formatFieldName(subKey)}:
-                            </span>{" "}
-                            <span>{formatValue(subValue, subKey)}</span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  ) : (
-                    formatValue(value, key)
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <pre className="text-[10px] font-mono bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2 overflow-x-auto">
+          {JSON.stringify(data, null, 2)}
+        </pre>
       </div>
     );
   };
 
-  // Render metadata in an organized way
+  // Render metadata in technical format
   const renderMetadata = (metadata: any) => {
     if (!metadata || typeof metadata !== "object") {
       return null;
     }
 
     return (
-      <div className="space-y-2">
-        <div className="text-xs font-semibold mb-1.5 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-1.5">
-          <span className="text-[10px]">📊</span> Additional Information
+      <div className="space-y-1">
+        <div className="text-xs font-semibold text-[#124A69] dark:text-[#4da6d1] uppercase tracking-wide">
+          metadata
         </div>
-        <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {Object.entries(metadata).map(([key, value]) => (
-              <div key={key} className="space-y-0.5">
-                <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  {formatFieldName(key)}
-                </div>
-                <div className="text-xs text-gray-900 dark:text-gray-100">
-                  {formatValue(value, key)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <pre className="text-[10px] font-mono bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2 overflow-x-auto">
+          {JSON.stringify(metadata, null, 2)}
+        </pre>
       </div>
     );
   };
@@ -461,8 +419,9 @@ export default function AuditLogsTable({
   const handleExport = async (filters: {
     startDate?: Date;
     endDate?: Date;
-    action?: string;
-    userId?: string;
+    actions?: string[];
+    modules?: string[];
+    faculty?: string[];
   }): Promise<AuditLog[]> => {
     try {
       const response = await fetch("/api/logs/export", {
@@ -518,19 +477,19 @@ export default function AuditLogsTable({
           </div>
 
           <div className="flex gap-2">
-            <Select value={selectedModule} onValueChange={handleModuleChange}>
-              <SelectTrigger className="w-[200px] border-[#124A69]">
-                <SelectValue placeholder="All Modules" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Modules</SelectItem>
-                {uniqueModules.map((module) => (
-                  <SelectItem key={module} value={module}>
-                    {module}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Button
+              variant="outline"
+              className="relative border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+              onClick={() => setFilterSheetOpen(true)}
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
 
             <Button
               onClick={() => setExportModalOpen(true)}
@@ -548,10 +507,10 @@ export default function AuditLogsTable({
             <p className="text-gray-600 text-lg">No audit logs found.</p>
           </div>
         ) : (
-          <>
-            <div className="rounded-md border border-gray-200">
+          <div className="flex flex-col">
+            <div className="rounded-md border border-gray-200 max-h-[580px] min-h-[580px] overflow-y-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-gray-50 z-10">
                   <TableRow className="bg-gray-50">
                     <TableHead className="text-[#124A69] font-semibold">
                       Timestamp
@@ -648,60 +607,68 @@ export default function AuditLogsTable({
                         {isExpanded && (
                           <TableRow>
                             <TableCell colSpan={5} className="bg-muted/50">
-                              <div className="space-y-2 py-2 px-2">
-                                {/* Status Badge */}
-                                {log.status && (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">
-                                      Status:
-                                    </span>
-                                    <Badge
-                                      variant="secondary"
-                                      className="bg-[#124A69]/10 text-[#124A69] dark:bg-[#4da6d1]/20 dark:text-[#4da6d1] border border-[#124A69]/20 dark:border-[#4da6d1]/30 text-[10px] px-1.5 py-0.5"
-                                    >
-                                      {log.status}
-                                    </Badge>
-                                  </div>
-                                )}
-
-                                {/* Batch ID for import/export operations */}
-                                {log.batchId && (
-                                  <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-1.5">
-                                    <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">
-                                      Batch ID
+                              <div className="space-y-3 py-3 px-3">
+                                {/* Technical Info Grid */}
+                                <div className="grid grid-cols-2 gap-3 text-xs">
+                                  {log.status && (
+                                    <div>
+                                      <span className="font-mono text-gray-500">
+                                        status:
+                                      </span>{" "}
+                                      <span className="font-mono text-gray-900">
+                                        {log.status}
+                                      </span>
                                     </div>
-                                    <div className="text-xs font-mono text-gray-900 dark:text-gray-100">
-                                      {log.batchId}
+                                  )}
+                                  {log.batchId && (
+                                    <div>
+                                      <span className="font-mono text-gray-500">
+                                        batchId:
+                                      </span>{" "}
+                                      <span className="font-mono text-gray-900">
+                                        {log.batchId}
+                                      </span>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                  {log.ip && (
+                                    <div>
+                                      <span className="font-mono text-gray-500">
+                                        ip:
+                                      </span>{" "}
+                                      <span className="font-mono text-gray-900">
+                                        {log.ip}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {log.userId && (
+                                    <div>
+                                      <span className="font-mono text-gray-500">
+                                        userId:
+                                      </span>{" "}
+                                      <span className="font-mono text-gray-900">
+                                        {log.userId}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
 
                                 {/* Reason */}
                                 {log.reason && (
-                                  <div className="bg-gray-50 dark:bg-gray-900/30 border-l-2 border-[#124A69] dark:border-[#4da6d1] p-1.5 rounded">
-                                    <div className="text-xs font-semibold mb-0.5 text-[#124A69] dark:text-[#4da6d1] flex items-center gap-1.5">
-                                      <span className="text-[10px]">📝</span>{" "}
-                                      Reason
+                                  <div>
+                                    <div className="text-xs font-semibold text-[#124A69] dark:text-[#4da6d1] uppercase tracking-wide mb-1">
+                                      reason
                                     </div>
-                                    <div className="text-xs text-gray-700 dark:text-gray-300">
+                                    <div className="text-xs font-mono bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded p-2">
                                       {log.reason}
                                     </div>
                                   </div>
                                 )}
 
-                                {/* Previous State */}
-                                {renderOrganizedDetails(
-                                  log.before,
-                                  "Previous State",
-                                  "⬅️"
-                                )}
+                                {/* Before State */}
+                                {renderOrganizedDetails(log.before, "before")}
 
-                                {/* New State / Action Details */}
-                                {renderOrganizedDetails(
-                                  log.after,
-                                  "New State / Action Details",
-                                  "➡️"
-                                )}
+                                {/* After State */}
+                                {renderOrganizedDetails(log.after, "after")}
 
                                 {/* Metadata */}
                                 {renderMetadata(log.metadata)}
@@ -710,10 +677,12 @@ export default function AuditLogsTable({
                                 {!log.before &&
                                   !log.after &&
                                   !log.reason &&
-                                  !log.metadata && (
-                                    <div className="text-xs text-muted-foreground text-center py-2">
-                                      No additional details available for this
-                                      log entry
+                                  !log.metadata &&
+                                  !log.status &&
+                                  !log.batchId &&
+                                  !log.ip && (
+                                    <div className="text-xs text-muted-foreground text-center py-2 font-mono">
+                                      No additional data
                                     </div>
                                   )}
                               </div>
@@ -728,13 +697,29 @@ export default function AuditLogsTable({
             </div>
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="mt-6 flex justify-center">
-                <Pagination>
+            {totalPages > 0 && (
+              <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-200">
+                <div className="flex items-center gap-4 w-full">
+                  <span className="text-sm text-gray-600">
+                    Showing {(currentPage - 1) * 9 + 1}-
+                    {(currentPage - 1) * 9 + logs.length} of{" "}
+                    {currentPage === totalPages
+                      ? (totalPages - 1) * 9 + logs.length
+                      : totalPages * 9}{" "}
+                    log
+                    {currentPage === totalPages
+                      ? (totalPages - 1) * 9 + logs.length !== 1
+                        ? "s"
+                        : ""
+                      : totalPages * 9 !== 1
+                      ? "s"
+                      : ""}
+                  </span>
+                </div>
+                <Pagination className="flex justify-end">
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        href="#"
                         onClick={(e) => {
                           e.preventDefault();
                           if (currentPage > 1) {
@@ -744,41 +729,30 @@ export default function AuditLogsTable({
                         className={
                           currentPage === 1
                             ? "pointer-events-none opacity-50"
-                            : ""
+                            : "cursor-pointer"
                         }
                       />
                     </PaginationItem>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1)
-                      .filter(
-                        (page) =>
-                          page === 1 ||
-                          page === totalPages ||
-                          (page >= currentPage - 2 && page <= currentPage + 2)
-                      )
-                      .map((page, idx, arr) => (
-                        <React.Fragment key={page}>
-                          {idx > 0 && arr[idx - 1] !== page - 1 && (
-                            <PaginationItem>
-                              <span className="px-2">...</span>
-                            </PaginationItem>
-                          )}
-                          <PaginationItem>
-                            <PaginationLink
-                              href="#"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handlePageChange(page);
-                              }}
-                              isActive={currentPage === page}
-                            >
-                              {page}
-                            </PaginationLink>
-                          </PaginationItem>
-                        </React.Fragment>
-                      ))}
+                    {Array.from({ length: totalPages }, (_, i) => (
+                      <PaginationItem key={i}>
+                        <PaginationLink
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handlePageChange(i + 1);
+                          }}
+                          isActive={currentPage === i + 1}
+                          className={
+                            currentPage === i + 1
+                              ? "bg-[#124A69] text-white hover:bg-[#0d3a56] cursor-pointer"
+                              : "cursor-pointer"
+                          }
+                        >
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
                     <PaginationItem>
                       <PaginationNext
-                        href="#"
                         onClick={(e) => {
                           e.preventDefault();
                           if (currentPage < totalPages) {
@@ -788,18 +762,15 @@ export default function AuditLogsTable({
                         className={
                           currentPage === totalPages
                             ? "pointer-events-none opacity-50"
-                            : ""
+                            : "cursor-pointer"
                         }
                       />
                     </PaginationItem>
                   </PaginationContent>
                 </Pagination>
-                <div className="ml-4 text-sm text-gray-600 flex items-center">
-                  Page {currentPage} of {totalPages}
-                </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </Card>
 
@@ -809,6 +780,23 @@ export default function AuditLogsTable({
         onOpenChange={setExportModalOpen}
         logs={logs}
         onExport={handleExport}
+        availableActions={uniqueActions}
+        availableModules={uniqueModules}
+        availableFaculty={faculty}
+        isLoadingFaculty={isLoadingFaculty}
+      />
+
+      {/* Filter Sheet */}
+      <AuditLogsFilterSheet
+        isOpen={filterSheetOpen}
+        onOpenChange={setFilterSheetOpen}
+        filters={filters}
+        onFiltersChange={setFilters}
+        onApplyFilters={handleApplyFilters}
+        availableActions={uniqueActions}
+        availableModules={uniqueModules}
+        availableFaculty={faculty}
+        isLoadingFaculty={isLoadingFaculty}
       />
     </>
   );

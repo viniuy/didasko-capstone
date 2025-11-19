@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +49,12 @@ interface AuditLog {
   } | null;
 }
 
+interface Faculty {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
+
 interface ExportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,9 +62,14 @@ interface ExportModalProps {
   onExport: (filters: {
     startDate?: Date;
     endDate?: Date;
-    action?: string;
-    userId?: string;
+    actions?: string[];
+    modules?: string[];
+    faculty?: string[];
   }) => Promise<AuditLog[]>;
+  availableActions?: string[];
+  availableModules?: string[];
+  availableFaculty?: Faculty[];
+  isLoadingFaculty?: boolean;
 }
 
 export function ExportModal({
@@ -66,44 +77,88 @@ export function ExportModal({
   onOpenChange,
   logs,
   onExport,
+  availableActions = [],
+  availableModules = [],
+  availableFaculty = [],
+  isLoadingFaculty = false,
 }: ExportModalProps) {
-  const [exportType, setExportType] = useState<"date" | "action" | "user">(
-    "date"
-  );
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
-  const [selectedAction, setSelectedAction] = useState<string>("");
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [selectedActions, setSelectedActions] = useState<string[]>([]);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Get unique actions and users from logs
-  const uniqueActions = Array.from(
-    new Set(logs.map((log) => log.action))
-  ).sort();
-  const uniqueUsers = Array.from(
-    new Set(
-      logs
-        .filter((log) => log.user)
-        .map((log) => ({
-          id: log.user!.id,
-          name: log.user!.name || log.user!.email || "Unknown",
-          email: log.user!.email || "",
-        }))
-    )
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  // Get unique actions and modules from props or logs
+  const uniqueActions =
+    availableActions.length > 0
+      ? availableActions
+      : Array.from(new Set(logs.map((log) => log.action))).sort();
+  const uniqueModules =
+    availableModules.length > 0
+      ? availableModules
+      : Array.from(new Set(logs.map((log) => log.module))).sort();
+
+  // Use faculty from props
+  const faculty = availableFaculty;
+
+  // Reset all selections when modal closes
+  useEffect(() => {
+    if (!open) {
+      setStartDate(undefined);
+      setEndDate(undefined);
+      setSelectedActions([]);
+      setSelectedModules([]);
+      setSelectedFaculty([]);
+    }
+  }, [open]);
+
+  const handleClearAll = () => {
+    setStartDate(undefined);
+    setEndDate(undefined);
+    setSelectedActions([]);
+    setSelectedModules([]);
+    setSelectedFaculty([]);
+  };
+
+  const handleActionToggle = (action: string) => {
+    setSelectedActions((prev) =>
+      prev.includes(action)
+        ? prev.filter((a) => a !== action)
+        : [...prev, action]
+    );
+  };
+
+  const handleModuleToggle = (module: string) => {
+    setSelectedModules((prev) =>
+      prev.includes(module)
+        ? prev.filter((m) => m !== module)
+        : [...prev, module]
+    );
+  };
+
+  const handleFacultyToggle = (facultyId: string) => {
+    setSelectedFaculty((prev) =>
+      prev.includes(facultyId)
+        ? prev.filter((f) => f !== facultyId)
+        : [...prev, facultyId]
+    );
+  };
 
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      // Build filters based on export type
+      // Build filters
       const filters: {
         startDate?: Date;
         endDate?: Date;
-        action?: string;
-        userId?: string;
+        actions?: string[];
+        modules?: string[];
+        faculty?: string[];
       } = {};
 
-      if (exportType === "date") {
+      // Date range is optional but if provided, both should be set
+      if (startDate || endDate) {
         if (!startDate || !endDate) {
           toast.error("Please select both start and end dates");
           setIsExporting(false);
@@ -111,20 +166,33 @@ export function ExportModal({
         }
         filters.startDate = startDate;
         filters.endDate = endDate;
-      } else if (exportType === "action") {
-        if (!selectedAction) {
-          toast.error("Please select an action");
-          setIsExporting(false);
-          return;
-        }
-        filters.action = selectedAction;
-      } else if (exportType === "user") {
-        if (!selectedUserId) {
-          toast.error("Please select a user");
-          setIsExporting(false);
-          return;
-        }
-        filters.userId = selectedUserId;
+      }
+
+      // Add action filters if any selected
+      if (selectedActions.length > 0) {
+        filters.actions = selectedActions;
+      }
+
+      // Add module filters if any selected
+      if (selectedModules.length > 0) {
+        filters.modules = selectedModules;
+      }
+
+      // Add faculty filters if any selected
+      if (selectedFaculty.length > 0) {
+        filters.faculty = selectedFaculty;
+      }
+
+      // At least one filter should be selected
+      if (
+        !filters.startDate &&
+        !filters.actions &&
+        !filters.modules &&
+        !filters.faculty
+      ) {
+        toast.error("Please select at least one filter option");
+        setIsExporting(false);
+        return;
       }
 
       // Fetch filtered logs
@@ -156,19 +224,32 @@ export function ExportModal({
       // Info row
       worksheet.mergeCells("A2:G2");
       const infoRow = worksheet.getCell("A2");
-      const filterInfo =
-        exportType === "date"
-          ? `Date Range: ${format(startDate!, "MMM dd, yyyy")} - ${format(
-              endDate!,
-              "MMM dd, yyyy"
-            )}`
-          : exportType === "action"
-          ? `Action: ${selectedAction}`
-          : `User: ${
-              uniqueUsers.find((u) => u.id === selectedUserId)?.name ||
-              "Unknown"
-            }`;
-      infoRow.value = filterInfo;
+      const filterParts: string[] = [];
+
+      if (filters.startDate && filters.endDate) {
+        filterParts.push(
+          `Date Range: ${format(filters.startDate, "MMM dd, yyyy")} - ${format(
+            filters.endDate,
+            "MMM dd, yyyy"
+          )}`
+        );
+      }
+      if (filters.actions && filters.actions.length > 0) {
+        filterParts.push(`Actions: ${filters.actions.join(", ")}`);
+      }
+      if (filters.modules && filters.modules.length > 0) {
+        filterParts.push(`Modules: ${filters.modules.join(", ")}`);
+      }
+      if (filters.faculty && filters.faculty.length > 0) {
+        const facultyNames = filters.faculty
+          .map(
+            (id) => availableFaculty.find((f) => f.id === id)?.name || "Unknown"
+          )
+          .join(", ");
+        filterParts.push(`Faculty: ${facultyNames}`);
+      }
+
+      infoRow.value = filterParts.join(" | ") || "All logs";
       infoRow.font = { italic: true, size: 11 };
       infoRow.alignment = { vertical: "middle", horizontal: "center" };
 
@@ -304,34 +385,15 @@ export function ExportModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Export Type Selection */}
-          <div className="space-y-2">
-            <Label className="text-[#124A69] font-semibold">
-              Export Filter Type
-            </Label>
-            <Select
-              value={exportType}
-              onValueChange={(value: any) => setExportType(value)}
-            >
-              <SelectTrigger className="border-[#124A69]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date">By Date Range</SelectItem>
-                <SelectItem value="action">By Action</SelectItem>
-                <SelectItem value="user">By User</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
+        <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
           {/* Date Range Filter */}
-          {exportType === "date" && (
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <Label className="text-[#124A69] font-semibold">
+              Date Range (Optional)
+            </Label>
+            <div className="space-y-3">
               <div className="space-y-2">
-                <Label className="text-[#124A69] font-semibold">
-                  Start Date
-                </Label>
+                <Label className="text-sm text-gray-600">Start Date</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -362,7 +424,7 @@ export function ExportModal({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[#124A69] font-semibold">End Date</Label>
+                <Label className="text-sm text-gray-600">End Date</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
@@ -392,53 +454,123 @@ export function ExportModal({
                 </Popover>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Action Filter */}
-          {exportType === "action" && (
-            <div className="space-y-2">
-              <Label className="text-[#124A69] font-semibold">
-                Select Action
-              </Label>
-              <Select value={selectedAction} onValueChange={setSelectedAction}>
-                <SelectTrigger className="border-[#124A69]">
-                  <SelectValue placeholder="Select an action" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueActions.map((action) => (
-                    <SelectItem key={action} value={action}>
-                      {action}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-4">
+            <Label className="text-[#124A69] font-semibold">
+              Actions (Optional)
+            </Label>
+            <div className="space-y-3 border rounded-lg p-4 max-h-[200px] overflow-y-auto">
+              {uniqueActions.length === 0 ? (
+                <p className="text-sm text-gray-500">No actions available</p>
+              ) : (
+                uniqueActions.map((action) => (
+                  <label
+                    key={action}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedActions.includes(action)}
+                      onChange={() => handleActionToggle(action)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#124A69] bg-white focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 checked:bg-[#124A69] checked:border-[#124A69] checked:text-white accent-[#124A69] cursor-pointer"
+                      style={{
+                        accentColor: "#124A69",
+                      }}
+                    />
+                    <span className="text-sm">
+                      {action
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (char) => char.toUpperCase())}
+                    </span>
+                  </label>
+                ))
+              )}
             </div>
-          )}
+          </div>
 
-          {/* User Filter */}
-          {exportType === "user" && (
-            <div className="space-y-2">
-              <Label className="text-[#124A69] font-semibold">
-                Select User
-              </Label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger className="border-[#124A69]">
-                  <SelectValue placeholder="Select a user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.name} {user.email && `(${user.email})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Module Filter */}
+          <div className="space-y-4">
+            <Label className="text-[#124A69] font-semibold">
+              Modules (Optional)
+            </Label>
+            <div className="space-y-3 border rounded-lg p-4 max-h-[200px] overflow-y-auto">
+              {uniqueModules.length === 0 ? (
+                <p className="text-sm text-gray-500">No modules available</p>
+              ) : (
+                uniqueModules.map((module) => (
+                  <label
+                    key={module}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedModules.includes(module)}
+                      onChange={() => handleModuleToggle(module)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#124A69] bg-white focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 checked:bg-[#124A69] checked:border-[#124A69] checked:text-white accent-[#124A69] cursor-pointer"
+                      style={{
+                        accentColor: "#124A69",
+                      }}
+                    />
+                    <span className="text-sm">{module}</span>
+                  </label>
+                ))
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Faculty Filter */}
+          <div className="space-y-4">
+            <Label className="text-[#124A69] font-semibold">
+              Faculty (Optional)
+            </Label>
+            <div className="space-y-3 border rounded-lg p-4 max-h-[200px] overflow-y-auto">
+              {isLoadingFaculty ? (
+                <p className="text-sm text-gray-500">Loading faculty...</p>
+              ) : faculty.length === 0 ? (
+                <p className="text-sm text-gray-500">No faculty available</p>
+              ) : (
+                faculty.map((fac) => (
+                  <label
+                    key={fac.id}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedFaculty.includes(fac.id)}
+                      onChange={() => handleFacultyToggle(fac.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-[#124A69] bg-white focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 checked:bg-[#124A69] checked:border-[#124A69] checked:text-white accent-[#124A69] cursor-pointer"
+                      style={{
+                        accentColor: "#124A69",
+                      }}
+                    />
+                    <span className="text-sm">
+                      {fac.name || fac.email || "Unknown"}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
         <DialogFooter className="px-6 py-4 bg-gray-50 border-t">
+          <Button
+            variant="outline"
+            onClick={handleClearAll}
+            className="border-gray-300"
+            disabled={
+              !startDate &&
+              !endDate &&
+              selectedActions.length === 0 &&
+              selectedModules.length === 0 &&
+              selectedFaculty.length === 0
+            }
+          >
+            Clear All
+          </Button>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

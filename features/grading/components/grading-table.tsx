@@ -566,10 +566,10 @@ export function GradingTable({
       try {
         // Fetch all criteria for this course
         let allReports;
-        if (isGroupView && groupId) {
+        if (isGroupView) {
+          // Group criteria is for the whole section, not specific to a group
           allReports = await criteriaService.getCriteria(courseSlug, {
             isGroupCriteria: true,
-            groupId,
           });
         } else if (isRecitationCriteria) {
           allReports = await criteriaService.getCriteria(courseSlug, {
@@ -1178,11 +1178,11 @@ export function GradingTable({
       }
 
       let endpoint = `/courses/${courseSlug}/criteria`;
-      if (isGroupView && groupId) {
-        endpoint = `/courses/${courseSlug}/groups/${groupId}/criteria`;
-      } else if (isRecitationCriteria) {
+      if (isRecitationCriteria) {
         endpoint = `/courses/${courseSlug}/recitation-criteria`;
       }
+      // Note: Group criteria is for the whole section, so we use the general criteria endpoint
+      // and filter by isGroupCriteria on the client side
       const dateToSend = selectedDate ? new Date(selectedDate) : undefined;
       if (dateToSend) {
         dateToSend.setHours(0, 0, 0, 0);
@@ -1246,16 +1246,22 @@ export function GradingTable({
       if (selectedDate) {
         try {
           let endpoint;
-          if (isGroupView && groupId) {
-            endpoint = `/courses/${courseSlug}/groups/${groupId}/criteria`;
-          } else if (isRecitationCriteria) {
+          if (isRecitationCriteria) {
             endpoint = `/courses/${courseSlug}/recitation-criteria`;
           } else {
             endpoint = `/courses/${courseSlug}/criteria`;
           }
 
           const response = await axiosInstance.get(endpoint);
-          setSavedReports(response.data);
+          // Filter group criteria if in group view (group criteria is for the whole section)
+          const reports = isGroupView
+            ? response.data.filter((r: any) => r.isGroupCriteria === true)
+            : response.data.filter(
+                (r: any) =>
+                  r.isGroupCriteria === false &&
+                  r.isRecitationCriteria === false
+              );
+          setSavedReports(reports);
         } catch (error) {
           console.error("Error fetching reports:", error);
           toast.error("Failed to load saved reports", {

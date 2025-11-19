@@ -7,7 +7,6 @@ export const criteriaService = {
     filters?: {
       isGroupCriteria?: boolean;
       isRecitationCriteria?: boolean;
-      groupId?: string;
     }
   ) => {
     if (filters?.isRecitationCriteria) {
@@ -15,10 +14,12 @@ export const criteriaService = {
         .get(`/courses/${courseSlug}/recitation-criteria`)
         .then((res) => res.data);
     }
-    if (filters?.groupId) {
+    if (filters?.isGroupCriteria) {
+      // Group criteria is for the whole section, so we can use the general criteria endpoint
+      // or the groups endpoint (which validates group exists but returns all group criteria)
       return axiosInstance
-        .get(`/courses/${courseSlug}/groups/${filters.groupId}/criteria`)
-        .then((res) => res.data);
+        .get(`/courses/${courseSlug}/criteria`)
+        .then((res) => res.data.filter((c: any) => c.isGroupCriteria === true));
     }
     return axiosInstance
       .get(`/courses/${courseSlug}/criteria`)

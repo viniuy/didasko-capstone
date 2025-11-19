@@ -1,53 +1,48 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { AssessmentType } from "@prisma/client";
+import { getCriteriaLinks } from "./criteria";
 
-// Cached: Get term configurations for a course
+// Get term configurations for a course
+// Note: Not cached to ensure fresh data after saves
 export async function getTermConfigs(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    include: {
+      termConfigs: {
         include: {
-          termConfigs: {
-            include: {
-              assessments: {
-                orderBy: [{ type: "asc" }, { order: "asc" }],
-              },
-            },
-            orderBy: { term: "asc" },
+          assessments: {
+            orderBy: [{ type: "asc" }, { order: "asc" }],
           },
         },
-      });
-
-      if (!course) return null;
-
-      const termConfigs: Record<string, any> = {};
-      course.termConfigs.forEach((config) => {
-        termConfigs[config.term] = {
-          id: config.id,
-          term: config.term,
-          ptWeight: config.ptWeight,
-          quizWeight: config.quizWeight,
-          examWeight: config.examWeight,
-          assessments: config.assessments.map((a) => ({
-            id: a.id,
-            name: a.name,
-            type: a.type,
-            maxScore: a.maxScore,
-            date: a.date ? a.date.toISOString().split("T")[0] : null,
-            enabled: a.enabled,
-            order: a.order,
-            linkedCriteriaId: a.linkedCriteriaId ?? null,
-          })),
-        };
-      });
-
-      return termConfigs;
+        orderBy: { term: "asc" },
+      },
     },
-    [`term-configs-${courseSlug}`],
-    { revalidate: 30 }
-  )();
+  });
+
+  if (!course) return null;
+
+  const termConfigs: Record<string, any> = {};
+  course.termConfigs.forEach((config) => {
+    termConfigs[config.term] = {
+      id: config.id,
+      term: config.term,
+      ptWeight: config.ptWeight,
+      quizWeight: config.quizWeight,
+      examWeight: config.examWeight,
+      assessments: config.assessments.map((a) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        maxScore: a.maxScore,
+        date: a.date ? a.date.toISOString().split("T")[0] : null,
+        enabled: a.enabled,
+        order: a.order,
+        linkedCriteriaId: a.linkedCriteriaId ?? null,
+      })),
+    };
+  });
+
+  return termConfigs;
 }
 
 // Save term configurations
@@ -144,70 +139,65 @@ export async function saveTermConfigs(
   return { success: true };
 }
 
-// Cached: Get assessment scores for a course (batched query)
+// Get assessment scores for a course (batched query)
+// Note: Not cached to ensure fresh data after saves
 export async function getAssessmentScores(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-        select: { id: true },
-      });
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
 
-      if (!course) return null;
+  if (!course) return null;
 
-      // Batch query: Get all assessment scores and criteria scores in parallel
-      const [assessmentScores, criteriaScores] = await Promise.all([
-        prisma.assessmentScore.findMany({
-          where: {
-            assessment: {
-              termConfig: {
-                courseId: course.id,
-              },
-            },
-          },
-          select: {
-            studentId: true,
-            assessmentId: true,
-            score: true,
-          },
-        }),
-        prisma.grade.findMany({
-          where: {
+  // Batch query: Get all assessment scores and criteria scores in parallel
+  const [assessmentScores, criteriaScores] = await Promise.all([
+    prisma.assessmentScore.findMany({
+      where: {
+        assessment: {
+          termConfig: {
             courseId: course.id,
           },
-          select: {
-            studentId: true,
-            criteriaId: true,
-            value: true,
-          },
-        }),
-      ]);
+        },
+      },
+      select: {
+        studentId: true,
+        assessmentId: true,
+        score: true,
+      },
+    }),
+    prisma.grade.findMany({
+      where: {
+        courseId: course.id,
+      },
+      select: {
+        studentId: true,
+        criteriaId: true,
+        value: true,
+      },
+    }),
+  ]);
 
-      const scoresMap: Record<string, any> = {};
+  const scoresMap: Record<string, any> = {};
 
-      assessmentScores.forEach((score) => {
-        const key = `${score.studentId}:${score.assessmentId}`;
-        scoresMap[key] = {
-          studentId: score.studentId,
-          assessmentId: score.assessmentId,
-          score: score.score,
-        };
-      });
+  assessmentScores.forEach((score) => {
+    const key = `${score.studentId}:${score.assessmentId}`;
+    scoresMap[key] = {
+      studentId: score.studentId,
+      assessmentId: score.assessmentId,
+      score: score.score,
+    };
+  });
 
-      criteriaScores.forEach((grade) => {
-        const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
-        scoresMap[key] = {
-          studentId: grade.studentId,
-          assessmentId: `criteria:${grade.criteriaId}`,
-          score: grade.value,
-        };
-      });
+  criteriaScores.forEach((grade) => {
+    const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
+    scoresMap[key] = {
+      studentId: grade.studentId,
+      assessmentId: `criteria:${grade.criteriaId}`,
+      score: grade.value,
+    };
+  });
 
-      return scoresMap;
-    },
-    [`assessment-scores-${courseSlug}`],
-    { revalidate: 30 }
-  )();
+  return scoresMap;
 }
 
 // Save or update assessment score
@@ -442,89 +432,50 @@ function computeTermGradeFromScores(
 }
 
 // Batched: Get class record data (students, term-configs, assessment-scores, criteria-links)
+// Note: Not cached to ensure fresh data after grade saves
 export async function getClassRecordData(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-        select: { id: true },
-      });
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
 
-      if (!course) return null;
+  if (!course) return null;
 
-      // Batch all queries in parallel
-      const [students, termConfigs, assessmentScores, criteriaLinks] =
-        await Promise.all([
-          // Students
-          prisma.student.findMany({
-            where: {
-              coursesEnrolled: {
-                some: { id: course.id },
-              },
-            },
-            select: {
-              id: true,
-              studentId: true,
-              firstName: true,
-              lastName: true,
-              middleInitial: true,
-              image: true,
-            },
-          }),
+  // Batch all queries in parallel
+  const [students, termConfigs, assessmentScores, criteriaLinks] =
+    await Promise.all([
+      // Students
+      prisma.student.findMany({
+        where: {
+          coursesEnrolled: {
+            some: { id: course.id },
+          },
+        },
+        select: {
+          id: true,
+          studentId: true,
+          firstName: true,
+          lastName: true,
+          middleInitial: true,
+          image: true,
+        },
+        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      }),
 
-          // Term configs
-          prisma.termConfiguration.findMany({
-            where: { courseId: course.id },
-            include: {
-              assessments: {
-                orderBy: [{ type: "asc" }, { order: "asc" }],
-              },
-            },
-            orderBy: { term: "asc" },
-          }),
+      // Term configs (not cached for fresh data)
+      getTermConfigs(courseSlug),
 
-          // Assessment scores (reuse existing function logic)
-          getAssessmentScores(courseSlug),
+      // Assessment scores (not cached for fresh data)
+      getAssessmentScores(courseSlug),
 
-          // Criteria links
-          Promise.all([
-            prisma.criteria.findMany({
-              where: {
-                courseId: course.id,
-                isRecitationCriteria: true,
-              },
-              orderBy: { createdAt: "desc" },
-            }),
-            prisma.criteria.findMany({
-              where: {
-                courseId: course.id,
-                isGroupCriteria: true,
-              },
-              orderBy: { createdAt: "desc" },
-            }),
-            prisma.criteria.findMany({
-              where: {
-                courseId: course.id,
-                isRecitationCriteria: false,
-                isGroupCriteria: false,
-              },
-              orderBy: { createdAt: "desc" },
-            }),
-          ]).then(([recitations, groupReportings, individualReportings]) => ({
-            recitations,
-            groupReportings,
-            individualReportings,
-          })),
-        ]);
+      // Criteria links (not cached for fresh data)
+      getCriteriaLinks(courseSlug),
+    ]);
 
-      return {
-        students,
-        termConfigs,
-        assessmentScores,
-        criteriaLinks,
-      };
-    },
-    [`class-record-${courseSlug}`],
-    { revalidate: 30 }
-  )();
+  return {
+    students,
+    termConfigs,
+    assessmentScores,
+    criteriaLinks,
+  };
 }

@@ -45,7 +45,8 @@ export async function POST(request: Request, context: { params }) {
       date: new Date(data.date),
       scoringRange: data.scoringRange,
       passingScore: data.passingScore,
-      isGroupCriteria: false,
+      isGroupCriteria: data.isGroupCriteria || false,
+      isRecitationCriteria: data.isRecitationCriteria || false,
       rubrics: Array.isArray(data.rubrics)
         ? data.rubrics.map((r: any) => ({
             name: r.name,

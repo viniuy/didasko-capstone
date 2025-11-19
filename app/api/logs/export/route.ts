@@ -27,23 +27,45 @@ export const POST = withLogging(
       }
 
       const body = await req.json();
-      const { startDate, endDate, action, userId } = body;
+      const {
+        startDate,
+        endDate,
+        actions,
+        modules,
+        faculty,
+        action, // Legacy support
+        userId, // Legacy support
+      } = body;
 
       // Build where clause
       const where: any = {};
 
       // Apply module filter for ACADEMIC_HEAD
       if (session.user.role === Role.ACADEMIC_HEAD) {
+        const allowedModules = [
+          "Course Management",
+          "Course",
+          "Courses",
+          "Class Management",
+          "Faculty",
+          "Attendance",
+          "Enrollment",
+        ];
+
+        // If modules filter is provided, intersect with allowed modules
+        if (modules && Array.isArray(modules) && modules.length > 0) {
+          where.module = {
+            in: modules.filter((m: string) => allowedModules.includes(m)),
+          };
+        } else {
+          where.module = {
+            in: allowedModules,
+          };
+        }
+      } else if (modules && Array.isArray(modules) && modules.length > 0) {
+        // Apply module filter for ADMIN
         where.module = {
-          in: [
-            "Course Management",
-            "Course",
-            "Courses",
-            "Class Management",
-            "Faculty",
-            "Attendance",
-            "Enrollment",
-          ],
+          in: modules,
         };
       }
 
@@ -55,16 +77,26 @@ export const POST = withLogging(
         };
       }
 
-      // Apply action filter
-      if (action) {
+      // Apply action filter (new array format preferred)
+      if (actions && Array.isArray(actions) && actions.length > 0) {
+        where.action = {
+          in: actions,
+        };
+      } else if (action) {
+        // Legacy support for single action
         where.action = {
           contains: action,
           mode: "insensitive",
         };
       }
 
-      // Apply user filter
-      if (userId) {
+      // Apply faculty/user filter (new array format preferred)
+      if (faculty && Array.isArray(faculty) && faculty.length > 0) {
+        where.userId = {
+          in: faculty,
+        };
+      } else if (userId) {
+        // Legacy support for single userId
         where.userId = userId;
       }
 
@@ -95,8 +127,22 @@ export const POST = withLogging(
           module: "Audit Logs",
           reason: `Exported ${logs.length} audit log(s)${
             startDate && endDate ? ` from ${startDate} to ${endDate}` : ""
-          }${action ? ` filtered by action: ${action}` : ""}${
-            userId ? ` for user: ${userId}` : ""
+          }${
+            actions && actions.length > 0
+              ? ` filtered by actions: ${actions.join(", ")}`
+              : action
+              ? ` filtered by action: ${action}`
+              : ""
+          }${
+            modules && modules.length > 0
+              ? ` filtered by modules: ${modules.join(", ")}`
+              : ""
+          }${
+            faculty && faculty.length > 0
+              ? ` filtered by faculty: ${faculty.length} user(s)`
+              : userId
+              ? ` for user: ${userId}`
+              : ""
           }`,
           batchId,
           status: "SUCCESS",
@@ -112,8 +158,9 @@ export const POST = withLogging(
             filters: {
               startDate: startDate || null,
               endDate: endDate || null,
-              action: action || null,
-              userId: userId || null,
+              actions: actions || (action ? [action] : null),
+              modules: modules || null,
+              faculty: faculty || (userId ? [userId] : null),
             },
             dataRange:
               startDate && endDate ? `${startDate} to ${endDate}` : "All time",

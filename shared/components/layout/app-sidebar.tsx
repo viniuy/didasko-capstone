@@ -55,7 +55,6 @@ import { supabase } from "@/lib/supabaseClient";
 
 const adminItems = [
   { title: "Dashboard", url: "/dashboard/admin", icon: LayoutDashboard },
-  { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Students", url: "/main/students", icon: Users },
   { title: "Audit Logs", url: "/main/logs", icon: Activity },
 ];

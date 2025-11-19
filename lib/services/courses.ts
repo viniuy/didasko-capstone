@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -9,34 +8,30 @@ export function generateSlug(code: string, section: string): string {
     .replace(/\s+/g, "-")}`;
 }
 
-// Cached: Get course by slug with basic info
+// Get course by slug with basic info
+// Note: Not cached to ensure fresh data after saves
 export async function getCourseBySlug(slug: string) {
-  return unstable_cache(
-    async () => {
-      return prisma.course.findUnique({
-        where: { slug },
-        include: {
-          faculty: {
-            select: { id: true, name: true, email: true, department: true },
-          },
-          students: {
-            select: {
-              id: true,
-              lastName: true,
-              firstName: true,
-              middleInitial: true,
-            },
-          },
-          schedules: true,
+  return prisma.course.findUnique({
+    where: { slug },
+    include: {
+      faculty: {
+        select: { id: true, name: true, email: true, department: true },
+      },
+      students: {
+        select: {
+          id: true,
+          lastName: true,
+          firstName: true,
+          middleInitial: true,
         },
-      });
+      },
+      schedules: true,
     },
-    [`course-${slug}`],
-    { revalidate: 30 }
-  )();
+  });
 }
 
-// Cached: Get courses with filters (merged /courses and /courses/active)
+// Get courses with filters (merged /courses and /courses/active)
+// Note: Not cached to ensure fresh data after saves
 export async function getCourses(filters: {
   facultyId?: string;
   search?: string;
@@ -46,88 +41,81 @@ export async function getCourses(filters: {
   section?: string;
   status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
 }) {
-  const cacheKey = `courses-${JSON.stringify(filters)}`;
+  const where: Prisma.CourseWhereInput = {};
 
-  return unstable_cache(
-    async () => {
-      const where: Prisma.CourseWhereInput = {};
+  if (filters.status) where.status = filters.status;
+  if (filters.facultyId) where.facultyId = filters.facultyId;
+  if (filters.department)
+    where.faculty = { department: filters.department };
+  if (filters.semester) where.semester = filters.semester;
+  if (filters.code) where.code = filters.code;
+  if (filters.section) where.section = filters.section;
+  if (filters.search) {
+    where.OR = [
+      { title: { contains: filters.search, mode: "insensitive" } },
+      { code: { contains: filters.search, mode: "insensitive" } },
+      { room: { contains: filters.search, mode: "insensitive" } },
+    ];
+  }
 
-      if (filters.status) where.status = filters.status;
-      if (filters.facultyId) where.facultyId = filters.facultyId;
-      if (filters.department)
-        where.faculty = { department: filters.department };
-      if (filters.semester) where.semester = filters.semester;
-      if (filters.code) where.code = filters.code;
-      if (filters.section) where.section = filters.section;
-      if (filters.search) {
-        where.OR = [
-          { title: { contains: filters.search, mode: "insensitive" } },
-          { code: { contains: filters.search, mode: "insensitive" } },
-          { room: { contains: filters.search, mode: "insensitive" } },
-        ];
-      }
-
-      const courses = await prisma.course.findMany({
-        where,
-        include: {
-          faculty: {
-            select: { id: true, name: true, email: true, department: true },
-          },
-          students: {
-            select: {
-              id: true,
-              lastName: true,
-              firstName: true,
-              middleInitial: true,
-            },
-          },
-          schedules: true,
-          attendance: true,
+  const courses = await prisma.course.findMany({
+    where,
+    include: {
+      faculty: {
+        select: { id: true, name: true, email: true, department: true },
+      },
+      students: {
+        select: {
+          id: true,
+          lastName: true,
+          firstName: true,
+          middleInitial: true,
         },
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      });
-
-      return courses.map((course) => {
-        const totalStudents = course.students.length;
-        const totalPresent = course.attendance.filter(
-          (a) => a.status === "PRESENT"
-        ).length;
-        const totalAbsents = course.attendance.filter(
-          (a) => a.status === "ABSENT"
-        ).length;
-        const totalLate = course.attendance.filter(
-          (a) => a.status === "LATE"
-        ).length;
-        const lastAttendanceDate = course.attendance.length
-          ? course.attendance[course.attendance.length - 1].date
-          : null;
-
-        return {
-          ...course,
-          attendanceStats: {
-            totalStudents,
-            totalPresent,
-            totalAbsents,
-            totalLate,
-            lastAttendanceDate,
-            attendanceRate:
-              totalStudents > 0 ? totalPresent / totalStudents : 0,
-          },
-          students: course.students.map((s) => ({
-            ...s,
-            middleInitial: s.middleInitial || undefined,
-          })),
-          schedules: course.schedules,
-          attendance: undefined,
-        };
-      });
+      },
+      schedules: true,
+      attendance: true,
     },
-    [cacheKey],
-    { revalidate: 30 }
-  )();
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+  });
+
+  return courses.map((course) => {
+    const totalStudents = course.students.length;
+    const totalPresent = course.attendance.filter(
+      (a) => a.status === "PRESENT"
+    ).length;
+    const totalAbsents = course.attendance.filter(
+      (a) => a.status === "ABSENT"
+    ).length;
+    const totalLate = course.attendance.filter(
+      (a) => a.status === "LATE"
+    ).length;
+    const lastAttendanceDate = course.attendance.length
+      ? course.attendance[course.attendance.length - 1].date
+      : null;
+
+    return {
+      ...course,
+      attendanceStats: {
+        totalStudents,
+        totalPresent,
+        totalAbsents,
+        totalLate,
+        lastAttendanceDate,
+        attendanceRate:
+          totalStudents > 0 ? totalPresent / totalStudents : 0,
+      },
+      students: course.students.map((s) => ({
+        ...s,
+        middleInitial: s.middleInitial || undefined,
+      })),
+      schedules: course.schedules,
+      attendance: undefined,
+    };
+  });
 }
 
-// Cached: Get course with students and today's attendance (batched query)
+// Get course with students and today's attendance (batched query)
+// Note: Not cached to ensure fresh data after saves
 export async function getCourseStudentsWithAttendance(
   courseSlug: string,
   date?: Date
@@ -137,139 +125,140 @@ export async function getCourseStudentsWithAttendance(
   const tomorrow = new Date(targetDate);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const cacheKey = `course-students-${courseSlug}-${
-    targetDate.toISOString().split("T")[0]
-  }`;
+  // Get course ID first
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true, code: true, section: true },
+  });
 
-  return unstable_cache(
-    async () => {
-      // Get course ID first
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-        select: { id: true, code: true, section: true },
-      });
+  if (!course) return null;
 
-      if (!course) return null;
-
-      // Batched query: Get all students with attendance and gradeScores in one go
-      const courseWithData = await prisma.course.findUnique({
-        where: { id: course.id },
-        include: {
-          students: {
+  // Batched query: Get all students with attendance and gradeScores in one go
+  const courseWithData = await prisma.course.findUnique({
+    where: { id: course.id },
+    include: {
+      students: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          middleInitial: true,
+          image: true,
+          attendance: {
+            where: {
+              courseId: course.id,
+              date: {
+                gte: targetDate,
+                lt: tomorrow,
+              },
+            },
             select: {
               id: true,
-              firstName: true,
-              lastName: true,
-              middleInitial: true,
-              image: true,
-              attendance: {
-                where: {
-                  courseId: course.id,
-                  date: {
-                    gte: targetDate,
-                    lt: tomorrow,
-                  },
-                },
-                select: {
-                  id: true,
-                  status: true,
-                  date: true,
-                  courseId: true,
-                },
-                orderBy: {
-                  date: "desc",
-                },
-                take: 1,
-              },
-              quizScores: true,
+              status: true,
+              date: true,
+              courseId: true,
             },
+            orderBy: {
+              date: "desc",
+            },
+            take: 1,
           },
+          quizScores: true,
         },
-      });
-
-      if (!courseWithData) return null;
-
-      // Batch fetch all gradeScores for all students at once (fixes N+1)
-      const studentIds = courseWithData.students.map((s) => s.id);
-      const allGradeScores = await prisma.gradeScore.findMany({
-        where: {
-          courseId: course.id,
-          studentId: { in: studentIds },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      // Group gradeScores by studentId, taking the latest for each
-      const gradeScoresMap = new Map<string, (typeof allGradeScores)[0]>();
-      for (const score of allGradeScores) {
-        if (!gradeScoresMap.has(score.studentId)) {
-          gradeScoresMap.set(score.studentId, score);
-        }
-      }
-
-      // Transform students with their gradeScores
-      const students = courseWithData.students.map((student) => {
-        const latestGradeScore = gradeScoresMap.get(student.id);
-
-        return {
-          id: student.id,
-          name: `${student.firstName} ${student.lastName}`,
-          firstName: student.firstName,
-          lastName: student.lastName,
-          middleInitial: student.middleInitial,
-          image: student.image || undefined,
-          status: student.attendance[0]?.status || "NOT_SET",
-          attendanceRecords: student.attendance,
-          reportingScore: latestGradeScore?.reportingScore ?? 0,
-          recitationScore: latestGradeScore?.recitationScore ?? 0,
-          quizScore: latestGradeScore?.quizScore ?? 0,
-          totalScore: latestGradeScore?.totalScore ?? 0,
-          remarks: latestGradeScore?.remarks ?? "",
-          quizScores: student.quizScores,
-        };
-      });
-
-      return {
-        course: {
-          code: courseWithData.code,
-          section: courseWithData.section,
-        },
-        students,
-      };
+      },
     },
-    [cacheKey],
-    { revalidate: 30 }
-  )();
+  });
+
+  if (!courseWithData) return null;
+
+  // Batch fetch all gradeScores for all students at once (fixes N+1)
+  const studentIds = courseWithData.students.map((s) => s.id);
+  const allGradeScores = await prisma.gradeScore.findMany({
+    where: {
+      courseId: course.id,
+      studentId: { in: studentIds },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Group gradeScores by studentId, taking the latest for each
+  const gradeScoresMap = new Map<string, (typeof allGradeScores)[0]>();
+  for (const score of allGradeScores) {
+    if (!gradeScoresMap.has(score.studentId)) {
+      gradeScoresMap.set(score.studentId, score);
+    }
+  }
+
+  // Transform students with their gradeScores
+  const students = courseWithData.students.map((student) => {
+    const latestGradeScore = gradeScoresMap.get(student.id);
+
+    return {
+      id: student.id,
+      name: `${student.firstName} ${student.lastName}`,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      middleInitial: student.middleInitial,
+      image: student.image || undefined,
+      status: student.attendance[0]?.status || "NOT_SET",
+      attendanceRecords: student.attendance,
+      reportingScore: latestGradeScore?.reportingScore ?? 0,
+      recitationScore: latestGradeScore?.recitationScore ?? 0,
+      quizScore: latestGradeScore?.quizScore ?? 0,
+      totalScore: latestGradeScore?.totalScore ?? 0,
+      remarks: latestGradeScore?.remarks ?? "",
+      quizScores: student.quizScores,
+    };
+  });
+
+  return {
+    course: {
+      code: courseWithData.code,
+      section: courseWithData.section,
+    },
+    students,
+  };
 }
 
-// Cached: Get course analytics (heavy query - all related data)
+// Get course analytics (heavy query - all related data)
+// Note: Not cached to ensure fresh data after saves
 export async function getCourseAnalytics(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    include: {
+      faculty: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          department: true,
+        },
+      },
+      students: {
+        select: {
+          id: true,
+          studentId: true,
+          lastName: true,
+          firstName: true,
+          middleInitial: true,
+          image: true,
+          rfid_id: true,
+        },
+      },
+      schedules: true,
+      attendance: {
         include: {
-          faculty: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              department: true,
-            },
-          },
-          students: {
+          student: {
             select: {
               id: true,
               studentId: true,
-              lastName: true,
-              firstName: true,
-              middleInitial: true,
-              image: true,
-              rfid_id: true,
             },
           },
-          schedules: true,
-          attendance: {
+        },
+      },
+      termConfigs: {
+        include: {
+          termGrades: {
             include: {
               student: {
                 select: {
@@ -279,9 +268,9 @@ export async function getCourseAnalytics(courseSlug: string) {
               },
             },
           },
-          termConfigs: {
+          assessments: {
             include: {
-              termGrades: {
+              scores: {
                 include: {
                   student: {
                     select: {
@@ -291,131 +280,110 @@ export async function getCourseAnalytics(courseSlug: string) {
                   },
                 },
               },
-              assessments: {
-                include: {
-                  scores: {
-                    include: {
-                      student: {
-                        select: {
-                          id: true,
-                          studentId: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          grades: {
-            include: {
-              student: {
-                select: {
-                  id: true,
-                  studentId: true,
-                },
-              },
             },
           },
         },
-      });
-
-      if (!course) return null;
-
-      // Import calculation functions (these are pure functions, can be extracted)
-      // For now, we'll return the raw data and let the API route handle calculations
-      // Or we can move the calculation logic here
-      return course;
-    },
-    [`course-analytics-${courseSlug}`],
-    { revalidate: 30 }
-  )();
-}
-
-// Cached: Get course stats (passing rate, attendance rate)
-export async function getCourseStats(courseSlug: string) {
-  return unstable_cache(
-    async () => {
-      const course = await prisma.course.findUnique({
-        where: { slug: courseSlug },
-        include: { students: true },
-      });
-
-      if (!course) return null;
-
-      const totalStudents = course.students.length;
-
-      if (totalStudents === 0) {
-        return {
-          passingRate: 0,
-          attendanceRate: 0,
-          totalStudents: 0,
-        };
-      }
-
-      // Batch query: Get term configs and attendance in parallel
-      const [termConfigs, attendanceRecords] = await Promise.all([
-        prisma.termConfiguration.findMany({
-          where: { courseId: course.id },
-          include: {
-            termGrades: {
-              where: {
-                studentId: {
-                  in: course.students.map((s) => s.id),
-                },
-              },
+      },
+      grades: {
+        include: {
+          student: {
+            select: {
+              id: true,
+              studentId: true,
             },
           },
-        }),
-        prisma.attendance.findMany({
-          where: { courseId: course.id },
-        }),
-      ]);
-
-      const studentsWithGrades = new Set<string>();
-      const passingStudents = new Set<string>();
-
-      termConfigs.forEach((config) => {
-        config.termGrades.forEach((grade) => {
-          studentsWithGrades.add(grade.studentId);
-          if (grade.remarks === "PASSED") {
-            passingStudents.add(grade.studentId);
-          }
-        });
-      });
-
-      const passingRate =
-        studentsWithGrades.size > 0
-          ? Math.round((passingStudents.size / studentsWithGrades.size) * 100)
-          : 0;
-
-      const attendanceRate =
-        attendanceRecords.length === 0
-          ? 0
-          : Math.round(
-              (attendanceRecords.filter(
-                (record) =>
-                  record.status === "PRESENT" || record.status === "LATE"
-              ).length /
-                attendanceRecords.length) *
-                100
-            );
-
-      return {
-        passingRate,
-        attendanceRate,
-        totalStudents,
-        studentsWithGrades: studentsWithGrades.size,
-        passingStudents: passingStudents.size,
-        totalAttendanceRecords: attendanceRecords.length,
-        presentCount: attendanceRecords.filter(
-          (r) => r.status === "PRESENT" || r.status === "LATE"
-        ).length,
-      };
+        },
+      },
     },
-    [`course-stats-${courseSlug}`],
-    { revalidate: 30 }
-  )();
+  });
+
+  if (!course) return null;
+
+  // Import calculation functions (these are pure functions, can be extracted)
+  // For now, we'll return the raw data and let the API route handle calculations
+  // Or we can move the calculation logic here
+  return course;
+}
+
+// Get course stats (passing rate, attendance rate)
+// Note: Not cached to ensure fresh data after saves
+export async function getCourseStats(courseSlug: string) {
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    include: { students: true },
+  });
+
+  if (!course) return null;
+
+  const totalStudents = course.students.length;
+
+  if (totalStudents === 0) {
+    return {
+      passingRate: 0,
+      attendanceRate: 0,
+      totalStudents: 0,
+    };
+  }
+
+  // Batch query: Get term configs and attendance in parallel
+  const [termConfigs, attendanceRecords] = await Promise.all([
+    prisma.termConfiguration.findMany({
+      where: { courseId: course.id },
+      include: {
+        termGrades: {
+          where: {
+            studentId: {
+              in: course.students.map((s) => s.id),
+            },
+          },
+        },
+      },
+    }),
+    prisma.attendance.findMany({
+      where: { courseId: course.id },
+    }),
+  ]);
+
+  const studentsWithGrades = new Set<string>();
+  const passingStudents = new Set<string>();
+
+  termConfigs.forEach((config) => {
+    config.termGrades.forEach((grade) => {
+      studentsWithGrades.add(grade.studentId);
+      if (grade.remarks === "PASSED") {
+        passingStudents.add(grade.studentId);
+      }
+    });
+  });
+
+  const passingRate =
+    studentsWithGrades.size > 0
+      ? Math.round((passingStudents.size / studentsWithGrades.size) * 100)
+      : 0;
+
+  const attendanceRate =
+    attendanceRecords.length === 0
+      ? 0
+      : Math.round(
+          (attendanceRecords.filter(
+            (record) =>
+              record.status === "PRESENT" || record.status === "LATE"
+          ).length /
+            attendanceRecords.length) *
+            100
+        );
+
+  return {
+    passingRate,
+    attendanceRate,
+    totalStudents,
+    studentsWithGrades: studentsWithGrades.size,
+    passingStudents: passingStudents.size,
+    totalAttendanceRecords: attendanceRecords.length,
+    presentCount: attendanceRecords.filter(
+      (r) => r.status === "PRESENT" || r.status === "LATE"
+    ).length,
+  };
 }
 
 // Batch: Get stats for multiple courses

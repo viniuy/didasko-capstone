@@ -12,10 +12,16 @@ import { BreakGlassCompact } from "@/features/admin/components/break-glass-compa
 
 interface PageProps {
   searchParams: Promise<{
+    p?: string;
     page?: string;
     module?: string;
     action?: string;
     userId?: string;
+    actions?: string;
+    faculty?: string;
+    modules?: string;
+    startDate?: string;
+    endDate?: string;
   }>;
 }
 
@@ -42,9 +48,9 @@ export default async function LogsPage({ searchParams }: PageProps) {
   // Await searchParams (Next.js 15 requirement)
   const params = await searchParams;
 
-  // Parse search params
-  const page = parseInt(params.page || "1", 10);
-  const pageSize = 50;
+  // Parse search params - use 'p' instead of 'page'
+  const page = parseInt(params.p || params.page || "1", 10);
+  const pageSize = 9;
   const skip = (page - 1) * pageSize;
 
   // Build where clause
@@ -66,23 +72,55 @@ export default async function LogsPage({ searchParams }: PageProps) {
     };
   }
 
-  // Apply search filters
-  if (params.module) {
-    where.module = {
-      contains: params.module,
-      mode: "insensitive",
+  // Apply new filter parameters (preferred over old single filters)
+  if (params.actions) {
+    const actionList = params.actions.split(",");
+    where.action = {
+      in: actionList,
     };
-  }
-
-  if (params.action) {
+  } else if (params.action) {
+    // Fallback to old single action filter for backward compatibility
     where.action = {
       contains: params.action,
       mode: "insensitive",
     };
   }
 
-  if (params.userId) {
+  if (params.faculty) {
+    const facultyList = params.faculty.split(",");
+    where.userId = {
+      in: facultyList,
+    };
+  } else if (params.userId) {
+    // Fallback to old single userId filter for backward compatibility
     where.userId = params.userId;
+  }
+
+  if (params.modules) {
+    const moduleList = params.modules.split(",");
+    where.module = {
+      in: moduleList,
+    };
+  } else if (params.module) {
+    // Fallback to old single module filter for backward compatibility
+    where.module = {
+      contains: params.module,
+      mode: "insensitive",
+    };
+  }
+
+  // Apply date range filter
+  if (params.startDate || params.endDate) {
+    where.createdAt = {};
+    if (params.startDate) {
+      where.createdAt.gte = new Date(params.startDate);
+    }
+    if (params.endDate) {
+      // Set end date to end of day
+      const endDate = new Date(params.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      where.createdAt.lte = endDate;
+    }
   }
 
   // Fetch logs
@@ -134,26 +172,26 @@ export default async function LogsPage({ searchParams }: PageProps) {
   }
 
   return (
-      <div className="relative h-screen w-screen overflow-hidden">
-        <AppSidebar />
+    <div className="relative h-screen w-screen overflow-hidden">
+      <AppSidebar />
 
-        <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
-          <div className="flex flex-col flex-grow px-2 sm:px-4 md:px-6 lg:px-8">
-            <Header />
+      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
+        <div className="flex flex-col flex-grow px-2 sm:px-4 md:px-6 lg:px-8">
+          <Header />
 
-            <div className="space-y-2 md:space-y-6 lg:space-y-8">
-              <div className="space-y-2">
+          <div className="space-y-2 md:space-y-6 lg:space-y-8">
+            <div className="space-y-2">
               <div className="flex items-center justify-between pl-2">
                 <div>
                   <h2 className="pb-1 text-xl sm:text-2xl font-bold text-[#124A69]">
                     Audit Logs
-                </h2>
+                  </h2>
                   <p className="text-sm text-muted-foreground">
                     {userRole === Role.ADMIN
                       ? "All system activity logs"
                       : "Course and faculty management logs"}
                   </p>
-                  </div>
+                </div>
                 <div className="flex items-center">
                   <BreakGlassCompact />
                 </div>
@@ -167,12 +205,12 @@ export default async function LogsPage({ searchParams }: PageProps) {
                   userRole={userRole!}
                   isLoading={isLoading}
                 />
-                </div>
               </div>
             </div>
           </div>
-          <Rightsidebar />
-        </main>
-      </div>
+        </div>
+        <Rightsidebar />
+      </main>
+    </div>
   );
 }
