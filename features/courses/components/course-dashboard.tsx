@@ -140,6 +140,13 @@ export function CourseDashboard({
           ),
         }))
       );
+
+      // Dispatch custom event to refresh sidebar components
+      window.dispatchEvent(
+        new CustomEvent("courseStudentsUpdated", {
+          detail: { courseSlug },
+        })
+      );
     } catch (error) {
       toast.error("Failed to load course data");
     } finally {
@@ -215,6 +222,7 @@ export function CourseDashboard({
         },
       ]);
       await fetchCourseData();
+      // Event is already dispatched in fetchCourseData
       toast.success("Student added successfully!");
       setShowAddSheet(false);
     } catch (error: any) {
@@ -582,14 +590,20 @@ export function CourseDashboard({
           students={studentsWithRecords}
           isLoading={false}
           courseSlug={courseSlug}
-          onRemoveSuccess={fetchCourseData}
+          onRemoveSuccess={async () => {
+            await fetchCourseData();
+            // Event is already dispatched in fetchCourseData
+          }}
         />
 
         <StudentImportDialog
           open={showImportDialog}
           onOpenChange={setShowImportDialog}
           courseSlug={courseSlug}
-          onImportComplete={fetchCourseData}
+          onImportComplete={async () => {
+            await fetchCourseData();
+            // Event is already dispatched in fetchCourseData
+          }}
         />
       </div>
     </div>

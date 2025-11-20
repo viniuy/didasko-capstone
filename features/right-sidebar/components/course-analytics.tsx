@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UserCheck, TrendingUp, UserX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,11 +60,7 @@ export default function CourseAnalytics({
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    fetchStats();
-  }, [courseSlug]);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await coursesService.getAnalytics(courseSlug);
@@ -75,7 +71,32 @@ export default function CourseAnalytics({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [courseSlug]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Listen for course students updated event
+  useEffect(() => {
+    const handleStudentsUpdated = (event: CustomEvent) => {
+      // Only refresh if the event is for this course
+      if (event.detail?.courseSlug === courseSlug) {
+        fetchStats();
+      }
+    };
+
+    window.addEventListener(
+      "courseStudentsUpdated",
+      handleStudentsUpdated as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "courseStudentsUpdated",
+        handleStudentsUpdated as EventListener
+      );
+    };
+  }, [courseSlug, fetchStats]);
 
   if (isLoading) {
     return <LoadingSkeleton />;
