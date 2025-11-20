@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TimePicker } from "@/components/ui/time-picker";
 import {
   Select,
@@ -649,6 +650,7 @@ export function CourseDataTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<CourseStatus | "ALL">("ALL");
   const [facultyFilter, setFacultyFilter] = useState<string[]>([userId]);
+  const [sectionFilter, setSectionFilter] = useState<string[]>([]);
   const [dayFilter, setDayFilter] = useState<string>("ALL");
   const [roomFilter, setRoomFilter] = useState<string>("");
   const [startTimeFilter, setStartTimeFilter] = useState<string>("");
@@ -665,6 +667,7 @@ export function CourseDataTable({
   const [tempFacultyFilter, setTempFacultyFilter] = useState<string[]>([
     userId,
   ]);
+  const [tempSectionFilter, setTempSectionFilter] = useState<string[]>([]);
   const [tempDayFilter, setTempDayFilter] = useState<string>("ALL");
   const [tempRoomFilter, setTempRoomFilter] = useState<string>("");
   const [tempStartTimeFilter, setTempStartTimeFilter] = useState<string>("");
@@ -678,6 +681,7 @@ export function CourseDataTable({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [scheduleDialogCourse, setScheduleDialogCourse] =
@@ -709,13 +713,16 @@ export function CourseDataTable({
     hasError?: boolean;
   } | null>(null);
 
-  // Load initial data
+  // Load initial data - only on first mount
   useEffect(() => {
     const loadAllData = async () => {
-      try {
+      // Only show initial loading spinner on first load
+      if (!hasLoadedOnce) {
         setIsInitialLoading(true);
-        setIsLoading(true);
+      }
+      setIsLoading(true);
 
+      try {
         // Batch all API calls together
         const [facultyResponse, coursesWithStats] = await Promise.all([
           // Fetch faculty
@@ -765,6 +772,9 @@ export function CourseDataTable({
 
         if (coursesWithStats.length > 0) {
           setTableData(coursesWithStats);
+        } else if (initialCourses.length === 0) {
+          // If no courses, still set empty array to show empty state
+          setTableData([]);
         }
       } catch (error) {
         console.error("Error loading initial data:", error);
@@ -772,16 +782,56 @@ export function CourseDataTable({
       } finally {
         setIsInitialLoading(false);
         setIsLoading(false);
+        setHasLoadedOnce(true);
       }
     };
 
-    loadAllData();
-  }, [initialCourses]);
+    // Only load on first mount
+    if (!hasLoadedOnce) {
+      loadAllData();
+    } else {
+      // If already loaded, just update tableData if initialCourses changed
+      // but don't show loading spinner
+      // Only update if initialCourses has actual data - don't clear existing data
+      if (initialCourses.length > 0) {
+        // Update tableData with new courses, preserving stats from existing courses
+        setTableData((prevData) => {
+          // Only update if we have new courses, don't clear if initialCourses is empty
+          if (prevData.length === 0 && initialCourses.length > 0) {
+            // If we have no data but initialCourses has data, use initialCourses
+            return initialCourses.map((newCourse) => ({
+              ...newCourse,
+              stats: {
+                passingRate: 0,
+                attendanceRate: 0,
+                totalStudents: 0,
+              },
+            }));
+          }
+          // Merge new courses with existing data, preserving stats
+          return initialCourses.map((newCourse) => {
+            const existingCourse = prevData.find((c) => c.id === newCourse.id);
+            return existingCourse
+              ? { ...newCourse, stats: existingCourse.stats }
+              : {
+                  ...newCourse,
+                  stats: {
+                    passingRate: 0,
+                    attendanceRate: 0,
+                    totalStudents: 0,
+                  },
+                };
+          });
+        });
+      }
+      // Don't clear tableData if initialCourses is empty - preserve existing data
+      // Only clear if we explicitly want to (e.g., on logout or data refresh)
+    }
+  }, [initialCourses, hasLoadedOnce]);
 
   const refreshTableData = useCallback(async (skipStats = false) => {
     try {
       setIsRefreshing(true);
-      setIsLoading(true);
       const data = await coursesService.getCourses();
 
       if (data && Array.isArray(data)) {
@@ -856,6 +906,23 @@ export function CourseDataTable({
     }
   }, []);
 
+  // Handle tab visibility - refresh data when tab becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && hasLoadedOnce) {
+        // When tab becomes visible, refresh data silently
+        refreshTableData(false).catch((error) => {
+          console.error("Error refreshing data on tab visibility:", error);
+        });
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [hasLoadedOnce, refreshTableData]);
+
   // Filter courses based on role and faculty (without search/status filters)
   const baseFilteredCourses = useMemo(() => {
     // For Academic Head with multiple faculty selection
@@ -907,6 +974,17 @@ export function CourseDataTable({
     return hours * 60 + (minutes || 0);
   };
 
+  // Get unique sections from baseFilteredCourses
+  const availableSections = useMemo(() => {
+    const sections = new Set<string>();
+    baseFilteredCourses.forEach((course) => {
+      if (course.section) {
+        sections.add(course.section);
+      }
+    });
+    return Array.from(sections).sort();
+  }, [baseFilteredCourses]);
+
   // Filter courses based on role and filters
   const filteredCourses = useMemo(() => {
     // Apply search and status filters to base filtered courses
@@ -919,6 +997,10 @@ export function CourseDataTable({
 
         const matchesStatus =
           statusFilter === "ALL" || course.status === statusFilter;
+
+        // Filter by section
+        const matchesSection =
+          sectionFilter.length === 0 || sectionFilter.includes(course.section);
 
         // Filter by day
         const matchesDay =
@@ -954,6 +1036,7 @@ export function CourseDataTable({
         return (
           matchesSearch &&
           matchesStatus &&
+          matchesSection &&
           matchesDay &&
           matchesRoom &&
           matchesStartTime &&
@@ -983,7 +1066,9 @@ export function CourseDataTable({
     baseFilteredCourses,
     searchQuery,
     statusFilter,
+    sectionFilter,
     dayFilter,
+    roomFilter,
     startTimeFilter,
     endTimeFilter,
     attendanceRateSort,
@@ -1218,120 +1303,147 @@ export function CourseDataTable({
   };
 
   // Export handler
-  const handleExport = useCallback(async () => {
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Courses");
+  const handleExport = useCallback(
+    async (exportFilter: "ALL" | "ACTIVE" | "ARCHIVED") => {
+      try {
+        // Filter courses based on export option
+        let coursesToExport: Course[];
+        if (exportFilter === "ALL") {
+          coursesToExport = baseFilteredCourses;
+        } else if (exportFilter === "ACTIVE") {
+          coursesToExport = baseFilteredCourses.filter(
+            (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+          );
+        } else {
+          coursesToExport = baseFilteredCourses.filter(
+            (c) => c.status === "ARCHIVED"
+          );
+        }
 
-      // Add title row
-      worksheet.mergeCells("A1:H1");
-      const titleRow = worksheet.getCell("A1");
-      titleRow.value = "COURSE MANAGEMENT DATA";
-      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-      titleRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      titleRow.alignment = { vertical: "middle", horizontal: "center" };
-      worksheet.getRow(1).height = 30;
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Courses");
 
-      // Add date row
-      worksheet.mergeCells("A2:H2");
-      const dateRow = worksheet.getCell("A2");
-      dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
-      dateRow.font = { italic: true, size: 11 };
-      dateRow.alignment = { vertical: "middle", horizontal: "center" };
-
-      worksheet.addRow([]);
-
-      // Add header row
-      const headerRow = worksheet.addRow([
-        "Course Code",
-        "Course Title",
-        "Room",
-        "Semester",
-        "Academic Year",
-        "Class Number",
-        "Section",
-        "Status",
-      ]);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
-      headerRow.height = 25;
-
-      headerRow.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
+        // Add title row
+        worksheet.mergeCells("A1:H1");
+        const titleRow = worksheet.getCell("A1");
+        titleRow.value = "COURSE MANAGEMENT DATA";
+        titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+        titleRow.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF124A69" },
         };
-      });
+        titleRow.alignment = { vertical: "middle", horizontal: "center" };
+        worksheet.getRow(1).height = 30;
 
-      // Add data rows
-      filteredCourses.forEach((course: Course) => {
-        const row = worksheet.addRow([
-          course.code,
-          course.title,
-          course.room,
-          course.semester,
-          course.academicYear,
-          course.classNumber.toString(),
-          course.section,
-          formatEnumValue(course.status),
+        // Add date row
+        worksheet.mergeCells("A2:H2");
+        const dateRow = worksheet.getCell("A2");
+        dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
+        dateRow.font = { italic: true, size: 11 };
+        dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+        worksheet.addRow([]);
+
+        // Add header row
+        const headerRow = worksheet.addRow([
+          "Course Code",
+          "Course Title",
+          "Room",
+          "Semester",
+          "Academic Year",
+          "Class Number",
+          "Section",
+          "Status",
         ]);
+        headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        headerRow.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF124A69" },
+        };
+        headerRow.alignment = { vertical: "middle", horizontal: "center" };
+        headerRow.height = 25;
 
-        row.eachCell((cell) => {
+        headerRow.eachCell((cell) => {
           cell.border = {
-            top: { style: "thin", color: { argb: "FFD3D3D3" } },
-            left: { style: "thin", color: { argb: "FFD3D3D3" } },
-            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
-            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
           };
-          cell.alignment = { vertical: "middle" };
         });
 
-        if (row.number % 2 === 0) {
-          row.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFF9FAFB" },
-          };
-        }
-      });
+        // Add data rows
+        coursesToExport.forEach((course: Course) => {
+          const row = worksheet.addRow([
+            course.code,
+            course.title,
+            course.room,
+            course.semester,
+            course.academicYear,
+            course.classNumber.toString(),
+            course.section,
+            formatEnumValue(course.status),
+          ]);
 
-      // Set column widths
-      worksheet.columns = [
-        { width: 15 },
-        { width: 35 },
-        { width: 12 },
-        { width: 18 },
-        { width: 18 },
-        { width: 15 },
-        { width: 12 },
-        { width: 15 },
-      ];
+          row.eachCell((cell) => {
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFD3D3D3" } },
+              left: { style: "thin", color: { argb: "FFD3D3D3" } },
+              bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+              right: { style: "thin", color: { argb: "FFD3D3D3" } },
+            };
+            cell.alignment = { vertical: "middle" };
+          });
 
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const filename = `courses_${new Date().toISOString().split("T")[0]}.xlsx`;
-      saveAs(blob, filename);
+          if (row.number % 2 === 0) {
+            row.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFF9FAFB" },
+            };
+          }
+        });
 
-      toast.success(`Successfully exported ${filteredCourses.length} courses`);
-      setShowExportPreview(false);
-    } catch (error) {
-      console.error("Export error:", error);
-      toast.error("Failed to export courses");
-    }
-  }, [filteredCourses]);
+        // Set column widths
+        worksheet.columns = [
+          { width: 15 },
+          { width: 35 },
+          { width: 12 },
+          { width: 18 },
+          { width: 18 },
+          { width: 15 },
+          { width: 12 },
+          { width: 15 },
+        ];
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const filterSuffix =
+          exportFilter === "ALL"
+            ? "all"
+            : exportFilter === "ACTIVE"
+            ? "active"
+            : "archived";
+        const filename = `courses_${filterSuffix}_${
+          new Date().toISOString().split("T")[0]
+        }.xlsx`;
+        saveAs(blob, filename);
+
+        toast.success(
+          `Successfully exported ${coursesToExport.length} ${filterSuffix} course(s)`
+        );
+        setShowExportPreview(false);
+      } catch (error) {
+        console.error("Export error:", error);
+        toast.error("Failed to export courses");
+      }
+    },
+    [baseFilteredCourses]
+  );
 
   // Import template handler
   const handleImportTemplate = useCallback(async () => {
@@ -1674,12 +1786,64 @@ export function CourseDataTable({
         ? existingCoursesResponse
         : existingCoursesResponse.courses || [];
 
-      for (const row of previewData) {
+      for (let rowIndex = 0; rowIndex < previewData.length; rowIndex++) {
+        const row = previewData[rowIndex];
         const code = row["Course Code"]?.trim().toUpperCase();
         const section = row["Section"]?.trim().toUpperCase() || "A";
-        const academicYear =
-          row["Academic Year"]?.trim() || new Date().getFullYear().toString();
-        const semester = row["Semester"]?.trim() || "1st Semester";
+        let academicYear = row["Academic Year"]?.trim() || "";
+        let semester = row["Semester"]?.trim() || "";
+        let room = row["Room"]?.trim() || "";
+
+        // Remove "Room:" prefix if present
+        room = room.replace(/^room:\s*/i, "").trim();
+
+        // Validation errors
+        const errors: string[] = [];
+
+        // Validate room
+        if (!room) {
+          errors.push("Room is required");
+        } else if (room.length > 15) {
+          errors.push("Room must be 15 characters or less");
+        }
+
+        // Validate semester
+        if (!semester) {
+          errors.push("Semester is required");
+        } else if (semester !== "1st Semester" && semester !== "2nd Semester") {
+          errors.push(
+            'Semester must be exactly "1st Semester" or "2nd Semester"'
+          );
+        }
+
+        // Validate academic year
+        if (!academicYear) {
+          errors.push("Academic Year is required");
+        } else if (!/^\d{4}-\d{4}$/.test(academicYear)) {
+          errors.push(
+            "Academic Year must be in format YYYY-YYYY (e.g., 2024-2025)"
+          );
+        } else {
+          const [firstYear, secondYear] = academicYear.split("-").map(Number);
+          if (firstYear >= secondYear) {
+            errors.push(
+              "First year must be less than second year (e.g., 2024-2025)"
+            );
+          } else if (secondYear - firstYear !== 1) {
+            errors.push(
+              "Academic year must have exactly 1 year difference (e.g., 2024-2025)"
+            );
+          }
+        }
+
+        // If there are validation errors, skip this course
+        if (errors.length > 0) {
+          toast.error(
+            `Row ${rowIndex + 1} (${code || "N/A"}): ${errors.join(", ")}`,
+            { duration: 5000 }
+          );
+          continue;
+        }
 
         // Check if course already exists in database
         const isDuplicate = existingCourses.some(
@@ -1693,7 +1857,13 @@ export function CourseDataTable({
         if (isDuplicate) {
           duplicates.push(`${code}-${section} (${academicYear} ${semester})`);
         } else {
-          validCourses.push(row);
+          // Use cleaned values
+          validCourses.push({
+            ...row,
+            Room: room.toUpperCase(),
+            Semester: semester,
+            "Academic Year": academicYear,
+          });
         }
       }
 
@@ -1773,6 +1943,7 @@ export function CourseDataTable({
 
     // Show loading state
     setIsRefreshing(true);
+    setIsLoading(true);
 
     // Small delay for visual feedback
     await new Promise((resolve) => setTimeout(resolve, 300));
@@ -1791,11 +1962,16 @@ export function CourseDataTable({
     // Also reset import status
     setShowImportStatus(false);
     setImportStatus(null);
+
+    // Ensure loading states are cleared
+    setIsLoading(false);
+    setIsRefreshing(false);
   }, [refreshTableData, onCourseAdded, scheduleDialogMode]);
 
   // Handle filter apply
   const handleApplyFilters = () => {
     setFacultyFilter(tempFacultyFilter);
+    setSectionFilter(tempSectionFilter);
     setDayFilter(tempDayFilter);
     setRoomFilter(tempRoomFilter);
     setStartTimeFilter(tempStartTimeFilter);
@@ -1807,9 +1983,20 @@ export function CourseDataTable({
 
   // Reset temp filters when sheet opens
   const handleFilterSheetOpen = (open: boolean) => {
-    setIsFilterSheetOpen(open);
     if (open) {
+      // When opening, set temp filters to current filter values
       setTempFacultyFilter(facultyFilter);
+      setTempSectionFilter(sectionFilter);
+      setTempDayFilter(dayFilter);
+      setTempRoomFilter(roomFilter);
+      setTempStartTimeFilter(startTimeFilter);
+      setTempEndTimeFilter(endTimeFilter);
+      setTempAttendanceRateSort(attendanceRateSort);
+      setTempPassingRateSort(passingRateSort);
+    } else {
+      // When closing without applying, revert temp filters to current filter values
+      setTempFacultyFilter(facultyFilter);
+      setTempSectionFilter(sectionFilter);
       setTempDayFilter(dayFilter);
       setTempRoomFilter(roomFilter);
       setTempStartTimeFilter(startTimeFilter);
@@ -1817,6 +2004,21 @@ export function CourseDataTable({
       setTempAttendanceRateSort(attendanceRateSort);
       setTempPassingRateSort(passingRateSort);
     }
+    setIsFilterSheetOpen(open);
+  };
+
+  // Handle cancel - revert temp filters and close sheet
+  const handleCancelFilters = () => {
+    // Revert temp filters to current filter values
+    setTempFacultyFilter(facultyFilter);
+    setTempSectionFilter(sectionFilter);
+    setTempDayFilter(dayFilter);
+    setTempRoomFilter(roomFilter);
+    setTempStartTimeFilter(startTimeFilter);
+    setTempEndTimeFilter(endTimeFilter);
+    setTempAttendanceRateSort(attendanceRateSort);
+    setTempPassingRateSort(passingRateSort);
+    setIsFilterSheetOpen(false);
   };
 
   // Check if filters are active and count them
@@ -1828,6 +2030,7 @@ export function CourseDataTable({
     ) {
       count++;
     }
+    if (sectionFilter.length > 0) count++;
     if (dayFilter !== "ALL") count++;
     if (roomFilter !== "") count++;
     if (startTimeFilter !== "") count++;
@@ -1873,6 +2076,15 @@ export function CourseDataTable({
         activeFilters.push(
           `for ${selectedFacultyNames.length} selected faculty`
         );
+      }
+    }
+
+    // Check section filter
+    if (sectionFilter.length > 0) {
+      if (sectionFilter.length === 1) {
+        activeFilters.push(`in section "${sectionFilter[0]}"`);
+      } else {
+        activeFilters.push(`in ${sectionFilter.length} selected sections`);
       }
     }
 
@@ -1963,300 +2175,404 @@ export function CourseDataTable({
           </h1>
 
           <div className="space-y-4 sm:space-y-5 md:space-y-6">
-            <div className="flex flex-col gap-3 sm:gap-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-                {/* Search Bar */}
-                <div className="relative w-[300px]">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search courses..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 sm:h-9 text-sm sm:text-base "
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
-                  {/* Filter Button */}
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsFilterSheetOpen(true)}
-                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
-                  >
-                    <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xl:inline">Filter</span>
-                    {hasActiveFilters && (
-                      <>
-                        <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center 2xl:hidden">
-                          {activeFilterCount > 3 ? "3" : activeFilterCount}
-                        </span>
-                        <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 items-center justify-center hidden 2xl:flex">
-                          {activeFilterCount}
-                        </span>
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowSettingsDialog(true)}
-                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                  >
-                    <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xl:inline">Archive</span>
-                  </Button>
-                  {permissions.canExportData && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowExportPreview(true)}
-                      className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                    >
-                      <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden xl:inline">Export</span>
-                    </Button>
-                  )}
-                  {permissions.canImportCourses && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowImportPreview(true)}
-                      className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                    >
-                      <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden xl:inline">Import</span>
-                    </Button>
-                  )}
-                  {permissions.canCreateCourse && (
-                    <CourseSheet
-                      mode="add"
-                      onSuccess={async (courseData) => {
-                        // Store course data and open schedule dialog
-                        // Course is NOT created yet - waiting for schedules
-                        if (courseData) {
-                          setPendingCourseData(courseData);
-                          setImportedCoursesForSchedule([courseData]);
-                          setScheduleDialogMode("create");
-                          setShowScheduleAssignment(true);
-                        }
-                      }}
-                      faculties={faculties}
-                      userId={userId}
-                      userRole={userRole}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-1 sm:gap-2 border-b overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-              <button
-                onClick={() => setStatusFilter("ALL")}
-                className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                  statusFilter === "ALL"
-                    ? "text-[#124A69] border-b-2 border-[#124A69]"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                All ({baseFilteredCourses.length})
-              </button>
-
-              <button
-                onClick={() => setStatusFilter("ACTIVE")}
-                className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                  statusFilter === "ACTIVE"
-                    ? "text-[#124A69] border-b-2 border-[#124A69]"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Active (
-                {
-                  baseFilteredCourses.filter((c) => c.status === "ACTIVE")
-                    .length
-                }
-                )
-              </button>
-
-              <button
-                onClick={() => setStatusFilter("ARCHIVED")}
-                className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                  statusFilter === "ARCHIVED"
-                    ? "text-[#124A69] border-b-2 border-[#124A69]"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
-              >
-                Archived (
-                {
-                  baseFilteredCourses.filter((c) => c.status === "ARCHIVED")
-                    .length
-                }
-                )
-              </button>
-            </div>
-
-            {isLoading || isRefreshing ? (
-              <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
-                  {Array.from({ length: itemsPerPage }).map((_, index) => (
-                    <CourseCardSkeleton
-                      key={index}
-                      itemsPerPage={itemsPerPage}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : filteredCourses.length > 0 ? (
-              <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
-                  {paginatedCourses.map((course) => (
-                    <CourseCard
-                      key={course.id}
-                      course={course}
-                      onEdit={handleEditCourse}
-                      onAddSchedule={handleAddSchedule}
-                      onViewDetails={handleViewDetails}
-                      onNavigate={handleCourseNavigate}
-                      itemsPerPage={itemsPerPage}
-                    />
-                  ))}
-                </div>
-
-                {totalPages > 1 && (
-                  <div className="flex flex-col sm:flex-row -mt-2 sm:-mt-3 items-center justify-between w-full gap-3 sm:gap-0">
-                    <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left w-[300px]">
-                      Showing{" "}
-                      {Math.min(
-                        (currentPage - 1) * itemsPerPage + 1,
-                        filteredCourses.length
+            {tableData.length > 0 ? (
+              <>
+                <div className="flex flex-col gap-3 sm:gap-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+                    {/* Search Bar */}
+                    <div className="relative w-[300px]">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Search courses..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 h-10 sm:h-9 text-sm sm:text-base "
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
+                      {/* Filter Button */}
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsFilterSheetOpen(true)}
+                        className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
+                      >
+                        <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="hidden xl:inline">Filter</span>
+                        {hasActiveFilters && (
+                          <>
+                            <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center 2xl:hidden">
+                              {activeFilterCount > 3 ? "3" : activeFilterCount}
+                            </span>
+                            <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 items-center justify-center hidden 2xl:flex">
+                              {activeFilterCount}
+                            </span>
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowSettingsDialog(true)}
+                        className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                      >
+                        <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="hidden xl:inline">Archive</span>
+                      </Button>
+                      {permissions.canExportData && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowExportPreview(true)}
+                          className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                        >
+                          <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span className="hidden xl:inline">Export</span>
+                        </Button>
                       )}
-                      –
-                      {Math.min(
-                        currentPage * itemsPerPage,
-                        filteredCourses.length
-                      )}{" "}
-                      of {filteredCourses.length} courses
-                    </span>
-
-                    <Pagination className="justify-end">
-                      <PaginationContent className="flex gap-1">
-                        <PaginationItem>
-                          <PaginationPrevious
-                            onClick={() =>
-                              currentPage > 1 &&
-                              handlePageChange(currentPage - 1)
+                      {permissions.canImportCourses && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowImportPreview(true)}
+                          className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                        >
+                          <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span className="hidden xl:inline">Import</span>
+                        </Button>
+                      )}
+                      {permissions.canCreateCourse && (
+                        <CourseSheet
+                          mode="add"
+                          onSuccess={async (courseData) => {
+                            // Store course data and open schedule dialog
+                            // Course is NOT created yet - waiting for schedules
+                            if (courseData) {
+                              setPendingCourseData(courseData);
+                              setImportedCoursesForSchedule([courseData]);
+                              setScheduleDialogMode("create");
+                              setShowScheduleAssignment(true);
                             }
-                            className={`min-h-[44px] sm:min-h-0 ${
-                              currentPage === 1
-                                ? "pointer-events-none opacity-50"
-                                : "cursor-pointer"
-                            }`}
-                          />
-                        </PaginationItem>
+                          }}
+                          faculties={faculties}
+                          userId={userId}
+                          userRole={userRole}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-                        {(() => {
-                          const pages: number[] = [];
+                <div className="flex gap-1 sm:gap-2 border-b overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+                  <button
+                    onClick={() => setStatusFilter("ALL")}
+                    className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                      statusFilter === "ALL"
+                        ? "text-[#124A69] border-b-2 border-[#124A69]"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    All ({baseFilteredCourses.length})
+                  </button>
 
-                          // If total pages is 5 or less, show all pages
-                          if (totalPages <= 5) {
-                            for (let i = 1; i <= totalPages; i++) {
-                              pages.push(i);
-                            }
-                          } else {
-                            // Always show first 2 pages
-                            pages.push(1, 2);
+                  <button
+                    onClick={() => setStatusFilter("ACTIVE")}
+                    className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                      statusFilter === "ACTIVE"
+                        ? "text-[#124A69] border-b-2 border-[#124A69]"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Active (
+                    {
+                      baseFilteredCourses.filter((c) => c.status === "ACTIVE")
+                        .length
+                    }
+                    )
+                  </button>
 
-                            // Determine which pages to show around current
-                            const showAroundCurrent: number[] = [];
-                            if (
-                              currentPage > 2 &&
-                              currentPage < totalPages - 1
-                            ) {
-                              // Show current-1, current, current+1 if in middle
-                              showAroundCurrent.push(
-                                currentPage - 1,
-                                currentPage,
-                                currentPage + 1
-                              );
-                            } else if (currentPage <= 2) {
-                              // If current is 1 or 2, show 3, 4
-                              showAroundCurrent.push(3, 4);
-                            } else if (currentPage >= totalPages - 1) {
-                              // If current is near end, show last-3, last-2, last-1
-                              showAroundCurrent.push(
-                                totalPages - 3,
-                                totalPages - 2,
-                                totalPages - 1
-                              );
-                            }
+                  <button
+                    onClick={() => setStatusFilter("ARCHIVED")}
+                    className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                      statusFilter === "ARCHIVED"
+                        ? "text-[#124A69] border-b-2 border-[#124A69]"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Archived (
+                    {
+                      baseFilteredCourses.filter((c) => c.status === "ARCHIVED")
+                        .length
+                    }
+                    )
+                  </button>
+                </div>
 
-                            // Remove duplicates and sort
-                            const uniquePages = Array.from(
-                              new Set([
-                                ...pages,
-                                ...showAroundCurrent,
-                                totalPages,
-                              ])
-                            ).sort((a, b) => a - b) as number[];
+                {isLoading || isRefreshing ? (
+                  <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
+                      {Array.from({ length: itemsPerPage }).map((_, index) => (
+                        <CourseCardSkeleton
+                          key={index}
+                          itemsPerPage={itemsPerPage}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : filteredCourses.length > 0 ? (
+                  <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
+                      {paginatedCourses.map((course) => (
+                        <CourseCard
+                          key={course.id}
+                          course={course}
+                          onEdit={handleEditCourse}
+                          onAddSchedule={handleAddSchedule}
+                          onViewDetails={handleViewDetails}
+                          onNavigate={handleCourseNavigate}
+                          itemsPerPage={itemsPerPage}
+                        />
+                      ))}
+                    </div>
 
-                            // Build final array with ellipsis
-                            const finalPages: (number | string)[] = [];
-                            for (let i = 0; i < uniquePages.length; i++) {
-                              const page = uniquePages[i];
-                              if (i > 0 && page - uniquePages[i - 1] > 1) {
-                                finalPages.push("…");
-                              }
-                              finalPages.push(page);
-                            }
+                    {totalPages > 1 && (
+                      <div className="flex flex-col sm:flex-row -mt-2 sm:-mt-3 items-center justify-between w-full gap-3 sm:gap-0">
+                        <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left w-[300px]">
+                          Showing{" "}
+                          {Math.min(
+                            (currentPage - 1) * itemsPerPage + 1,
+                            filteredCourses.length
+                          )}
+                          –
+                          {Math.min(
+                            currentPage * itemsPerPage,
+                            filteredCourses.length
+                          )}{" "}
+                          of {filteredCourses.length} courses
+                        </span>
 
-                            return finalPages;
-                          }
-
-                          return pages;
-                        })().map((item, i) => (
-                          <PaginationItem key={i}>
-                            {item === "…" ? (
-                              <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
-                                …
-                              </span>
-                            ) : (
-                              <PaginationLink
-                                onClick={() => handlePageChange(item as number)}
-                                isActive={currentPage === item}
-                                className={`hidden sm:inline-flex min-h-[44px] sm:min-h-0 ${
-                                  currentPage === item
-                                    ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
-                                    : ""
+                        <Pagination className="justify-end">
+                          <PaginationContent className="flex gap-1">
+                            <PaginationItem>
+                              <PaginationPrevious
+                                onClick={() =>
+                                  currentPage > 1 &&
+                                  handlePageChange(currentPage - 1)
+                                }
+                                className={`min-h-[44px] sm:min-h-0 ${
+                                  currentPage === 1
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
                                 }`}
-                              >
-                                {item}
-                              </PaginationLink>
-                            )}
-                          </PaginationItem>
-                        ))}
+                              />
+                            </PaginationItem>
 
-                        <PaginationItem>
-                          <PaginationNext
-                            onClick={() =>
-                              currentPage < totalPages &&
-                              handlePageChange(currentPage + 1)
-                            }
-                            className={`min-h-[44px] sm:min-h-0 ${
-                              currentPage === totalPages
-                                ? "pointer-events-none opacity-50"
-                                : "cursor-pointer"
-                            }`}
-                          />
-                        </PaginationItem>
-                      </PaginationContent>
-                    </Pagination>
+                            {(() => {
+                              const pages: number[] = [];
+
+                              // If total pages is 5 or less, show all pages
+                              if (totalPages <= 5) {
+                                for (let i = 1; i <= totalPages; i++) {
+                                  pages.push(i);
+                                }
+                              } else {
+                                // Always show first 2 pages
+                                pages.push(1, 2);
+
+                                // Determine which pages to show around current
+                                const showAroundCurrent: number[] = [];
+                                if (
+                                  currentPage > 2 &&
+                                  currentPage < totalPages - 1
+                                ) {
+                                  // Show current-1, current, current+1 if in middle
+                                  showAroundCurrent.push(
+                                    currentPage - 1,
+                                    currentPage,
+                                    currentPage + 1
+                                  );
+                                } else if (currentPage <= 2) {
+                                  // If current is 1 or 2, show 3, 4
+                                  showAroundCurrent.push(3, 4);
+                                } else if (currentPage >= totalPages - 1) {
+                                  // If current is near end, show last-3, last-2, last-1
+                                  showAroundCurrent.push(
+                                    totalPages - 3,
+                                    totalPages - 2,
+                                    totalPages - 1
+                                  );
+                                }
+
+                                // Remove duplicates and sort
+                                const uniquePages = Array.from(
+                                  new Set([
+                                    ...pages,
+                                    ...showAroundCurrent,
+                                    totalPages,
+                                  ])
+                                ).sort((a, b) => a - b) as number[];
+
+                                // Build final array with ellipsis
+                                const finalPages: (number | string)[] = [];
+                                for (let i = 0; i < uniquePages.length; i++) {
+                                  const page = uniquePages[i];
+                                  if (i > 0 && page - uniquePages[i - 1] > 1) {
+                                    finalPages.push("…");
+                                  }
+                                  finalPages.push(page);
+                                }
+
+                                return finalPages;
+                              }
+
+                              return pages;
+                            })().map((item, i) => (
+                              <PaginationItem key={i}>
+                                {item === "…" ? (
+                                  <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                                    …
+                                  </span>
+                                ) : (
+                                  <PaginationLink
+                                    onClick={() =>
+                                      handlePageChange(item as number)
+                                    }
+                                    isActive={currentPage === item}
+                                    className={`hidden sm:inline-flex min-h-[44px] sm:min-h-0 ${
+                                      currentPage === item
+                                        ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                                        : ""
+                                    }`}
+                                  >
+                                    {item}
+                                  </PaginationLink>
+                                )}
+                              </PaginationItem>
+                            ))}
+
+                            <PaginationItem>
+                              <PaginationNext
+                                onClick={() =>
+                                  currentPage < totalPages &&
+                                  handlePageChange(currentPage + 1)
+                                }
+                                className={`min-h-[44px] sm:min-h-0 ${
+                                  currentPage === totalPages
+                                    ? "pointer-events-none opacity-50"
+                                    : "cursor-pointer"
+                                }`}
+                              />
+                            </PaginationItem>
+                          </PaginationContent>
+                        </Pagination>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-48 sm:h-64 text-center px-4">
+                    <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2 sm:mb-3" />
+                    <p className="text-sm sm:text-base text-gray-600 font-medium">
+                      {getEmptyStateMessage()}
+                    </p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                      {getEmptyStateSubMessage()}
+                    </p>
                   </div>
                 )}
-              </div>
+              </>
             ) : (
-              <div className="flex flex-col items-center justify-center h-48 sm:h-64 text-center px-4">
-                <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2 sm:mb-3" />
-                <p className="text-sm sm:text-base text-gray-600 font-medium">
-                  {getEmptyStateMessage()}
-                </p>
-                <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                  {getEmptyStateSubMessage()}
-                </p>
+              // Empty state when there are no courses at all
+              <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
+                <style>{`
+                  @keyframes tumbleweedHorizontal {
+                    0% {
+                      left: -100px;
+                    }
+                    100% {
+                      left: calc(100% + 20px);
+                    }
+                  }
+                  @keyframes tumbleweedBounce {
+                    0% {
+                      transform: translateY(0px);
+                    }
+                    25% {
+                      transform: translateY(-12px);
+                    }
+                    50% {
+                      transform: translateY(0px);
+                    }
+                    75% {
+                      transform: translateY(-10px);
+                    }
+                    100% {
+                      transform: translateY(0px);
+                    }
+                  }
+                  @keyframes tumbleweedRotate {
+                    from {
+                      transform: rotate(0deg);
+                    }
+                    to {
+                      transform: rotate(360deg);
+                    }
+                  }
+                  .tumbleweed-container {
+                    animation: tumbleweedHorizontal 8s linear infinite,
+                               tumbleweedBounce 1.6s ease-in-out infinite;
+                  }
+                  .tumbleweed-svg {
+                    animation: tumbleweedRotate 4s linear infinite;
+                  }
+                `}</style>
+                <div className="text-center px-4 pb-8 z-10 relative">
+                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                    It seems empty here
+                  </h3>
+                  <p className="text-gray-500 mb-4">
+                    Start by adding courses to get started
+                  </p>
+                  <div className="flex items-center gap-3 justify-center flex-wrap">
+                    {permissions.canCreateCourse && (
+                      <CourseSheet
+                        mode="add"
+                        onSuccess={async (courseData) => {
+                          if (courseData) {
+                            setPendingCourseData(courseData);
+                            setImportedCoursesForSchedule([courseData]);
+                            setScheduleDialogMode("create");
+                            setShowScheduleAssignment(true);
+                          }
+                        }}
+                        faculties={faculties}
+                        userId={userId}
+                        userRole={userRole}
+                      />
+                    )}
+                    {permissions.canImportCourses && (
+                      <>
+                        <span className="text-gray-500">or</span>
+                        <Button
+                          onClick={() => setShowImportPreview(true)}
+                          variant="outline"
+                          className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2"
+                        >
+                          <Upload className="w-4 h-4" />
+                          Import Courses
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {/* Tumbleweed Animation */}
+                <div className="relative w-full flex items-end">
+                  {/* Outer container: horizontal movement + vertical bounce */}
+                  <div className="absolute bottom-0 tumbleweed-container">
+                    {/* Inner SVG: rotation only */}
+                    <img
+                      src="/svg/tumbleweed.svg"
+                      alt="Tumbleweed"
+                      className="w-20 h-20 tumbleweed-svg"
+                      style={{ filter: "brightness(0.8)" }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -2265,6 +2581,7 @@ export function CourseDataTable({
               open={showExportPreview}
               onOpenChange={setShowExportPreview}
               courses={filteredCourses}
+              allCourses={baseFilteredCourses}
               onExport={handleExport}
             />
 
@@ -2344,9 +2661,9 @@ export function CourseDataTable({
                 side="right"
                 className="w-[340px] sm:w-[400px] p-0 flex flex-col"
               >
-                <div className="p-6 border-b flex-shrink-0">
+                <div className="p-6 border-b flex-shrink-0 bg-[#124A69]/5">
                   <SheetHeader>
-                    <SheetTitle className="text-xl font-semibold">
+                    <SheetTitle className="text-xl font-semibold text-[#124A69]">
                       Filter Options
                     </SheetTitle>
                   </SheetHeader>
@@ -2364,9 +2681,80 @@ export function CourseDataTable({
                     </div>
                   )}
 
+                  {/* Filter by Section */}
+                  {availableSections.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-[#124A69]">
+                        Filter by Section
+                      </Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto border-2 border-[#124A69]/20 rounded-md p-3 bg-gray-50/50">
+                        <div className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors">
+                          <Checkbox
+                            id="section-all"
+                            checked={
+                              tempSectionFilter.length === 0 ||
+                              tempSectionFilter.length ===
+                                availableSections.length
+                            }
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setTempSectionFilter(availableSections);
+                              } else {
+                                setTempSectionFilter([]);
+                              }
+                            }}
+                            className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
+                          />
+                          <Label
+                            htmlFor="section-all"
+                            className="text-sm font-medium cursor-pointer text-[#124A69]"
+                          >
+                            All Sections ({availableSections.length})
+                          </Label>
+                        </div>
+                        {availableSections.map((section) => (
+                          <div
+                            key={section}
+                            className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
+                          >
+                            <Checkbox
+                              id={`section-${section}`}
+                              checked={tempSectionFilter.includes(section)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setTempSectionFilter((prev) => [
+                                    ...prev,
+                                    section,
+                                  ]);
+                                } else {
+                                  setTempSectionFilter((prev) =>
+                                    prev.filter((s) => s !== section)
+                                  );
+                                }
+                              }}
+                              className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
+                            />
+                            <Label
+                              htmlFor={`section-${section}`}
+                              className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                            >
+                              {section}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Select one or more sections to filter courses
+                      </p>
+                    </div>
+                  )}
+
                   {/* Filter by Day */}
                   <div className="space-y-2">
-                    <Label htmlFor="day-filter" className="text-sm font-medium">
+                    <Label
+                      htmlFor="day-filter"
+                      className="text-sm font-medium text-[#124A69]"
+                    >
                       Filter by Day
                     </Label>
                     <Select
@@ -2393,7 +2781,7 @@ export function CourseDataTable({
                   <div className="space-y-2">
                     <Label
                       htmlFor="room-filter"
-                      className="text-sm font-medium"
+                      className="text-sm font-medium text-[#124A69]"
                     >
                       Filter by Room
                     </Label>
@@ -2413,7 +2801,7 @@ export function CourseDataTable({
                   {/* Filter by Start Time and End Time */}
                   <div className="flex gap-4">
                     <div className="flex-1 space-y-2">
-                      <Label className="text-sm font-medium">
+                      <Label className="text-sm font-medium text-[#124A69]">
                         Filter by Start Time
                       </Label>
                       <div className="flex items-center gap-2">
@@ -2441,7 +2829,7 @@ export function CourseDataTable({
                       </p>
                     </div>
                     <div className="flex-1 space-y-2">
-                      <Label className="text-sm font-medium">
+                      <Label className="text-sm font-medium text-[#124A69]">
                         Filter by End Time
                       </Label>
                       <div className="flex items-center gap-2">
@@ -2474,7 +2862,7 @@ export function CourseDataTable({
                   <div className="space-y-2">
                     <Label
                       htmlFor="attendance-rate-sort"
-                      className="text-sm font-medium"
+                      className="text-sm font-medium text-[#124A69]"
                     >
                       Sort by Attendance Rate
                     </Label>
@@ -2506,7 +2894,7 @@ export function CourseDataTable({
                   <div className="space-y-2">
                     <Label
                       htmlFor="passing-rate-sort"
-                      className="text-sm font-medium"
+                      className="text-sm font-medium text-[#124A69]"
                     >
                       Sort by Passing Rate
                     </Label>
@@ -2531,12 +2919,12 @@ export function CourseDataTable({
                     </Select>
                   </div>
                 </div>
-                <div className="p-6 border-t bg-white flex-shrink-0">
+                <div className="p-6 border-t bg-[#124A69]/5 flex-shrink-0">
                   <div className="flex gap-3">
                     <Button
                       variant="outline"
-                      onClick={() => setIsFilterSheetOpen(false)}
-                      className="flex-1"
+                      onClick={handleCancelFilters}
+                      className="flex-1 border-[#124A69]/30 text-[#124A69] hover:bg-[#124A69]/10"
                     >
                       Cancel
                     </Button>

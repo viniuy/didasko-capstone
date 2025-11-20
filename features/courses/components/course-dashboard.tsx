@@ -222,198 +222,6 @@ export function CourseDashboard({
     }
   };
 
-  const toggleExportOption = (key: keyof typeof exportOptions) => {
-    setExportOptions((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
-  const selectAllBasicInfo = () => {
-    setExportOptions((prev) => ({
-      ...prev,
-      studentId: true,
-      firstName: true,
-      lastName: true,
-      middleInitial: true,
-    }));
-  };
-
-  const selectAllGrades = () => {
-    setExportOptions((prev) => ({
-      ...prev,
-      prelims: true,
-      midterm: true,
-      preFinals: true,
-      finals: true,
-    }));
-  };
-
-  const handleExport = async () => {
-    if (!courseInfo) return;
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Students");
-
-      // Title row
-      worksheet.mergeCells("A1:D1");
-      const titleRow = worksheet.getCell("A1");
-      titleRow.value = `${courseInfo.code} - ${courseInfo.title}`;
-      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-      titleRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      titleRow.alignment = { vertical: "middle", horizontal: "center" };
-      worksheet.getRow(1).height = 30;
-
-      // Info row
-      worksheet.mergeCells("A2:D2");
-      const infoRow = worksheet.getCell("A2");
-      infoRow.value = `Section ${courseInfo.section} • ${courseInfo.room} • ${courseInfo.semester} ${courseInfo.academicYear}`;
-      infoRow.font = { italic: true, size: 11 };
-      infoRow.alignment = { vertical: "middle", horizontal: "center" };
-
-      // Date row
-      worksheet.mergeCells("A3:D3");
-      const dateRow = worksheet.getCell("A3");
-      dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
-      dateRow.font = { italic: true, size: 10, color: { argb: "FF666666" } };
-      dateRow.alignment = { vertical: "middle", horizontal: "center" };
-
-      worksheet.addRow([]);
-
-      // Build header row based on selected options
-      const headers = [];
-      const columnWidths = [];
-
-      if (exportOptions.studentId) {
-        headers.push("Student ID");
-        columnWidths.push({ width: 15 });
-      }
-      if (exportOptions.lastName) {
-        headers.push("Last Name");
-        columnWidths.push({ width: 20 });
-      }
-      if (exportOptions.firstName) {
-        headers.push("First Name");
-        columnWidths.push({ width: 20 });
-      }
-      if (exportOptions.middleInitial) {
-        headers.push("Middle Initial");
-        columnWidths.push({ width: 15 });
-      }
-      if (exportOptions.attendance) {
-        headers.push("Attendance Rate");
-        columnWidths.push({ width: 18 });
-      }
-      if (exportOptions.prelims) {
-        headers.push("Prelims");
-        columnWidths.push({ width: 12 });
-      }
-      if (exportOptions.midterm) {
-        headers.push("Midterm");
-        columnWidths.push({ width: 12 });
-      }
-      if (exportOptions.preFinals) {
-        headers.push("Pre-Finals");
-        columnWidths.push({ width: 12 });
-      }
-      if (exportOptions.finals) {
-        headers.push("Finals");
-        columnWidths.push({ width: 12 });
-      }
-
-      const headerRow = worksheet.addRow(headers);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
-      };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
-      headerRow.height = 25;
-
-      headerRow.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
-
-      // Data rows
-      tableData.forEach((student, index) => {
-        const rowData = [];
-
-        if (exportOptions.studentId) rowData.push(student.studentId);
-        if (exportOptions.lastName) rowData.push(student.lastName);
-        if (exportOptions.firstName) rowData.push(student.firstName);
-        if (exportOptions.middleInitial)
-          rowData.push(student.middleInitial || "");
-
-        if (exportOptions.attendance) {
-          const records = student.attendanceRecords || [];
-          const present = records.filter((r) => r.status === "PRESENT").length;
-          const rate =
-            records.length > 0
-              ? `${Math.round((present / records.length) * 100)}%`
-              : "N/A";
-          rowData.push(rate);
-        }
-
-        if (exportOptions.prelims)
-          rowData.push(student.termGrades?.prelims?.numericGrade || "");
-        if (exportOptions.midterm)
-          rowData.push(student.termGrades?.midterm?.numericGrade || "");
-        if (exportOptions.preFinals)
-          rowData.push(student.termGrades?.preFinals?.numericGrade || "");
-        if (exportOptions.finals)
-          rowData.push(student.termGrades?.finals?.numericGrade || "");
-
-        const row = worksheet.addRow(rowData);
-
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFD3D3D3" } },
-            left: { style: "thin", color: { argb: "FFD3D3D3" } },
-            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
-            right: { style: "thin", color: { argb: "FFD3D3D3" } },
-          };
-          cell.alignment = { vertical: "middle" };
-        });
-
-        if ((index + 1) % 2 === 0) {
-          row.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFF9FAFB" },
-          };
-        }
-      });
-
-      // Set column widths
-      worksheet.columns = columnWidths;
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const filename = `${courseInfo.code}_students_${
-        new Date().toISOString().split("T")[0]
-      }.xlsx`;
-      saveAs(blob, filename);
-
-      toast.success(`Successfully exported ${tableData.length} students`);
-      setShowExportDialog(false);
-    } catch (error) {
-      console.error("Export error:", error);
-      toast.error("Export failed");
-    }
-  };
-
   const handleBackNavigation = () => {
     setIsRedirecting(true);
     setTimeout(() => {
@@ -469,7 +277,7 @@ export function CourseDashboard({
                 {courseInfo.code} - {courseInfo.title}
               </h1>
               <p className="text-sm text-gray-600 mt-1">
-                Section {courseInfo.section} • {courseInfo.room} •{" "}
+                Section: {courseInfo.section} • Room: {courseInfo.room} •{" "}
                 {courseInfo.semester} • {courseInfo.academicYear}
               </p>
             </div>
@@ -477,65 +285,67 @@ export function CourseDashboard({
         </div>
 
         {/* Search and Action Buttons - Above tabs */}
-        <div className="flex gap-2 flex-wrap justify-between">
-          <div className="relative w-full sm:w-[400px]">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search students..."
-              value={globalSearchQuery}
-              onChange={(e) => {
-                setGlobalSearchQuery(e.target.value);
-                table.getColumn("lastName")?.setFilterValue(e.target.value);
-              }}
-              className="pl-9"
-            />
+        {tableData.length > 0 && (
+          <div className="flex gap-2 flex-wrap justify-between">
+            <div className="relative w-full sm:w-[400px]">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search students..."
+                value={globalSearchQuery}
+                onChange={(e) => {
+                  setGlobalSearchQuery(e.target.value);
+                  table.getColumn("lastName")?.setFilterValue(e.target.value);
+                }}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setShowExportDialog(true)}
+                className={isSmallScreen ? "" : "gap-2"}
+                size={isSmallScreen ? "icon" : "default"}
+              >
+                <Download className="w-4 h-4" />
+                {!isSmallScreen && <span>Export</span>}
+              </Button>
+              <Button
+                onClick={() => setShowImportDialog(true)}
+                variant="outline"
+                className={`${
+                  isSmallScreen ? "" : "gap-2"
+                } border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white`}
+                size={isSmallScreen ? "icon" : "default"}
+              >
+                <Upload className="w-4 h-4" />
+                {!isSmallScreen && <span>Import Students</span>}
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowAddSheet(true);
+                }}
+                className={`${
+                  isSmallScreen ? "" : "gap-2"
+                } bg-[#124A69] hover:bg-[#0D3A54] text-white`}
+                size={isSmallScreen ? "icon" : "default"}
+              >
+                <Users className="w-4 h-4" />
+                {!isSmallScreen && <span>Add Student</span>}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowRemoveSheet(true)}
+                className={`${
+                  isSmallScreen ? "" : "gap-2"
+                } border-red-500 text-red-600 hover:bg-red-50`}
+                size={isSmallScreen ? "icon" : "default"}
+              >
+                <UserX className="w-4 h-4" />
+                {!isSmallScreen && <span>Remove Student</span>}
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={() => setShowExportDialog(true)}
-              className={isSmallScreen ? "" : "gap-2"}
-              size={isSmallScreen ? "icon" : "default"}
-            >
-              <Download className="w-4 h-4" />
-              {!isSmallScreen && <span>Export</span>}
-            </Button>
-            <Button
-              onClick={() => setShowImportDialog(true)}
-              variant="outline"
-              className={`${
-                isSmallScreen ? "" : "gap-2"
-              } border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white`}
-              size={isSmallScreen ? "icon" : "default"}
-            >
-              <Upload className="w-4 h-4" />
-              {!isSmallScreen && <span>Import Students</span>}
-            </Button>
-            <Button
-              onClick={() => {
-                setShowAddSheet(true);
-              }}
-              className={`${
-                isSmallScreen ? "" : "gap-2"
-              } bg-[#124A69] hover:bg-[#0D3A54] text-white`}
-              size={isSmallScreen ? "icon" : "default"}
-            >
-              <Users className="w-4 h-4" />
-              {!isSmallScreen && <span>Add Student</span>}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setShowRemoveSheet(true)}
-              className={`${
-                isSmallScreen ? "" : "gap-2"
-              } border-red-500 text-red-600 hover:bg-red-50`}
-              size={isSmallScreen ? "icon" : "default"}
-            >
-              <UserX className="w-4 h-4" />
-              {!isSmallScreen && <span>Remove Student</span>}
-            </Button>
-          </div>
-        </div>
+        )}
 
         {/* Main Content Tabs */}
         <Tabs
@@ -555,62 +365,154 @@ export function CourseDashboard({
             value="overview"
             className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
           >
-            <div className="flex-shrink-0">
-              <AttendanceLegend />
-            </div>
+            {tableData.length > 0 && (
+              <div className="flex-shrink-0">
+                <AttendanceLegend />
+              </div>
+            )}
 
-            <div
-              className="rounded-md border overflow-auto flex-1 min-h-[200px] mb-4"
-              style={{
-                height: "auto",
-                maxHeight: "100%",
-                alignSelf: "stretch",
-              }}
-            >
-              <Table>
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows?.length ? (
-                    table.getRowModel().rows.map((row) => (
-                      <TableRow key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
-                          </TableCell>
+            {tableData.length === 0 ? (
+              <>
+                <style>{`
+                  @keyframes tumbleweedHorizontal {
+                    0% {
+                      left: -100px;
+                    }
+                    100% {
+                      left: calc(100% + 20px);
+                    }
+                  }
+                  @keyframes tumbleweedBounce {
+                    0% {
+                      transform: translateY(0px);
+                    }
+                    25% {
+                      transform: translateY(-12px);
+                    }
+                    50% {
+                      transform: translateY(0px);
+                    }
+                    75% {
+                      transform: translateY(-10px);
+                    }
+                    100% {
+                      transform: translateY(0px);
+                    }
+                  }
+                  @keyframes tumbleweedRotate {
+                    from {
+                      transform: rotate(0deg);
+                    }
+                    to {
+                      transform: rotate(360deg);
+                    }
+                  }
+                  .tumbleweed-container {
+                    animation: tumbleweedHorizontal 8s linear infinite,
+                               tumbleweedBounce 1.6s ease-in-out infinite;
+                  }
+                  .tumbleweed-svg {
+                    animation: tumbleweedRotate 4s linear infinite;
+                  }
+                `}</style>
+                <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
+                  <div className="text-center px-4 pb-8 z-10 relative">
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                      It seems empty here
+                    </h3>
+                    <p className="text-gray-500 mb-4">
+                      Start by adding students to this course
+                    </p>
+                    <div className="flex items-center gap-3 justify-center flex-wrap">
+                      <Button
+                        onClick={() => {
+                          setShowAddSheet(true);
+                        }}
+                        className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
+                      >
+                        <Users className="w-4 h-4" />
+                        Add Student
+                      </Button>
+                      <span className="text-gray-500">or</span>
+                      <Button
+                        onClick={() => setShowImportDialog(true)}
+                        variant="outline"
+                        className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Import Students
+                      </Button>
+                    </div>
+                  </div>
+                  {/* Tumbleweed Animation */}
+                  <div className="relative w-full flex items-end">
+                    {/* Outer container: horizontal movement + vertical bounce */}
+                    <div className="absolute bottom-0 tumbleweed-container">
+                      {/* Inner SVG: rotation only */}
+                      <img
+                        src="/svg/tumbleweed.svg"
+                        alt="Tumbleweed"
+                        className="w-20 h-20 tumbleweed-svg"
+                        style={{ filter: "brightness(0.8)" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div
+                className="rounded-md border overflow-auto flex-1 min-h-[200px] mb-4"
+                style={{
+                  height: "auto",
+                  maxHeight: "100%",
+                  alignSelf: "stretch",
+                }}
+              >
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                          </TableHead>
                         ))}
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={columns.length}
-                        className="h-24 text-center"
-                      >
-                        No students found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows?.length ? (
+                      table.getRowModel().rows.map((row) => (
+                        <TableRow key={row.id}>
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={columns.length}
+                          className="h-24 text-center"
+                        >
+                          No students found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </TabsContent>
 
           {/* Term Grade Tabs */}

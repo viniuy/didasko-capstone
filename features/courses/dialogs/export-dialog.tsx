@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,14 @@ import {
   DialogTitle,
 } from "@/components/ui/svdialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Download } from "lucide-react";
 
 const MAX_PREVIEW_ROWS = 100;
@@ -21,7 +29,6 @@ const EXPECTED_HEADERS = [
   "Class Number",
   "Section",
   "Status",
-  "Faculty Email",
 ];
 
 interface Course {
@@ -32,14 +39,15 @@ interface Course {
   academicYear: string;
   classNumber: number;
   section: string;
-  status: string;
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED" | string;
 }
 
 interface ExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courses: Course[];
-  onExport: () => void;
+  allCourses: Course[]; // All courses for filtering
+  onExport: (exportFilter: "ALL" | "ACTIVE" | "ARCHIVED") => void;
 }
 
 const formatEnumValue = (value: string) =>
@@ -52,8 +60,26 @@ export function ExportDialog({
   open,
   onOpenChange,
   courses,
+  allCourses,
   onExport,
 }: ExportDialogProps) {
+  const [exportFilter, setExportFilter] = useState<
+    "ALL" | "ACTIVE" | "ARCHIVED"
+  >("ALL");
+
+  // Filter courses based on selected option
+  const filteredExportCourses = useMemo(() => {
+    if (exportFilter === "ALL") {
+      return allCourses;
+    } else if (exportFilter === "ACTIVE") {
+      return allCourses.filter(
+        (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+      );
+    } else {
+      return allCourses.filter((c) => c.status === "ARCHIVED");
+    }
+  }, [exportFilter, allCourses]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[90vw] max-w-[1200px] p-4 sm:p-6">
@@ -62,10 +88,47 @@ export function ExportDialog({
             Export Courses to Excel
           </DialogTitle>
           <DialogDescription>
-            Preview of {courses.length}{" "}
-            {courses.length === 1 ? "course" : "courses"} to be exported
+            Choose which courses to export and preview the data
           </DialogDescription>
         </DialogHeader>
+
+        {/* Export Filter Selection */}
+        <div className="mt-4 space-y-2">
+          <Label
+            htmlFor="export-filter"
+            className="text-sm font-medium text-[#124A69]"
+          >
+            Export Options
+          </Label>
+          <Select
+            value={exportFilter}
+            onValueChange={(value: "ALL" | "ACTIVE" | "ARCHIVED") =>
+              setExportFilter(value)
+            }
+          >
+            <SelectTrigger id="export-filter" className="w-full">
+              <SelectValue placeholder="Select export option" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">
+                All Courses ({allCourses.length})
+              </SelectItem>
+              <SelectItem value="ACTIVE">
+                Active Courses (
+                {
+                  allCourses.filter(
+                    (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+                  ).length
+                }
+                )
+              </SelectItem>
+              <SelectItem value="ARCHIVED">
+                Archived Courses (
+                {allCourses.filter((c) => c.status === "ARCHIVED").length})
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="mt-6 border rounded-lg">
           <div className="max-h-[450px] overflow-auto">
@@ -86,45 +149,47 @@ export function ExportDialog({
                 </tr>
               </thead>
               <tbody>
-                {courses.slice(0, MAX_PREVIEW_ROWS).map((course, index) => (
-                  <tr key={index} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-2 text-xs text-gray-500">
-                      {index + 1}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {course.code}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900 max-w-[250px] truncate">
-                      {course.title}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {course.room}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {course.semester}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {course.academicYear}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {course.classNumber}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {course.section}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {formatEnumValue(course.status)}
-                    </td>
-                  </tr>
-                ))}
-                {courses.length > MAX_PREVIEW_ROWS && (
+                {filteredExportCourses
+                  .slice(0, MAX_PREVIEW_ROWS)
+                  .map((course, index) => (
+                    <tr key={index} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        {index + 1}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {course.code}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900 max-w-[250px] truncate">
+                        {course.title}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {course.room}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {course.semester}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {course.academicYear}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {course.classNumber}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {course.section}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-900">
+                        {formatEnumValue(course.status)}
+                      </td>
+                    </tr>
+                  ))}
+                {filteredExportCourses.length > MAX_PREVIEW_ROWS && (
                   <tr className="border-t bg-gray-50">
                     <td
                       colSpan={9}
                       className="px-4 py-3 text-sm text-gray-600 text-center font-medium"
                     >
-                      + {courses.length - MAX_PREVIEW_ROWS} more{" "}
-                      {courses.length - MAX_PREVIEW_ROWS === 1
+                      + {filteredExportCourses.length - MAX_PREVIEW_ROWS} more{" "}
+                      {filteredExportCourses.length - MAX_PREVIEW_ROWS === 1
                         ? "course"
                         : "courses"}{" "}
                       will be exported
@@ -139,7 +204,9 @@ export function ExportDialog({
         <div className="mt-6 flex justify-between items-center">
           <p className="text-sm text-gray-600">
             Total courses to export:{" "}
-            <span className="font-semibold">{courses.length}</span>
+            <span className="font-semibold">
+              {filteredExportCourses.length}
+            </span>
           </p>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -147,7 +214,7 @@ export function ExportDialog({
             </Button>
             <Button
               className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
-              onClick={onExport}
+              onClick={() => onExport(exportFilter)}
             >
               <Download className="h-4 w-4 mr-2" />
               Export to Excel

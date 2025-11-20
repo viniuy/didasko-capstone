@@ -316,7 +316,7 @@ export function CourseSettingsDialog({
                         className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors"
                       >
                         <Checkbox
-                          checked={selectedActive.has(course.id)}
+                          checked={selectedArchived.has(course.id)}
                           onCheckedChange={() =>
                             toggleArchivedSelection(course.id)
                           }
