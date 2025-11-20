@@ -126,7 +126,12 @@ export function CourseSheet({
       toast.error("Section is required");
       return;
     }
-    if (!formData.room.trim()) {
+    // Clean room input - remove "Room:" prefix if present
+    const cleanedRoom = formData.room
+      .trim()
+      .replace(/^room:\s*/i, "")
+      .trim();
+    if (!cleanedRoom) {
       toast.error("Room is required");
       return;
     }
@@ -173,10 +178,17 @@ export function CourseSheet({
     setIsLoading(true);
 
     try {
+      // Clean room input - remove "Room:" prefix if present
+      const cleanedRoom = formData.room
+        .trim()
+        .replace(/^room:\s*/i, "")
+        .trim()
+        .toUpperCase();
+
       const courseData = {
         code: formData.code.trim().toUpperCase(),
         title: formData.title.trim(),
-        room: formData.room.trim().toUpperCase(),
+        room: cleanedRoom,
         semester: formData.semester,
         academicYear: formData.academicYear.trim(),
         classNumber,
@@ -309,9 +321,12 @@ export function CourseSheet({
               <Input
                 id="room"
                 value={formData.room}
-                onChange={(e) =>
-                  handleChange("room", e.target.value.toUpperCase())
-                }
+                onChange={(e) => {
+                  let value = e.target.value;
+                  // Remove "Room:" or "room:" prefix (case-insensitive) with optional colon and space
+                  value = value.replace(/^room:\s*/i, "").trim();
+                  handleChange("room", value.toUpperCase());
+                }}
                 placeholder="e.g., 402"
                 maxLength={15}
                 required

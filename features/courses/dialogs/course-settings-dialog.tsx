@@ -117,10 +117,8 @@ export function CourseSettingsDialog({
     setIsProcessing(true);
     try {
       await onArchiveCourses(Array.from(selectedActive));
-      toast.success(`Successfully archived ${selectedActive.size} course(s)`);
       setSelectedActive(new Set());
     } catch (error) {
-      toast.error("Failed to archive courses");
       console.error(error);
     } finally {
       setIsProcessing(false);
@@ -137,12 +135,8 @@ export function CourseSettingsDialog({
     setIsProcessing(true);
     try {
       await onUnarchiveCourses(Array.from(selectedArchived));
-      toast.success(
-        `Successfully unarchived ${selectedArchived.size} course(s)`
-      );
       setSelectedArchived(new Set());
     } catch (error) {
-      toast.error("Failed to unarchive courses");
       console.error(error);
     } finally {
       setIsProcessing(false);

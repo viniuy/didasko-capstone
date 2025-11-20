@@ -134,13 +134,7 @@ export function AppSidebar() {
 
   // Define allowed paths for each role
   const allowedPaths = {
-    ADMIN: [
-      "/dashboard/admin",
-      "/main/course",
-      "/main/accounts",
-      "/main/students",
-      "/main/logs",
-    ],
+    ADMIN: ["/dashboard/admin", "/main/students", "/main/logs"],
     ACADEMIC_HEAD: [
       "/dashboard/academic-head",
       "/main/attendance",

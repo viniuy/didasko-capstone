@@ -78,6 +78,7 @@ export function CourseDashboard({
   const [tableData, setTableData] = useState<StudentWithGrades[]>([]);
   const [stats, setStats] = useState<CourseStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([
     { id: "lastName", desc: false },
   ]);
@@ -413,14 +414,31 @@ export function CourseDashboard({
     }
   };
 
-  if (isLoading) return <LoadingSpinner />;
+  const handleBackNavigation = () => {
+    setIsRedirecting(true);
+    setTimeout(() => {
+      router.push(backUrl);
+    }, 10);
+  };
+
+  if (isLoading)
+    return (
+      <LoadingSpinner
+        mainMessage="Loading Course Details"
+        secondaryMessage="Please sit tight while we are getting things ready for you..."
+      />
+    );
 
   if (!courseInfo || !stats) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px]">
+      <div
+        className={`bg-white p-6 rounded-lg shadow-sm min-h-[840px] transition-opacity duration-200 ${
+          isRedirecting ? "opacity-0" : "opacity-100"
+        }`}
+      >
         <div className="flex flex-col items-center justify-center h-96">
           <p className="text-gray-500 text-lg mb-4">Course not found</p>
-          <Button onClick={() => router.push(backUrl)} variant="outline">
+          <Button onClick={handleBackNavigation} variant="outline">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Courses
           </Button>
@@ -430,7 +448,11 @@ export function CourseDashboard({
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm h-screen flex flex-col overflow-y-auto overflow-x-hidden">
+    <div
+      className={`bg-white p-6 rounded-lg shadow-sm h-screen flex flex-col overflow-y-auto overflow-x-hidden transition-opacity duration-200 ${
+        isRedirecting ? "opacity-0" : "opacity-100"
+      }`}
+    >
       <div className="flex flex-col flex-1 min-h-0 space-y-6 pb-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -438,7 +460,7 @@ export function CourseDashboard({
             <Button
               variant="outline"
               size="icon"
-              onClick={() => router.push(backUrl)}
+              onClick={handleBackNavigation}
             >
               <ArrowLeft className="w-4 h-4" />
             </Button>

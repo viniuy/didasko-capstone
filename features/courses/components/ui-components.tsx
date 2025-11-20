@@ -5,18 +5,24 @@ import { CheckCircle2, Clock, XCircle, Circle } from "lucide-react";
 import { Student, AttendanceRecord } from "../types/types";
 import { getInitials } from "../utils/initials";
 
-export function LoadingSpinner() {
+export function LoadingSpinner({
+  mainMessage = "Loading Course Data...",
+  secondaryMessage = "Please sit tight while we are getting things ready for you...",
+}: {
+  mainMessage?: string;
+  secondaryMessage?: string;
+}) {
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px]">
       <div className="flex flex-col items-center gap-4 mt-40">
         <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
-          Loading Course Data...
+          {mainMessage}
         </h2>
         <p
           className="text-lg text-gray-600 animate-pulse"
           style={{ animationDelay: "150ms" }}
         >
-          Please sit tight while we are getting things ready for you...
+          {secondaryMessage}
         </p>
         <div className="flex gap-2 mt-4">
           {[0, 150, 300].map((delay, i) => (
