@@ -265,7 +265,7 @@ export function CourseSheet({
               onChange={(e) =>
                 handleChange("code", e.target.value.toUpperCase())
               }
-              placeholder="e.g., CS101"
+              placeholder="e.g., ITCAPSTONE"
               maxLength={15}
               required
             />
@@ -279,7 +279,7 @@ export function CourseSheet({
               id="title"
               value={formData.title}
               onChange={(e) => handleChange("title", e.target.value)}
-              placeholder="e.g., Introduction to Programming"
+              placeholder="e.g., IT Capstone"
               maxLength={80}
               required
             />
@@ -296,7 +296,7 @@ export function CourseSheet({
                 onChange={(e) =>
                   handleChange("section", e.target.value.toUpperCase())
                 }
-                placeholder="e.g., A"
+                placeholder="e.g., BSIT-711"
                 maxLength={10}
                 required
               />
@@ -312,7 +312,7 @@ export function CourseSheet({
                 onChange={(e) =>
                   handleChange("room", e.target.value.toUpperCase())
                 }
-                placeholder="e.g., A101"
+                placeholder="e.g., 402"
                 maxLength={15}
                 required
               />
@@ -328,7 +328,7 @@ export function CourseSheet({
                 value={formData.semester}
                 onValueChange={(value) => handleChange("semester", value)}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -438,12 +438,11 @@ export function CourseSheet({
                   handleChange("status", value as CourseStatus)
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIVE">Active</SelectItem>
-                  <SelectItem value="INACTIVE">Inactive</SelectItem>
                   <SelectItem value="ARCHIVED">Archived</SelectItem>
                 </SelectContent>
               </Select>

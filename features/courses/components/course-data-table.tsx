@@ -131,8 +131,58 @@ interface ImportStatus {
   }>;
 }
 
-const ITEMS_PER_PAGE = 8;
 const MAX_PREVIEW_ROWS = 100;
+
+// Hook to get responsive items per page based on screen size
+const useItemsPerPage = () => {
+  const [itemsPerPage, setItemsPerPage] = useState(8);
+
+  useEffect(() => {
+    const updateItemsPerPage = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      // Determine items per page based on width first
+      let items = 4; // default for large desktop
+      if (width < 640) {
+        items = 2;
+      } else if (width < 1280) {
+        items = 2;
+      } else if (width < 1524) {
+        items = 3;
+      } else {
+        items = 4;
+      }
+
+      // Apply height restriction only if it would reduce items (not increase)
+      // On large screens (width >= 1524), only restrict if height is very small
+      if (width >= 1520) {
+        // Large desktop: only restrict if height is below 600px
+        if (height < 600) {
+          setItemsPerPage(4);
+        } else {
+          setItemsPerPage(items);
+        }
+      } else {
+        // For smaller screens, apply height restriction more strictly
+        if (height < 960) {
+          setItemsPerPage(4);
+        } else {
+          setItemsPerPage(items);
+        }
+      }
+    };
+
+    // Set initial value
+    updateItemsPerPage();
+
+    // Update on resize
+    window.addEventListener("resize", updateItemsPerPage);
+    return () => window.removeEventListener("resize", updateItemsPerPage);
+  }, []);
+
+  return itemsPerPage;
+};
 const EXPECTED_HEADERS = [
   "Course Code",
   "Course Title",
@@ -153,25 +203,25 @@ const formatEnumValue = (value: string) =>
 // Loading Spinner Component
 function LoadingSpinner() {
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
-      <div className="flex flex-col items-center gap-4 mt-40">
-        <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
+    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[590px] sm:min-h-[700px] md:min-h-[840px] max-h-[840px] mt-2 sm:mt-3 md:mt-5">
+      <div className="flex flex-col items-center gap-3 sm:gap-4 mt-20 sm:mt-32 md:mt-40 px-4">
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69] animate-pulse text-center">
           Loading Courses...
         </h2>
         <p
-          className="text-lg text-gray-600 animate-pulse"
+          className="text-sm sm:text-base md:text-lg text-gray-600 animate-pulse text-center"
           style={{ animationDelay: "150ms" }}
         >
           Please sit tight while we are getting things ready for you...
         </p>
-        <div className="flex gap-2 mt-4">
-          <div className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"></div>
+        <div className="flex gap-2 mt-3 sm:mt-4">
+          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"></div>
           <div
-            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+            className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
             style={{ animationDelay: "150ms" }}
           ></div>
           <div
-            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
+            className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
             style={{ animationDelay: "300ms" }}
           ></div>
         </div>
@@ -239,17 +289,17 @@ const CourseCard = ({
   const attendanceRate = course.stats?.attendanceRate ?? 0;
 
   return (
-    <div className="group relative w-auto h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-3 hover:border-[#124A69] hover:shadow-lg transition-all duration-200 text-[#124A69]">
+    <div className="group relative w-auto h-auto min-h-[240px] sm:h-[250px] md:h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-2 sm:p-3 hover:border-[#124A69] hover:shadow-xl transition-all duration-300 ease-in-out text-[#124A69] transform hover:scale-105 hover:-translate-y-1 will-change-transform">
       {/* More Options Menu */}
-      <div className="absolute top-2 right-2 z-10">
+      <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10">
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0 hover:bg-gray-100"
+              className="h-8 w-8 sm:h-9 sm:w-9 p-0 hover:bg-gray-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
             >
-              <MoreVertical className="h-4 w-4" />
+              <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
@@ -277,28 +327,23 @@ const CourseCard = ({
         </DropdownMenu>
       </div>
 
-      {/* Status Badge */}
-      <div className="absolute top-4 right-12">
-        <Badge className={`${getStatusColor(course.status)} border`}>
-          {formatEnumValue(course.status)}
-        </Badge>
-      </div>
-
       {/* Card Content - Clickable */}
       <div
         onClick={() => router.push(`/main/course/${course.slug}`)}
         className="cursor-pointer h-full"
       >
-        <div className="mb-4">
-          <h3 className="text-lg font-bold group-hover:text-[#0C3246] transition-colors">
+        <div className="mb-2 sm:mb-3 md:mb-4">
+          <h3 className="text-base sm:text-lg font-bold group-hover:text-[#0C3246] transition-colors">
             {course.code} - {course.section}
           </h3>
-          <p className="text-xs opacity-80 mt-1">{course.title}</p>
+          <p className="text-[10px] sm:text-xs opacity-80 mt-0.5 sm:mt-1 line-clamp-2">
+            {course.title}
+          </p>
         </div>
 
-        <div className="flex items-center mb-4 opacity-80">
-          <Calendar className="w-5 h-5" />
-          <span className="text-xs font-medium ml-2 truncate">
+        <div className="flex items-center mb-2 sm:mb-3 md:mb-4 opacity-80">
+          <Calendar className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+          <span className="text-[10px] sm:text-xs font-medium ml-1 sm:ml-2 truncate">
             {course.room} |{" "}
             {hasNoSchedule ? (
               <span className="text-amber-600 font-semibold">
@@ -317,11 +362,11 @@ const CourseCard = ({
           </span>
         </div>
 
-        <div className="flex justify-between items-center mb-4 opacity-80 text-gray-700">
-          <div className="flex items-center min-w-0">
-            <CircleUserRound className="w-5 h-5 flex-shrink-0" />
+        <div className="flex justify-between items-center mb-2 sm:mb-3 md:mb-4 opacity-80 text-gray-700 gap-2">
+          <div className="flex items-center min-w-0 flex-1">
+            <CircleUserRound className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
             <span
-              className="text-xs font-medium ml-2 truncate max-w-[150px]"
+              className="text-[10px] sm:text-xs font-medium ml-1 sm:ml-2 truncate max-w-[120px] sm:max-w-[150px]"
               title={course.faculty?.name || "No Instructor"}
             >
               {course.faculty?.name || "No Instructor"}
@@ -329,26 +374,26 @@ const CourseCard = ({
           </div>
 
           <div className="flex items-center flex-shrink-0">
-            <Users className="w-5 h-5" />
-            <span className="text-xs font-medium ml-2">
-              {course._count?.students || 0} Students
+            <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-[10px] sm:text-xs font-medium ml-1 sm:ml-2">
+              {course._count?.students || 0}
             </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 pt-7">
-          <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
-            <div className="flex items-center gap-2 mb-1 text-xs">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-4 sm:pt-5 md:pt-7">
+          <div className="rounded-lg p-2 sm:p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
+            <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 text-[10px] sm:text-xs">
               <span>Passing Rate</span>
             </div>
-            <p className="text-xl font-bold">{passingRate}%</p>
+            <p className="text-lg sm:text-xl font-bold">{passingRate}%</p>
           </div>
-          <div className="rounded-lg p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
-            <div className="flex items-center gap-2 mb-1 text-xs">
+          <div className="rounded-lg p-2 sm:p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
+            <div className="flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 text-[10px] sm:text-xs">
               <GraduationCap className="w-3 h-3" />
               <span>Attendance</span>
             </div>
-            <p className="text-xl font-bold">{attendanceRate}%</p>
+            <p className="text-lg sm:text-xl font-bold">{attendanceRate}%</p>
           </div>
         </div>
       </div>
@@ -366,6 +411,9 @@ export function CourseDataTable({
 }: CourseDataTableProps) {
   // Get permissions based on role
   const permissions = useMemo(() => getCoursePermissions(userRole), [userRole]);
+
+  // Responsive items per page
+  const itemsPerPage = useItemsPerPage();
 
   // State
   const [tableData, setTableData] = useState<Course[]>(initialCourses);
@@ -545,18 +593,15 @@ export function CourseDataTable({
     }
   }, []);
 
+  // Filter courses based on role and faculty (without search/status filters)
+  const baseFilteredCourses = useMemo(() => {
+    return filterCoursesByRole(tableData, userRole, userId, facultyFilter);
+  }, [tableData, userRole, userId, facultyFilter]);
+
   // Filter courses based on role and filters
   const filteredCourses = useMemo(() => {
-    // First filter by role and faculty
-    let courses = filterCoursesByRole(
-      tableData,
-      userRole,
-      userId,
-      facultyFilter
-    );
-
-    // Then apply search and status filters
-    return courses.filter((course) => {
+    // Apply search and status filters to base filtered courses
+    return baseFilteredCourses.filter((course) => {
       const matchesSearch =
         course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -567,14 +612,19 @@ export function CourseDataTable({
 
       return matchesSearch && matchesStatus;
     });
-  }, [tableData, userRole, userId, facultyFilter, searchQuery, statusFilter]);
+  }, [baseFilteredCourses, searchQuery, statusFilter]);
 
-  const totalPages = Math.ceil(filteredCourses.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredCourses.length / itemsPerPage);
 
   const paginatedCourses = filteredCourses.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
+
+  // Reset to page 1 when itemsPerPage changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -1006,7 +1056,7 @@ export function CourseDataTable({
         })
         .filter((row) => {
           return EXPECTED_HEADERS.every(
-            (field) => row[field] && row[field].trim() !== ""
+            (field) => (row as any)[field] && (row as any)[field].trim() !== ""
           );
         });
 
@@ -1224,207 +1274,248 @@ export function CourseDataTable({
     setImportStatus(null);
   }, [refreshTableData, onCourseAdded, scheduleDialogMode]);
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px] mt-5">
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#124A69] mb-5">
-        Course Management Dashboard
-      </h1>
+    <div className="flex flex-col flex-grow">
+      <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[500px] md:min-h-[590px] overflow-x-visible">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69] mb-3 sm:mb-4 md:mb-5">
+          Course Management Dashboard
+        </h1>
 
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex">
-            {/* Faculty Filter - Only for Academic Head */}
-            <div className="pr-5">
-              {permissions.canFilterByFaculty && (
-                <FacultyFilter
-                  faculties={faculties}
-                  selectedFacultyId={facultyFilter}
-                  onChange={setFacultyFilter}
-                  currentUserId={userId}
-                />
-              )}
-            </div>
-            <div className="relative w-full sm:w-[400px]">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search courses by code, title, or section..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+        <div className="space-y-4 sm:space-y-5 md:space-y-6">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
+                {/* Faculty Filter - Only for Academic Head */}
+                {permissions.canFilterByFaculty && (
+                  <div className="w-full sm:w-auto sm:pr-5">
+                    <FacultyFilter
+                      faculties={faculties}
+                      selectedFacultyId={facultyFilter}
+                      onChange={setFacultyFilter}
+                      currentUserId={userId}
+                    />
+                  </div>
+                )}
+                <div className="relative w-full sm:w-[300px] md:w-[400px]">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search courses..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 h-10 sm:h-9 text-sm sm:text-base"
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSettingsDialog(true)}
+                  className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-h-[44px] sm:min-h-0"
+                >
+                  <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Archive</span>
+                  <span className="sm:hidden">Archive</span>
+                </Button>
+                {permissions.canExportData && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowExportPreview(true)}
+                    className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-h-[44px] sm:min-h-0"
+                  >
+                    <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Export</span>
+                    <span className="sm:hidden">Export</span>
+                  </Button>
+                )}
+                {permissions.canImportCourses && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowImportPreview(true)}
+                    className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-h-[44px] sm:min-h-0"
+                  >
+                    <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Import</span>
+                    <span className="sm:hidden">Import</span>
+                  </Button>
+                )}
+                {permissions.canCreateCourse && (
+                  <CourseSheet
+                    mode="add"
+                    onSuccess={async (courseData) => {
+                      // Store course data and open schedule dialog
+                      // Course is NOT created yet - waiting for schedules
+                      if (courseData) {
+                        setPendingCourseData(courseData);
+                        setImportedCoursesForSchedule([courseData]);
+                        setScheduleDialogMode("create");
+                        setShowScheduleAssignment(true);
+                      }
+                    }}
+                    faculties={faculties}
+                    userId={userId}
+                    userRole={userRole}
+                  />
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowSettingsDialog(true)}
-              className="gap-2"
+
+          <div className="flex gap-1 sm:gap-2 border-b overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+            <button
+              onClick={() => setStatusFilter("ALL")}
+              className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                statusFilter === "ALL"
+                  ? "text-[#124A69] border-b-2 border-[#124A69]"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
             >
-              <Archive className="h-4 w-4" />
-              Archive
-            </Button>
-            {permissions.canExportData && (
-              <Button
-                variant="outline"
-                onClick={() => setShowExportPreview(true)}
-                className="gap-2"
-              >
-                <Download className="h-4 w-4" />
-                Export
-              </Button>
-            )}
-            {permissions.canImportCourses && (
-              <Button
-                variant="outline"
-                onClick={() => setShowImportPreview(true)}
-                className="gap-2"
-              >
-                <Upload className="h-4 w-4" />
-                Import
-              </Button>
-            )}
-            {permissions.canCreateCourse && (
-              <CourseSheet
-                mode="add"
-                onSuccess={async (courseData) => {
-                  // Store course data and open schedule dialog
-                  // Course is NOT created yet - waiting for schedules
-                  if (courseData) {
-                    setPendingCourseData(courseData);
-                    setImportedCoursesForSchedule([courseData]);
-                    setScheduleDialogMode("create");
-                    setShowScheduleAssignment(true);
-                  }
-                }}
-                faculties={faculties}
-                userId={userId}
-                userRole={userRole}
-              />
-            )}
+              All ({baseFilteredCourses.length})
+            </button>
+
+            <button
+              onClick={() => setStatusFilter("ACTIVE")}
+              className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                statusFilter === "ACTIVE"
+                  ? "text-[#124A69] border-b-2 border-[#124A69]"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Active (
+              {baseFilteredCourses.filter((c) => c.status === "ACTIVE").length})
+            </button>
+
+            <button
+              onClick={() => setStatusFilter("ARCHIVED")}
+              className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
+                statusFilter === "ARCHIVED"
+                  ? "text-[#124A69] border-b-2 border-[#124A69]"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Archived (
+              {
+                baseFilteredCourses.filter((c) => c.status === "ARCHIVED")
+                  .length
+              }
+              )
+            </button>
           </div>
-        </div>
 
-        <div className="flex gap-2 border-b">
-          <button
-            onClick={() => setStatusFilter("ALL")}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              statusFilter === "ALL"
-                ? "text-[#124A69] border-b-2 border-[#124A69]"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            All Courses ({filteredCourses.length})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter("ACTIVE")}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              statusFilter === "ACTIVE"
-                ? "text-[#124A69] border-b-2 border-[#124A69]"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Active ({tableData.filter((c) => c.status === "ACTIVE").length})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter("INACTIVE")}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              statusFilter === "INACTIVE"
-                ? "text-[#124A69] border-b-2 border-[#124A69]"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Inactive ({tableData.filter((c) => c.status === "INACTIVE").length})
-          </button>
-
-          <button
-            onClick={() => setStatusFilter("ARCHIVED")}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              statusFilter === "ARCHIVED"
-                ? "text-[#124A69] border-b-2 border-[#124A69]"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Archived ({tableData.filter((c) => c.status === "ARCHIVED").length})
-          </button>
-        </div>
-
-        {isRefreshing ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69]" />
-          </div>
-        ) : filteredCourses.length > 0 ? (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-6 min-h-[555px]">
-              {paginatedCourses.map((course) => (
-                <CourseCard
-                  key={course.id}
-                  course={course}
-                  onEdit={handleEditCourse}
-                  onAddSchedule={handleAddSchedule}
-                  onViewDetails={handleViewDetails}
-                />
-              ))}
+          {isRefreshing ? (
+            <div className="flex justify-center items-center h-48 sm:h-64">
+              <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-[#124A69]" />
             </div>
+          ) : filteredCourses.length > 0 ? (
+            <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
+                {paginatedCourses.map((course) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    onEdit={handleEditCourse}
+                    onAddSchedule={handleAddSchedule}
+                    onViewDetails={handleViewDetails}
+                  />
+                ))}
+              </div>
 
-            {totalPages > 1 && (
-              <div className="flex -mt-3 items-center justify-between w-full">
-                <span className="text-sm text-gray-600 w-[1100%]">
-                  {Math.min(
-                    (currentPage - 1) * ITEMS_PER_PAGE + 1,
-                    filteredCourses.length
-                  )}
-                  –
-                  {Math.min(
-                    currentPage * ITEMS_PER_PAGE,
-                    filteredCourses.length
-                  )}{" "}
-                  of {filteredCourses.length} courses
-                </span>
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row -mt-2 sm:-mt-3 items-center justify-between w-full gap-3 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left w-[300px]">
+                    Showing{" "}
+                    {Math.min(
+                      (currentPage - 1) * itemsPerPage + 1,
+                      filteredCourses.length
+                    )}
+                    –
+                    {Math.min(
+                      currentPage * itemsPerPage,
+                      filteredCourses.length
+                    )}{" "}
+                    of {filteredCourses.length} courses
+                  </span>
 
-                <Pagination>
-                  <PaginationContent className="flex gap-1">
-                    <PaginationItem>
-                      <PaginationPrevious
-                        onClick={() =>
-                          currentPage > 1 && handlePageChange(currentPage - 1)
-                        }
-                        className={
-                          currentPage === 1
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
-                        }
-                      />
-                    </PaginationItem>
+                  <Pagination className="justify-end">
+                    <PaginationContent className="flex gap-1">
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() =>
+                            currentPage > 1 && handlePageChange(currentPage - 1)
+                          }
+                          className={`min-h-[44px] sm:min-h-0 ${
+                            currentPage === 1
+                              ? "pointer-events-none opacity-50"
+                              : "cursor-pointer"
+                          }`}
+                        />
+                      </PaginationItem>
 
-                    {Array.from({ length: totalPages })
-                      .map((_, i) => i + 1)
-                      .filter((page) => {
-                        return (
-                          page === 1 ||
-                          page === totalPages ||
-                          Math.abs(page - currentPage) <= 1
-                        );
-                      })
-                      .reduce((acc: (number | string)[], page, index, arr) => {
-                        if (index > 0) {
-                          const prevPage = arr[index - 1] as number;
-                          if ((page as number) - prevPage > 1) acc.push("…");
+                      {(() => {
+                        const pages: number[] = [];
+
+                        // If total pages is 5 or less, show all pages
+                        if (totalPages <= 5) {
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i);
+                          }
+                        } else {
+                          // Always show first 2 pages
+                          pages.push(1, 2);
+
+                          // Determine which pages to show around current
+                          const showAroundCurrent: number[] = [];
+                          if (currentPage > 2 && currentPage < totalPages - 1) {
+                            // Show current-1, current, current+1 if in middle
+                            showAroundCurrent.push(
+                              currentPage - 1,
+                              currentPage,
+                              currentPage + 1
+                            );
+                          } else if (currentPage <= 2) {
+                            // If current is 1 or 2, show 3, 4
+                            showAroundCurrent.push(3, 4);
+                          } else if (currentPage >= totalPages - 1) {
+                            // If current is near end, show last-3, last-2, last-1
+                            showAroundCurrent.push(
+                              totalPages - 3,
+                              totalPages - 2,
+                              totalPages - 1
+                            );
+                          }
+
+                          // Remove duplicates and sort
+                          const uniquePages = Array.from(
+                            new Set([
+                              ...pages,
+                              ...showAroundCurrent,
+                              totalPages,
+                            ])
+                          ).sort((a, b) => a - b) as number[];
+
+                          // Build final array with ellipsis
+                          const finalPages: (number | string)[] = [];
+                          for (let i = 0; i < uniquePages.length; i++) {
+                            const page = uniquePages[i];
+                            if (i > 0 && page - uniquePages[i - 1] > 1) {
+                              finalPages.push("…");
+                            }
+                            finalPages.push(page);
+                          }
+
+                          return finalPages;
                         }
-                        acc.push(page);
-                        return acc;
-                      }, [])
-                      .map((item, i) => (
+
+                        return pages;
+                      })().map((item, i) => (
                         <PaginationItem key={i}>
                           {item === "…" ? (
-                            <span className="px-2 text-gray-500 select-none">
+                            <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
                               …
                             </span>
                           ) : (
                             <PaginationLink
                               onClick={() => handlePageChange(item as number)}
                               isActive={currentPage === item}
-                              className={`hidden xs:inline-flex ${
+                              className={`hidden sm:inline-flex min-h-[44px] sm:min-h-0 ${
                                 currentPage === item
                                   ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
                                   : ""
@@ -1436,127 +1527,130 @@ export function CourseDataTable({
                         </PaginationItem>
                       ))}
 
-                    <PaginationItem>
-                      <PaginationNext
-                        onClick={() =>
-                          currentPage < totalPages &&
-                          handlePageChange(currentPage + 1)
-                        }
-                        className={
-                          currentPage === totalPages
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
-                        }
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <BookOpen className="w-12 h-12 text-gray-400 mb-3" />
-            <p className="text-gray-600 font-medium">No courses found</p>
-            <p className="text-sm text-gray-500 mt-1">
-              {searchQuery
-                ? "Try adjusting your search"
-                : "Get started by adding a new course"}
-            </p>
-          </div>
-        )}
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() =>
+                            currentPage < totalPages &&
+                            handlePageChange(currentPage + 1)
+                          }
+                          className={`min-h-[44px] sm:min-h-0 ${
+                            currentPage === totalPages
+                              ? "pointer-events-none opacity-50"
+                              : "cursor-pointer"
+                          }`}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-48 sm:h-64 text-center px-4">
+              <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2 sm:mb-3" />
+              <p className="text-sm sm:text-base text-gray-600 font-medium">
+                No courses found
+              </p>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                {searchQuery
+                  ? "Try adjusting your search"
+                  : "Get started by adding a new course"}
+              </p>
+            </div>
+          )}
 
-        {/* Export Dialog */}
-        <ExportDialog
-          open={showExportPreview}
-          onOpenChange={setShowExportPreview}
-          courses={filteredCourses}
-          onExport={handleExport}
-        />
+          {/* Export Dialog */}
+          <ExportDialog
+            open={showExportPreview}
+            onOpenChange={setShowExportPreview}
+            courses={filteredCourses}
+            onExport={handleExport}
+          />
 
-        {/* Import Dialog */}
-        <ImportDialog
-          open={showImportPreview}
-          onOpenChange={(open) => {
-            setShowImportPreview(open);
-            if (!open) {
-              setSelectedFile(null);
-              setPreviewData([]);
-              setIsValidFile(false);
-              setImportProgress(null);
-            }
-          }}
-          previewData={previewData}
-          selectedFile={selectedFile}
-          isValidFile={isValidFile}
-          onFileChange={handleFileChange}
-          onImport={handleImport}
-          onDownloadTemplate={handleImportTemplate}
-          importProgress={importProgress}
-        />
-
-        {/* Import Status Dialog */}
-        <ImportStatusDialog
-          open={showImportStatus}
-          onOpenChange={setShowImportStatus}
-          importStatus={importStatus}
-          importProgress={importProgress}
-          onClose={() => {
-            setShowImportStatus(false);
-            setImportProgress(null);
-          }}
-          onImportMore={() => {
-            setShowImportStatus(false);
-            setShowImportPreview(true);
-          }}
-        />
-
-        {/* Schedule Assignment Dialog */}
-        <ScheduleAssignmentDialog
-          open={showScheduleAssignment}
-          onOpenChange={(open) => {
-            setShowScheduleAssignment(open);
-            // Only call handleScheduleAssignmentComplete if dialog was closed after successful completion
-            // The dialog will call onComplete() itself when saving, not when canceling
-            if (!open) {
-              setPendingCourseData(null);
-            }
-          }}
-          courses={
-            scheduleDialogMode === "create"
-              ? [pendingCourseData]
-              : importedCoursesForSchedule
-          }
-          onComplete={handleScheduleAssignmentComplete}
-          mode={scheduleDialogMode}
-        />
-
-        <CourseSettingsDialog
-          open={showSettingsDialog}
-          onOpenChange={setShowSettingsDialog}
-          courses={filterArchivableCourses(tableData, userId)}
-          onArchiveCourses={handleArchiveCourses}
-          onUnarchiveCourses={handleUnarchiveCourses}
-          userId={userId}
-          userRole={userRole}
-        />
-
-        {/* Edit Course Sheet */}
-        {editingCourse && (
-          <CourseSheet
-            mode="edit"
-            course={editingCourse}
-            onSuccess={() => {
-              refreshTableData(true);
-              setEditingCourse(null);
+          {/* Import Dialog */}
+          <ImportDialog
+            open={showImportPreview}
+            onOpenChange={(open) => {
+              setShowImportPreview(open);
+              if (!open) {
+                setSelectedFile(null);
+                setPreviewData([]);
+                setIsValidFile(false);
+                setImportProgress(null);
+              }
             }}
-            faculties={faculties}
+            previewData={previewData}
+            selectedFile={selectedFile}
+            isValidFile={isValidFile}
+            onFileChange={handleFileChange}
+            onImport={handleImport}
+            onDownloadTemplate={handleImportTemplate}
+            importProgress={importProgress}
+          />
+
+          {/* Import Status Dialog */}
+          <ImportStatusDialog
+            open={showImportStatus}
+            onOpenChange={setShowImportStatus}
+            importStatus={importStatus}
+            importProgress={importProgress}
+            onClose={() => {
+              setShowImportStatus(false);
+              setImportProgress(null);
+            }}
+            onImportMore={() => {
+              setShowImportStatus(false);
+              setShowImportPreview(true);
+            }}
+          />
+
+          {/* Schedule Assignment Dialog */}
+          <ScheduleAssignmentDialog
+            open={showScheduleAssignment}
+            onOpenChange={(open) => {
+              setShowScheduleAssignment(open);
+              // Only call handleScheduleAssignmentComplete if dialog was closed after successful completion
+              // The dialog will call onComplete() itself when saving, not when canceling
+              if (!open) {
+                setPendingCourseData(null);
+              }
+            }}
+            courses={
+              scheduleDialogMode === "create"
+                ? [pendingCourseData]
+                : importedCoursesForSchedule
+            }
+            onComplete={handleScheduleAssignmentComplete}
+            mode={scheduleDialogMode}
+          />
+
+          <CourseSettingsDialog
+            open={showSettingsDialog}
+            onOpenChange={setShowSettingsDialog}
+            courses={filterArchivableCourses(tableData, userId)}
+            onArchiveCourses={handleArchiveCourses}
+            onUnarchiveCourses={handleUnarchiveCourses}
             userId={userId}
             userRole={userRole}
-            open={!!editingCourse}
-            onOpenChange={(open) => !open && setEditingCourse(null)}
           />
-        )}
+
+          {/* Edit Course Sheet */}
+          {editingCourse && (
+            <CourseSheet
+              mode="edit"
+              course={editingCourse}
+              onSuccess={() => {
+                refreshTableData(true);
+                setEditingCourse(null);
+              }}
+              faculties={faculties}
+              userId={userId}
+              userRole={userRole}
+              open={!!editingCourse}
+              onOpenChange={(open) => !open && setEditingCourse(null)}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

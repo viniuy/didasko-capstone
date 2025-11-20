@@ -135,7 +135,7 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
     return (
       <div className="bg-white rounded-lg shadow-sm p-4 min-h-[430px]">
         <div className="border-b pb-4 mb-4">
-          <h2 className="text-xl font-bold text-center text-[#124A69]">
+          <h2 className="text-base sm:text-lg md:text-xl font-bold text-center text-[#124A69]">
             MY WEEKLY SCHEDULE
           </h2>
         </div>
@@ -162,7 +162,9 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
   if (error) {
     return (
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="text-red-500 text-center">{error}</div>
+        <div className="text-sm sm:text-base text-red-500 text-center">
+          {error}
+        </div>
       </div>
     );
   }
@@ -170,21 +172,21 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
   return (
     <div className="bg-white rounded-lg shadow-sm min-h-[430px]">
       <div className="p-4 border-b">
-        <h2 className="text-xl font-bold text-center text-[#124A69]">
+        <h2 className="text-base sm:text-lg md:text-xl font-bold text-center text-[#124A69]">
           MY WEEKLY SCHEDULE
         </h2>
       </div>
       {schedules.length === 0 ? (
-        <div className="p-8 flex items-center justify-center min-h-[400px]">
+        <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center min-h-[400px]">
           <div className="text-center space-y-4">
-            <div className="text-6xl text-[#124A69] opacity-20">
+            <div className="text-4xl sm:text-5xl md:text-6xl text-[#124A69] opacity-20">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
                 strokeWidth={1.5}
                 stroke="currentColor"
-                className="w-24 h-24 mx-auto"
+                className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 mx-auto"
               >
                 <path
                   strokeLinecap="round"
@@ -193,36 +195,36 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
                 />
               </svg>
             </div>
-            <h3 className="text-xl font-semibold text-[#124A69]">
+            <h3 className="text-lg sm:text-xl font-semibold text-[#124A69]">
               No Schedule Found
             </h3>
-            <p className="text-gray-500 max-w-md mx-auto">
+            <p className="text-sm sm:text-base text-gray-500 max-w-md mx-auto">
               You don't have any scheduled classes for this week. Check back
               later for updates.
             </p>
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-4 p-4">
+        <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto">
           {days.map((day) => (
             <div
               key={day}
               className={`${day === currentDay ? "bg-blue-50 rounded-lg" : ""}`}
             >
-              <div className="text-center font-semibold mb-4 text-[#124A69] text-sm">
+              <div className="text-center font-semibold mb-2 sm:mb-3 md:mb-4 text-[#124A69] text-xs sm:text-sm">
                 {day}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1 sm:space-y-2">
                 {getSchedulesForDay(day).map((schedule) => (
                   <div key={schedule.id} className="group perspective">
                     <div className="preserve-3d">
                       {/* Front of card */}
                       <div className="backface-hidden">
-                        <div className="bg-[#FAEDCB] rounded-lg p-2 text-[#124A69] shadow-sm text-center h-[80px] flex flex-col justify-center">
-                          <div className="font-bold text-sm">
+                        <div className="bg-[#FAEDCB] rounded-lg p-1.5 sm:p-2 text-[#124A69] shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
+                          <div className="font-bold text-[10px] sm:text-xs md:text-sm">
                             {schedule.course.title}
                           </div>
-                          <div className="text-xs mt-1">
+                          <div className="text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
                             {formatTime(schedule.fromTime)} -{" "}
                             {formatTime(schedule.toTime)}
                           </div>
@@ -230,14 +232,13 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
                       </div>
                       {/* Back of card */}
                       <div className="backface-hidden rotate-y-180">
-                        <div className="bg-[#124A69] rounded-lg p-2 text-white shadow-sm text-center h-[80px] flex flex-col justify-center">
-                          <div className="text-xs space-y-1">
+                        <div className="bg-[#124A69] rounded-lg p-1.5 sm:p-2 text-white shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
+                          <div className="text-[9px] sm:text-[10px] md:text-xs space-y-0.5 sm:space-y-1">
                             <div className="font-semibold">
                               {schedule.course.code}
                             </div>
                             <div>Section: {schedule.course.section}</div>
-                            <div>{schedule.course.room}</div>
-                            <div>{schedule.course.semester}</div>
+                            <div>Room: {schedule.course.room}</div>
                           </div>
                         </div>
                       </div>

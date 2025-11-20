@@ -17,16 +17,16 @@ export default function AcademicHeadDashboard() {
     <div className="relative h-screen w-screen overflow-hidden">
       <AppSidebar />
 
-      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
-        <div className="flex-1 px-4">
+      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-0 sm:pl-12 md:pl-16 lg:pl-[4rem] xl:pl-[5rem] transition-all overflow-y-auto">
+        <div className="flex-1 px-2 sm:px-4 md:px-6">
           <div className="flex flex-col flex-grow">
-            <div className="px-4">
+            <div className="px-2 sm:px-4">
               <Header />
               <Greet />
 
               <Stats />
-              <div className="space-y-4">
-                <h2 className="pl-2 pb-1 text-2xl font-bold text-muted-foreground">
+              <div className="space-y-3 sm:space-y-4">
+                <h2 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
                   Your Subjects
                 </h2>
                 <AllCourses type="attendance" />

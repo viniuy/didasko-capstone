@@ -37,6 +37,20 @@ export default function EditProfileModal({
   const displayName = user.name || "Loading...";
   const initial = displayName.charAt(0).toUpperCase();
 
+  // Format role display
+  const formatRole = (role: string) => {
+    switch (role) {
+      case "ADMIN":
+        return "Administrator";
+      case "ACADEMIC_HEAD":
+        return "Academic Head";
+      case "FACULTY":
+        return "Faculty";
+      default:
+        return role.replace(/_/g, " ");
+    }
+  };
+
   // Image select handler
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -135,7 +149,7 @@ export default function EditProfileModal({
       <DialogContent className="sm:max-w-2xl text-center">
         <DialogHeader>
           <DialogTitle className="flex justify-center text-2xl font-semibold text-[#124A69]">
-            Edit profile
+            Edit Profile Picture
           </DialogTitle>
         </DialogHeader>
 
@@ -177,7 +191,7 @@ export default function EditProfileModal({
 
         <div>
           <p className="font-semibold text-xl text-[#124A69]">{user.name}</p>
-          <p className="text-sm text-gray-500">{user.role}</p>
+          <p className="text-sm text-gray-500">{formatRole(user.role)}</p>
         </div>
 
         <div className="flex justify-between mt-4">

@@ -19,15 +19,17 @@ export default function FacultyDashboard() {
       <div className="relative h-screen w-screen overflow-hidden">
         <AppSidebar />
 
-        <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
-          <div className="flex-1 px-4">
+        <main className="h-full w-full lg:w-[calc(100%-22.5rem)] transition-all overflow-y-auto">
+          <div className="flex-1 pl-[4rem] ">
             <div className="flex flex-col flex-grow">
-              <div className="px-4">
+              <div>
                 <Header />
+              </div>
+              <div className="px-2 sm:px-4">
                 <Greet />
                 <Stats />
-                <div className="space-y-4">
-                  <h2 className="pl-2 pb-1 text-2xl font-bold text-muted-foreground">
+                <div className="space-y-3 sm:space-y-4">
+                  <h2 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
                     My Courses
                   </h2>
                   <AllCourses type="attendance" />

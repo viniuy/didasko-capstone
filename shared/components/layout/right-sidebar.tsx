@@ -44,16 +44,16 @@ export default function Rightsidebar() {
         variant="outline"
         size="icon"
         onClick={() => setOpen(!open)}
-        className="fixed top-4 right-4 z-50 bg-[#124A69] text-white hover:bg-[#0f3d58] lg:hidden"
+        className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 bg-[#124A69] text-white hover:bg-[#0f3d58] lg:hidden min-h-[44px] min-w-[44px]"
       >
         {open ? <X size={20} /> : <Menu size={20} />}
       </Button>
 
       <div
-        className={`fixed top-0 right-0 z-40 h-screen bg-[#124A69] border-l p-4 pt-2 flex flex-col transition-all duration-300 overflow-hidden
+        className={`fixed top-0 right-0 z-40 h-screen bg-[#124A69] border-l p-2 sm:p-3 md:p-4 pt-2 flex flex-col transition-all duration-300 overflow-hidden
           ${open ? "translate-x-0" : "translate-x-full"}
           lg:translate-x-0
-          w-[360px] md:w-[360px] sm:w-[80vw]
+          w-[85vw] sm:w-[80vw] md:w-[360px] lg:w-[360px]
         `}
       >
         <div className="flex-grow overflow-y-auto grid grid-rows-2 gap-4 h-[calc(100vh-32px)]">

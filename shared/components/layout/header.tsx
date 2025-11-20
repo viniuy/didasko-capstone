@@ -102,17 +102,17 @@ export default function Header() {
 
   return (
     <>
-      <div className="w-[102.6%] -ml-5 bg-white border-b border-gray-400 flex justify-between shadow-lg items-center relative">
+      <div className="w-full bg-white border-b border-gray-400 flex justify-between shadow-lg items-center relative px-4 sm:px-5 lg:px-6">
         <Image
           src="/didasko-logo.png"
           alt="Logo"
           width={240}
           height={76}
-          className="w-60 h-19"
+          className="w-32 h-auto sm:w-48 md:w-60 sm:h-19"
         />
         {/* Sticky Temp Admin Button */}
         {!isChecking && isTempAdmin && (
-          <div className="relative mr-4">
+          <div className="relative mr-2 sm:mr-4">
             <Button
               onClick={() => !showPromoteDialog && setShowPromoteDialog(true)}
               className={`
@@ -122,10 +122,13 @@ export default function Header() {
                 text-white font-semibold
                 shadow-[0_0_15px_rgba(234,179,8,0.5)]
                 hover:shadow-[0_0_25px_rgba(234,179,8,0.7)]
-                flex items-center gap-2
-                mr-4 sticky top-0 z-50
+                flex items-center gap-1 sm:gap-2
+                sticky top-0 z-50
                 transition-all duration-300
                 transform hover:scale-105
+                text-xs sm:text-sm
+                px-2 sm:px-3 py-1.5 sm:py-2
+                min-h-[44px] sm:min-h-0
                 ${
                   showPromoteDialog
                     ? "opacity-75 cursor-not-allowed pointer-events-none"
@@ -149,11 +152,11 @@ export default function Header() {
               {/* Glow effect */}
               <div className="absolute inset-0 rounded-md bg-yellow-400/50 blur-xl animate-pulse opacity-50" />
 
-              <ShieldCheck className="w-4 h-4 relative z-10 animate-[bounce_2s_infinite]" />
+              <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 relative z-10 animate-[bounce_2s_infinite]" />
               <span className="hidden sm:inline relative z-10">
                 Temporary Admin
               </span>
-              <span className="sm:hidden relative z-10">Temp Admin</span>
+              <span className="sm:hidden relative z-10">Temp</span>
             </Button>
           </div>
         )}

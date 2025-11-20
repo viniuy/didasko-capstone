@@ -53,15 +53,17 @@ const CourseCard = ({
     <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between h-38">
       <div>
         <CardHeader className="-mt-4 flex justify-between items-center">
-          <CardTitle className="text-2xl font-bold">{course.title}</CardTitle>
-          <BookOpenText size={50} />
+          <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold">
+            {course.title}
+          </CardTitle>
+          <BookOpenText className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-[50px] lg:h-[50px]" />
         </CardHeader>
         <CardContent>
-          <p className="text-sm">Section {course.section}</p>
-          <p className="text-sm font-semibold">
+          <p className="text-xs sm:text-sm">Section {course.section}</p>
+          <p className="text-xs sm:text-sm font-semibold">
             Total Number of Absents: {course.attendanceStats?.totalAbsents || 0}
           </p>
-          <p className="text-xs text-gray-400">
+          <p className="text-[10px] sm:text-xs text-gray-400">
             {course.attendanceStats?.lastAttendanceDate
               ? `Last attendance: ${new Date(
                   course.attendanceStats.lastAttendanceDate
@@ -72,7 +74,7 @@ const CourseCard = ({
             <Button
               asChild
               variant="secondary"
-              className="bg-[#FAEDCB] text-black text-sm"
+              className="bg-[#FAEDCB] text-black text-xs sm:text-sm"
             >
               <Link href={href}>View Details</Link>
             </Button>
@@ -102,13 +104,43 @@ const LoadingSkeleton = ({ index }: { index: number }) => (
   </Card>
 );
 
+// Hook to get responsive items per page based on screen width
+const useItemsPerPage = () => {
+  const [itemsPerPage, setItemsPerPage] = useState(3);
+
+  useEffect(() => {
+    const updateItemsPerPage = () => {
+      const width = window.innerWidth;
+
+      if (width < 1521) {
+        setItemsPerPage(2);
+      } else if (width >= 2500) {
+        setItemsPerPage(5);
+      } else if (width >= 1956) {
+        setItemsPerPage(4);
+      } else {
+        setItemsPerPage(3);
+      }
+    };
+
+    // Set initial value
+    updateItemsPerPage();
+
+    // Update on resize
+    window.addEventListener("resize", updateItemsPerPage);
+    return () => window.removeEventListener("resize", updateItemsPerPage);
+  }, []);
+
+  return itemsPerPage;
+};
+
 export default function AllCourses({ type }: AllCoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 3;
+  const itemsPerPage = useItemsPerPage();
 
   const fetchSchedules = async () => {
     if (!session?.user?.id) {
@@ -137,6 +169,27 @@ export default function AllCourses({ type }: AllCoursesProps) {
     }
   }, [status, session?.user?.id]);
 
+  // Reset to page 1 when itemsPerPage changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
+
+  // Get grid class based on itemsPerPage
+  const getGridClass = () => {
+    switch (itemsPerPage) {
+      case 2:
+        return "grid-cols-1 sm:grid-cols-2";
+      case 3:
+        return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+      case 4:
+        return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
+      case 5:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5";
+      default:
+        return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+    }
+  };
+
   const totalPages = Math.ceil(courses.length / itemsPerPage);
   const currentCourses = courses.slice(
     (currentPage - 1) * itemsPerPage,
@@ -146,8 +199,8 @@ export default function AllCourses({ type }: AllCoursesProps) {
   if (status === "loading" || isLoading) {
     return (
       <Card className="p-4 shadow-md rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {[...Array(3)].map((_, index) => (
+        <div className={`grid ${getGridClass()} gap-4`}>
+          {[...Array(itemsPerPage)].map((_, index) => (
             <LoadingSkeleton key={index} index={index} />
           ))}
         </div>
@@ -159,9 +212,11 @@ export default function AllCourses({ type }: AllCoursesProps) {
     return (
       <Card className="p-4 shadow-md rounded-lg">
         <div className="text-center py-8">
-          <BookOpenText className="mx-auto mb-4" size={50} />
-          <h2 className="text-xl font-semibold mb-2">No Courses</h2>
-          <p className="text-gray-500">You don't have any courses assigned.</p>
+          <BookOpenText className="mx-auto mb-4 w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 lg:w-[50px] lg:h-[50px]" />
+          <h2 className="text-lg sm:text-xl font-semibold mb-2">No Courses</h2>
+          <p className="text-sm sm:text-base text-gray-500">
+            You don't have any courses assigned.
+          </p>
         </div>
       </Card>
     );
@@ -169,15 +224,17 @@ export default function AllCourses({ type }: AllCoursesProps) {
 
   return (
     <Card className="p-4 shadow-md rounded-lg">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-hidden">
+      <div
+        className={`grid ${getGridClass()} gap-4 max-h-[600px] overflow-hidden`}
+      >
         {currentCourses.map((course) => (
           <CourseCard key={course.id} course={course} type={type} />
         ))}
       </div>
 
       {courses.length > itemsPerPage && (
-        <div className="flex justify-between items-center px-2 -mt-4">
-          <p className="text-sm text-gray-500 w-100">
+        <div className="flex flex-col sm:flex-row justify-between items-center px-2 -mt-4 gap-2 sm:gap-0">
+          <p className="text-xs sm:text-sm text-gray-500 w-100">
             Showing {currentPage * itemsPerPage - (itemsPerPage - 1)}-
             {Math.min(currentPage * itemsPerPage, courses.length)} of{" "}
             {courses.length} classes
@@ -194,19 +251,78 @@ export default function AllCourses({ type }: AllCoursesProps) {
                   }
                 />
               </PaginationItem>
-              {[...Array(totalPages)].map((_, i) => (
+
+              {(() => {
+                const pages: number[] = [];
+
+                // If total pages is 5 or less, show all pages
+                if (totalPages <= 5) {
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i);
+                  }
+                  return pages;
+                } else {
+                  // Always show first 2 pages
+                  pages.push(1, 2);
+
+                  // Determine which pages to show around current
+                  const showAroundCurrent: number[] = [];
+                  if (currentPage > 2 && currentPage < totalPages - 1) {
+                    // Show current-1, current, current+1 if in middle
+                    showAroundCurrent.push(
+                      currentPage - 1,
+                      currentPage,
+                      currentPage + 1
+                    );
+                  } else if (currentPage <= 2) {
+                    // If current is 1 or 2, show 3, 4
+                    showAroundCurrent.push(3, 4);
+                  } else if (currentPage >= totalPages - 1) {
+                    // If current is near end, show last-3, last-2, last-1
+                    showAroundCurrent.push(
+                      totalPages - 3,
+                      totalPages - 2,
+                      totalPages - 1
+                    );
+                  }
+
+                  // Remove duplicates and sort
+                  const uniquePages = Array.from(
+                    new Set([...pages, ...showAroundCurrent, totalPages])
+                  ).sort((a, b) => a - b) as number[];
+
+                  // Build final array with ellipsis
+                  const finalPages: (number | string)[] = [];
+                  for (let i = 0; i < uniquePages.length; i++) {
+                    const page = uniquePages[i];
+                    if (i > 0 && page - uniquePages[i - 1] > 1) {
+                      finalPages.push("…");
+                    }
+                    finalPages.push(page);
+                  }
+
+                  return finalPages;
+                }
+              })().map((item, i) => (
                 <PaginationItem key={i}>
+                  {item === "…" ? (
+                    <span className="px-0.5 text-gray-500 select-none text-xs sm:text-sm">
+                      …
+                    </span>
+                  ) : (
                   <PaginationLink
-                    isActive={currentPage === i + 1}
-                    onClick={() => setCurrentPage(i + 1)}
+                      isActive={currentPage === item}
+                      onClick={() => setCurrentPage(item as number)}
                     className={
-                      currentPage === i + 1 ? "bg-[#124A69] text-white" : ""
+                        currentPage === item ? "bg-[#124A69] text-white" : ""
                     }
                   >
-                    {i + 1}
+                      {item}
                   </PaginationLink>
+                  )}
                 </PaginationItem>
               ))}
+
               <PaginationItem>
                 <PaginationNext
                   onClick={() =>

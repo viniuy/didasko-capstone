@@ -337,15 +337,15 @@ export function AppSidebar() {
       collapsible="icon"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
-      className="fixed top-0 left-0 z-50 h-screen bg-[#124A69] text-white border-[#124A69]"
+      className="fixed top-0 left-0 z-50 h-screen bg-[#124A69] text-white border-[#124A69] w-16 sm:w-20 md:w-64"
     >
       <SidebarContent className="flex-1">
         {/* User Profile */}
-        <SidebarHeader className="flex flex-row items-center gap-3 px-2 mt-4 relative group">
+        <SidebarHeader className="flex flex-row items-center gap-2 sm:gap-3 px-1 sm:px-2 mt-2 sm:mt-4 relative group">
           <div className="relative">
-            <Avatar className="w-12 h-12 shrink-0">
+            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 shrink-0">
               <AvatarImage src={userImage} className="object-cover" />
-              <AvatarFallback className="text-xl">
+              <AvatarFallback className="text-base sm:text-xl">
                 {avatarInitial}
               </AvatarFallback>
             </Avatar>
@@ -353,9 +353,9 @@ export function AppSidebar() {
             {/* Pencil overlay on hover */}
             <button
               onClick={() => setEditModalOpen(true)}
-              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full"
+              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full min-h-[44px] min-w-[44px]"
             >
-              <NotebookPen className="w-5 h-5 text-white" />
+              <NotebookPen className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </button>
           </div>
 
@@ -367,13 +367,13 @@ export function AppSidebar() {
             }`}
           >
             <p
-              className="text-lg font-semibold whitespace-nowrap overflow-hidden text-ellipsis max-w-[180px]"
+              className="text-sm sm:text-base md:text-lg font-semibold whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] sm:max-w-[180px]"
               title={displayName}
             >
               {displayName}
             </p>
             <p
-              className="text-sm text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis max-w-[180px]"
+              className="text-xs sm:text-sm text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] sm:max-w-[180px]"
               title={displayDepartment}
             >
               {displayDepartment}
@@ -389,13 +389,13 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.title}>
                   <a
                     href={item.url}
-                    className={`flex items-center gap-3 p-3 rounded hover:bg-gray-800 w-full ${
+                    className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
                       pathname?.startsWith(item.url) ? "bg-gray-800" : ""
                     }`}
                   >
-                    <item.icon className="w-6 h-6 shrink-0" />
+                    <item.icon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
                     <span
-                      className={`whitespace-nowrap transition-all duration-300 ${
+                      className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
                         open
                           ? "opacity-100 translate-x-0 delay-200"
                           : "opacity-0 translate-x-[-10px] delay-0"
@@ -417,15 +417,15 @@ export function AppSidebar() {
                     >
                       <CollapsibleTrigger asChild>
                         <button
-                          className={`flex items-center gap-3 p-3 rounded hover:bg-gray-800 w-full ${
+                          className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
                             pathname?.startsWith("/grading")
                               ? "bg-gray-800"
                               : ""
                           }`}
                         >
-                          <ClipboardList className="w-6 h-6 shrink-0" />
+                          <ClipboardList className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
                           <span
-                            className={`whitespace-nowrap transition-all duration-300 ${
+                            className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
                               open
                                 ? "opacity-100 translate-x-0 delay-200"
                                 : "opacity-0 translate-x-[-10px] delay-0"
@@ -434,7 +434,7 @@ export function AppSidebar() {
                             {open && "Grading"}
                           </span>
                           <ChevronDown
-                            className={`ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180 ${
+                            className={`ml-auto w-4 h-4 sm:w-5 sm:h-5 transition-transform group-data-[state=open]/collapsible:rotate-180 ${
                               open ? "opacity-100" : "opacity-0"
                             }`}
                           />
@@ -447,15 +447,15 @@ export function AppSidebar() {
                               <SidebarMenuItem key={item.title}>
                                 <a
                                   href={item.url}
-                                  className={`flex items-center gap-3 p-3 rounded hover:bg-gray-800 w-56 h-10 ml-4 ${
+                                  className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-56 min-h-[44px] sm:min-h-[40px] ml-2 sm:ml-4 ${
                                     pathname?.startsWith(item.url)
                                       ? "bg-gray-800"
                                       : ""
                                   }`}
                                 >
-                                  <item.icon className="w-6 h-6 shrink-0" />
+                                  <item.icon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
                                   <span
-                                    className={`text-sm transition-all duration-1000 ${
+                                    className={`text-xs sm:text-sm transition-all duration-1000 ${
                                       open
                                         ? "opacity-100 translate-x-0 "
                                         : "opacity-0 translate-x-[-10px]"
@@ -479,13 +479,13 @@ export function AppSidebar() {
       </SidebarContent>
 
       {/* Logout Button in Sidebar Footer */}
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-2 sm:p-4">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <button className="flex items-center gap-3 p-3 rounded hover:bg-gray-800 text-black-600">
-              <LogOut className="w-6 h-6 shrink-0" />
+            <button className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 text-black-600 min-h-[44px] sm:min-h-0 w-full">
+              <LogOut className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
               <span
-                className={`transition-all duration-300 ${
+                className={`text-sm sm:text-base transition-all duration-300 ${
                   open
                     ? "opacity-100 translate-x-0 delay-200"
                     : "opacity-0 translate-x-[-10px] delay-0"

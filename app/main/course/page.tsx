@@ -40,13 +40,11 @@ export default async function CourseDashboardPage() {
           <Header />
 
           {/* Courses Table */}
-          <div className="mb-4">
-            <CourseDataTable
-              courses={courses}
-              userRole={userRole}
-              userId={userId}
-            />
-          </div>
+          <CourseDataTable
+            courses={courses}
+            userRole={userRole}
+            userId={userId}
+          />
         </div>
 
         {/* Right Sidebar */}
