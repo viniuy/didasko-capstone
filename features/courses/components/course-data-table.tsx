@@ -4,6 +4,15 @@ import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { TimePicker } from "@/components/ui/time-picker";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Search,
   Download,
@@ -18,6 +27,8 @@ import {
   CalendarPlus,
   Settings2,
   Archive,
+  Filter,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +44,12 @@ import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 import { coursesService, usersService } from "@/lib/services/client";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Pagination,
   PaginationContent,
@@ -142,10 +159,16 @@ const useItemsPerPage = () => {
       const width = window.innerWidth;
       const height = window.innerHeight;
 
+      // If both height and width are very low, show only 1 item
+      if (width < 640 && height < 820) {
+        setItemsPerPage(1);
+        return;
+      }
+
       // Determine items per page based on width first
       let items = 4; // default for large desktop
       if (width < 640) {
-        items = 2;
+        items = 1;
       } else if (width < 1280) {
         items = 2;
       } else if (width < 1524) {
@@ -166,7 +189,7 @@ const useItemsPerPage = () => {
       } else {
         // For smaller screens, apply height restriction more strictly
         if (height < 960) {
-          setItemsPerPage(4);
+          setItemsPerPage(2);
         } else {
           setItemsPerPage(items);
         }
@@ -236,11 +259,13 @@ const CourseCard = ({
   onEdit,
   onAddSchedule,
   onViewDetails,
+  onNavigate,
 }: {
   course: Course;
   onEdit: (course: Course) => void;
   onAddSchedule: (course: Course) => void;
   onViewDetails: (course: Course) => void;
+  onNavigate?: (slug: string) => void;
 }) => {
   const router = useRouter();
 
@@ -289,7 +314,23 @@ const CourseCard = ({
   const attendanceRate = course.stats?.attendanceRate ?? 0;
 
   return (
-    <div className="group relative w-auto h-auto min-h-[240px] sm:h-[250px] md:h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-2 sm:p-3 hover:border-[#124A69] hover:shadow-xl transition-all duration-300 ease-in-out text-[#124A69] transform hover:scale-105 hover:-translate-y-1 will-change-transform">
+    <div className="group relative w-auto h-auto min-h-[240px] sm:h-[250px] md:h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-2 sm:p-3 hover:border-[#124A69] hover:shadow-xl transition-all duration-300 ease-in-out text-[#124A69] transform hover:scale-105 hover:-translate-y-1 will-change-transform overflow-hidden">
+      {/* Status Stripe - Diagonal top right (backward slash) */}
+      <div
+        className={`absolute top-0 right-0 w-24 h-1.5 ${
+          course.status === "ARCHIVED"
+            ? "bg-red-500"
+            : course.status === "ACTIVE"
+            ? "bg-[#124A69]"
+            : "bg-gray-400"
+        }`}
+        style={{
+          transform: "rotate(45deg)",
+          transformOrigin: "top right",
+          marginTop: "24px",
+          marginRight: "-20px",
+        }}
+      />
       {/* More Options Menu */}
       <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10">
         <DropdownMenu>
@@ -329,7 +370,13 @@ const CourseCard = ({
 
       {/* Card Content - Clickable */}
       <div
-        onClick={() => router.push(`/main/course/${course.slug}`)}
+        onClick={() => {
+          if (onNavigate) {
+            onNavigate(course.slug);
+          } else {
+            router.push(`/main/course/${course.slug}`);
+          }
+        }}
         className="cursor-pointer h-full"
       >
         <div className="mb-2 sm:mb-3 md:mb-4">
@@ -420,9 +467,36 @@ export function CourseDataTable({
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<CourseStatus | "ALL">("ALL");
-  const [facultyFilter, setFacultyFilter] = useState<string>(userId);
+  const [facultyFilter, setFacultyFilter] = useState<string[]>([userId]);
+  const [dayFilter, setDayFilter] = useState<string>("ALL");
+  const [roomFilter, setRoomFilter] = useState<string>("");
+  const [startTimeFilter, setStartTimeFilter] = useState<string>("");
+  const [endTimeFilter, setEndTimeFilter] = useState<string>("");
+  const [attendanceRateSort, setAttendanceRateSort] = useState<
+    "asc" | "desc" | "none"
+  >("none");
+  const [passingRateSort, setPassingRateSort] = useState<
+    "asc" | "desc" | "none"
+  >("none");
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const router = useRouter();
+  const [tempFacultyFilter, setTempFacultyFilter] = useState<string[]>([
+    userId,
+  ]);
+  const [tempDayFilter, setTempDayFilter] = useState<string>("ALL");
+  const [tempRoomFilter, setTempRoomFilter] = useState<string>("");
+  const [tempStartTimeFilter, setTempStartTimeFilter] = useState<string>("");
+  const [tempEndTimeFilter, setTempEndTimeFilter] = useState<string>("");
+  const [tempAttendanceRateSort, setTempAttendanceRateSort] = useState<
+    "asc" | "desc" | "none"
+  >("none");
+  const [tempPassingRateSort, setTempPassingRateSort] = useState<
+    "asc" | "desc" | "none"
+  >("none");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [scheduleDialogCourse, setScheduleDialogCourse] =
@@ -459,10 +533,46 @@ export function CourseDataTable({
     const loadAllData = async () => {
       try {
         setIsInitialLoading(true);
+        setIsLoading(true);
 
-        // Use getFaculty instead of getUsers to avoid permission issues
-        // getFaculty only requires authentication, not VIEW_USERS permission
-        const facultyResponse = await usersService.getFaculty();
+        // Batch all API calls together
+        const [facultyResponse, coursesWithStats] = await Promise.all([
+          // Fetch faculty
+          usersService.getFaculty().catch((error) => {
+            console.error("Error fetching faculty:", error);
+            return [];
+          }),
+          // Fetch stats for all courses in parallel
+          initialCourses.length > 0
+            ? Promise.all(
+                initialCourses.map(async (course) => {
+                  try {
+                    const stats = await coursesService.getStats(course.slug);
+                    return {
+                      ...course,
+                      stats,
+                    };
+                  } catch (error: any) {
+                    // Silently handle 404s (courses without stats yet)
+                    if (error?.response?.status !== 404) {
+                      console.error(
+                        `Error fetching stats for course ${course.code}:`,
+                        error
+                      );
+                    }
+                    return {
+                      ...course,
+                      stats: {
+                        passingRate: 0,
+                        attendanceRate: 0,
+                        totalStudents: 0,
+                      },
+                    };
+                  }
+                })
+              )
+            : Promise.resolve([]),
+        ]);
 
         if (Array.isArray(facultyResponse)) {
           // Filter to only FACULTY role (exclude ACADEMIC_HEAD if needed)
@@ -472,44 +582,15 @@ export function CourseDataTable({
           setFaculties(facultyOnly);
         }
 
-        // Fetch stats for all courses
-        if (initialCourses.length > 0) {
-          const coursesWithStats = await Promise.all(
-            initialCourses.map(async (course) => {
-              try {
-                const stats = await coursesService.getStats(course.slug);
-                return {
-                  ...course,
-                  stats,
-                };
-              } catch (error: any) {
-                // Silently handle 404s (courses without stats yet)
-                if (error?.response?.status !== 404) {
-                  console.error(
-                    `Error fetching stats for course ${course.code}:`,
-                    error
-                  );
-                }
-                return {
-                  ...course,
-                  stats: {
-                    passingRate: 0,
-                    attendanceRate: 0,
-                    totalStudents: 0,
-                  },
-                };
-              }
-            })
-          );
+        if (coursesWithStats.length > 0) {
           setTableData(coursesWithStats);
         }
-
-        await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error("Error loading initial data:", error);
         toast.error("Failed to load some data");
       } finally {
         setIsInitialLoading(false);
+        setIsLoading(false);
       }
     };
 
@@ -519,6 +600,7 @@ export function CourseDataTable({
   const refreshTableData = useCallback(async (skipStats = false) => {
     try {
       setIsRefreshing(true);
+      setIsLoading(true);
       const data = await coursesService.getCourses();
 
       if (data && Array.isArray(data)) {
@@ -595,24 +677,137 @@ export function CourseDataTable({
 
   // Filter courses based on role and faculty (without search/status filters)
   const baseFilteredCourses = useMemo(() => {
-    return filterCoursesByRole(tableData, userRole, userId, facultyFilter);
-  }, [tableData, userRole, userId, facultyFilter]);
+    // For Academic Head with multiple faculty selection
+    if (userRole === "ACADEMIC_HEAD") {
+      if (facultyFilter.length === 0) {
+        return [];
+      }
+      // If all faculties are selected (or "ALL" equivalent), show all courses
+      const allFacultyIds = [userId, ...faculties.map((f) => f.id)];
+      if (facultyFilter.length === allFacultyIds.length) {
+        return tableData;
+      }
+      // Filter by selected faculty IDs
+      return tableData.filter(
+        (course) => course.facultyId && facultyFilter.includes(course.facultyId)
+      );
+    }
+    // For Faculty, use the original function (single user)
+    return filterCoursesByRole(
+      tableData,
+      userRole,
+      userId,
+      facultyFilter[0] || userId
+    );
+  }, [tableData, userRole, userId, facultyFilter, faculties]);
+
+  // Helper function to convert time string to minutes for comparison
+  // Handles both "HH:MM" (24-hour) and "HH:MM AM/PM" (12-hour) formats
+  const timeToMinutes = (timeStr: string): number => {
+    if (!timeStr) return 0;
+
+    // Check if it's in "HH:MM AM/PM" format
+    if (timeStr.includes("AM") || timeStr.includes("PM")) {
+      const [time, period] = timeStr.split(" ");
+      const [hours, minutes] = time.split(":").map(Number);
+      let hour24 = hours;
+
+      if (period === "PM" && hours !== 12) {
+        hour24 = hours + 12;
+      } else if (period === "AM" && hours === 12) {
+        hour24 = 0;
+      }
+
+      return hour24 * 60 + (minutes || 0);
+    }
+
+    // Handle "HH:MM" format (24-hour)
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours * 60 + (minutes || 0);
+  };
 
   // Filter courses based on role and filters
   const filteredCourses = useMemo(() => {
     // Apply search and status filters to base filtered courses
-    return baseFilteredCourses.filter((course) => {
-      const matchesSearch =
-        course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        course.section.toLowerCase().includes(searchQuery.toLowerCase());
+    return baseFilteredCourses
+      .filter((course) => {
+        const matchesSearch =
+          course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          course.section.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesStatus =
-        statusFilter === "ALL" || course.status === statusFilter;
+        const matchesStatus =
+          statusFilter === "ALL" || course.status === statusFilter;
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [baseFilteredCourses, searchQuery, statusFilter]);
+        // Filter by day
+        const matchesDay =
+          dayFilter === "ALL" ||
+          (course.schedules &&
+            course.schedules.some((s: { day: string }) => s.day === dayFilter));
+
+        // Filter by room
+        const matchesRoom =
+          !roomFilter ||
+          course.room.toLowerCase().includes(roomFilter.toLowerCase());
+
+        // Filter by start time - show courses that start at the exact selected time
+        const matchesStartTime =
+          !startTimeFilter ||
+          (course.schedules &&
+            course.schedules.some((s: { fromTime: string }) => {
+              const courseStart = timeToMinutes(s.fromTime);
+              const filterStart = timeToMinutes(startTimeFilter);
+              return courseStart === filterStart;
+            }));
+
+        // Filter by end time - show courses that end at the exact selected time
+        const matchesEndTime =
+          !endTimeFilter ||
+          (course.schedules &&
+            course.schedules.some((s: { toTime: string }) => {
+              const courseEnd = timeToMinutes(s.toTime);
+              const filterEnd = timeToMinutes(endTimeFilter);
+              return courseEnd === filterEnd;
+            }));
+
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesDay &&
+          matchesRoom &&
+          matchesStartTime &&
+          matchesEndTime
+        );
+      })
+      .sort((a, b) => {
+        // Sort by attendance rate if sort is enabled
+        if (attendanceRateSort !== "none") {
+          const aRate = a.stats?.attendanceRate ?? 0;
+          const bRate = b.stats?.attendanceRate ?? 0;
+          if (aRate !== bRate) {
+            return attendanceRateSort === "asc" ? aRate - bRate : bRate - aRate;
+          }
+        }
+        // Sort by passing rate if sort is enabled (and attendance rate is equal or not sorted)
+        if (passingRateSort !== "none") {
+          const aRate = a.stats?.passingRate ?? 0;
+          const bRate = b.stats?.passingRate ?? 0;
+          if (aRate !== bRate) {
+            return passingRateSort === "asc" ? aRate - bRate : bRate - aRate;
+          }
+        }
+        return 0;
+      });
+  }, [
+    baseFilteredCourses,
+    searchQuery,
+    statusFilter,
+    dayFilter,
+    startTimeFilter,
+    endTimeFilter,
+    attendanceRateSort,
+    passingRateSort,
+  ]);
 
   const totalPages = Math.ceil(filteredCourses.length / itemsPerPage);
 
@@ -649,6 +844,7 @@ export function CourseDataTable({
 
   const handleArchiveCourses = async (courseIds: string[]) => {
     try {
+      setIsLoading(true);
       // Filter courses to only include those owned by current user
       const coursesToArchive = tableData
         .filter(
@@ -668,6 +864,7 @@ export function CourseDataTable({
         );
       }
 
+      setIsLoading(true);
       await axiosInstance.patch("/courses/bulk-archive", {
         courseIds: coursesToArchive,
         status: "ARCHIVED",
@@ -683,11 +880,14 @@ export function CourseDataTable({
     } catch (error) {
       console.error("Error archiving courses:", error);
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleUnarchiveCourses = async (courseIds: string[]) => {
     try {
+      setIsLoading(true);
       await axiosInstance.patch("/courses/bulk-archive", {
         courseIds,
         status: "ACTIVE",
@@ -699,6 +899,8 @@ export function CourseDataTable({
     } catch (error) {
       console.error("Error unarchiving courses:", error);
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1148,9 +1350,16 @@ export function CourseDataTable({
     }
 
     try {
+      setIsLoading(true);
       // Check for duplicate courses BEFORE preparing import
       const duplicates: string[] = [];
       const validCourses: any[] = [];
+
+      // Fetch existing courses once instead of in a loop
+      const existingCoursesResponse = await coursesService.getCourses();
+      const existingCourses = Array.isArray(existingCoursesResponse)
+        ? existingCoursesResponse
+        : existingCoursesResponse.courses || [];
 
       for (const row of previewData) {
         const code = row["Course Code"]?.trim().toUpperCase();
@@ -1160,11 +1369,6 @@ export function CourseDataTable({
         const semester = row["Semester"]?.trim() || "1st Semester";
 
         // Check if course already exists in database
-        const existingCoursesResponse = await coursesService.getCourses();
-        const existingCourses = Array.isArray(existingCoursesResponse)
-          ? existingCoursesResponse
-          : existingCoursesResponse.courses || [];
-
         const isDuplicate = existingCourses.some(
           (c: any) =>
             c.code === code &&
@@ -1242,6 +1446,8 @@ export function CourseDataTable({
 
       console.error("Import preparation error:", error);
       toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
     }
   }, [selectedFile, isValidFile, previewData]);
 
@@ -1273,8 +1479,168 @@ export function CourseDataTable({
     setShowImportStatus(false);
     setImportStatus(null);
   }, [refreshTableData, onCourseAdded, scheduleDialogMode]);
+
+  // Handle filter apply
+  const handleApplyFilters = () => {
+    setFacultyFilter(tempFacultyFilter);
+    setDayFilter(tempDayFilter);
+    setRoomFilter(tempRoomFilter);
+    setStartTimeFilter(tempStartTimeFilter);
+    setEndTimeFilter(tempEndTimeFilter);
+    setAttendanceRateSort(tempAttendanceRateSort);
+    setPassingRateSort(tempPassingRateSort);
+    setIsFilterSheetOpen(false);
+  };
+
+  // Reset temp filters when sheet opens
+  const handleFilterSheetOpen = (open: boolean) => {
+    setIsFilterSheetOpen(open);
+    if (open) {
+      setTempFacultyFilter(facultyFilter);
+      setTempDayFilter(dayFilter);
+      setTempRoomFilter(roomFilter);
+      setTempStartTimeFilter(startTimeFilter);
+      setTempEndTimeFilter(endTimeFilter);
+      setTempAttendanceRateSort(attendanceRateSort);
+      setTempPassingRateSort(passingRateSort);
+    }
+  };
+
+  // Check if filters are active and count them
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (
+      facultyFilter.length > 0 &&
+      (facultyFilter.length !== 1 || facultyFilter[0] !== userId)
+    ) {
+      count++;
+    }
+    if (dayFilter !== "ALL") count++;
+    if (roomFilter !== "") count++;
+    if (startTimeFilter !== "") count++;
+    if (endTimeFilter !== "") count++;
+    if (attendanceRateSort !== "none") count++;
+    if (passingRateSort !== "none") count++;
+    return count;
+  };
+
+  const hasActiveFilters = getActiveFilterCount() > 0;
+  const activeFilterCount = getActiveFilterCount();
+
+  // Handle course navigation with fade out
+  const handleCourseNavigate = (slug: string) => {
+    setIsRedirecting(true);
+    setTimeout(() => {
+      router.push(`/main/course/${slug}`);
+    }, 300);
+  };
+
+  // Get empty state message based on active filters
+  const getEmptyStateMessage = () => {
+    const activeFilters: string[] = [];
+
+    // Check faculty filter
+    const isFacultyFilterActive =
+      facultyFilter.length > 0 &&
+      (facultyFilter.length !== 1 || facultyFilter[0] !== userId);
+    if (isFacultyFilterActive) {
+      const selectedFacultyNames = facultyFilter
+        .map((id) => {
+          if (id === userId) {
+            return "My Courses";
+          }
+          const faculty = faculties.find((f) => f.id === id);
+          return faculty?.name || "Unknown";
+        })
+        .filter(Boolean);
+
+      if (selectedFacultyNames.length === 1) {
+        activeFilters.push(`for ${selectedFacultyNames[0]}`);
+      } else if (selectedFacultyNames.length > 1) {
+        activeFilters.push(
+          `for ${selectedFacultyNames.length} selected faculty`
+        );
+      }
+    }
+
+    // Check status filter
+    if (statusFilter !== "ALL") {
+      activeFilters.push(`with status "${statusFilter}"`);
+    }
+
+    // Check day filter
+    if (dayFilter !== "ALL") {
+      activeFilters.push(`on ${dayFilter}`);
+    }
+
+    // Check room filter
+    if (roomFilter) {
+      activeFilters.push(`in room "${roomFilter}"`);
+    }
+
+    // Check start time filter
+    if (startTimeFilter) {
+      activeFilters.push(`starting from ${startTimeFilter}`);
+    }
+
+    // Check end time filter
+    if (endTimeFilter) {
+      activeFilters.push(`ending by ${endTimeFilter}`);
+    }
+
+    // Check search query
+    if (searchQuery) {
+      activeFilters.push(`matching "${searchQuery}"`);
+    }
+
+    if (activeFilters.length > 0) {
+      return `No courses found ${activeFilters.join(", ")}`;
+    }
+
+    return "No courses found";
+  };
+
+  const getEmptyStateSubMessage = () => {
+    const suggestions: string[] = [];
+
+    // Check faculty filter
+    const isFacultyFilterActive =
+      facultyFilter.length > 0 &&
+      (facultyFilter.length !== 1 || facultyFilter[0] !== userId);
+    if (isFacultyFilterActive) {
+      suggestions.push("try selecting different faculty");
+    }
+
+    // Check other filters
+    if (dayFilter !== "ALL") {
+      suggestions.push("try a different day");
+    }
+    if (roomFilter) {
+      suggestions.push("try a different room");
+    }
+    if (startTimeFilter || endTimeFilter) {
+      suggestions.push("adjust time filters");
+    }
+    if (statusFilter !== "ALL") {
+      suggestions.push("try a different status");
+    }
+    if (searchQuery) {
+      suggestions.push("adjust your search");
+    }
+
+    if (suggestions.length > 0) {
+      return `Try ${suggestions.join(" or ")}`;
+    }
+
+    return "Get started by adding a new course";
+  };
+
   return (
-    <div className="flex flex-col flex-grow">
+    <div
+      className={`flex flex-col flex-grow transition-opacity duration-300 ${
+        isRedirecting ? "opacity-0" : "opacity-100"
+      }`}
+    >
       <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[500px] md:min-h-[590px] overflow-x-visible">
         <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69] mb-3 sm:mb-4 md:mb-5">
           Course Management Dashboard
@@ -1282,59 +1648,63 @@ export function CourseDataTable({
 
         <div className="space-y-4 sm:space-y-5 md:space-y-6">
           <div className="flex flex-col gap-3 sm:gap-4">
-            <div className="flex justify-between items-center">
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
-                {/* Faculty Filter - Only for Academic Head */}
-                {permissions.canFilterByFaculty && (
-                  <div className="w-full sm:w-auto sm:pr-5">
-                    <FacultyFilter
-                      faculties={faculties}
-                      selectedFacultyId={facultyFilter}
-                      onChange={setFacultyFilter}
-                      currentUserId={userId}
-                    />
-                  </div>
-                )}
-                <div className="relative w-full sm:w-[300px] md:w-[400px]">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search courses..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 sm:h-9 text-sm sm:text-base"
-                  />
-                </div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+              {/* Search Bar */}
+              <div className="relative w-[300px]">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search courses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-10 sm:h-9 text-sm sm:text-base "
+                />
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
+                {/* Filter Button */}
+                <Button
+                  variant="outline"
+                  onClick={() => setIsFilterSheetOpen(true)}
+                  className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
+                >
+                  <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xl:inline">Filter</span>
+                  {hasActiveFilters && (
+                    <>
+                      <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center 2xl:hidden">
+                        {activeFilterCount > 3 ? "3" : activeFilterCount}
+                      </span>
+                      <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 items-center justify-center hidden 2xl:flex">
+                        {activeFilterCount}
+                      </span>
+                    </>
+                  )}
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowSettingsDialog(true)}
-                  className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-h-[44px] sm:min-h-0"
+                  className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                 >
                   <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span className="hidden sm:inline">Archive</span>
-                  <span className="sm:hidden">Archive</span>
+                  <span className="hidden xl:inline">Archive</span>
                 </Button>
                 {permissions.canExportData && (
                   <Button
                     variant="outline"
                     onClick={() => setShowExportPreview(true)}
-                    className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-h-[44px] sm:min-h-0"
+                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                   >
                     <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden sm:inline">Export</span>
-                    <span className="sm:hidden">Export</span>
+                    <span className="hidden xl:inline">Export</span>
                   </Button>
                 )}
                 {permissions.canImportCourses && (
                   <Button
                     variant="outline"
                     onClick={() => setShowImportPreview(true)}
-                    className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 min-h-[44px] sm:min-h-0"
+                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                   >
                     <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden sm:inline">Import</span>
-                    <span className="sm:hidden">Import</span>
+                    <span className="hidden xl:inline">Import</span>
                   </Button>
                 )}
                 {permissions.canCreateCourse && (
@@ -1400,7 +1770,9 @@ export function CourseDataTable({
             </button>
           </div>
 
-          {isRefreshing ? (
+          {isInitialLoading || isLoading ? (
+            <LoadingSpinner />
+          ) : isRefreshing ? (
             <div className="flex justify-center items-center h-48 sm:h-64">
               <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-[#124A69]" />
             </div>
@@ -1414,6 +1786,7 @@ export function CourseDataTable({
                     onEdit={handleEditCourse}
                     onAddSchedule={handleAddSchedule}
                     onViewDetails={handleViewDetails}
+                    onNavigate={handleCourseNavigate}
                   />
                 ))}
               </div>
@@ -1549,12 +1922,10 @@ export function CourseDataTable({
             <div className="flex flex-col items-center justify-center h-48 sm:h-64 text-center px-4">
               <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2 sm:mb-3" />
               <p className="text-sm sm:text-base text-gray-600 font-medium">
-                No courses found
+                {getEmptyStateMessage()}
               </p>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                {searchQuery
-                  ? "Try adjusting your search"
-                  : "Get started by adding a new course"}
+                {getEmptyStateSubMessage()}
               </p>
             </div>
           )}
@@ -1633,6 +2004,213 @@ export function CourseDataTable({
             userId={userId}
             userRole={userRole}
           />
+
+          {/* Filter Sheet */}
+          <Sheet open={isFilterSheetOpen} onOpenChange={handleFilterSheetOpen}>
+            <SheetContent
+              side="right"
+              className="w-[340px] sm:w-[400px] p-0 flex flex-col"
+            >
+              <div className="p-6 border-b flex-shrink-0">
+                <SheetHeader>
+                  <SheetTitle className="text-xl font-semibold">
+                    Filter Options
+                  </SheetTitle>
+                </SheetHeader>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Faculty Filter - Only for Academic Head */}
+                {permissions.canFilterByFaculty && (
+                  <div className="w-full">
+                    <FacultyFilter
+                      faculties={faculties}
+                      selectedFacultyIds={tempFacultyFilter}
+                      onChange={setTempFacultyFilter}
+                      currentUserId={userId}
+                    />
+                  </div>
+                )}
+
+                {/* Filter by Day */}
+                <div className="space-y-2">
+                  <Label htmlFor="day-filter" className="text-sm font-medium">
+                    Filter by Day
+                  </Label>
+                  <Select
+                    value={tempDayFilter}
+                    onValueChange={setTempDayFilter}
+                  >
+                    <SelectTrigger id="day-filter" className="w-full">
+                      <SelectValue placeholder="Select day" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Days</SelectItem>
+                      <SelectItem value="Monday">Monday</SelectItem>
+                      <SelectItem value="Tuesday">Tuesday</SelectItem>
+                      <SelectItem value="Wednesday">Wednesday</SelectItem>
+                      <SelectItem value="Thursday">Thursday</SelectItem>
+                      <SelectItem value="Friday">Friday</SelectItem>
+                      <SelectItem value="Saturday">Saturday</SelectItem>
+                      <SelectItem value="Sunday">Sunday</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filter by Room */}
+                <div className="space-y-2">
+                  <Label htmlFor="room-filter" className="text-sm font-medium">
+                    Filter by Room
+                  </Label>
+                  <Input
+                    id="room-filter"
+                    type="text"
+                    value={tempRoomFilter}
+                    onChange={(e) => setTempRoomFilter(e.target.value)}
+                    placeholder="Enter room name or number"
+                    className="w-full"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Filter courses by room name or number
+                  </p>
+                </div>
+
+                {/* Filter by Start Time and End Time */}
+                <div className="flex gap-4">
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-sm font-medium">
+                      Filter by Start Time
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <TimePicker
+                          value={tempStartTimeFilter}
+                          onChange={setTempStartTimeFilter}
+                        />
+                      </div>
+                      {tempStartTimeFilter && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setTempStartTimeFilter("")}
+                          className="h-9 w-9 p-0 flex-shrink-0"
+                          title="Clear start time"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Show courses starting at this exact time
+                    </p>
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <Label className="text-sm font-medium">
+                      Filter by End Time
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <TimePicker
+                          value={tempEndTimeFilter}
+                          onChange={setTempEndTimeFilter}
+                        />
+                      </div>
+                      {tempEndTimeFilter && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setTempEndTimeFilter("")}
+                          className="h-9 w-9 p-0 flex-shrink-0"
+                          title="Clear end time"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Show courses ending at this exact time
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sort by Attendance Rate */}
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="attendance-rate-sort"
+                    className="text-sm font-medium"
+                  >
+                    Sort by Attendance Rate
+                  </Label>
+                  <Select
+                    value={tempAttendanceRateSort}
+                    onValueChange={(value: "asc" | "desc" | "none") =>
+                      setTempAttendanceRateSort(value)
+                    }
+                  >
+                    <SelectTrigger id="attendance-rate-sort" className="w-full">
+                      <SelectValue placeholder="Select sort order" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Sort</SelectItem>
+                      <SelectItem value="asc">
+                        Ascending (Low to High)
+                      </SelectItem>
+                      <SelectItem value="desc">
+                        Descending (High to Low)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sort by Passing Rate */}
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="passing-rate-sort"
+                    className="text-sm font-medium"
+                  >
+                    Sort by Passing Rate
+                  </Label>
+                  <Select
+                    value={tempPassingRateSort}
+                    onValueChange={(value: "asc" | "desc" | "none") =>
+                      setTempPassingRateSort(value)
+                    }
+                  >
+                    <SelectTrigger id="passing-rate-sort" className="w-full">
+                      <SelectValue placeholder="Select sort order" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Sort</SelectItem>
+                      <SelectItem value="asc">
+                        Ascending (Low to High)
+                      </SelectItem>
+                      <SelectItem value="desc">
+                        Descending (High to Low)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="p-6 border-t bg-white flex-shrink-0">
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsFilterSheetOpen(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleApplyFilters}
+                    className="flex-1 bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                  >
+                    Apply Filters
+                  </Button>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {/* Edit Course Sheet */}
           {editingCourse && (

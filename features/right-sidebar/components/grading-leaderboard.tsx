@@ -72,7 +72,7 @@ const GradeBar = ({ grade }: { grade: number }) => {
 
 const StudentRankCard = ({ student }: { student: StudentGrade }) => {
   return (
-    <div className="bg-white/10 hover:bg-white/15 rounded-lg p-3 border border-white/20 transition-all duration-200">
+    <div className="bg-white/10 rounded-lg p-3 border border-white/20">
       <div className="flex items-start gap-3">
         <RankBadge rank={student.rank} />
 

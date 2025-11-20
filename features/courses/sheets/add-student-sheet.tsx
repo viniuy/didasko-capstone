@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,12 +12,11 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Search, AlertCircle, Loader2, Users } from "lucide-react";
 import { Student } from "../types/types";
 import { getInitials } from "../utils/initials";
+import { studentsService } from "@/lib/services/client";
 
 interface AddStudentSheetProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  existingStudents: Student[];
-  isLoading: boolean;
   enrolledStudentIds: string[];
   onSelectStudent: (student: Student) => Promise<void>;
 }
@@ -25,25 +24,75 @@ interface AddStudentSheetProps {
 export const AddStudentSheet = ({
   isOpen,
   onOpenChange,
-  existingStudents,
-  isLoading,
   enrolledStudentIds,
   onSelectStudent,
 }: AddStudentSheetProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchResults, setSearchResults] = useState<Student[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-  const filteredStudents = useMemo(
-    () =>
-      existingStudents.filter(
-        (s) =>
-          !enrolledStudentIds.includes(s.id) &&
-          `${s.lastName} ${s.firstName} ${s.studentId}`
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())
-      ),
-    [existingStudents, enrolledStudentIds, searchQuery]
+  // Debounced search function
+  const performSearch = useCallback(
+    async (query: string) => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const response = await studentsService.getStudents({
+          search: query.trim(),
+          limit: 50, // Increase limit for better results
+        });
+        const students = Array.isArray(response.students)
+          ? response.students
+          : response.students || [];
+
+        // Map and filter to only students with RFID and not already enrolled
+        const filtered = students
+          .map((s: any) => ({
+            id: s.id,
+            lastName: s.lastName,
+            firstName: s.firstName,
+            middleInitial: s.middleInitial || "",
+            studentId: s.studentId,
+            image: s.image,
+            rfid_id: s.rfid_id,
+          }))
+          .filter(
+            (s: Student) => s.rfid_id && !enrolledStudentIds.includes(s.id)
+          );
+
+        setSearchResults(filtered);
+      } catch (error) {
+        console.error("Error searching students:", error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    [enrolledStudentIds]
   );
+
+  // Debounce search input
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      performSearch(searchQuery);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, performSearch]);
+
+  // Reset search when sheet closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery("");
+      setSearchResults([]);
+    }
+  }, [isOpen]);
 
   const handleSelect = async (student: Student) => {
     setIsSubmitting(true);
@@ -79,20 +128,33 @@ export const AddStudentSheet = ({
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
             <Input
-              placeholder="Search students..."
+              placeholder="Search by name, Student ID, or RFID ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8"
+              disabled={isSubmitting}
             />
+            {isSearching && (
+              <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-gray-400" />
+            )}
           </div>
 
           <div className="border rounded-lg max-h-[500px] overflow-y-auto">
-            {isLoading ? (
-              <div className="flex items-center justify-center p-8">
-                <Loader2 className="w-6 h-6 animate-spin text-[#124A69]" />
+            {isSearching ? (
+              <div className="flex flex-col items-center justify-center p-8">
+                <Loader2 className="w-6 h-6 animate-spin text-[#124A69] mb-2" />
+                <p className="text-sm text-gray-500">Searching students...</p>
               </div>
-            ) : filteredStudents.length > 0 ? (
-              filteredStudents.map((student) => (
+            ) : searchQuery.trim() === "" ? (
+              <div className="p-8 text-center text-gray-500">
+                <Search className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                <p className="font-medium">Start searching</p>
+                <p className="text-sm mt-1">
+                  Enter a name, Student ID, or RFID ID to find students
+                </p>
+              </div>
+            ) : searchResults.length > 0 ? (
+              searchResults.map((student) => (
                 <div
                   key={student.id}
                   className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
@@ -138,9 +200,8 @@ export const AddStudentSheet = ({
                 <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
                 <p className="font-medium">No students found</p>
                 <p className="text-sm mt-1">
-                  {searchQuery
-                    ? "Try adjusting your search"
-                    : "No students with RFID registration available"}
+                  Try adjusting your search or make sure the student has RFID
+                  registration
                 </p>
               </div>
             )}

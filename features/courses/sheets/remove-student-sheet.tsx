@@ -64,6 +64,43 @@ export const RemoveStudentSheet = ({
     [students, searchQuery]
   );
 
+  const allFilteredSelected = useMemo(
+    () =>
+      filteredStudents.length > 0 &&
+      filteredStudents.every((student) =>
+        selectedStudents.includes(student.id)
+      ),
+    [filteredStudents, selectedStudents]
+  );
+
+  const hasAnyFilteredSelected = useMemo(
+    () =>
+      filteredStudents.some((student) => selectedStudents.includes(student.id)),
+    [filteredStudents, selectedStudents]
+  );
+
+  const toggleSelectAll = () => {
+    if (hasAnyFilteredSelected) {
+      // Deselect all filtered students
+      const filteredIds = filteredStudents.map((s) => s.id);
+      setSelectedStudents((prev) =>
+        prev.filter((id) => !filteredIds.includes(id))
+      );
+    } else {
+      // Select all filtered students
+      const filteredIds = filteredStudents.map((s) => s.id);
+      setSelectedStudents((prev) => {
+        const newSelection = [...prev];
+        filteredIds.forEach((id) => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
+    }
+  };
+
   const confirmRemoval = async () => {
     if (hasStudentsWithRecords && confirmationInput !== "Remove") {
       toast.error('Please type "Remove" to confirm');
@@ -123,32 +160,27 @@ export const RemoveStudentSheet = ({
               </div>
             </div>
 
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-              <Input
-                placeholder="Search students..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-
-            {selectedStudents.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-800">
-                  {selectedStudents.length} student
-                  {selectedStudents.length > 1 ? "s" : ""} selected
-                </span>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+                <Input
+                  placeholder="Search students..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              {filteredStudents.length > 0 && (
                 <Button
                   size="sm"
-                  variant="ghost"
-                  onClick={() => setSelectedStudents([])}
-                  className="text-blue-600"
+                  variant="outline"
+                  onClick={toggleSelectAll}
+                  className="text-sm whitespace-nowrap"
                 >
-                  Clear
+                  {hasAnyFilteredSelected ? "Deselect All" : "Select All"}
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
 
             <div className="border rounded-lg max-h-[400px] overflow-y-auto">
               {filteredStudents.map((student) => (
@@ -192,7 +224,11 @@ export const RemoveStudentSheet = ({
             </div>
 
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={resetSheet}>
+              <Button
+                variant="outline"
+                onClick={resetSheet}
+                disabled={isRemoving}
+              >
                 Cancel
               </Button>
               <Button
@@ -201,11 +237,20 @@ export const RemoveStudentSheet = ({
                     ? setShowConfirmation(true)
                     : confirmRemoval()
                 }
-                disabled={selectedStudents.length === 0}
+                disabled={selectedStudents.length === 0 || isRemoving}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                Remove {selectedStudents.length} Student
-                {selectedStudents.length !== 1 ? "s" : ""}
+                {isRemoving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Removing...
+                  </>
+                ) : (
+                  <>
+                    Remove {selectedStudents.length} Student
+                    {selectedStudents.length !== 1 ? "s" : ""}
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -230,6 +275,7 @@ export const RemoveStudentSheet = ({
             <Button
               variant="outline"
               onClick={() => setShowConfirmation(false)}
+              disabled={isRemoving}
             >
               Cancel
             </Button>

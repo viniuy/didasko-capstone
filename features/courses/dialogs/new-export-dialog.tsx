@@ -1,10 +1,18 @@
-import React, { useState } from "react";
-import { Download, FileSpreadsheet } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Download, FileSpreadsheet, CalendarIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import toast from "react-hot-toast";
+import { format } from "date-fns";
 import { StudentWithGrades, CourseInfo } from "../types/types";
 
 interface ExportDialogProps {
@@ -23,10 +31,7 @@ export const ExportDialog = ({
   const [exportOptions, setExportOptions] = useState({
     // Basic Info
     studentId: true,
-    firstName: true,
-    lastName: true,
-    middleInitial: true,
-    attendance: false,
+    fullName: true,
     // Terms with detailed scores
     prelimsDetailed: false,
     midtermDetailed: false,
@@ -38,6 +43,33 @@ export const ExportDialog = ({
     preFinalsSummary: false,
     finalsSummary: false,
   });
+  const [selectedAttendanceDates, setSelectedAttendanceDates] = useState<
+    Date[]
+  >([]);
+  const [exportAllAttendance, setExportAllAttendance] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  // Get all unique attendance dates from all students
+  const attendanceDates = useMemo(() => {
+    const dateSet = new Set<string>();
+    students.forEach((student) => {
+      student.attendanceRecords?.forEach((record) => {
+        dateSet.add(record.date);
+      });
+    });
+    return Array.from(dateSet)
+      .map((dateStr) => new Date(dateStr))
+      .sort((a, b) => a.getTime() - b.getTime());
+  }, [students]);
+
+  // When exportAllAttendance is checked, select all dates
+  useEffect(() => {
+    if (exportAllAttendance) {
+      setSelectedAttendanceDates([...attendanceDates]);
+    } else {
+      setSelectedAttendanceDates([]);
+    }
+  }, [exportAllAttendance, attendanceDates]);
 
   const toggleExportOption = (key: keyof typeof exportOptions) => {
     setExportOptions((prev) => ({
@@ -50,9 +82,7 @@ export const ExportDialog = ({
     setExportOptions((prev) => ({
       ...prev,
       studentId: true,
-      firstName: true,
-      lastName: true,
-      middleInitial: true,
+      fullName: true,
     }));
   };
 
@@ -157,10 +187,15 @@ export const ExportDialog = ({
 
       // Basic Information columns
       if (exportOptions.studentId) addColumn("STUDENT ID", 16, "id");
-      if (exportOptions.lastName) addColumn("LAST NAME", 20, "name");
-      if (exportOptions.firstName) addColumn("FIRST NAME", 20, "name");
-      if (exportOptions.middleInitial) addColumn("M.I.", 8, "text");
-      if (exportOptions.attendance) addColumn("ATTENDANCE", 15, "percentage");
+      if (exportOptions.fullName) addColumn("FULL NAME", 35, "name");
+
+      // Attendance columns for selected dates
+      const datesToExport = exportAllAttendance
+        ? attendanceDates
+        : selectedAttendanceDates;
+      datesToExport.forEach((date) => {
+        addColumn(format(date, "MMM d, yyyy"), 14, "attendance");
+      });
 
       // Helper to add term columns with visual grouping
       const addTermColumns = (
@@ -267,11 +302,19 @@ export const ExportDialog = ({
         worksheet.getColumn(col).width = width;
       });
 
-      // Sort students alphabetically by last name, then first name
+      // Sort students alphabetically by last name, then first name (case-insensitive)
       const sortedStudents = [...students].sort((a, b) => {
-        const lastNameCompare = a.lastName.localeCompare(b.lastName);
+        const lastNameCompare = a.lastName
+          .toLowerCase()
+          .localeCompare(b.lastName.toLowerCase(), undefined, {
+            sensitivity: "base",
+          });
         if (lastNameCompare !== 0) return lastNameCompare;
-        return a.firstName.localeCompare(b.firstName);
+        return a.firstName
+          .toLowerCase()
+          .localeCompare(b.firstName.toLowerCase(), undefined, {
+            sensitivity: "base",
+          });
       });
 
       // Add student data rows
@@ -285,49 +328,59 @@ export const ExportDialog = ({
           cell.value = student.studentId;
           cell.font = { size: dataFontSize, name: "Courier New", bold: true };
         }
-        if (exportOptions.lastName) {
+        if (exportOptions.fullName) {
           const cell = worksheet.getCell(rowNum, col++);
-          cell.value = student.lastName.toUpperCase();
+          const fullName = `${student.lastName.toUpperCase()}, ${
+            student.firstName
+          }${student.middleInitial ? ` ${student.middleInitial}.` : ""}`;
+          cell.value = fullName;
           cell.font = { size: dataFontSize, name: "Arial", bold: true };
         }
-        if (exportOptions.firstName) {
+
+        // Attendance columns for selected dates
+        const datesToExport = exportAllAttendance
+          ? attendanceDates
+          : selectedAttendanceDates;
+        datesToExport.forEach((date) => {
+          // Match date in various formats
+          const dateStr = format(date, "yyyy-MM-dd");
+          const record = student.attendanceRecords?.find((r) => {
+            const recordDate = new Date(r.date);
+            return (
+              recordDate.getFullYear() === date.getFullYear() &&
+              recordDate.getMonth() === date.getMonth() &&
+              recordDate.getDate() === date.getDate()
+            );
+          });
           const cell = worksheet.getCell(rowNum, col++);
-          cell.value = student.firstName;
-          cell.font = { size: dataFontSize, name: "Arial" };
-        }
-        if (exportOptions.middleInitial) {
-          const cell = worksheet.getCell(rowNum, col++);
-          cell.value = student.middleInitial || "";
-          cell.font = { size: dataFontSize, name: "Arial" };
-        }
 
-        if (exportOptions.attendance) {
-          const records = student.attendanceRecords || [];
-          const present = records.filter((r) => r.status === "PRESENT").length;
-          const percentage =
-            records.length > 0
-              ? Math.round((present / records.length) * 100)
-              : 0;
+          if (record) {
+            cell.value = record.status;
+            cell.font = {
+              size: dataFontSize,
+              name: "Arial",
+              bold: true,
+            };
+            cell.alignment = { horizontal: "center" };
 
-          const cell = worksheet.getCell(rowNum, col++);
-          cell.value = records.length > 0 ? percentage / 100 : "N/A";
-
-          if (typeof cell.value === "number") {
-            cell.numFmt = "0%";
-            cell.font = { size: dataFontSize + 1, name: "Arial", bold: true };
-
-            // Color coding for attendance
-            if (percentage >= 90) {
+            // Color coding for attendance status
+            if (record.status === "PRESENT") {
               cell.font = { ...cell.font, color: { argb: "FF059669" } }; // Green
-            } else if (percentage >= 75) {
+            } else if (record.status === "LATE") {
               cell.font = { ...cell.font, color: { argb: "FFD97706" } }; // Orange
             } else {
               cell.font = { ...cell.font, color: { argb: "FFDC2626" } }; // Red
             }
           } else {
-            cell.font = { size: dataFontSize, name: "Arial", italic: true };
+            cell.value = "—";
+            cell.font = {
+              size: dataFontSize,
+              name: "Arial",
+              color: { argb: "FF999999" },
+            };
+            cell.alignment = { horizontal: "center" };
           }
-        }
+        });
 
         // Helper function to add term data
         const addTermData = (
@@ -704,36 +757,119 @@ export const ExportDialog = ({
                 label="Student ID"
               />
               <CheckboxItem
-                id="firstName"
-                checked={exportOptions.firstName}
-                label="First Name"
-              />
-              <CheckboxItem
-                id="lastName"
-                checked={exportOptions.lastName}
-                label="Last Name"
-              />
-              <CheckboxItem
-                id="middleInitial"
-                checked={exportOptions.middleInitial}
-                label="Middle Initial"
+                id="fullName"
+                checked={exportOptions.fullName}
+                label="Full Name"
               />
             </div>
           </div>
 
           <div className="border-t border-gray-200"></div>
 
-          {/* Additional Data Section */}
+          {/* Attendance Section */}
           <div className="space-y-3">
             <h3 className="font-semibold text-base text-gray-800 flex items-center gap-2 mb-4">
               <div className="w-1 h-5 bg-[#124A69] rounded-full"></div>
-              Additional Data
+              Attendance by Day
             </h3>
-            <CheckboxItem
-              id="attendance"
-              checked={exportOptions.attendance}
-              label="Attendance Rate"
-            />
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer group">
+                <Checkbox
+                  checked={exportAllAttendance}
+                  onCheckedChange={(checked) =>
+                    setExportAllAttendance(checked === true)
+                  }
+                />
+                <label className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                  Export All Attendance Dates
+                </label>
+              </div>
+              {!exportAllAttendance && (
+                <div className="space-y-2">
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="rounded-full h-10 pl-3 pr-2 flex items-center gap-2 w-full justify-between"
+                      >
+                        <span className="truncate">
+                          {selectedAttendanceDates.length > 0
+                            ? `${selectedAttendanceDates.length} date${
+                                selectedAttendanceDates.length > 1 ? "s" : ""
+                              } selected`
+                            : "Select attendance dates"}
+                        </span>
+                        <CalendarIcon className="h-4 w-4 shrink-0" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-auto p-0"
+                      align="start"
+                      side="bottom"
+                      sideOffset={8}
+                    >
+                      <div className="[&_button.rdp-day]:transition-colors [&_button.rdp-day]:duration-200 [&_button.rdp-day:hover]:bg-[#124A69]/10 [&_button.rdp-day:focus]:bg-[#124A69]/10">
+                        <Calendar
+                          mode="multiple"
+                          selected={selectedAttendanceDates}
+                          onSelect={(dates) => {
+                            if (dates) {
+                              setSelectedAttendanceDates(dates);
+                            }
+                          }}
+                          disabled={(date) => {
+                            // Only allow selecting dates that have attendance data
+                            return !attendanceDates.some(
+                              (attDate) =>
+                                attDate.getFullYear() === date.getFullYear() &&
+                                attDate.getMonth() === date.getMonth() &&
+                                attDate.getDate() === date.getDate()
+                            );
+                          }}
+                          modifiers={{
+                            hasAttendance: (date) =>
+                              attendanceDates.some(
+                                (attDate) =>
+                                  attDate.getFullYear() ===
+                                    date.getFullYear() &&
+                                  attDate.getMonth() === date.getMonth() &&
+                                  attDate.getDate() === date.getDate()
+                              ),
+                          }}
+                          modifiersStyles={{
+                            hasAttendance: {
+                              border: "1px solid #124A69",
+                              color: "#000000",
+                              borderRadius: "50%",
+                            },
+                            selected: {
+                              backgroundColor: "#124A69",
+                              color: "#ffffff",
+                            },
+                          }}
+                          modifiersClassNames={{
+                            selected:
+                              "bg-[#124A69] text-white hover:bg-[#124A69] focus:bg-[#124A69]",
+                            hasAttendance:
+                              "border border-[#124A69] rounded-full text-black",
+                          }}
+                          initialFocus
+                        />
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  {selectedAttendanceDates.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      Selected:{" "}
+                      {selectedAttendanceDates
+                        .sort((a, b) => a.getTime() - b.getTime())
+                        .map((date) => format(date, "MMM d"))
+                        .join(", ")}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="border-t border-gray-200"></div>
@@ -820,8 +956,11 @@ export const ExportDialog = ({
         {/* Footer */}
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            {Object.values(exportOptions).filter(Boolean).length} fields
-            selected
+            {Object.values(exportOptions).filter(Boolean).length +
+              (exportAllAttendance
+                ? attendanceDates.length
+                : selectedAttendanceDates.length)}{" "}
+            fields selected
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => onOpenChange(false)}>

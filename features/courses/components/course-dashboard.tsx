@@ -32,7 +32,6 @@ import {
   useReactTable,
   ColumnFiltersState,
   getFilteredRowModel,
-  getPaginationRowModel,
 } from "@tanstack/react-table";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -58,14 +57,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
-import {
   Student,
   StudentWithGrades,
   StudentWithRecords,
@@ -87,11 +78,12 @@ export function CourseDashboard({
   const [tableData, setTableData] = useState<StudentWithGrades[]>([]);
   const [stats, setStats] = useState<CourseStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "lastName", desc: false },
+  ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showRemoveSheet, setShowRemoveSheet] = useState(false);
-  const [existingStudents, setExistingStudents] = useState<Student[]>([]);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [studentsWithRecords, setStudentsWithRecords] = useState<
     StudentWithRecords[]
@@ -109,6 +101,18 @@ export function CourseDashboard({
     finals: false,
   });
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+
+  // Check screen width for button text visibility
+  useEffect(() => {
+    const checkWidth = () => {
+      setIsSmallScreen(window.innerWidth < 1495);
+    };
+
+    checkWidth();
+    window.addEventListener("resize", checkWidth);
+    return () => window.removeEventListener("resize", checkWidth);
+  }, []);
 
   useEffect(() => {
     if (courseSlug) {
@@ -142,17 +146,6 @@ export function CourseDashboard({
     }
   };
 
-  const fetchExistingStudents = async () => {
-    try {
-      const response = await studentsService.getStudents();
-      setExistingStudents(
-        (response.students || []).filter((s: Student) => s.rfid_id)
-      );
-    } catch (error) {
-      toast.error("Failed to load students");
-    }
-  };
-
   const columns = useMemo<ColumnDef<StudentWithGrades>[]>(
     () => [
       {
@@ -166,6 +159,24 @@ export function CourseDashboard({
         accessorKey: "lastName",
         header: "Name",
         cell: ({ row }) => <StudentAvatar student={row.original} />,
+        sortingFn: (rowA, rowB) => {
+          const lastNameA = rowA.original.lastName.toLowerCase();
+          const lastNameB = rowB.original.lastName.toLowerCase();
+          const lastNameCompare = lastNameA.localeCompare(
+            lastNameB,
+            undefined,
+            {
+              sensitivity: "base",
+            }
+          );
+          if (lastNameCompare !== 0) return lastNameCompare;
+          // If last names are the same, sort by first name
+          const firstNameA = rowA.original.firstName.toLowerCase();
+          const firstNameB = rowB.original.firstName.toLowerCase();
+          return firstNameA.localeCompare(firstNameB, undefined, {
+            sensitivity: "base",
+          });
+        },
       },
       {
         id: "attendance",
@@ -184,7 +195,6 @@ export function CourseDashboard({
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     state: {
@@ -211,7 +221,7 @@ export function CourseDashboard({
     }
   };
 
-  const toggleExportOption = (key: string) => {
+  const toggleExportOption = (key: keyof typeof exportOptions) => {
     setExportOptions((prev) => ({
       ...prev,
       [key]: !prev[key],
@@ -420,8 +430,8 @@ export function CourseDashboard({
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px]">
-      <div className="space-y-6">
+    <div className="bg-white p-6 rounded-lg shadow-sm h-screen flex flex-col overflow-y-auto overflow-x-hidden">
+      <div className="flex flex-col flex-1 min-h-0 space-y-6 pb-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -462,43 +472,55 @@ export function CourseDashboard({
             <Button
               variant="outline"
               onClick={() => setShowExportDialog(true)}
-              className="gap-2"
+              className={isSmallScreen ? "" : "gap-2"}
+              size={isSmallScreen ? "icon" : "default"}
             >
               <Download className="w-4 h-4" />
-              Export
+              {!isSmallScreen && <span>Export</span>}
             </Button>
             <Button
               onClick={() => setShowImportDialog(true)}
               variant="outline"
-              className="gap-2 border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+              className={`${
+                isSmallScreen ? "" : "gap-2"
+              } border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white`}
+              size={isSmallScreen ? "icon" : "default"}
             >
               <Upload className="w-4 h-4" />
-              Import Students
+              {!isSmallScreen && <span>Import Students</span>}
             </Button>
             <Button
               onClick={() => {
                 setShowAddSheet(true);
-                fetchExistingStudents();
               }}
-              className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
+              className={`${
+                isSmallScreen ? "" : "gap-2"
+              } bg-[#124A69] hover:bg-[#0D3A54] text-white`}
+              size={isSmallScreen ? "icon" : "default"}
             >
               <Users className="w-4 h-4" />
-              Add Student
+              {!isSmallScreen && <span>Add Student</span>}
             </Button>
             <Button
               variant="outline"
               onClick={() => setShowRemoveSheet(true)}
-              className="gap-2 border-red-500 text-red-600 hover:bg-red-50"
+              className={`${
+                isSmallScreen ? "" : "gap-2"
+              } border-red-500 text-red-600 hover:bg-red-50`}
+              size={isSmallScreen ? "icon" : "default"}
             >
               <UserX className="w-4 h-4" />
-              Remove
+              {!isSmallScreen && <span>Remove Student</span>}
             </Button>
           </div>
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs
+          defaultValue="overview"
+          className="w-full flex flex-col flex-1 min-h-0"
+        >
+          <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="prelims">Prelims</TabsTrigger>
             <TabsTrigger value="midterm">Midterm</TabsTrigger>
@@ -507,10 +529,22 @@ export function CourseDashboard({
           </TabsList>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-4">
-            <AttendanceLegend />
+          <TabsContent
+            value="overview"
+            className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
+          >
+            <div className="flex-shrink-0">
+              <AttendanceLegend />
+            </div>
 
-            <div className="min-h-[56vh] max-h-[56vh] rounded-md border">
+            <div
+              className="rounded-md border overflow-auto flex-1 min-h-[200px] mb-4"
+              style={{
+                height: "auto",
+                maxHeight: "100%",
+                alignSelf: "stretch",
+              }}
+            >
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((headerGroup) => (
@@ -555,52 +589,13 @@ export function CourseDashboard({
                 </TableBody>
               </Table>
             </div>
-
-            <div className="flex items-center justify-end">
-              <Pagination className="justify-end">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => table.previousPage()}
-                      className={
-                        !table.getCanPreviousPage()
-                          ? "pointer-events-none opacity-50"
-                          : "cursor-pointer"
-                      }
-                    />
-                  </PaginationItem>
-                  {Array.from({ length: table.getPageCount() }, (_, i) => (
-                    <PaginationItem key={i}>
-                      <PaginationLink
-                        onClick={() => table.setPageIndex(i)}
-                        isActive={table.getState().pagination.pageIndex === i}
-                        className={
-                          table.getState().pagination.pageIndex === i
-                            ? "bg-[#124A69] text-white"
-                            : ""
-                        }
-                      >
-                        {i + 1}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => table.nextPage()}
-                      className={
-                        !table.getCanNextPage()
-                          ? "pointer-events-none opacity-50"
-                          : "cursor-pointer"
-                      }
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </div>
           </TabsContent>
 
           {/* Term Grade Tabs */}
-          <TabsContent value="prelims">
+          <TabsContent
+            value="prelims"
+            className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
+          >
             <TermGradesTab
               students={tableData}
               termKey="prelims"
@@ -608,7 +603,10 @@ export function CourseDashboard({
             />
           </TabsContent>
 
-          <TabsContent value="midterm">
+          <TabsContent
+            value="midterm"
+            className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
+          >
             <TermGradesTab
               students={tableData}
               termKey="midterm"
@@ -616,7 +614,10 @@ export function CourseDashboard({
             />
           </TabsContent>
 
-          <TabsContent value="prefinals">
+          <TabsContent
+            value="prefinals"
+            className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
+          >
             <TermGradesTab
               students={tableData}
               termKey="preFinals"
@@ -624,7 +625,10 @@ export function CourseDashboard({
             />
           </TabsContent>
 
-          <TabsContent value="finals">
+          <TabsContent
+            value="finals"
+            className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
+          >
             <TermGradesTab
               students={tableData}
               termKey="finals"
@@ -644,8 +648,6 @@ export function CourseDashboard({
         <AddStudentSheet
           isOpen={showAddSheet}
           onOpenChange={setShowAddSheet}
-          existingStudents={existingStudents}
-          isLoading={false}
           enrolledStudentIds={tableData.map((s) => s.id)}
           onSelectStudent={handleSelectExistingStudent}
         />

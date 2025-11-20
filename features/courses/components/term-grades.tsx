@@ -10,14 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { Search, Download, TrendingUp } from "lucide-react";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
@@ -38,13 +30,11 @@ export const TermGradesTab = ({
   const termName =
     termKey === "preFinals" ? "PRE-FINALS" : termKey.toUpperCase();
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
-  const itemsPerPage = 10;
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
 
   // Sync local search with global search
   useEffect(() => {
     setSearchQuery(globalSearchQuery);
-    setCurrentPage(0); // Reset to first page when search changes
   }, [globalSearchQuery]);
 
   const hasData = students.some((s) => s.termGrades[termKey]);
@@ -58,17 +48,26 @@ export const TermGradesTab = ({
     );
   }
 
-  const filteredStudents = students.filter((student) =>
-    `${student.lastName} ${student.firstName} ${student.studentId}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
-  const paginatedStudents = filteredStudents.slice(
-    currentPage * itemsPerPage,
-    (currentPage + 1) * itemsPerPage
-  );
+  // Sort students alphabetically by last name, then first name (case-insensitive)
+  const filteredStudents = students
+    .filter((student) =>
+      `${student.lastName} ${student.firstName} ${student.studentId}`
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      const lastNameCompare = a.lastName
+        .toLowerCase()
+        .localeCompare(b.lastName.toLowerCase(), undefined, {
+          sensitivity: "base",
+        });
+      if (lastNameCompare !== 0) return lastNameCompare;
+      return a.firstName
+        .toLowerCase()
+        .localeCompare(b.firstName.toLowerCase(), undefined, {
+          sensitivity: "base",
+        });
+    });
 
   const sampleTerm = students.find((s) => s.termGrades[termKey])?.termGrades[
     termKey
@@ -78,235 +77,249 @@ export const TermGradesTab = ({
   const hasExam = sampleTerm?.examScore !== undefined;
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border">
-        <div className="min-h-[60vh] max-h-[60vh] overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[200px] sticky left-0 bg-white z-10 border-r">
-                  Student
+    <div className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4">
+      <div
+        className="rounded-md border overflow-auto flex-1 min-h-[200px] mb-4"
+        style={{
+          height: "auto",
+          maxHeight: "100%",
+          alignSelf: "stretch",
+        }}
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-[200px] sticky left-0 bg-white z-10 border-r">
+                Student
+              </TableHead>
+              {ptColumns.map((pt, idx) => (
+                <TableHead
+                  key={`pt-${idx}`}
+                  className="text-center min-w-[100px]"
+                >
+                  {pt}
                 </TableHead>
-                {ptColumns.map((pt, idx) => (
-                  <TableHead
-                    key={`pt-${idx}`}
-                    className="text-center min-w-[100px]"
-                  >
-                    {pt}
-                  </TableHead>
-                ))}
-                {quizColumns.map((quiz, idx) => (
-                  <TableHead
-                    key={`quiz-${idx}`}
-                    className="text-center min-w-[100px]"
-                  >
-                    {quiz}
-                  </TableHead>
-                ))}
-                {hasExam && (
-                  <TableHead className="text-center min-w-[100px]">
-                    Exam
-                  </TableHead>
-                )}
+              ))}
+              {quizColumns.map((quiz, idx) => (
+                <TableHead
+                  key={`quiz-${idx}`}
+                  className="text-center min-w-[100px]"
+                >
+                  {quiz}
+                </TableHead>
+              ))}
+              {hasExam && (
                 <TableHead className="text-center min-w-[100px]">
-                  Final %
+                  Exam
                 </TableHead>
-                <TableHead className="text-center min-w-[100px]">
-                  Grade
-                </TableHead>
-                <TableHead className="text-center min-w-[100px]">
-                  Remarks
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedStudents.length > 0 ? (
-                paginatedStudents.map((student) => {
-                  const termData = student.termGrades[termKey];
-                  if (!termData) return null;
+              )}
+              <TableHead className="text-center min-w-[100px]">
+                Final %
+              </TableHead>
+              <TableHead className="text-center min-w-[100px]">Grade</TableHead>
+              <TableHead className="text-center min-w-[100px]">
+                Remarks
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredStudents.length > 0 ? (
+              filteredStudents.map((student) => {
+                const termData = student.termGrades[termKey];
+                if (!termData) return null;
 
-                  return (
-                    <TableRow key={student.id}>
-                      <TableCell className="font-medium sticky left-0 bg-white z-10 border-r">
+                const isSelected = selectedRowId === student.id;
+                return (
+                  <TableRow
+                    key={student.id}
+                    onClick={() =>
+                      setSelectedRowId(isSelected ? null : student.id)
+                    }
+                    className={`cursor-pointer transition-colors ${
+                      isSelected
+                        ? "bg-[#124A69] hover:bg-[#0D3A54]"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <TableCell
+                      className={`font-medium sticky left-0 z-10 border-r ${
+                        isSelected ? "bg-[#124A69] text-white" : "bg-white"
+                      }`}
+                    >
+                      <div className={isSelected ? "[&_span]:text-white" : ""}>
                         <StudentAvatar student={student} />
-                      </TableCell>
+                      </div>
+                    </TableCell>
 
-                      {ptColumns.map((ptName, idx) => {
-                        const pt = termData.ptScores?.find(
-                          (p) => p.name === ptName
-                        );
-                        return (
-                          <TableCell key={`pt-${idx}`} className="text-center">
-                            {pt?.score !== undefined ? (
-                              <div className="flex flex-col items-center">
-                                <span className="font-semibold">
-                                  {pt.score}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  / {pt.maxScore}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">—</span>
-                            )}
-                          </TableCell>
-                        );
-                      })}
-
-                      {quizColumns.map((quizName, idx) => {
-                        const quiz = termData.quizScores?.find(
-                          (q) => q.name === quizName
-                        );
-                        return (
-                          <TableCell
-                            key={`quiz-${idx}`}
-                            className="text-center"
-                          >
-                            {quiz?.score !== undefined ? (
-                              <div className="flex flex-col items-center">
-                                <span className="font-semibold">
-                                  {quiz.score}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  / {quiz.maxScore}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">—</span>
-                            )}
-                          </TableCell>
-                        );
-                      })}
-
-                      {hasExam && (
-                        <TableCell className="text-center">
-                          {termData.examScore?.score !== undefined ? (
+                    {ptColumns.map((ptName, idx) => {
+                      const pt = termData.ptScores?.find(
+                        (p) => p.name === ptName
+                      );
+                      return (
+                        <TableCell
+                          key={`pt-${idx}`}
+                          className={`text-center ${
+                            isSelected ? "text-white" : ""
+                          }`}
+                        >
+                          {pt?.score !== undefined ? (
                             <div className="flex flex-col items-center">
-                              <span className="font-semibold">
-                                {termData.examScore.score}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                / {termData.examScore.maxScore}
+                              <span className="font-semibold">{pt.score}</span>
+                              <span
+                                className={`text-xs ${
+                                  isSelected ? "text-white/80" : "text-gray-500"
+                                }`}
+                              >
+                                / {pt.maxScore}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-gray-400">—</span>
+                            <span
+                              className={
+                                isSelected ? "text-white/70" : "text-gray-400"
+                              }
+                            >
+                              —
+                            </span>
                           )}
                         </TableCell>
-                      )}
+                      );
+                    })}
 
-                      <TableCell className="text-center">
-                        <span className="font-bold text-[#124A69]">
-                          {termData.totalPercentage?.toFixed(2) || "—"}%
-                        </span>
-                      </TableCell>
+                    {quizColumns.map((quizName, idx) => {
+                      const quiz = termData.quizScores?.find(
+                        (q) => q.name === quizName
+                      );
+                      return (
+                        <TableCell
+                          key={`quiz-${idx}`}
+                          className={`text-center ${
+                            isSelected ? "text-white" : ""
+                          }`}
+                        >
+                          {quiz?.score !== undefined ? (
+                            <div className="flex flex-col items-center">
+                              <span className="font-semibold">
+                                {quiz.score}
+                              </span>
+                              <span
+                                className={`text-xs ${
+                                  isSelected ? "text-white/80" : "text-gray-500"
+                                }`}
+                              >
+                                / {quiz.maxScore}
+                              </span>
+                            </div>
+                          ) : (
+                            <span
+                              className={
+                                isSelected ? "text-white/70" : "text-gray-400"
+                              }
+                            >
+                              —
+                            </span>
+                          )}
+                        </TableCell>
+                      );
+                    })}
 
-                      <TableCell className="text-center">
-                        <span className="font-bold text-[#124A69]">
-                          {termData.numericGrade?.toFixed(2) || "—"}
-                        </span>
-                      </TableCell>
-
-                      <TableCell className="text-center">
-                        {termData.remarks && (
-                          <Badge
+                    {hasExam && (
+                      <TableCell
+                        className={`text-center ${
+                          isSelected ? "text-white" : ""
+                        }`}
+                      >
+                        {termData.examScore?.score !== undefined ? (
+                          <div className="flex flex-col items-center">
+                            <span className="font-semibold">
+                              {termData.examScore.score}
+                            </span>
+                            <span
+                              className={`text-xs ${
+                                isSelected ? "text-white/80" : "text-gray-500"
+                              }`}
+                            >
+                              / {termData.examScore.maxScore}
+                            </span>
+                          </div>
+                        ) : (
+                          <span
                             className={
-                              termData.remarks === "PASSED"
-                                ? "bg-green-500 hover:bg-green-600 text-white"
-                                : "bg-red-500 hover:bg-red-600 text-white"
+                              isSelected ? "text-white/70" : "text-gray-400"
                             }
                           >
-                            {termData.remarks}
-                          </Badge>
+                            —
+                          </span>
                         )}
                       </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={
-                      ptColumns.length +
-                      quizColumns.length +
-                      (hasExam ? 1 : 0) +
-                      4
-                    }
-                    className="text-center py-8 text-gray-500"
-                  >
-                    No students found matching your search.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                    )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-600 w-full">
-            Showing {currentPage * itemsPerPage + 1} to{" "}
-            {Math.min(
-              (currentPage + 1) * itemsPerPage,
-              filteredStudents.length
-            )}{" "}
-            of {filteredStudents.length} students
-          </p>
-          <Pagination className="justify-end">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                  className={
-                    currentPage === 0
-                      ? "pointer-events-none opacity-50"
-                      : "cursor-pointer"
-                  }
-                />
-              </PaginationItem>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum = i;
-                if (totalPages > 5) {
-                  if (currentPage > 2) {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  if (pageNum >= totalPages) {
-                    pageNum = totalPages - 5 + i;
-                  }
-                }
-                return (
-                  <PaginationItem key={pageNum}>
-                    <PaginationLink
-                      onClick={() => setCurrentPage(pageNum)}
-                      isActive={currentPage === pageNum}
-                      className={
-                        currentPage === pageNum
-                          ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
-                          : "cursor-pointer"
-                      }
+                    <TableCell
+                      className={`text-center ${
+                        isSelected ? "text-white" : ""
+                      }`}
                     >
-                      {pageNum + 1}
-                    </PaginationLink>
-                  </PaginationItem>
+                      <span
+                        className={`font-bold ${
+                          isSelected ? "text-white" : "text-[#124A69]"
+                        }`}
+                      >
+                        {termData.totalPercentage?.toFixed(2) || "—"}%
+                      </span>
+                    </TableCell>
+
+                    <TableCell
+                      className={`text-center ${
+                        isSelected ? "text-white" : ""
+                      }`}
+                    >
+                      <span
+                        className={`font-bold ${
+                          isSelected ? "text-white" : "text-[#124A69]"
+                        }`}
+                      >
+                        {termData.numericGrade?.toFixed(2) || "—"}
+                      </span>
+                    </TableCell>
+
+                    <TableCell className="text-center">
+                      {termData.remarks && (
+                        <Badge
+                          className={
+                            termData.remarks === "PASSED"
+                              ? isSelected
+                                ? "bg-green-400 hover:bg-green-500 text-white"
+                                : "bg-green-500 hover:bg-green-600 text-white"
+                              : isSelected
+                              ? "bg-red-400 hover:bg-red-500 text-white"
+                              : "bg-red-500 hover:bg-red-600 text-white"
+                          }
+                        >
+                          {termData.remarks}
+                        </Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
                 );
-              })}
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() =>
-                    setCurrentPage(Math.min(totalPages - 1, currentPage + 1))
+              })
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={
+                    ptColumns.length +
+                    quizColumns.length +
+                    (hasExam ? 1 : 0) +
+                    4
                   }
-                  className={
-                    currentPage >= totalPages - 1
-                      ? "pointer-events-none opacity-50"
-                      : "cursor-pointer"
-                  }
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
-        </div>
-      )}
+                  className="text-center py-8 text-gray-500"
+                >
+                  No students found matching your search.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 };

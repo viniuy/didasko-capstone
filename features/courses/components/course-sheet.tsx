@@ -236,9 +236,9 @@ export function CourseSheet({
     <Sheet open={open} onOpenChange={handleOpenChange}>
       {mode === "add" && (
         <SheetTrigger asChild>
-          <Button className="bg-[#124A69] hover:bg-[#0D3A54] text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Course
+          <Button className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 bg-[#124A69] hover:bg-[#0D3A54] text-white">
+            <Plus className="h-3 w-3 sm:h-4 sm:w-4 xl:mr-2" />
+            <span className="hidden xl:inline">Add Course</span>
           </Button>
         </SheetTrigger>
       )}

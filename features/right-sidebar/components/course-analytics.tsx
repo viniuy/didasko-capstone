@@ -130,7 +130,7 @@ export default function CourseAnalytics({
           {statItems.map((stat, idx) => (
             <div
               key={idx}
-              className={`bg-gradient-to-br ${stat.gradient} rounded-xl p-3 border border-white/20 hover:border-white/40 hover:scale-105 transition-all duration-200 shadow-lg backdrop-blur-sm`}
+              className={`bg-gradient-to-br ${stat.gradient} rounded-xl p-3 border border-white/20 shadow-lg backdrop-blur-sm`}
             >
               {/* Icon and Label Row */}
               <div className="flex items-center gap-2 mb-3">

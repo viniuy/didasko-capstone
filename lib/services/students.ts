@@ -15,11 +15,16 @@ export async function getStudents(filters: {
   const where: Prisma.StudentWhereInput = {};
 
   if (search) {
+    // Try to parse as number for RFID search
+    const searchAsNumber = parseInt(search, 10);
+    const isNumeric = !isNaN(searchAsNumber);
+
     where.OR = [
       { firstName: { contains: search, mode: "insensitive" } },
       { lastName: { contains: search, mode: "insensitive" } },
       { studentId: { contains: search, mode: "insensitive" } },
       { id: { contains: search, mode: "insensitive" } },
+      ...(isNumeric ? [{ rfid_id: searchAsNumber }] : []),
     ];
   }
 
