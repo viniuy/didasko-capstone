@@ -22,9 +22,6 @@ export default function FacultyLoadPage() {
               <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
                 Faculty Load
               </h1>
-              <h1 className="text-2xl font-bold tracking-tight text-[#A0A0A0]">
-                {format(new Date(), "EEEE, MMMM d")}
-              </h1>
             </div>
 
             <div className="flex-1 p-4">

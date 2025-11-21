@@ -63,6 +63,7 @@ const FacultyList: React.FC<FacultyListProps> = ({
   const [faculty, setFaculty] = useState<FacultyMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   useEffect(() => {
     const fetchFaculty = async () => {
@@ -111,8 +112,19 @@ const FacultyList: React.FC<FacultyListProps> = ({
   const totalItems = filteredFaculty.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
+  const handleViewSchedule = (faculty: FacultyMember) => {
+    setIsNavigating(true);
+    setTimeout(() => {
+      onTeacherClick(faculty);
+    }, 200);
+  };
+
   return (
-    <div className="flex flex-col gap-8 min-h-[600px]">
+    <div
+      className={`flex flex-col gap-8 min-h-[600px] transition-opacity duration-200 ${
+        isNavigating ? "opacity-0" : "opacity-100"
+      }`}
+    >
       {filteredFaculty.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-96 text-gray-500 min-h-[610px] max-h-[610px]">
           <UserCircle2 size={72} className="mb-6 text-gray-400" />
@@ -165,7 +177,7 @@ const FacultyList: React.FC<FacultyListProps> = ({
 
                   {/* View Schedule Button */}
                   <button
-                    onClick={() => onTeacherClick(faculty)}
+                    onClick={() => handleViewSchedule(faculty)}
                     className="w-full bg-[#124A69] text-white px-4 py-2 rounded-full hover:bg-[#0D3A54] transition-colors text-sm font-medium"
                   >
                     View Schedule

@@ -44,9 +44,11 @@ interface Teacher {
 export default function FacultyLoad() {
   const [search, setSearch] = useState("");
   const [sortOption, setSortOption] = useState<string[]>([]);
+  const [tempSortOption, setTempSortOption] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   const itemsPerPage = 15;
 
   const handlePageChange = (pageNumber: number) => {
@@ -54,12 +56,38 @@ export default function FacultyLoad() {
   };
 
   const handleDepartmentClick = (department: string) => {
-    setSortOption((prev) =>
+    setTempSortOption((prev) =>
       prev.includes(department)
         ? prev.filter((d) => d !== department)
         : [...prev, department]
     );
+  };
+
+  const handleFilterOpen = (open: boolean) => {
+    if (open) {
+      // When opening, initialize temp state with current filter
+      setTempSortOption([...sortOption]);
+    } else {
+      // When closing without applying, revert to current filter
+      setTempSortOption([...sortOption]);
+    }
+    setIsFilterOpen(open);
+  };
+
+  const handleApplyFilter = () => {
+    setSortOption([...tempSortOption]);
     setCurrentPage(1);
+    setIsFilterOpen(false);
+  };
+
+  const handleClearFilter = () => {
+    setTempSortOption([]);
+  };
+
+  const handleCancelFilter = () => {
+    // Revert to previous state
+    setTempSortOption([...sortOption]);
+    setIsFilterOpen(false);
   };
 
   const handleTeacherClick = (teacher: Teacher) => {
@@ -67,7 +95,11 @@ export default function FacultyLoad() {
   };
 
   const handleBack = () => {
-    setSelectedTeacher(null);
+    setIsNavigatingBack(true);
+    setTimeout(() => {
+      setSelectedTeacher(null);
+      setIsNavigatingBack(false);
+    }, 200);
   };
 
   // Department options
@@ -122,7 +154,7 @@ export default function FacultyLoad() {
               <Button
                 variant="outline"
                 className="rounded-full relative flex items-center gap-2 px-3 bg-white text-[#124A69] hover:bg-gray-100 border border-gray-200"
-                onClick={() => setIsFilterOpen(true)}
+                onClick={() => handleFilterOpen(true)}
               >
                 <Filter className="h-4 w-4" />
                 <span>Filter</span>
@@ -132,7 +164,7 @@ export default function FacultyLoad() {
                   </span>
                 )}
               </Button>
-              <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <Sheet open={isFilterOpen} onOpenChange={handleFilterOpen}>
                 <SheetContent
                   side="right"
                   className="w-[340px] sm:w-[400px] p-0"
@@ -158,7 +190,7 @@ export default function FacultyLoad() {
                             <input
                               type="checkbox"
                               name="department-filter"
-                              checked={sortOption.includes(option.value)}
+                              checked={tempSortOption.includes(option.value)}
                               onChange={() =>
                                 handleDepartmentClick(option.value)
                               }
@@ -176,16 +208,20 @@ export default function FacultyLoad() {
                     <Button
                       variant="outline"
                       className="flex-1 rounded-lg"
-                      onClick={() => {
-                        setSortOption([]);
-                        setIsFilterOpen(false);
-                      }}
+                      onClick={handleCancelFilter}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 rounded-lg"
+                      onClick={handleClearFilter}
                     >
                       Clear
                     </Button>
                     <Button
                       className="flex-1 rounded-lg bg-[#124A69] hover:bg-[#0D3A54] text-white"
-                      onClick={() => setIsFilterOpen(false)}
+                      onClick={handleApplyFilter}
                     >
                       Apply
                     </Button>
@@ -200,9 +236,16 @@ export default function FacultyLoad() {
       <div className="flex-grow ">
         <div className="grid grid-cols-1 gap-4 mb-4">
           {selectedTeacher ? (
-            <div>
+            <div
+              className={`transition-opacity duration-200 ${
+                isNavigatingBack ? "opacity-0" : "opacity-100"
+              }`}
+            >
               <FacultyDetails faculty={selectedTeacher} onBack={handleBack} />
-              <WeeklySchedule teacherInfo={selectedTeacher} />
+              <WeeklySchedule
+                teacherInfo={selectedTeacher}
+                isViewingOtherTeacher={true}
+              />
             </div>
           ) : (
             <FacultyList

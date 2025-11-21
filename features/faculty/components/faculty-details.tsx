@@ -45,6 +45,11 @@ export default function FacultyDetails({
     totalClasses: 0,
     totalCourses: 0,
   });
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const sanitizeText = (text: string) => {
+    return text.replace(/_/g, " ").toUpperCase();
+  };
 
   useEffect(() => {
     // Calculate total unique students across all courses
@@ -67,13 +72,24 @@ export default function FacultyDetails({
     });
   }, [faculty]);
 
+  const handleBack = () => {
+    setIsNavigating(true);
+    setTimeout(() => {
+      onBack();
+    }, 200);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-sm mb-6">
+    <div
+      className={`bg-white rounded-lg shadow-sm mb-6 transition-opacity duration-200 ${
+        isNavigating ? "opacity-0" : "opacity-100"
+      }`}
+    >
       <div className="p-6">
         <div className="flex items-start space-x-6">
           {/* Back Button */}
           <button
-            onClick={onBack}
+            onClick={handleBack}
             className="flex items-center gap-2 text-[#124A69] hover:text-[#0d3550] transition-colors mt-10"
           >
             <svg
@@ -115,10 +131,10 @@ export default function FacultyDetails({
             <p className="text-gray-600">{faculty.department}</p>
             <div className="flex items-center space-x-2 mt-1">
               <span className="px-2 py-1 text-xs rounded-full bg-[#124A69] text-white">
-                {faculty.role}
+                {sanitizeText(faculty.role)}
               </span>
               <span className="px-2 py-1 text-xs rounded-full bg-[#FAEDCB] text-[#124A69]">
-                {faculty.workType}
+                {sanitizeText(faculty.workType)}
               </span>
             </div>
           </div>

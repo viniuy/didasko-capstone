@@ -24,9 +24,13 @@ interface Teacher {
 
 interface WeeklyScheduleProps {
   teacherInfo: Teacher;
+  isViewingOtherTeacher?: boolean;
 }
 
-export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
+export default function WeeklySchedule({
+  teacherInfo,
+  isViewingOtherTeacher = false,
+}: WeeklyScheduleProps) {
   const { data: session, status } = useSession();
   const [schedules, setSchedules] = useState<ScheduleWithCourse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,8 +203,9 @@ export default function WeeklySchedule({ teacherInfo }: WeeklyScheduleProps) {
               No Schedule Found
             </h3>
             <p className="text-sm sm:text-base text-gray-500 max-w-md mx-auto">
-              You don't have any scheduled classes for this week. Check back
-              later for updates.
+              {isViewingOtherTeacher
+                ? "This teacher doesn't have any scheduled class for this week, Check back later for updates"
+                : "You don't have any scheduled classes for this week. Check back later for updates."}
             </p>
           </div>
         </div>
