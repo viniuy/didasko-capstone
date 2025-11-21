@@ -7,30 +7,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Camera, X } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
-import { toast } from "react-hot-toast";
+import { useState } from "react";
 
 interface StudentCardProps {
   student: {
@@ -43,16 +25,13 @@ interface StudentCardProps {
     attendanceRecord: AttendanceRecord[];
   };
   index: number;
-  tempImage: { index: number; dataUrl: string } | null;
-  onImageUpload: (file: File) => void;
-  onSaveChanges: (index: number) => void;
-  onRemoveImage: (index: number, name: string) => void;
   onStatusChange: (index: number, status: AttendanceStatus) => void;
-  isSaving?: boolean;
   isInCooldown?: boolean;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
   isSelecting?: boolean;
+  disableStatusChange?: boolean;
+  isSavingRfidAttendance?: boolean;
 }
 
 interface AttendanceRecord {
@@ -75,54 +54,16 @@ const statusStyles: Record<AttendanceStatusWithNotSet, string> = {
 export function StudentCard({
   student,
   index,
-  tempImage,
-  onImageUpload,
-  onSaveChanges,
-  onRemoveImage,
   onStatusChange,
-  isSaving = false,
   isInCooldown = false,
   isSelected = false,
   onSelect,
+  disableStatusChange = false,
+  isSavingRfidAttendance = false,
 }: StudentCardProps) {
-  const [showImageDialog, setShowImageDialog] = useState(false);
-  const [imageToRemove, setImageToRemove] = useState<{
-    index: number;
-    name: string;
-  } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const excusedReason =
     student.attendanceRecord.find((r) => r.status === "EXCUSED")?.reason ||
     "No reason provided";
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Check if the file is an image
-      if (!file.type.startsWith("image/")) {
-        toast.error("Please upload an image file", {
-          style: {
-            background: "#fff",
-            color: "#dc2626",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#dc2626",
-            secondary: "#fff",
-          },
-        });
-        // Reset the file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-        return;
-      }
-      onImageUpload(file);
-    }
-  };
 
   return (
     <div className="w-full bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -138,45 +79,27 @@ export function StudentCard({
           </div>
         )}
         <div className="relative group">
-          <div
-            className="cursor-pointer"
-            onClick={() => setShowImageDialog(true)}
-          >
-            {tempImage && tempImage.index === index ? (
-              <img
-                src={tempImage.dataUrl}
-                alt={student.name}
-                className="w-16 h-16 rounded-full object-cover"
-              />
-            ) : student.image ? (
-              <img
-                src={student.image}
-                alt={student.name}
-                className="w-16 h-16 rounded-full object-cover"
-              />
-            ) : (
-              <span className="inline-flex w-16 h-16 rounded-full bg-gray-200 text-gray-400 items-center justify-center">
-                <svg
-                  width="32"
-                  height="32"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
-                  <circle cx="12" cy="8" r="4" />
-                  <path d="M6 20c0-2.2 3.6-4 6-4s6 1.8 6 4" />
-                </svg>
-              </span>
-            )}
-          </div>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept="image/*"
-            onChange={handleFileChange}
-          />
+          {student.image ? (
+            <img
+              src={student.image}
+              alt={student.name}
+              className="w-16 h-16 rounded-full object-cover"
+            />
+          ) : (
+            <span className="inline-flex w-16 h-16 rounded-full bg-gray-200 text-gray-400 items-center justify-center">
+              <svg
+                width="32"
+                height="32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="12" cy="8" r="4" />
+                <path d="M6 20c0-2.2 3.6-4 6-4s6 1.8 6 4" />
+              </svg>
+            </span>
+          )}
         </div>
 
         <h3
@@ -187,62 +110,69 @@ export function StudentCard({
         </h3>
         <div className="w-full">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              {student.status === "EXCUSED" ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
-                        statusStyles[student.status]
-                      } ${isInCooldown ? "opacity-50 cursor-not-allowed" : ""}`}
-                      disabled={isInCooldown}
-                    >
-                      {student.status}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{excusedReason}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
-                    statusStyles[student.status]
-                  } ${isInCooldown ? "opacity-50 cursor-not-allowed" : ""}`}
-                  disabled={isInCooldown}
-                >
-                  {student.status === "NOT_SET"
-                    ? "Select status"
-                    : student.status}
-                </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
+                      statusStyles[student.status]
+                    } ${
+                      isInCooldown ||
+                      disableStatusChange ||
+                      isSavingRfidAttendance
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                    disabled={
+                      isInCooldown ||
+                      disableStatusChange ||
+                      isSavingRfidAttendance
+                    }
+                  >
+                    {student.status === "NOT_SET"
+                      ? "Select status"
+                      : student.status}
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              {student.status === "EXCUSED" && (
+                <TooltipContent>
+                  <p>{excusedReason}</p>
+                </TooltipContent>
               )}
-            </DropdownMenuTrigger>
+            </Tooltip>
             <DropdownMenuContent align="center">
               <DropdownMenuItem
                 onClick={() => onStatusChange(index, "PRESENT")}
-                disabled={isInCooldown}
+                disabled={
+                  isInCooldown || disableStatusChange || isSavingRfidAttendance
+                }
               >
                 Present
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onStatusChange(index, "LATE")}
-                disabled={isInCooldown}
+                disabled={
+                  isInCooldown || disableStatusChange || isSavingRfidAttendance
+                }
               >
                 Late
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onStatusChange(index, "ABSENT")}
-                disabled={isInCooldown}
+                disabled={
+                  isInCooldown || disableStatusChange || isSavingRfidAttendance
+                }
               >
                 Absent
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onStatusChange(index, "EXCUSED")}
-                disabled={isInCooldown}
+                disabled={
+                  isInCooldown || disableStatusChange || isSavingRfidAttendance
+                }
               >
                 Excused
               </DropdownMenuItem>
@@ -250,112 +180,6 @@ export function StudentCard({
           </DropdownMenu>
         </div>
       </div>
-
-      {/* Image Preview Dialog */}
-      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="text-[#124A69] text-xl font-bold">
-              {student.name}'s Profile Picture
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="relative">
-              {tempImage && tempImage.index === index ? (
-                <img
-                  src={tempImage.dataUrl}
-                  alt={student.name}
-                  className="w-48 h-48 rounded-full object-cover"
-                />
-              ) : student.image ? (
-                <img
-                  src={student.image}
-                  alt={student.name}
-                  className="w-48 h-48 rounded-full object-cover"
-                />
-              ) : (
-                <span className="inline-flex w-48 h-48 rounded-full bg-gray-200 text-gray-400 items-center justify-center">
-                  <svg
-                    width="80"
-                    height="80"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle cx="12" cy="8" r="4" />
-                    <path d="M6 20c0-2.2 3.6-4 6-4s6 1.8 6 4" />
-                  </svg>
-                </span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 bg-[#124A69] text-white hover:bg-[#0D3A54] hover:text-white border-none"
-              >
-                <Camera className="h-4 w-4" />
-                Change Picture
-              </Button>
-              {student.image && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setImageToRemove({ index, name: student.name });
-                    setShowImageDialog(false);
-                  }}
-                  className="flex items-center gap-2 text-red-500 hover:text-red-600 hover:bg-red-50"
-                >
-                  <X className="h-4 w-4" />
-                  Remove Picture
-                </Button>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Remove Image Confirmation Dialog */}
-      <AlertDialog
-        open={!!imageToRemove}
-        onOpenChange={(open) => {
-          setImageToRemove(null);
-          if (!open) {
-            setTimeout(() => {
-              document.body.style.removeProperty("pointer-events");
-            }, 300);
-          }
-        }}
-      >
-        <AlertDialogContent className="sm:max-w-[425px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[#124A69] text-xl font-bold">
-              Remove Profile Picture
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-gray-500">
-              Are you sure you want to remove this profile picture? This action
-              cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2 mt-4">
-            <AlertDialogCancel className="border-gray-200">
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (imageToRemove) {
-                  onRemoveImage(imageToRemove.index, imageToRemove.name);
-                  setImageToRemove(null);
-                }
-              }}
-              className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
-            >
-              Remove
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

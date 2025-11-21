@@ -59,30 +59,48 @@ export default function CourseAnalytics({
   const [stats, setStats] = useState<CourseStats | null>(null);
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchStats = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const response = await coursesService.getAnalytics(courseSlug);
-      setStats(response.stats);
-      setCourseInfo(response.course);
-    } catch (error) {
-      console.error("Failed to load course stats:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [courseSlug]);
+  const fetchStats = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (isRefresh) {
+          setIsRefreshing(true);
+        } else {
+          setIsLoading(true);
+        }
+        const response = await coursesService.getAnalytics(courseSlug);
+        setStats(response.stats);
+        setCourseInfo(response.course);
+      } catch (error) {
+        console.error("Failed to load course stats:", error);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [courseSlug]
+  );
 
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
 
-  // Listen for course students updated event
+  // Listen for course students updated and attendance updated events
   useEffect(() => {
     const handleStudentsUpdated = (event: CustomEvent) => {
       // Only refresh if the event is for this course
       if (event.detail?.courseSlug === courseSlug) {
-        fetchStats();
+        // Keep existing data visible while refreshing
+        fetchStats(true);
+      }
+    };
+
+    const handleAttendanceUpdated = (event: CustomEvent) => {
+      // Only refresh if the event is for this course
+      if (event.detail?.courseSlug === courseSlug) {
+        // Keep existing data visible while refreshing
+        fetchStats(true);
       }
     };
 
@@ -90,15 +108,23 @@ export default function CourseAnalytics({
       "courseStudentsUpdated",
       handleStudentsUpdated as EventListener
     );
+    window.addEventListener(
+      "attendanceUpdated",
+      handleAttendanceUpdated as EventListener
+    );
     return () => {
       window.removeEventListener(
         "courseStudentsUpdated",
         handleStudentsUpdated as EventListener
       );
+      window.removeEventListener(
+        "attendanceUpdated",
+        handleAttendanceUpdated as EventListener
+      );
     };
   }, [courseSlug, fetchStats]);
 
-  if (isLoading) {
+  if (isLoading && !isRefreshing) {
     return <LoadingSkeleton />;
   }
 

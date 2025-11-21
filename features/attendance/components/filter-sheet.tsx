@@ -16,6 +16,7 @@ interface FilterSheetProps {
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
   onApplyFilters: () => void;
+  onCancel?: () => void;
   statusLabels?: {
     [key in AttendanceStatusWithNotSet]: string;
   };
@@ -27,6 +28,7 @@ export function FilterSheet({
   filters,
   onFiltersChange,
   onApplyFilters,
+  onCancel,
   statusLabels,
 }: FilterSheetProps) {
   const getStatusDisplay = (status: AttendanceStatusWithNotSet) => {
@@ -99,7 +101,7 @@ export function FilterSheet({
                             ),
                       });
                     }}
-                    className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
+                    className="w-4 h-4 rounded border-gray-300 text-[#124A69] focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 cursor-pointer accent-[#124A69]"
                   />
                   <span className="text-sm">
                     {getStatusDisplay(status as AttendanceStatusWithNotSet)}
@@ -115,11 +117,25 @@ export function FilterSheet({
             variant="outline"
             className="flex-1 rounded-lg"
             onClick={() => {
-              onFiltersChange({ status: [] });
-              onOpenChange(false);
+              if (onCancel) {
+                onCancel();
+              } else {
+                onFiltersChange({ status: [] });
+                onOpenChange(false);
+              }
             }}
           >
             Cancel
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 rounded-lg"
+            onClick={() => {
+              onFiltersChange({ status: [] });
+            }}
+            disabled={filters.status.length === 0}
+          >
+            Clear All
           </Button>
           <Button
             className="flex-1 rounded-lg bg-[#124A69] hover:bg-[#0D3A54]"

@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Menu, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import UpcomingEvents from "@/features/dashboard/components/events";
 import Notes from "@/features/dashboard/components/notes";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,17 @@ import ActiveFaculty from "@/features/right-sidebar/components/active-faculty";
 
 export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
+  const [isLargeScreen, setIsLargeScreen] = useState(false);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsLargeScreen(window.innerWidth >= 1024);
+    };
+
+    checkScreenSize(); // Check on mount
+    window.addEventListener("resize", checkScreenSize);
+    return () => window.removeEventListener("resize", checkScreenSize);
+  }, []);
   const pathname = usePathname();
   const params = useParams();
   const { data: session } = useSession();
@@ -40,14 +51,16 @@ export default function Rightsidebar() {
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => setOpen(!open)}
-        className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 bg-[#124A69] text-white hover:bg-[#0f3d58] lg:hidden min-h-[44px] min-w-[44px]"
-      >
-        {open ? <X size={20} /> : <Menu size={20} />}
-      </Button>
+      {!open && !isLargeScreen && (
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setOpen(!open)}
+          className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 bg-[#124A69] text-white hover:bg-[#0f3d58] min-h-[44px] min-w-[44px]"
+        >
+          <Menu size={20} />
+        </Button>
+      )}
 
       <div
         className={`fixed top-0 right-0 z-40 h-screen bg-[#124A69] border-l p-2 sm:p-3 md:p-4 pt-2 flex flex-col transition-all duration-300 overflow-hidden

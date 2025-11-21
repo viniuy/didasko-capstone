@@ -54,9 +54,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import toast from "react-hot-toast";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 import { StudentCard } from "./student-card";
 import { FilterSheet } from "./filter-sheet";
+import { LoadingSpinner } from "@/features/courses/components/ui-components";
 import Link from "next/link";
 import { AttendanceStatus } from "@prisma/client";
 import { FilterState } from "@/shared/types/attendance";
@@ -68,7 +70,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import axiosInstance from "@/lib/axios";
 import axios from "axios";
-import { supabase } from "@/lib/supabase-client";
 
 // Add interface for Excel data
 interface ExcelRow {
@@ -149,6 +150,11 @@ function debounce<T extends (...args: any[]) => any>(
 
 export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [showExcuseModal, setShowExcuseModal] = useState(false);
+  const [showBacktrackConfirm, setShowBacktrackConfirm] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    index: number;
+    status: AttendanceStatus;
+  } | null>(null);
   const [excuseReason, setExcuseReason] = useState("");
   const [pendingExcusedStudent, setPendingExcusedStudent] = useState<{
     index: number;
@@ -162,15 +168,33 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [sortDate] = useState<"newest" | "oldest" | "">("");
-  const itemsPerPage = 10;
+  const [windowDimensions, setWindowDimensions] = useState({
+    width: typeof window !== "undefined" ? window.innerWidth : 0,
+    height: typeof window !== "undefined" ? window.innerHeight : 0,
+  });
+  const itemsPerPage = useMemo(() => {
+    if (windowDimensions.height < 740) {
+      return 5;
+    }
+    if (windowDimensions.width < 1025 && windowDimensions.height > 740) {
+      return 6;
+    }
+    return 10;
+  }, [windowDimensions.width, windowDimensions.height]);
+
+  const gridColsClass = useMemo(() => {
+    if (windowDimensions.width < 1025 && windowDimensions.height > 740) {
+      return "grid grid-cols-3 gap-4";
+    }
+    return "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4";
+  }, [windowDimensions.width, windowDimensions.height]);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     status: [],
   });
-  const [tempImage, setTempImage] = useState<{
-    index: number;
-    dataUrl: string;
-  } | null>(null);
+  const [tempFilters, setTempFilters] = useState<FilterState>({
+    status: [],
+  });
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
@@ -195,6 +219,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   });
   const [showMarkAllConfirm, setShowMarkAllConfirm] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearConfirmText, setClearConfirmText] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [attendanceDates, setAttendanceDates] = useState<Date[]>([]);
   const [previousAttendance, setPreviousAttendance] = useState<Record<
@@ -220,6 +245,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [isSavingRfidAttendance, setIsSavingRfidAttendance] = useState(false);
+  const isSavingRfidAttendanceRef = useRef(false);
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [showTimeSetupModal, setShowTimeSetupModal] = useState(false);
   const [graceMinutes, setGraceMinutes] = useState<number>(5);
@@ -268,6 +295,14 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const getStorageKey = (name: string) =>
     courseSlug ? `attendance:${courseSlug}:${name}` : `attendance::${name}`;
+
+  // Helper function to dispatch attendance update event
+  const dispatchAttendanceUpdate = useCallback(() => {
+    const event = new CustomEvent("attendanceUpdated", {
+      detail: { courseSlug },
+    });
+    window.dispatchEvent(event);
+  }, [courseSlug]);
 
   const selectedDateStr = useMemo(
     () => (selectedDate ? format(selectedDate, "yyyy-MM-dd") : null),
@@ -492,6 +527,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     }
   }, [courseSlug]);
 
+  // Track window dimensions for responsive itemsPerPage
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    // Set initial dimensions
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Restore persisted times and session state
   useEffect(() => {
     try {
@@ -659,6 +710,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
     const nextDay = new Date(selectedDate);
     nextDay.setDate(nextDay.getDate() + 1);
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // Build the updates array
     const updates = studentIds.map((id) => ({
@@ -681,18 +733,50 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     try {
       await axiosInstance.post(`/courses/${courseSlug}/attendance`, {
         date: nextDay.toISOString(),
-        attendance: updates,
+        attendance: updates.map((u) => ({
+          studentId: u.studentId,
+          status: u.status,
+          reason: u.reason,
+        })),
       });
+
+      // Update local state with attendance records including reason
+      const records = updates.map((update) => ({
+        id: crypto.randomUUID(),
+        studentId: update.studentId,
+        courseId: courseSlug,
+        status: update.status,
+        date: dateStr,
+        reason: update.reason,
+      }));
 
       setStudentList((prev) =>
         prev.map((s) => {
           const update = updates.find((u) => u.studentId === s.id);
           if (update) {
-            return { ...s, status: update.status };
+            const record = records.find((r) => r.studentId === s.id);
+            const existingRecordIndex = s.attendanceRecords.findIndex(
+              (r) => r.date === dateStr
+            );
+            return {
+              ...s,
+              status: update.status,
+              attendanceRecords:
+                existingRecordIndex >= 0
+                  ? s.attendanceRecords.map((r, idx) =>
+                      idx === existingRecordIndex && record ? record : r
+                    )
+                  : record
+                  ? [...s.attendanceRecords, record]
+                  : s.attendanceRecords,
+            };
           }
           return s;
         })
       );
+
+      // Dispatch event to update right sidebar
+      dispatchAttendanceUpdate();
 
       toast.success(
         `Excused ${updates.length} student${updates.length > 1 ? "s" : ""}`,
@@ -860,6 +944,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         setPendingUpdates({});
         latestUpdateRef.current = null;
 
+        // Dispatch event to update right sidebar
+        dispatchAttendanceUpdate();
+
         toast.success(
           `Updated ${updates.length} student${updates.length > 1 ? "s" : ""}`,
           {
@@ -911,6 +998,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   };
 
   const updateStatus = async (index: number, newStatus: AttendanceStatus) => {
+    // Check if we're backtracking (viewing a past date)
+    const isBacktracking = selectedDate && !isToday(selectedDate);
+
+    if (isBacktracking) {
+      // Show confirmation dialog for past dates
+      setPendingStatusChange({ index, status: newStatus });
+      setShowBacktrackConfirm(true);
+      return;
+    }
+
+    // For today's date, proceed normally
     if (newStatus === "EXCUSED") {
       setPendingExcusedStudent({ index, status: newStatus });
       setShowExcuseModal(true);
@@ -918,6 +1016,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     }
 
     await updateStatusContinue(index, newStatus);
+  };
+
+  const handleBacktrackStatusConfirm = async () => {
+    if (!pendingStatusChange) return;
+
+    const { index, status } = pendingStatusChange;
+    setShowBacktrackConfirm(false);
+
+    if (status === "EXCUSED") {
+      setPendingExcusedStudent({ index, status });
+      setShowExcuseModal(true);
+    } else {
+      await updateStatusContinue(index, status);
+    }
+
+    setPendingStatusChange(null);
   };
 
   useEffect(() => {
@@ -940,72 +1054,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return filteredStudents.slice(startIdx, startIdx + itemsPerPage);
   }, [filteredStudents, currentPage, itemsPerPage]);
 
-  const handleImageUpload = useCallback(
-    async (studentId: string, file: File): Promise<string | null> => {
-      if (!file) return null;
-
-      try {
-        const ext = file.name.split(".").pop() ?? "png";
-        const fileName = `${studentId}.${ext}`;
-        const bucket = supabase.storage.from("student-image");
-
-        const { error: uploadError } = await bucket.upload(fileName, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-        if (uploadError) throw uploadError;
-
-        const { data: publicUrlData } = bucket.getPublicUrl(fileName);
-        const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
-
-        if (!publicUrlData.publicUrl)
-          throw new Error("Failed to get public URL");
-
-        // Use startTransition for non-blocking UI updates
-        startTransition(() => {
-          setTempImage({
-            index: studentList.findIndex((s) => s.id === studentId),
-            dataUrl: publicUrl,
-          });
-          setStudentList((prev) =>
-            prev.map((s) =>
-              s.id === studentId ? { ...s, image: publicUrl } : s
-            )
-          );
-        });
-
-        toast.success("Image uploaded successfully");
-        return publicUrl;
-      } catch (err) {
-        console.error("Upload failed:", err);
-        toast.error("Failed to upload image");
-        return null;
-      }
-    },
-    [studentList]
-  );
-
-  const handleSaveImageChanges = async (studentId: string): Promise<void> => {
-    const student = studentList.find((s) => s.id === studentId);
-    const imageUrl = student?.image;
-
-    if (!imageUrl) return;
-
-    try {
-      await axiosInstance.put(`/students/${studentId}/image`, {
-        imageUrl: imageUrl,
-      });
-
-      setTempImage(null);
-      toast.success("Profile picture saved successfully");
-    } catch (err) {
-      console.error("Failed to save image URL to DB:", err);
-      toast.error("Failed to save profile picture");
-    }
-  };
-
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!selectedDate) {
       toast.error("Please select a date before exporting");
       return;
@@ -1018,40 +1067,109 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       return;
     }
 
-    const formattedDate = format(selectedDate, "MMMM d, yyyy");
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Attendance");
 
-    const header = [
-      ["ATTENDANCE RECORD"],
-      [""],
-      ["Date:", formattedDate],
-      ["Course:", courseInfo?.code || ""],
-      ["Section:", courseInfo?.section || ""],
-      [""],
-      ["Student Name", "Attendance Status"],
-    ];
+      const formattedDate = format(selectedDate, "MMMM d, yyyy");
 
-    const studentRows = filteredStudents.map((student) => [
-      student.name,
-      student.status === "NOT_SET" ? "No Status" : student.status,
-    ]);
+      // Title row
+      worksheet.mergeCells("A1:B1");
+      const titleRow = worksheet.getCell("A1");
+      titleRow.value = "ATTENDANCE RECORD";
+      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      titleRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      worksheet.getRow(1).height = 30;
 
-    const ws = XLSX.utils.aoa_to_sheet([...header, ...studentRows]);
+      // Date row
+      worksheet.mergeCells("A2:B2");
+      const dateRow = worksheet.getCell("A2");
+      dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
+      dateRow.font = { italic: true, size: 11 };
+      dateRow.alignment = { vertical: "middle", horizontal: "center" };
 
-    ws["!cols"] = [{ wch: 40 }, { wch: 20 }];
+      worksheet.addRow([]);
 
-    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+      // Course info rows
+      worksheet.addRow(["Date:", formattedDate]);
+      worksheet.addRow(["Course:", courseInfo?.code || ""]);
+      worksheet.addRow(["Section:", courseInfo?.section || ""]);
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+      worksheet.addRow([]);
 
-    const filename = `attendance_${courseInfo?.code || "course"}_${format(
-      selectedDate,
-      "yyyy-MM-dd"
-    )}.xlsx`;
+      // Header row
+      const headerRow = worksheet.addRow(["Student Name", "Attendance Status"]);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF124A69" },
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.height = 25;
 
-    XLSX.writeFile(wb, filename);
-    toast.success("Attendance data exported successfully");
-    setShowExportPreview(false);
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+
+      // Student rows
+      filteredStudents.forEach((student, index) => {
+        const row = worksheet.addRow([
+          student.name,
+          student.status === "NOT_SET" ? "No Status" : student.status,
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD3D3D3" } },
+            left: { style: "thin", color: { argb: "FFD3D3D3" } },
+            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+          };
+          cell.alignment = { vertical: "middle" };
+        });
+
+        // Alternating row colors for easier reading
+        if (index % 2 === 1) {
+          row.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF9FAFB" },
+          };
+        }
+      });
+
+      // Set column widths
+      worksheet.getColumn(1).width = 40;
+      worksheet.getColumn(2).width = 20;
+
+      // Generate file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const filename = `attendance_${courseInfo?.code || "course"}_${format(
+        selectedDate,
+        "yyyy-MM-dd"
+      )}.xlsx`;
+
+      saveAs(blob, filename);
+      toast.success("Attendance data exported successfully");
+      setShowExportPreview(false);
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export attendance data");
+    }
   };
 
   const handleImportExcel = async (
@@ -1061,37 +1179,81 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (!file) return;
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelRow[];
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
 
-        const newStudents = jsonData.map(
-          (row) =>
-            ({
-              id: row.Students,
-              name: row.Name,
-              status: "NOT_SET" as AttendanceStatusWithNotSet,
-              attendanceRecords: [
-                {
-                  id: crypto.randomUUID(),
-                  studentId: row.Students,
-                  courseId: courseSlug || "",
-                  status: row.Status as AttendanceStatus,
-                  date: row.Date,
-                  reason: null,
-                },
-              ] satisfies AttendanceRecord[],
-            } satisfies Student)
-        );
+      const worksheet = workbook.worksheets[0];
+      if (!worksheet) {
+        toast.error("No worksheet found in the Excel file");
+        return;
+      }
 
-        setStudentList(newStudents);
-        setShowImportDialog(false);
-      };
-      reader.readAsArrayBuffer(file);
+      const jsonData: ExcelRow[] = [];
+      let headerRowFound = false;
+
+      worksheet.eachRow((row, rowNumber) => {
+        const values = row.values as any[];
+        // ExcelJS row.values has undefined at index 0, so actual data starts at index 1
+        const rowData = values.slice(1);
+
+        // Look for header row (contains "Students", "Name", "Status", "Date")
+        if (!headerRowFound) {
+          const hasHeader = rowData.some((cell) => {
+            const cellStr = String(cell || "").toLowerCase();
+            return (
+              cellStr.includes("student") ||
+              cellStr.includes("name") ||
+              cellStr.includes("status")
+            );
+          });
+          if (hasHeader) {
+            headerRowFound = true;
+            return; // Skip header row
+          }
+        }
+
+        // Skip empty rows or rows without enough data
+        if (!headerRowFound || !rowData || rowData.length < 4) {
+          return;
+        }
+
+        // Map columns: Students, Name, Status, Date
+        jsonData.push({
+          Students: String(rowData[0] || "").trim(),
+          Name: String(rowData[1] || "").trim(),
+          Status: String(rowData[2] || "").trim(),
+          Date: String(rowData[3] || "").trim(),
+        });
+      });
+
+      if (jsonData.length === 0) {
+        toast.error("No valid data found in the Excel file");
+        return;
+      }
+
+      const newStudents = jsonData.map(
+        (row) =>
+          ({
+            id: row.Students,
+            name: row.Name,
+            status: "NOT_SET" as AttendanceStatusWithNotSet,
+            attendanceRecords: [
+              {
+                id: crypto.randomUUID(),
+                studentId: row.Students,
+                courseId: courseSlug || "",
+                status: row.Status as AttendanceStatus,
+                date: row.Date,
+                reason: null,
+              },
+            ] satisfies AttendanceRecord[],
+          } satisfies Student)
+      );
+
+      setStudentList(newStudents);
+      setShowImportDialog(false);
+      toast.success("Excel file imported successfully");
     } catch (error) {
       console.error("Error importing Excel file:", error);
       toast.error("Failed to import Excel file");
@@ -1242,17 +1404,30 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       await promise;
       setShowClearConfirm(false);
+      setClearConfirmText("");
 
       setAttendanceDates((prev) =>
         prev.filter((d) => format(d, "yyyy-MM-dd") !== dateStr)
       );
 
-      setAttendanceStartTime(null);
-      setShowTimeoutModal(false);
-      setIsInGracePeriod(false);
-      setPendingUpdates({});
-      setCurrentPage(1);
-      setShowTimeSetupModal(true);
+      // Only reset attendance session if clearing today's attendance
+      const isClearingToday = isToday(selectedDate);
+      if (isClearingToday) {
+        setAttendanceStartTime(null);
+        setShowTimeoutModal(false);
+        setIsInGracePeriod(false);
+        setPendingUpdates({});
+        setCurrentPage(1);
+        setShowTimeSetupModal(true);
+      }
+
+      // Navigate back to today's date after clearing
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      setSelectedDate(today);
+
+      // Dispatch event to update right sidebar
+      dispatchAttendanceUpdate();
     } catch (error) {
       console.error("Error clearing attendance:", error);
       setStudentList((prev) =>
@@ -1278,7 +1453,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filters.status, sortDate]);
+  }, [searchQuery, filters.status, sortDate, itemsPerPage]);
 
   useEffect(() => {
     return () => {
@@ -1355,39 +1530,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return () => document.removeEventListener("keydown", handleKeyPress);
   }, [attendanceStartTime, pendingAttendanceUpdates]);
 
-  const handleRemoveImage = async (studentId: string) => {
-    const student = studentList.find((s) => s.id === studentId);
-    if (!student?.image) return;
-
-    try {
-      await axiosInstance.delete("/upload", {
-        data: { imageUrl: student.image },
-      });
-
-      await axiosInstance.put(`/students/${studentId}/image`, {
-        imageUrl: null,
-      });
-
-      setStudentList((prev) =>
-        prev.map((s) => (s.id === studentId ? { ...s, image: undefined } : s))
-      );
-
-      const studentIndex = studentList.findIndex((s) => s.id === studentId);
-      if (tempImage?.index === studentIndex) {
-        setTempImage(null);
-      }
-
-      toast.success("Profile picture removed successfully");
-    } catch (error) {
-      console.error("Error removing image:", error);
-      toast.error("Failed to remove profile picture");
-      throw error;
-    }
-  };
-
   const handleApplyFilters = () => {
+    setFilters(tempFilters); // Apply temporary filters to actual filters
     setCurrentPage(1);
     setIsFilterSheetOpen(false);
+  };
+
+  const handleCancelFilters = () => {
+    setTempFilters(filters); // Revert temporary filters to current filters
+    setIsFilterSheetOpen(false);
+  };
+
+  const handleFilterOpen = (open: boolean) => {
+    setIsFilterSheetOpen(open);
+    if (open) {
+      setTempFilters(filters); // Initialize temp filters with current filters
+    }
   };
 
   const startAttendance = async () => {
@@ -1611,7 +1769,24 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   }) => {
     const sourceUpdates =
       overrideUpdates ?? pendingUpdatesRef.current ?? pendingAttendanceUpdates;
-    if (Object.keys(sourceUpdates).length === 0) return;
+    if (Object.keys(sourceUpdates).length === 0) {
+      // If no updates, ensure state is reset
+      isSavingRfidAttendanceRef.current = false;
+      setIsSavingRfidAttendance(false);
+      return;
+    }
+
+    // Prevent concurrent calls
+    if (isSavingRfidAttendanceRef.current) {
+      console.log("Already saving RFID attendance, skipping...");
+      return;
+    }
+
+    isSavingRfidAttendanceRef.current = true;
+    setIsSavingRfidAttendance(true);
+    const toastId = toast.loading("Saving RFID attendance...", {
+      id: "rfid-attendance-saving",
+    });
 
     try {
       const dateStr = format(selectedDate!, "yyyy-MM-dd");
@@ -1628,6 +1803,41 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }
       );
 
+      // Update local state with attendance records before awaiting the promise
+      const records = Object.entries(sourceUpdates).map(
+        ([studentId, update]) => ({
+          id: crypto.randomUUID(),
+          studentId,
+          courseId: courseSlug,
+          status: update.status,
+          date: dateStr,
+          reason: null,
+        })
+      );
+
+      setStudentList((prev) =>
+        prev.map((s) => {
+          const record = records.find((r) => r.studentId === s.id);
+          if (record) {
+            // Check if record already exists for this date
+            const existingRecordIndex = s.attendanceRecords.findIndex(
+              (r) => r.date === dateStr
+            );
+            return {
+              ...s,
+              status: record.status,
+              attendanceRecords:
+                existingRecordIndex >= 0
+                  ? s.attendanceRecords.map((r, idx) =>
+                      idx === existingRecordIndex ? record : r
+                    )
+                  : [...s.attendanceRecords, record],
+            };
+          }
+          return s;
+        })
+      );
+
       setPendingAttendanceUpdates({});
 
       const dateOnly = new Date(format(selectedDate!, "yyyy-MM-dd"));
@@ -1640,16 +1850,30 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       await updatePromise;
 
+      // Dispatch event to update right sidebar
+      dispatchAttendanceUpdate();
+
       toast.success(
         `Saved ${Object.keys(sourceUpdates).length} attendance record(s)`,
         {
+          id: "rfid-attendance-saving",
           duration: 2000,
         }
       );
     } catch (error) {
       console.error("Error batch updating attendance:", error);
-      toast.error("Failed to batch update attendance");
-      await fetchAttendance(selectedDate!);
+      toast.error("Failed to batch update attendance", {
+        id: "rfid-attendance-saving",
+      });
+      try {
+        await fetchAttendance(selectedDate!);
+      } catch (fetchError) {
+        console.error("Error fetching attendance after save:", fetchError);
+      }
+    } finally {
+      // Always re-enable buttons - reset both ref and state immediately
+      isSavingRfidAttendanceRef.current = false;
+      setIsSavingRfidAttendance(false);
     }
   };
 
@@ -1766,6 +1990,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       await promise;
       setShowMarkAllConfirm(false);
+
+      // Dispatch event to update right sidebar
+      dispatchAttendanceUpdate();
     } catch (error) {
       console.error("Error marking all as present:", error);
       setStudentList((prev) =>
@@ -1836,6 +2063,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
 
       await promise;
+
+      // Dispatch event to update right sidebar
+      dispatchAttendanceUpdate();
     } catch (error) {
       console.error("Error marking late as present:", error);
       setStudentList((prev) =>
@@ -1861,47 +2091,33 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             attendanceRecord: student.attendanceRecords || [],
           }}
           index={index}
-          tempImage={tempImage}
-          onImageUpload={(file) => handleImageUpload(student.id, file)}
-          onSaveChanges={() => handleSaveImageChanges(student.id)}
-          onRemoveImage={() => handleRemoveImage(student.id)}
           onStatusChange={(index, status: AttendanceStatus) =>
             updateStatus(index, status)
           }
-          isSaving={isSaving}
           isInCooldown={cooldownMap[student.id] || false}
           isSelected={selectedStudents.includes(student.id)}
           onSelect={isSelecting ? handleSelectStudent : undefined}
           isSelecting={isSelecting}
+          disableStatusChange={isSelecting}
+          isSavingRfidAttendance={isSavingRfidAttendance}
         />
       </div>
     ));
   }, [
     currentStudents,
-    tempImage,
     cooldownMap,
-    isSaving,
-    handleImageUpload,
     selectedStudents,
     isSelecting,
+    isSavingRfidAttendance,
   ]);
 
   if (isLoading) {
     return (
       <div className="flex flex-col h-screen">
-        <div className="flex items-center gap-4 p-4 border-b bg-white ">
-          <Link href="/main/attendance">
-            <Button variant="ghost" size="icon" className="hover:bg-gray-100">
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2">
-            <div>
-              <h1 className="text-[#124A69] font-bold text-xl">Loading...</h1>
-              <p className="text-gray-500 text-sm">Please wait</p>
-            </div>
-          </div>
-        </div>
+        <LoadingSpinner
+          mainMessage="Loading Course Attendance"
+          secondaryMessage="Please sit tight while we are getting things ready for you..."
+        />
       </div>
     );
   }
@@ -1913,7 +2129,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       <div className="flex flex-col h-screen">
         <div className="flex items-center gap-4 p-4 border-b bg-white">
           <Link href="/main/attendance">
-            <Button variant="ghost" size="icon" className="hover:bg-gray-100">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-gray-100"
+              disabled={isSavingRfidAttendance}
+            >
               <ChevronLeft className="h-5 w-5" />
             </Button>
           </Link>
@@ -1934,290 +2155,350 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   return (
     <div className="flex flex-col h-screen ">
-      <div className="flex items-center gap-4 p-4 border-b bg-white">
-        <Link href="/main/attendance">
-          <Button variant="ghost" size="icon" className="hover:bg-gray-100">
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-        </Link>
+      <div className="p-4 border-b bg-white">
         <div className="flex items-center gap-2">
-          <div>
-            <h1 className="text-[#124A69] font-bold text-xl">
-              {courseInfo?.code || "Course"}
-            </h1>
-            <p className="text-gray-500 text-sm">
-              {courseInfo?.section || "N/A"}
-            </p>
+          <Link href="/main/attendance">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-gray-100"
+              disabled={isSavingRfidAttendance}
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2">
+            <div>
+              <h1 className="text-[#124A69] font-bold text-xl">
+                {courseInfo?.code || "Course"}
+              </h1>
+              <p className="text-gray-500 text-sm">
+                {courseInfo?.section || "N/A"}
+              </p>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 ml-6 grow">
-          <div className="flex items-center gap-3">
-            <div className="relative grow max-w-[300px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search a name"
-                className="w-full pl-9 pr-8 bg-white border-gray-200 rounded-full h-10"
-                value={searchQuery}
-                onChange={handleSearch}
-                disabled={!hasAttendanceForSelectedDate}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  disabled={!hasAttendanceForSelectedDate}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              )}
-            </div>
-            <Popover open={open} onOpenChange={setOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="rounded-full h-10 pl-3 pr-2 flex items-center gap-2 w-[180px] justify-between relative"
+        <div className="p-3">
+          <div className="flex items-center gap-3 ml-6 grow">
+            <div className="flex items-center gap-3">
+              <div className="relative grow max-w-[300px]">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search a name"
+                  className="w-full pl-9 pr-8 bg-white border-gray-200 rounded-full h-10"
+                  value={searchQuery}
+                  onChange={handleSearch}
                   disabled={
-                    isDateLoading || isUpdating || isClearing || isMarkingAll
+                    !hasAttendanceForSelectedDate || isSavingRfidAttendance
                   }
-                >
-                  <span className="truncate">
-                    {selectedDate
-                      ? format(selectedDate, "MMMM d, yyyy")
-                      : "Pick a date"}
-                  </span>
-                  {isDateLoading ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
-                  ) : (
-                    <CalendarIcon className="h-4 w-4 shrink-0" />
-                  )}
-                </Button>
-              </PopoverTrigger>
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    disabled={
+                      !hasAttendanceForSelectedDate || isSavingRfidAttendance
+                    }
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="rounded-full h-10 pl-3 pr-2 flex items-center gap-2 w-[230px] justify-between relative"
+                    disabled={
+                      isDateLoading ||
+                      isUpdating ||
+                      isClearing ||
+                      isMarkingAll ||
+                      isSavingRfidAttendance
+                    }
+                  >
+                    <span className="truncate">
+                      {selectedDate
+                        ? format(selectedDate, "MMMM d, yyyy")
+                        : "Pick a date"}
+                    </span>
+                    {isDateLoading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
+                    ) : (
+                      <CalendarIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </Button>
+                </PopoverTrigger>
 
-              <PopoverContent
-                className="w-auto p-0"
-                align="start"
-                side="bottom"
-                sideOffset={8}
-              >
-                <div className="[&_button.rdp-day]:transition-colors [&_button.rdp-day]:duration-200 [&_button.rdp-day:hover]:bg-[#124A69]/10 [&_button.rdp-day:focus]:bg-[#124A69]/10">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => {
-                      if (date) {
-                        setSelectedDate(date);
-                        setOpen(false);
-                      }
-                    }}
-                    disabled={(date) => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const jan2025 = new Date(2025, 0, 1);
-                      return date < jan2025 || date > today;
-                    }}
-                    modifiers={{
-                      hasAttendance: (date) =>
-                        attendanceDates.some(
-                          (attDate) =>
-                            attDate.getFullYear() === date.getFullYear() &&
-                            attDate.getMonth() === date.getMonth() &&
-                            attDate.getDate() === date.getDate()
-                        ),
-                    }}
-                    modifiersStyles={{
-                      hasAttendance: {
-                        border: "1px solid #124A69",
-                        color: "#000000",
-                        borderRadius: "50%",
-                      },
-                      selected: {
-                        backgroundColor: "#124A69",
-                        color: "#ffffff",
-                      },
-                    }}
-                    modifiersClassNames={{
-                      selected:
-                        "bg-[#124A69] text-white hover:bg-[#124A69] focus:bg-[#124A69]",
-                      hasAttendance:
-                        "border border-[#124A69] rounded-full text-black",
-                    }}
-                    initialFocus
-                  />
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full"
-                disabled={
-                  isUpdating || isDateLoading || isClearing || isMarkingAll
-                }
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => setShowMarkAllConfirm(true)}
-                className="text-[#22C55E] focus:text-[#22C55E] focus:bg-[#22C55E]/10"
-                disabled={
-                  isUpdating ||
-                  isDateLoading ||
-                  isClearing ||
-                  isMarkingAll ||
-                  !hasAttendanceForSelectedDate
-                }
-              >
-                Mark All as Present
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={markAllLateAsPresent}
-                className="text-[#3B82F6] focus:text-[#3B82F6] focus:bg-[#3B82F6]/10"
-                disabled={
-                  isUpdating ||
-                  isDateLoading ||
-                  isClearing ||
-                  isMarkingAll ||
-                  !hasAttendanceForSelectedDate
-                }
-              >
-                Mark All Late as Present
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setShowClearConfirm(true)}
-                disabled={
-                  isSaving ||
-                  isUpdating ||
-                  isDateLoading ||
-                  isClearing ||
-                  isMarkingAll ||
-                  !hasAttendanceForSelectedDate
-                }
-                className="text-[#EF4444] focus:text-[#EF4444] focus:bg-[#EF4444]/10"
-              >
-                {isSaving ? "Clearing..." : "Clear Attendance"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {selectedStudents.length > 0 && (
+                <PopoverContent
+                  className="w-auto p-0"
+                  align="start"
+                  side="bottom"
+                  sideOffset={8}
+                >
+                  <div className="[&_button.rdp-day]:transition-colors [&_button.rdp-day]:duration-200 [&_button.rdp-day:hover]:bg-[#124A69]/10 [&_button.rdp-day:focus]:bg-[#124A69]/10">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelectedDate(date);
+                          setOpen(false);
+                        }
+                      }}
+                      disabled={(date) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const jan2025 = new Date(2025, 0, 1);
+                        const dateStr = format(date, "yyyy-MM-dd");
+                        const hasAttendance = attendanceDateSet.has(dateStr);
+
+                        // Disable dates before Jan 2025 or after today
+                        if (date < jan2025 || date > today) {
+                          return true;
+                        }
+
+                        // For dates in the past (before today), disable if they don't have attendance
+                        const isPastDate = date < today;
+                        if (isPastDate && !hasAttendance) {
+                          return true;
+                        }
+
+                        return false;
+                      }}
+                      modifiers={{
+                        hasAttendance: (date) =>
+                          attendanceDates.some(
+                            (attDate) =>
+                              attDate.getFullYear() === date.getFullYear() &&
+                              attDate.getMonth() === date.getMonth() &&
+                              attDate.getDate() === date.getDate()
+                          ),
+                      }}
+                      modifiersStyles={{
+                        hasAttendance: {
+                          border: "1px solid #124A69",
+                          color: "#000000",
+                          borderRadius: "50%",
+                        },
+                        selected: {
+                          backgroundColor: "#124A69",
+                          color: "#ffffff",
+                        },
+                      }}
+                      modifiersClassNames={{
+                        selected:
+                          "bg-[#124A69] text-white hover:bg-[#124A69] focus:bg-[#124A69]",
+                        hasAttendance:
+                          "border border-[#124A69] rounded-full text-black",
+                      }}
+                      initialFocus
+                    />
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  className="rounded-full shadow-md bg-[#FAEDCB] border-gray-200 hover:bg-[#f1deb1]"
-                  disabled={isSaving || isUpdating}
+                  size="icon"
+                  className="rounded-full"
+                  disabled={
+                    isUpdating ||
+                    isDateLoading ||
+                    isClearing ||
+                    isMarkingAll ||
+                    isSavingRfidAttendance
+                  }
                 >
-                  Mark Selected Students as...
+                  <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => bulkUpdateStatus("PRESENT")}>
-                  Mark Selected Present
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setShowMarkAllConfirm(true)}
+                  className="text-[#22C55E] focus:text-[#22C55E] focus:bg-[#22C55E]/10"
+                  disabled={
+                    isUpdating ||
+                    isDateLoading ||
+                    isClearing ||
+                    isMarkingAll ||
+                    isSavingRfidAttendance ||
+                    !hasAttendanceForSelectedDate
+                  }
+                >
+                  Mark All as Present
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => bulkUpdateStatus("LATE")}>
-                  Mark Selected Late
+                <DropdownMenuItem
+                  onClick={markAllLateAsPresent}
+                  className="text-[#3B82F6] focus:text-[#3B82F6] focus:bg-[#3B82F6]/10"
+                  disabled={
+                    isUpdating ||
+                    isDateLoading ||
+                    isClearing ||
+                    isMarkingAll ||
+                    isSavingRfidAttendance ||
+                    !hasAttendanceForSelectedDate
+                  }
+                >
+                  Mark All Late as Present
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => bulkUpdateStatus("ABSENT")}>
-                  Mark Selected Absent
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => bulkUpdateStatus("EXCUSED")}>
-                  Mark Selected Excused
+                <DropdownMenuItem
+                  onClick={() => setShowClearConfirm(true)}
+                  disabled={
+                    isSaving ||
+                    isUpdating ||
+                    isDateLoading ||
+                    isClearing ||
+                    isMarkingAll ||
+                    isSavingRfidAttendance ||
+                    !hasAttendanceForSelectedDate
+                  }
+                  className="text-[#EF4444] focus:text-[#EF4444] focus:bg-[#EF4444]/10"
+                >
+                  {isSaving ? "Clearing..." : "Clear Attendance"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
+            {selectedStudents.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="rounded-full shadow-md bg-[#FAEDCB] border-gray-200 hover:bg-[#f1deb1]"
+                    disabled={isSaving || isUpdating || isSavingRfidAttendance}
+                  >
+                    Mark Selected Students as...
+                  </Button>
+                </DropdownMenuTrigger>
 
-          <div className="flex items-center gap-3 ml-auto">
-            {attendanceStartTime && (
-              <Button
-                className="rounded-full bg-[#124A69] hover:bg-[#0a2f42] text-white"
-                onClick={() => setShowTimeoutModal(true)}
-              >
-                Ongoing Attendance • Grace:{" "}
-                {graceCountdown || `${graceMinutes}:00`}
-              </Button>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={() => bulkUpdateStatus("PRESENT")}
+                    disabled={isSavingRfidAttendance}
+                  >
+                    Present
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => bulkUpdateStatus("LATE")}
+                    disabled={isSavingRfidAttendance}
+                  >
+                    Late
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => bulkUpdateStatus("ABSENT")}
+                    disabled={isSavingRfidAttendance}
+                  >
+                    Absent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => bulkUpdateStatus("EXCUSED")}
+                    disabled={isSavingRfidAttendance}
+                  >
+                    Excused
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            <Button
-              onClick={toggleSelectMode}
-              className={`rounded-full flex items-center gap-2 transition-colors duration-200 ${
-                isSelecting
-                  ? "bg-white text-black border border-[#124A69] hover:bg-gray-100"
-                  : "bg-[#124A69] text-white hover:bg-[#0D3A54]"
-              }`}
-            >
-              <MousePointerClick
-                className={isSelecting ? "text-[#124A69]" : "text-white"}
-              />
-              {isSelecting ? "Cancel Selection" : "Select Students"}
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full relative flex items-center gap-2 px-3"
-              onClick={() => setIsFilterSheetOpen(true)}
-              disabled={
-                isUpdating ||
-                isDateLoading ||
-                isClearing ||
-                isMarkingAll ||
-                !hasAttendanceForSelectedDate
-              }
-            >
-              <Filter className="h-4 w-4" />
-              <span>Filter</span>
-              {filters.status.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {filters.status.length}
-                </span>
+
+            <div className="flex items-center gap-3 ml-auto">
+              {attendanceStartTime && isToday(selectedDate || new Date()) && (
+                <Button
+                  className="rounded-full bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                  onClick={() => setShowTimeoutModal(true)}
+                  disabled={isSavingRfidAttendance}
+                >
+                  Ongoing Attendance • Grace:{" "}
+                  {graceCountdown || `${graceMinutes}:00`}
+                </Button>
               )}
-            </Button>
-            <FilterSheet
-              isOpen={isFilterSheetOpen}
-              onOpenChange={setIsFilterSheetOpen}
-              filters={filters}
-              onFiltersChange={setFilters}
-              onApplyFilters={handleApplyFilters}
-              statusLabels={{
-                NOT_SET: "No Status",
-                PRESENT: "Present",
-                ABSENT: "Absent",
-                LATE: "Late",
-                EXCUSED: "Excused",
-              }}
-            />
-            <Button
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setShowExportPreview(true)}
-              title="Export to Excel"
-              disabled={
-                isUpdating ||
-                isDateLoading ||
-                isClearing ||
-                isMarkingAll ||
-                !hasAttendanceForSelectedDate
-              }
-            >
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
+              <Button
+                onClick={toggleSelectMode}
+                className={`rounded-full flex items-center gap-2 transition-colors duration-200 ${
+                  isSelecting
+                    ? "bg-white text-black border border-[#124A69] hover:bg-gray-100"
+                    : "bg-[#124A69] text-white hover:bg-[#0D3A54]"
+                }`}
+                disabled={
+                  !hasAttendanceForSelectedDate ||
+                  isSavingRfidAttendance ||
+                  isClearing ||
+                  isMarkingAll
+                }
+              >
+                <MousePointerClick
+                  className={isSelecting ? "text-[#124A69]" : "text-white"}
+                />
+                {isSelecting ? "Cancel Selection" : "Select Students"}
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full relative flex items-center gap-2 px-3"
+                onClick={() => handleFilterOpen(true)}
+                disabled={
+                  isUpdating ||
+                  isDateLoading ||
+                  isClearing ||
+                  isMarkingAll ||
+                  isSavingRfidAttendance ||
+                  !hasAttendanceForSelectedDate
+                }
+              >
+                <Filter className="h-4 w-4" />
+                <span>Filter</span>
+                {filters.status.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {filters.status.length}
+                  </span>
+                )}
+              </Button>
+              <FilterSheet
+                isOpen={isFilterSheetOpen}
+                onOpenChange={handleFilterOpen}
+                filters={tempFilters}
+                onFiltersChange={setTempFilters}
+                onApplyFilters={handleApplyFilters}
+                onCancel={handleCancelFilters}
+                statusLabels={{
+                  NOT_SET: "No Status",
+                  PRESENT: "Present",
+                  ABSENT: "Absent",
+                  LATE: "Late",
+                  EXCUSED: "Excused",
+                }}
+              />
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setShowExportPreview(true)}
+                title="Export to Excel"
+                disabled={
+                  isUpdating ||
+                  isDateLoading ||
+                  isClearing ||
+                  isMarkingAll ||
+                  isSavingRfidAttendance ||
+                  !hasAttendanceForSelectedDate
+                }
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -2242,15 +2523,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 onClick={startAttendance}
                 className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-6 py-3 text-lg"
                 size="lg"
+                disabled={isSavingRfidAttendance}
               >
                 Start Attendance
               </Button>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className={gridColsClass}>
             {isDateLoading ? (
-              Array.from({ length: 10 }).map((_, index) => (
+              Array.from({ length: itemsPerPage }).map((_, index) => (
                 <div
                   key={index}
                   className="w-full bg-white p-6 rounded-lg shadow-sm border border-gray-100 animate-pulse"
@@ -2404,6 +2686,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <Button
                   variant="outline"
                   onClick={() => setShowExportPreview(false)}
+                  disabled={isSavingRfidAttendance}
                 >
                   Cancel
                 </Button>
@@ -2411,6 +2694,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
                   onClick={handleExport}
                   disabled={
+                    isSavingRfidAttendance ||
                     !selectedDate ||
                     filteredStudents.some(
                       (student) => student.status === "NOT_SET"
@@ -2445,6 +2729,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                     startAttendance();
                   }}
                   className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                  disabled={isSavingRfidAttendance}
                 >
                   Start Attendance
                 </Button>
@@ -2535,6 +2820,51 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         </AlertDialog>
       )}
 
+      {/* Backtrack Status Change Confirm Alert */}
+      <AlertDialog
+        open={showBacktrackConfirm}
+        onOpenChange={(open) => {
+          setShowBacktrackConfirm(open);
+          if (!open) {
+            setPendingStatusChange(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[425px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#124A69] text-xl font-bold">
+              Confirm Status Change
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-500">
+              You are about to change attendance status for{" "}
+              <span className="font-semibold text-[#124A69]">
+                {selectedDate
+                  ? format(selectedDate, "MMMM d, yyyy")
+                  : "this date"}
+              </span>
+              , which is a past date. Are you sure you want to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel
+              onClick={() => {
+                setShowBacktrackConfirm(false);
+                setPendingStatusChange(null);
+              }}
+              className="border-gray-200"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBacktrackStatusConfirm}
+              className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
+            >
+              Confirm Change
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Clear Confirm Alert */}
       {hasAttendanceForSelectedDate && (
         <AlertDialog
@@ -2542,27 +2872,54 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           onOpenChange={(open) => {
             setShowClearConfirm(open);
             if (!open) {
+              setClearConfirmText("");
               document.body.style.removeProperty("pointer-events");
             }
           }}
         >
-          <AlertDialogContent className="sm:max-w-[425px]">
+          <AlertDialogContent className="sm:max-w-[425px] border-red-500">
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-[#124A69] text-xl font-bold">
+              <AlertDialogTitle className="text-red-600 text-xl font-bold">
                 Clear Attendance
               </AlertDialogTitle>
               <AlertDialogDescription className="text-gray-500">
-                Are you sure you want to clear all attendance records for{" "}
-                {selectedDate
-                  ? format(selectedDate, "MMMM d, yyyy")
-                  : "this date"}
-                ? This action cannot be undone.
+                You are about to clear all attendance records for{" "}
+                <span className="font-semibold text-red-500">
+                  {selectedDate
+                    ? format(selectedDate, "MMMM d, yyyy")
+                    : "this date"}
+                </span>
+                . This action cannot be undone.{" "}
+                <span className="font-semibold text-red-600">
+                  You will not be able to modify or backtrack to this date after
+                  clearing.
+                </span>
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <div className="py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Type{" "}
+                  <span className="font-mono font-semibold text-red-600">
+                    clear attendance
+                  </span>{" "}
+                  to confirm:
+                </label>
+                <Input
+                  type="text"
+                  value={clearConfirmText}
+                  onChange={(e) => setClearConfirmText(e.target.value)}
+                  placeholder="clear attendance"
+                  className="w-full border-red-300 focus:border-red-500 focus:ring-red-500"
+                  autoFocus
+                />
+              </div>
+            </div>
             <AlertDialogFooter className="gap-2 sm:gap-2">
               <AlertDialogCancel
                 onClick={() => {
                   setShowClearConfirm(false);
+                  setClearConfirmText("");
                   document.body.style.removeProperty("pointer-events");
                 }}
                 className="border-gray-200"
@@ -2572,10 +2929,15 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               <AlertDialogAction
                 onClick={() => {
                   clearAllAttendance();
+                  setShowClearConfirm(false);
+                  setClearConfirmText("");
                   document.body.style.removeProperty("pointer-events");
                 }}
-                className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
-                disabled={isClearing}
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={
+                  isClearing ||
+                  clearConfirmText.toLowerCase() !== "clear attendance"
+                }
               >
                 {isClearing ? "Clearing..." : "Clear Attendance"}
               </AlertDialogAction>
@@ -2611,6 +2973,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 : "h-9 px-4 border-gray-200 text-gray-600 hover:bg-gray-50"
             }
             disabled={
+              isSavingRfidAttendance ||
               isLoading ||
               (!previousAttendance && Object.keys(unsavedChanges).length === 0)
             }
@@ -2641,6 +3004,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 variant="outline"
                 onClick={() => setShowResetConfirmation(false)}
                 className="border-gray-200"
+                disabled={isSavingRfidAttendance}
               >
                 Cancel
               </Button>
@@ -2660,6 +3024,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   });
                 }}
                 className="bg-[#124A69] hover:bg-[#0d3a56] text-white"
+                disabled={isSavingRfidAttendance}
               >
                 Reset Attendance
               </Button>
@@ -2728,7 +3093,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             <div className="flex gap-3">
               <Button
                 onClick={confirmAttendanceStart}
-                disabled={!graceMinutes || graceMinutes <= 0}
+                disabled={
+                  isSavingRfidAttendance || !graceMinutes || graceMinutes <= 0
+                }
                 className="flex-1 bg-[#124A69] hover:bg-[#0D3A54] text-white"
               >
                 Start Attendance Session
@@ -2737,6 +3104,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 onClick={() => setShowTimeSetupModal(false)}
                 variant="outline"
                 className="flex-1"
+                disabled={isSavingRfidAttendance}
               >
                 Cancel
               </Button>
@@ -2887,12 +3255,14 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   variant="outline"
                   className="flex-1 h-11"
                   onClick={() => setShowTimeoutModal(false)}
+                  disabled={isSavingRfidAttendance}
                 >
                   Back
                 </Button>
                 <Button
                   className="flex-1 h-11 bg-[#124A69] hover:bg-[#0a2f42] text-white"
                   onClick={handleAttendanceTimeout}
+                  disabled={isSavingRfidAttendance}
                 >
                   Done
                 </Button>
@@ -2914,19 +3284,19 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-[#124A69] text-xl font-bold">
               {isBulkExcuse ? "Excuse Selected Students" : "Excuse Reason"}
             </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
+            <DialogDescription className="text-gray-500">
               {isBulkExcuse
                 ? "Please provide a reason for excusing all selected students."
                 : "Please provide a reason for marking this student as excused."}
-            </p>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
             <Input
               placeholder={
                 isBulkExcuse
@@ -2935,10 +3305,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               }
               value={excuseReason}
               onChange={(e) => setExcuseReason(e.target.value)}
+              className="w-full border-gray-200 focus:border-[#124A69] focus:ring-[#124A69]"
             />
           </div>
 
-          <DialogFooter className="mt-4">
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -2947,10 +3318,18 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 setPendingExcusedStudent(null);
                 setIsBulkExcuse(false);
               }}
+              disabled={isSavingRfidAttendance}
+              className="border-gray-200"
             >
               Cancel
             </Button>
-            <Button onClick={handleExcusedSubmit}>Save Reason</Button>
+            <Button
+              onClick={handleExcusedSubmit}
+              disabled={isSavingRfidAttendance || !excuseReason.trim()}
+              className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+            >
+              Save Reason
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -13,12 +13,11 @@ export default function AttendancePage() {
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="relative h-screen w-screen overflow-hidden">
+        <Header />
         <AppSidebar />
 
         <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
           <div className="flex flex-col flex-grow px-2 sm:px-4 md:px-6 lg:px-8">
-            <Header />
-
             <div className="space-y-2 md:space-y-6 lg:space-y-8">
               <div className="space-y-2">
                 <h2 className="pl-2 pb-1 text-xl sm:text-2xl font-bold text-muted-foreground">

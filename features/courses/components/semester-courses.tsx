@@ -43,9 +43,11 @@ interface CoursesProps {
 const CourseCard = ({
   course,
   type,
+  onNavigate,
 }: {
   course: Course;
   type: "attendance" | "recitation" | "quiz" | "class-record" | "reporting";
+  onNavigate: () => void;
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -63,8 +65,11 @@ const CourseCard = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    router.push(href);
+    onNavigate();
+    setTimeout(() => {
+      setIsLoading(true);
+      router.push(href);
+    }, 200);
   };
 
   return (
@@ -137,6 +142,7 @@ export default function ActiveCourses({ type }: CoursesProps) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isNavigating, setIsNavigating] = useState(false);
   const itemsPerPage = 3;
 
   const fetchActiveCourses = async () => {
@@ -192,11 +198,24 @@ export default function ActiveCourses({ type }: CoursesProps) {
     );
   }
 
+  const handleNavigate = () => {
+    setIsNavigating(true);
+  };
+
   return (
-    <Card className="p-4 shadow-md rounded-lg">
+    <Card
+      className={`p-4 shadow-md rounded-lg transition-opacity duration-200 ${
+        isNavigating ? "opacity-0" : "opacity-100"
+      }`}
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
         {currentCourses.map((course) => (
-          <CourseCard key={course.id} course={course} type={type} />
+          <CourseCard
+            key={course.id}
+            course={course}
+            type={type}
+            onNavigate={handleNavigate}
+          />
         ))}
       </div>
 

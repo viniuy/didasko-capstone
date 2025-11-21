@@ -1,7 +1,7 @@
 "use client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import axiosInstance from "@/lib/axios";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,8 +50,15 @@ const LeaderboardItem = ({
   student: StudentAttendance;
   rank: number;
 }) => {
+  // Calculate bonus absents: every 3 lates = +1 absent
+  const bonusAbsents = Math.floor(student.totalLate / 3);
+  const displayAbsent =
+    bonusAbsents > 0
+      ? `${student.totalAbsent} (+${bonusAbsents})`
+      : student.totalAbsent;
+
   return (
-    <div className="bg-white/5 hover:bg-white/10 rounded-lg p-3 border border-white/10 transition-all duration-200">
+    <div className="bg-white/5 rounded-lg p-3 border border-white/10">
       <div className="flex items-start gap-3">
         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 flex-shrink-0 mt-1">
           {rank <= 3 ? (
@@ -72,7 +79,7 @@ const LeaderboardItem = ({
             <div className="flex items-center gap-1">
               <span className="text-white/50">Absent:</span>
               <span className="text-red-400 font-semibold">
-                {student.totalAbsent}
+                {displayAbsent}
               </span>
             </div>
             <div className="flex items-center gap-1">
@@ -144,7 +151,7 @@ const CourseAttendanceCard = ({
   }, [leaderboard]);
 
   return (
-    <div className="w-full bg-white/10 hover:bg-white/20 rounded-lg p-3 text-left transition-all duration-200 border border-white/20 hover:border-white/40">
+    <div className="w-full bg-white/10 rounded-lg p-3 text-left border border-white/20">
       <div className="flex items-start gap-3">
         <Trophy className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-1" />
 
@@ -177,7 +184,7 @@ const CourseAttendanceCard = ({
   );
 };
 
-type SortOption = "absents" | "attendance" | "present" | "late" | "excused";
+type SortOption = "absents" | "present" | "late" | "excused";
 
 interface AttendanceLeaderboardProps {
   courseSlug?: string;
@@ -191,6 +198,7 @@ export default function AttendanceLeaderboard({
   const [allLeaderboards, setAllLeaderboards] = useState<LeaderboardData>({});
   const [sortBy, setSortBy] = useState<SortOption>("absents");
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [courseTitle, setCourseTitle] = useState<string>("");
   const [courseSection, setCourseSection] = useState<string>("");
 
@@ -205,8 +213,6 @@ export default function AttendanceLeaderboard({
       switch (sortBy) {
         case "absents":
           return b.totalAbsent - a.totalAbsent;
-        case "attendance":
-          return b.attendanceRate - a.attendanceRate;
         case "present":
           return b.totalPresent - a.totalPresent;
         case "late":
@@ -237,11 +243,17 @@ export default function AttendanceLeaderboard({
     fetchCourseTitle();
   }, [courseSlug]);
 
-  useEffect(() => {
-    const fetchAllData = async () => {
+  const fetchAllData = useCallback(
+    async (isRefresh = false) => {
       if (!session?.user?.id) return;
 
       try {
+        if (isRefresh) {
+          setIsRefreshing(true);
+        } else {
+          setIsLoading(true);
+        }
+
         if (isSingleCourse) {
           const response = await axiosInstance.get(
             "/attendance/leaderboard/all",
@@ -272,15 +284,41 @@ export default function AttendanceLeaderboard({
         setAllLeaderboards({});
       } finally {
         setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [session?.user?.id, courseSlug, isSingleCourse]
+  );
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetchAllData(false);
+    }
+  }, [status, fetchAllData]);
+
+  // Listen for attendance updates
+  useEffect(() => {
+    const handleAttendanceUpdate = (event: CustomEvent) => {
+      // Only refresh if the event is for this course (or all courses if no courseSlug)
+      if (!courseSlug || event.detail?.courseSlug === courseSlug) {
+        // Keep existing data visible while refreshing
+        fetchAllData(true);
       }
     };
 
-    if (status === "authenticated") {
-      fetchAllData();
-    }
-  }, [status, session?.user?.id, courseSlug, isSingleCourse]);
+    window.addEventListener(
+      "attendanceUpdated",
+      handleAttendanceUpdate as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        "attendanceUpdated",
+        handleAttendanceUpdate as EventListener
+      );
+    };
+  }, [courseSlug, fetchAllData]);
 
-  if (isLoading) {
+  if (isLoading && !isRefreshing) {
     return (
       <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
         <CardHeader className="pb-3 flex-shrink-0">
@@ -362,7 +400,6 @@ export default function AttendanceLeaderboard({
             </SelectTrigger>
             <SelectContent className="bg-[#0f3d58] border-white/20 text-white">
               <SelectItem value="absents">Most Absents</SelectItem>
-              <SelectItem value="attendance">Highest Attendance</SelectItem>
               <SelectItem value="present">Most Present</SelectItem>
               <SelectItem value="late">Most Late</SelectItem>
               <SelectItem value="excused">Most Excused</SelectItem>
