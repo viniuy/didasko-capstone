@@ -16,8 +16,10 @@ import {
   Users,
   BookCopy,
   Activity,
+  Menu,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import EditProfileModal from "@/shared/components/profile/components/EditProfileModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -29,6 +31,7 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSession, signOut } from "next-auth/react";
@@ -127,7 +130,7 @@ function SidebarSkeleton() {
 
 export function AppSidebar() {
   const [isGradingOpen, setIsGradingOpen] = useState(false);
-  const { open, setOpen } = useSidebar();
+  const { open, setOpen, openMobile, setOpenMobile, isMobile } = useSidebar();
   const { data: session, status, update } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -327,223 +330,270 @@ export function AppSidebar() {
     image: userImage || null,
   };
   return (
-    <Sidebar
-      collapsible="icon"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      className="fixed top-0 left-0 z-50 h-screen bg-[#124A69] text-white border-[#124A69] w-16 sm:w-20 md:w-64"
-    >
-      <SidebarContent className="flex-1">
-        {/* User Profile */}
-        <SidebarHeader className="flex flex-row items-center gap-2 sm:gap-3 px-1 sm:px-2 mt-2 sm:mt-4 relative group">
-          <div className="relative">
-            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 shrink-0">
-              <AvatarImage src={userImage} className="object-cover" />
-              <AvatarFallback className="text-base sm:text-xl">
-                {avatarInitial}
-              </AvatarFallback>
-            </Avatar>
+    <>
+      {/* Mobile Background Override */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+          [data-mobile='true'] {
+            background-color: #124A69 !important;
+            color: white !important;
+          }
+          [data-mobile='true'] *,
+          [data-mobile='true'] p,
+          [data-mobile='true'] span,
+          [data-mobile='true'] div,
+          [data-mobile='true'] a,
+          [data-mobile='true'] button,
+          [data-mobile='true'] h1,
+          [data-mobile='true'] h2,
+          [data-mobile='true'] h3,
+          [data-mobile='true'] h4,
+          [data-mobile='true'] h5,
+          [data-mobile='true'] h6,
+          [data-mobile='true'] label {
+            color: white !important;
+          }
+          [data-mobile='true'] svg {
+            color: white !important;
+            stroke: white !important;
+          }
+        `,
+        }}
+      />
 
-            {/* Pencil overlay on hover */}
-            <button
-              onClick={() => setEditModalOpen(true)}
-              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full min-h-[44px] min-w-[44px]"
-            >
-              <NotebookPen className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </button>
-          </div>
-
-          <div
-            className={`overflow-hidden transition-all duration-300 delay-150 ${
-              open
-                ? "opacity-100 translate-x-0 w-auto"
-                : "opacity-0 translate-x-[-10px] w-0"
-            }`}
+      {/* Mobile Toggle Button */}
+      {isMobile && (
+        <div className="fixed top-2 left-2 sm:top-4 sm:left-4 z-50">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setOpenMobile(!openMobile)}
+            className="bg-[#124A69] text-white hover:bg-[#0f3d58] min-h-[44px] min-w-[44px] border-0"
           >
-            <p
-              className="text-sm sm:text-base md:text-lg font-semibold whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] sm:max-w-[180px]"
-              title={displayName}
-            >
-              {displayName}
-            </p>
-            <p
-              className="text-xs sm:text-sm text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] sm:max-w-[180px]"
-              title={displayDepartment}
-            >
-              {displayDepartment}
-            </p>
-          </div>
-        </SidebarHeader>
+            <Menu size={20} />
+          </Button>
+        </div>
+      )}
 
-        {/* Sidebar Menu */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <a
-                    href={item.url}
-                    className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
-                      pathname?.startsWith(item.url) ? "bg-gray-800" : ""
-                    }`}
-                  >
-                    <item.icon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-                    <span
-                      className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
-                        open
-                          ? "opacity-100 translate-x-0 delay-200"
-                          : "opacity-0 translate-x-[-10px] delay-0"
+      <Sidebar
+        collapsible="icon"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className="fixed top-0 left-0 z-50 h-screen bg-[#124A69] text-white border-[#124A69] w-16 sm:w-20 md:w-64"
+      >
+        <SidebarContent className="flex-1">
+          {/* User Profile */}
+          <SidebarHeader className="flex flex-row items-center gap-2 sm:gap-3 px-1 sm:px-2 mt-2 sm:mt-4 relative group">
+            <div className="relative">
+              <Avatar className="w-10 h-10 sm:w-12 sm:h-12 shrink-0">
+                <AvatarImage src={userImage} className="object-cover" />
+                <AvatarFallback className="text-base sm:text-xl">
+                  {avatarInitial}
+                </AvatarFallback>
+              </Avatar>
+
+              {/* Pencil overlay on hover */}
+              <button
+                onClick={() => setEditModalOpen(true)}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full min-h-[44px] min-w-[44px]"
+              >
+                <NotebookPen className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+              </button>
+            </div>
+
+            <div
+              className={`overflow-hidden transition-all duration-300 delay-150 ${
+                open
+                  ? "opacity-100 translate-x-0 w-auto"
+                  : "opacity-0 translate-x-[-10px] w-0"
+              }`}
+            >
+              <p
+                className="text-sm sm:text-base md:text-lg font-semibold whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] sm:max-w-[180px]"
+                title={displayName}
+              >
+                {displayName}
+              </p>
+              <p
+                className="text-xs sm:text-sm text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px] sm:max-w-[180px]"
+                title={displayDepartment}
+              >
+                {displayDepartment}
+              </p>
+            </div>
+          </SidebarHeader>
+
+          {/* Sidebar Menu */}
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {items.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <a
+                      href={item.url}
+                      className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
+                        pathname?.startsWith(item.url) ? "bg-gray-800" : ""
                       }`}
                     >
-                      {open && item.title}
-                    </span>
-                  </a>
-                </SidebarMenuItem>
-              ))}
+                      <item.icon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+                      <span
+                        className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
+                          open
+                            ? "opacity-100 translate-x-0 delay-200"
+                            : "opacity-0 translate-x-[-10px] delay-0"
+                        }`}
+                      >
+                        {open && item.title}
+                      </span>
+                    </a>
+                  </SidebarMenuItem>
+                ))}
 
-              {!isAdmin && (
-                <>
-                  <SidebarMenuItem>
-                    <Collapsible
-                      open={isGradingOpen}
-                      onOpenChange={setIsGradingOpen}
-                      className="group/collapsible w-full"
-                    >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
-                            pathname?.startsWith("/grading")
-                              ? "bg-gray-800"
-                              : ""
-                          }`}
-                        >
-                          <ClipboardList className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-                          <span
-                            className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
-                              open
-                                ? "opacity-100 translate-x-0 delay-200"
-                                : "opacity-0 translate-x-[-10px] delay-0"
+                {!isAdmin && (
+                  <>
+                    <SidebarMenuItem>
+                      <Collapsible
+                        open={isGradingOpen}
+                        onOpenChange={setIsGradingOpen}
+                        className="group/collapsible w-full"
+                      >
+                        <CollapsibleTrigger asChild>
+                          <button
+                            className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
+                              pathname?.startsWith("/grading")
+                                ? "bg-gray-800"
+                                : ""
                             }`}
                           >
-                            {open && "Grading"}
-                          </span>
-                          <ChevronDown
-                            className={`ml-auto w-4 h-4 sm:w-5 sm:h-5 transition-transform group-data-[state=open]/collapsible:rotate-180 ${
-                              open ? "opacity-100" : "opacity-0"
-                            }`}
-                          />
-                        </button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
-                        <SidebarGroupContent>
-                          <SidebarMenu>
-                            {gradingSubItems.map((item) => (
-                              <SidebarMenuItem key={item.title}>
-                                <a
-                                  href={item.url}
-                                  className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-56 min-h-[44px] sm:min-h-[40px] ml-2 sm:ml-4 ${
-                                    pathname?.startsWith(item.url)
-                                      ? "bg-gray-800"
-                                      : ""
-                                  }`}
-                                >
-                                  <item.icon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-                                  <span
-                                    className={`text-xs sm:text-sm transition-all duration-1000 ${
-                                      open
-                                        ? "opacity-100 translate-x-0 "
-                                        : "opacity-0 translate-x-[-10px]"
+                            <ClipboardList className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+                            <span
+                              className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
+                                open
+                                  ? "opacity-100 translate-x-0 delay-200"
+                                  : "opacity-0 translate-x-[-10px] delay-0"
+                              }`}
+                            >
+                              {open && "Grading"}
+                            </span>
+                            <ChevronDown
+                              className={`ml-auto w-4 h-4 sm:w-5 sm:h-5 transition-transform group-data-[state=open]/collapsible:rotate-180 ${
+                                open ? "opacity-100" : "opacity-0"
+                              }`}
+                            />
+                          </button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up overflow-hidden">
+                          <SidebarGroupContent>
+                            <SidebarMenu>
+                              {gradingSubItems.map((item) => (
+                                <SidebarMenuItem key={item.title}>
+                                  <a
+                                    href={item.url}
+                                    className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-56 min-h-[44px] sm:min-h-[40px] ml-2 sm:ml-4 ${
+                                      pathname?.startsWith(item.url)
+                                        ? "bg-gray-800"
+                                        : ""
                                     }`}
                                   >
-                                    {item.title}
-                                  </span>
-                                </a>
-                              </SidebarMenuItem>
-                            ))}
-                          </SidebarMenu>
-                        </SidebarGroupContent>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </SidebarMenuItem>
-                </>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
+                                    <item.icon className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+                                    <span
+                                      className={`text-xs sm:text-sm transition-all duration-1000 ${
+                                        open
+                                          ? "opacity-100 translate-x-0 "
+                                          : "opacity-0 translate-x-[-10px]"
+                                      }`}
+                                    >
+                                      {item.title}
+                                    </span>
+                                  </a>
+                                </SidebarMenuItem>
+                              ))}
+                            </SidebarMenu>
+                          </SidebarGroupContent>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </SidebarMenuItem>
+                  </>
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
 
-      {/* Logout Button in Sidebar Footer */}
-      <SidebarFooter className="p-2 sm:p-4">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 text-black-600 min-h-[44px] sm:min-h-0 w-full">
-              <LogOut className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
-              <span
-                className={`text-sm sm:text-base transition-all duration-300 ${
-                  open
-                    ? "opacity-100 translate-x-0 delay-200"
-                    : "opacity-0 translate-x-[-10px] delay-0"
-                }`}
-              >
-                {open && "Logout"}
-              </span>
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="text-xl font-semibold">
-                {isAdmin
-                  ? "What would you like to do?"
-                  : "Are you sure you want to logout?"}
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-gray-600">
-                {isAdmin
-                  ? selectedRole === "FACULTY"
-                    ? "You can switch back to Admin view or logout completely."
-                    : "You can switch to Faculty view or logout completely."
-                  : "This action will log you out of your account."}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="gap-2 flex-col sm:flex-row">
-              <AlertDialogCancel
-                onClick={() => setOpen(false)}
-                className="border-0 bg-gray-100 hover:bg-gray-200 text-gray-900 w-full sm:w-auto"
-              >
-                Cancel
-              </AlertDialogCancel>
-              {isAdmin && (
+        {/* Logout Button in Sidebar Footer */}
+        <SidebarFooter className="p-2 sm:p-4">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 text-black-600 min-h-[44px] sm:min-h-0 w-full">
+                <LogOut className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+                <span
+                  className={`text-sm sm:text-base transition-all duration-300 ${
+                    open
+                      ? "opacity-100 translate-x-0 delay-200"
+                      : "opacity-0 translate-x-[-10px] delay-0"
+                  }`}
+                >
+                  {open && "Logout"}
+                </span>
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-xl font-semibold">
+                  {isAdmin
+                    ? "What would you like to do?"
+                    : "Are you sure you want to logout?"}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-gray-600">
+                  {isAdmin
+                    ? selectedRole === "FACULTY"
+                      ? "You can switch back to Admin view or logout completely."
+                      : "You can switch to Faculty view or logout completely."
+                    : "This action will log you out of your account."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="gap-2 flex-col sm:flex-row">
+                <AlertDialogCancel
+                  onClick={() => setOpen(false)}
+                  className="border-0 bg-gray-100 hover:bg-gray-200 text-gray-900 w-full sm:w-auto"
+                >
+                  Cancel
+                </AlertDialogCancel>
+                {isAdmin && (
+                  <AlertDialogAction
+                    onClick={() => {
+                      const newRole =
+                        selectedRole === "FACULTY" ? "ADMIN" : "FACULTY";
+                      handleRoleSwitch(newRole);
+                      setOpen(false);
+                    }}
+                    className="bg-[#124A69] hover:bg-[#0a2f42] text-white w-full sm:w-auto"
+                  >
+                    {selectedRole === "FACULTY"
+                      ? "Switch to Admin"
+                      : "Switch to Faculty"}
+                  </AlertDialogAction>
+                )}
                 <AlertDialogAction
                   onClick={() => {
-                    const newRole =
-                      selectedRole === "FACULTY" ? "ADMIN" : "FACULTY";
-                    handleRoleSwitch(newRole);
+                    handleLogout();
                     setOpen(false);
                   }}
                   className="bg-[#124A69] hover:bg-[#0a2f42] text-white w-full sm:w-auto"
                 >
-                  {selectedRole === "FACULTY"
-                    ? "Switch to Admin"
-                    : "Switch to Faculty"}
+                  Logout
                 </AlertDialogAction>
-              )}
-              <AlertDialogAction
-                onClick={() => {
-                  handleLogout();
-                  setOpen(false);
-                }}
-                className="bg-[#124A69] hover:bg-[#0a2f42] text-white w-full sm:w-auto"
-              >
-                Logout
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </SidebarFooter>
-      <EditProfileModal
-        open={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        user={user}
-      />
-    </Sidebar>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </SidebarFooter>
+        <EditProfileModal
+          open={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          user={user}
+        />
+      </Sidebar>
+    </>
   );
 }

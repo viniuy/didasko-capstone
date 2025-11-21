@@ -72,38 +72,38 @@ export default function Rightsidebar() {
         <div className="flex-grow overflow-y-auto grid grid-rows-2 gap-4 h-[calc(100vh-32px)]">
           {isCourseDashboard ? (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <CourseAnalytics courseSlug={courseSlug} />
               </div>
             </>
           ) : /* Attendance List Page */
           isAttendanceList ? (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <CourseShortcut />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <AttendanceLeaderboard />
               </div>
             </>
           ) : isClassAttendance ? (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <AttendanceLeaderboard courseSlug={courseSlug} />
               </div>
             </>
           ) : isGradingClassRecord ? (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <GradingLeaderboard courseSlug={courseSlug} />
               </div>
             </>
@@ -118,19 +118,19 @@ export default function Rightsidebar() {
             </>
           ) : isAdminDashboard ? (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <UserIdSearch />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <ActiveFaculty />
               </div>
             </>
           ) : (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <UpcomingEvents />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-25px)]">
                 <Notes />
               </div>
             </>

@@ -31,6 +31,7 @@ interface Course {
     totalAbsents: number;
     lastAttendanceDate: string | null;
   };
+  latestAbsents?: number;
 }
 
 interface AllCoursesProps {
@@ -54,14 +55,15 @@ const CourseCard = ({
       <div>
         <CardHeader className="-mt-4 flex justify-between items-center">
           <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold">
-            {course.title}
+            {course.code}
           </CardTitle>
           <BookOpenText className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-[50px] lg:h-[50px]" />
         </CardHeader>
         <CardContent>
           <p className="text-xs sm:text-sm">Section {course.section}</p>
           <p className="text-xs sm:text-sm font-semibold">
-            Total Number of Absents: {course.attendanceStats?.totalAbsents || 0}
+            Total Number of Absents:{" "}
+            {course.latestAbsents ?? course.attendanceStats?.totalAbsents ?? 0}
           </p>
           <p className="text-[10px] sm:text-xs text-gray-400">
             {course.attendanceStats?.lastAttendanceDate
@@ -154,7 +156,46 @@ export default function AllCourses({ type }: AllCoursesProps) {
       });
 
       const courses = response.data.courses || [];
-      setCourses(courses);
+
+      // Fetch latest attendance absents for each course
+      const coursesWithLatestAbsents = await Promise.all(
+        courses.map(async (course: Course) => {
+          if (!course.attendanceStats?.lastAttendanceDate) {
+            return { ...course, latestAbsents: 0 };
+          }
+
+          try {
+            const dateStr = new Date(course.attendanceStats.lastAttendanceDate)
+              .toISOString()
+              .split("T")[0];
+
+            const attendanceResponse = await axiosInstance.get(
+              `/courses/${course.slug}/attendance`,
+              {
+                params: {
+                  date: dateStr,
+                  limit: 1000,
+                },
+              }
+            );
+
+            const attendanceRecords = attendanceResponse.data.attendance || [];
+            const absentsCount = attendanceRecords.filter(
+              (record: any) => record.status === "ABSENT"
+            ).length;
+
+            return { ...course, latestAbsents: absentsCount };
+          } catch (error) {
+            console.error(
+              `Error fetching latest attendance for ${course.code}:`,
+              error
+            );
+            return { ...course, latestAbsents: 0 };
+          }
+        })
+      );
+
+      setCourses(coursesWithLatestAbsents);
     } catch (error) {
       console.error("Error fetching courses:", error);
       setCourses([]);
@@ -310,15 +351,15 @@ export default function AllCourses({ type }: AllCoursesProps) {
                       …
                     </span>
                   ) : (
-                  <PaginationLink
+                    <PaginationLink
                       isActive={currentPage === item}
                       onClick={() => setCurrentPage(item as number)}
-                    className={
+                      className={
                         currentPage === item ? "bg-[#124A69] text-white" : ""
-                    }
-                  >
+                      }
+                    >
                       {item}
-                  </PaginationLink>
+                    </PaginationLink>
                   )}
                 </PaginationItem>
               ))}
