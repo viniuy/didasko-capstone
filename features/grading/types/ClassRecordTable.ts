@@ -1,8 +1,8 @@
 // Term Types
 export const TERMS = [
-  "PRELIMS",
+  "PRELIM",
   "MIDTERM",
-  "PRE-FINALS",
+  "PREFINALS",
   "FINALS",
   "SUMMARY",
 ] as const;
@@ -28,6 +28,7 @@ export interface TermConfig {
   ptWeight: number;
   quizWeight: number;
   examWeight: number;
+  transmutationBase: number; // Base for grade transmutation (0-75)
   assessments: Assessment[];
 }
 
@@ -91,9 +92,9 @@ export interface FinalGrade {
 
 // Term Weights Constants
 export const TERM_WEIGHTS = {
-  PRELIMS: 0.2,
+  PRELIM: 0.2,
   MIDTERM: 0.2,
-  "PRE-FINALS": 0.2,
+  PREFINALS: 0.2,
   FINALS: 0.4,
 } as const;
 

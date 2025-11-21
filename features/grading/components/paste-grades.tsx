@@ -431,8 +431,8 @@ export function PasteGradesModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col relative">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] sm:max-w-3xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col relative">
         {/* Tutorial Overlay */}
         <Tutorial
           isActive={showTutorial}
@@ -445,30 +445,34 @@ export function PasteGradesModal({
         {/* Notification */}
         {notification && (
           <div
-            className={`absolute top-4 right-4 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 z-10 ${
+            className={`absolute top-3 sm:top-4 right-3 sm:right-4 px-3 sm:px-4 py-2 sm:py-3 rounded-lg shadow-lg flex items-center gap-2 z-10 ${
               notification.type === "success"
                 ? "bg-green-100 text-green-800 border border-green-200"
                 : "bg-red-100 text-red-800 border border-red-200"
             }`}
           >
             {notification.type === "success" ? (
-              <CheckCircle className="w-5 h-5" />
+              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             ) : (
-              <AlertCircle className="w-5 h-5" />
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             )}
-            <span className="text-sm font-medium">{notification.message}</span>
+            <span className="text-xs sm:text-sm font-medium">
+              {notification.message}
+            </span>
           </div>
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <ClipboardPaste className="w-5 h-5 text-[#124A69]" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 px-4 sm:px-6 py-3 sm:py-4 border-b">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 bg-[#124A69]/10 rounded-lg">
+              <ClipboardPaste className="w-4 h-4 sm:w-5 sm:h-5 text-[#124A69]" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-800">Paste Grades</h2>
-              <p className="text-sm text-gray-600 mt-0.5">
+              <h2 className="text-lg sm:text-xl font-bold text-[#124A69]">
+                Paste Grades
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-600 mt-0.5">
                 Quickly paste grades from Excel or spreadsheet
               </p>
             </div>
@@ -479,34 +483,34 @@ export function PasteGradesModal({
                 setShowTutorial(true);
                 setTutorialStep(0);
               }}
-              className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-blue-600"
+              className="p-2 hover:bg-[#124A69]/10 rounded-lg transition-colors text-[#124A69]"
               title="Show Tutorial"
             >
-              <Lightbulb className="w-5 h-5" />
+              <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
           {/* Instructions */}
           <div
             data-tutorial="instructions"
-            className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg"
+            className="mb-4 sm:mb-6 p-3 sm:p-4 bg-[#124A69]/5 border border-[#124A69]/20 rounded-lg"
           >
             <div className="flex items-start gap-2">
-              <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 sm:w-5 sm:h-5 text-[#124A69] flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h4 className="text-sm font-semibold text-blue-800 mb-2">
+                <h4 className="text-xs sm:text-sm font-semibold text-[#124A69] mb-2">
                   How to use:
                 </h4>
-                <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                <ol className="text-xs sm:text-sm text-gray-700 space-y-1 list-decimal list-inside">
                   <li>Select the column where you want to paste grades</li>
                   <li>
                     Copy grades from Excel (one grade per line, in student
@@ -521,8 +525,8 @@ export function PasteGradesModal({
           </div>
 
           {/* Column Selection */}
-          <div className="mb-6" data-tutorial="column-select">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+          <div className="mb-4 sm:mb-6" data-tutorial="column-select">
+            <label className="block text-xs sm:text-sm font-semibold text-[#124A69] mb-2">
               Select Target Column
             </label>
             <select
@@ -533,7 +537,7 @@ export function PasteGradesModal({
                 setParsedGrades([]);
                 setValidationErrors([]);
               }}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#124A69] focus:border-transparent"
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-[#124A69]/30 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-[#124A69] focus:border-[#124A69]"
             >
               <option value="">-- Choose a column --</option>
               {availableColumns.map((col) => (
@@ -554,7 +558,7 @@ export function PasteGradesModal({
 
           {/* Paste Area */}
           <div className="mb-4" data-tutorial="paste-area">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-xs sm:text-sm font-semibold text-[#124A69] mb-2">
               Paste Grades Here
             </label>
             <textarea
@@ -566,7 +570,7 @@ export function PasteGradesModal({
                 setValidationErrors([]);
               }}
               placeholder={`Paste grades here (one per line)...\n\nExample:\n95\n88\nabsent\n92\n85`}
-              className="w-full h-40 px-4 py-3 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#124A69] focus:border-transparent resize-none"
+              className="w-full h-32 sm:h-40 px-3 sm:px-4 py-2 sm:py-3 border border-[#124A69]/30 rounded-lg text-xs sm:text-sm font-mono focus:ring-2 focus:ring-[#124A69] focus:border-[#124A69] resize-none"
             />
             <p className="mt-2 text-xs text-gray-600">
               Lines pasted:{" "}
@@ -580,7 +584,7 @@ export function PasteGradesModal({
             <button
               onClick={parseGrades}
               disabled={!selectedColumn || !pastedText.trim()}
-              className="w-full px-4 py-3 bg-[#124A69] text-white rounded-lg font-medium hover:bg-[#0D3A54] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors mb-6"
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-[#124A69] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#0D3A54] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors mb-4 sm:mb-6"
             >
               Parse Grades
             </button>
@@ -588,14 +592,14 @@ export function PasteGradesModal({
 
           {/* Validation Errors */}
           {validationErrors.length > 0 && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-red-800 mb-2">
+                  <h4 className="text-xs sm:text-sm font-semibold text-red-800 mb-2">
                     Validation Errors:
                   </h4>
-                  <ul className="text-sm text-red-700 space-y-1 max-h-40 overflow-y-auto">
+                  <ul className="text-xs sm:text-sm text-red-700 space-y-1 max-h-32 sm:max-h-40 overflow-y-auto">
                     {validationErrors.map((error, index) => (
                       <li key={index} className="flex items-start gap-2">
                         <span className="text-red-600">•</span>
@@ -687,8 +691,8 @@ export function PasteGradesModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50">
-          <div className="text-sm text-gray-600">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 px-4 sm:px-6 py-3 sm:py-4 border-t bg-gray-50">
+          <div className="text-xs sm:text-sm text-gray-600">
             {showPreview && parsedGrades.length > 0 && (
               <>
                 {validationErrors.length === 0 ? (
@@ -703,10 +707,10 @@ export function PasteGradesModal({
               </>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
             >
               Cancel
             </button>
@@ -717,10 +721,11 @@ export function PasteGradesModal({
                 parsedGrades.length === 0 ||
                 validationErrors.length > 0
               }
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] disabled:bg-gray-300 disabled:cursor-not-allowed text-xs sm:text-sm transition-colors"
             >
-              <ClipboardPaste className="w-4 h-4" />
-              Paste Grades
+              <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Paste Grades</span>
+              <span className="sm:hidden">Paste</span>
             </button>
           </div>
         </div>

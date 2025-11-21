@@ -29,6 +29,7 @@ export async function getTermConfigs(courseSlug: string) {
       ptWeight: config.ptWeight,
       quizWeight: config.quizWeight,
       examWeight: config.examWeight,
+      transmutationBase: config.transmutationBase ?? 0,
       assessments: config.assessments.map((a) => ({
         id: a.id,
         name: a.name,
@@ -68,71 +69,88 @@ export async function saveTermConfigs(
 
   // Process each term config
   for (const [term, config] of Object.entries(termConfigs)) {
-    const termConfig = await prisma.termConfiguration.upsert({
-      where: {
-        courseId_term: {
+    try {
+      const termConfig = await prisma.termConfiguration.upsert({
+        where: {
+          courseId_term: {
+            courseId: course.id,
+            term,
+          },
+        },
+        create: {
           courseId: course.id,
           term,
+          ptWeight: config.ptWeight,
+          quizWeight: config.quizWeight,
+          examWeight: config.examWeight,
+          transmutationBase: config.transmutationBase ?? 0,
         },
-      },
-      create: {
-        courseId: course.id,
-        term,
-        ptWeight: config.ptWeight,
-        quizWeight: config.quizWeight,
-        examWeight: config.examWeight,
-      },
-      update: {
-        ptWeight: config.ptWeight,
-        quizWeight: config.quizWeight,
-        examWeight: config.examWeight,
-      },
-    });
-
-    const existingAssessments = await prisma.assessment.findMany({
-      where: { termConfigId: termConfig.id },
-      select: { id: true },
-    });
-
-    const existingIds = existingAssessments.map((a) => a.id);
-    const incomingIds = config.assessments
-      .filter((a: any) => a.id && !a.id.startsWith("temp"))
-      .map((a: any) => a.id);
-
-    const idsToDelete = existingIds.filter((id) => !incomingIds.includes(id));
-
-    if (idsToDelete.length > 0) {
-      await prisma.assessment.deleteMany({
-        where: { id: { in: idsToDelete } },
+        update: {
+          ptWeight: config.ptWeight,
+          quizWeight: config.quizWeight,
+          examWeight: config.examWeight,
+          transmutationBase: config.transmutationBase ?? 0,
+        },
       });
-    }
 
-    for (const assessment of config.assessments) {
-      const existsInDb = existingIds.includes(assessment.id);
+      const existingAssessments = await prisma.assessment.findMany({
+        where: { termConfigId: termConfig.id },
+        select: { id: true },
+      });
 
-      const assessmentData = {
-        name: assessment.name,
-        maxScore: assessment.maxScore,
-        date: assessment.date ? new Date(assessment.date) : null,
-        enabled: assessment.enabled,
-        order: assessment.order,
-        linkedCriteriaId: assessment.linkedCriteriaId ?? null,
-      };
+      const existingIds = existingAssessments.map((a) => a.id);
+      const incomingIds = config.assessments
+        .filter((a: any) => a.id && !a.id.startsWith("temp"))
+        .map((a: any) => a.id);
 
-      if (!existsInDb || !assessment.id || assessment.id.startsWith("temp")) {
-        await prisma.assessment.create({
-          data: {
-            termConfigId: termConfig.id,
-            type: assessment.type as AssessmentType,
-            ...assessmentData,
-          },
-        });
-      } else {
-        await prisma.assessment.update({
-          where: { id: assessment.id },
-          data: assessmentData,
+      const idsToDelete = existingIds.filter((id) => !incomingIds.includes(id));
+
+      if (idsToDelete.length > 0) {
+        await prisma.assessment.deleteMany({
+          where: { id: { in: idsToDelete } },
         });
       }
+
+      for (const assessment of config.assessments) {
+        const existsInDb = existingIds.includes(assessment.id);
+
+        const assessmentData = {
+          name: assessment.name,
+          maxScore: assessment.maxScore,
+          date: assessment.date ? new Date(assessment.date) : null,
+          enabled: assessment.enabled,
+          order: assessment.order,
+          linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+        };
+
+        if (!existsInDb || !assessment.id || assessment.id.startsWith("temp")) {
+          await prisma.assessment.create({
+            data: {
+              termConfigId: termConfig.id,
+              type: assessment.type as AssessmentType,
+              ...assessmentData,
+            },
+          });
+        } else {
+          await prisma.assessment.update({
+            where: { id: assessment.id },
+            data: assessmentData,
+          });
+        }
+      }
+    } catch (error: any) {
+      // Check if error is due to missing column (migration not run)
+      if (
+        error.message?.includes("transmutation_base") ||
+        error.message?.includes("column") ||
+        error.code === "P2003" ||
+        error.code === "P2011"
+      ) {
+        throw new Error(
+          "Database migration required. Please run: npx prisma migrate dev"
+        );
+      }
+      throw error;
     }
   }
 

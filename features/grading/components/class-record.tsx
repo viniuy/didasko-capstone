@@ -273,13 +273,7 @@ function Tutorial({
   );
 }
 
-const TERMS = [
-  "PRELIMS",
-  "MIDTERM",
-  "PRE-FINALS",
-  "FINALS",
-  "SUMMARY",
-] as const;
+const TERMS = ["PRELIM", "MIDTERM", "PREFINALS", "FINALS", "SUMMARY"] as const;
 type Term = (typeof TERMS)[number];
 
 interface Assessment {
@@ -299,6 +293,7 @@ interface TermConfig {
   ptWeight: number;
   quizWeight: number;
   examWeight: number;
+  transmutationBase: number;
   assessments: Assessment[];
 }
 
@@ -313,6 +308,7 @@ interface Student {
   lastName: string;
   firstName: string;
   middleInitial: string | null;
+  image?: string | null;
 }
 
 interface ClassRecordTableProps {
@@ -324,15 +320,32 @@ interface ClassRecordTableProps {
 }
 
 const TERM_WEIGHTS = {
-  PRELIMS: 0.2,
+  PRELIM: 0.2,
   MIDTERM: 0.2,
-  "PRE-FINALS": 0.2,
+  PREFINALS: 0.2,
   FINALS: 0.4,
 } as const;
 
 function percent(score: number | null, max: number | null): number | null {
   if (score == null || max == null || max <= 0) return null;
   return Math.max(0, Math.min(100, (score / max) * 100));
+}
+
+function transmuteScore(
+  rawScore: number | null,
+  maxScore: number,
+  base: number
+): number | null {
+  // If base is 0, no transmutation (raw score stays the same)
+  if (base === 0 || rawScore === null) return rawScore;
+
+  // Calculate base score: base% of max score
+  const baseScore = (base / 100) * maxScore;
+
+  // Transmuted score = raw score + base score, capped at max score
+  const transmutedScore = Math.min(maxScore, rawScore + baseScore);
+
+  return transmutedScore;
 }
 
 function getNumericGrade(totalPercent: number): string {
@@ -381,12 +394,13 @@ export function ClassRecordTable({
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [termConfigs, setTermConfigs] = useState<Record<string, TermConfig>>({
-    PRELIMS: {
+    PRELIM: {
       id: "prelims",
-      term: "PRELIMS",
+      term: "PRELIM",
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
+      transmutationBase: 0,
       assessments: [
         {
           id: "pt1",
@@ -423,6 +437,7 @@ export function ClassRecordTable({
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
+      transmutationBase: 0,
       assessments: [
         {
           id: "pt2",
@@ -444,7 +459,7 @@ export function ClassRecordTable({
         },
         {
           id: "exam2",
-          name: "Final Exam",
+          name: "Exam",
           type: "EXAM",
           maxScore: 100,
           date: null,
@@ -453,12 +468,13 @@ export function ClassRecordTable({
         },
       ],
     },
-    "PRE-FINALS": {
+    PREFINALS: {
       id: "prefinals",
-      term: "PRE-FINALS",
+      term: "PREFINALS",
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
+      transmutationBase: 0,
       assessments: [
         {
           id: "pt3",
@@ -480,7 +496,7 @@ export function ClassRecordTable({
         },
         {
           id: "exam3",
-          name: "Final Exam",
+          name: "Exam",
           type: "EXAM",
           maxScore: 100,
           date: null,
@@ -495,6 +511,7 @@ export function ClassRecordTable({
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
+      transmutationBase: 0,
       assessments: [
         {
           id: "pt4",
@@ -516,7 +533,7 @@ export function ClassRecordTable({
         },
         {
           id: "exam4",
-          name: "Final Exam",
+          name: "Exam",
           type: "EXAM",
           maxScore: 100,
           date: null,
@@ -531,10 +548,14 @@ export function ClassRecordTable({
   );
   const [scores, setScores] = useState<Map<string, StudentScore>>(new Map());
   const [search, setSearch] = useState("");
-  const [activeTerm, setActiveTerm] = useState<Term>("PRELIMS");
+  const [activeTerm, setActiveTerm] = useState<Term>("PRELIM");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(7);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
+    null
+  );
+  const [hasTermConfigs, setHasTermConfigs] = useState(false);
 
   const pendingScoresRef = useRef<
     Map<
@@ -566,6 +587,9 @@ export function ClassRecordTable({
           Object.keys(classRecordData.termConfigs).length > 0
         ) {
           setTermConfigs(classRecordData.termConfigs);
+          setHasTermConfigs(true);
+        } else {
+          setHasTermConfigs(false);
         }
         // Convert assessment scores object to Map format
         const assessmentScoresMap = new Map<string, StudentScore>();
@@ -637,6 +661,29 @@ export function ClassRecordTable({
     }
   }, [loading, students.length]);
 
+  // Cleanup on unmount to prevent memory leaks and ensure pending saves complete
+  useEffect(() => {
+    return () => {
+      // Clear any pending timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      // Save any remaining pending scores before unmounting
+      if (pendingScoresRef.current.size > 0) {
+        // Use a synchronous approach or save immediately
+        const gradesToSave = Array.from(pendingScoresRef.current.values());
+        // Note: This is a fire-and-forget operation on unmount
+        // In production, you might want to use navigator.sendBeacon or similar
+        gradingService
+          .saveAssessmentScoresBulk(courseSlug, gradesToSave)
+          .catch((err) => {
+            console.error("Failed to save pending scores on unmount:", err);
+          });
+      }
+    };
+  }, [courseSlug]);
+
   const handleNextTutorialStep = () => {
     if (tutorialStep === tutorialSteps.length - 1) {
       setShowTutorial(false);
@@ -656,7 +703,11 @@ export function ClassRecordTable({
   const savePendingScores = async () => {
     if (pendingScoresRef.current.size === 0) return;
 
+    // Create a copy of pending scores before clearing
     const gradesToSave = Array.from(pendingScoresRef.current.values());
+    const pendingScoresBackup = new Map(pendingScoresRef.current);
+
+    // Clear pending scores optimistically
     pendingScoresRef.current.clear();
 
     try {
@@ -664,8 +715,20 @@ export function ClassRecordTable({
       await gradingService.saveAssessmentScoresBulk(courseSlug, gradesToSave);
       toast.success("Grades saved successfully", { id: "save-grades" });
     } catch (error) {
-      toast.error("Failed to save grades", { id: "save-grades" });
-      console.error(error);
+      // Restore pending scores on failure to prevent data loss
+      pendingScoresRef.current = pendingScoresBackup;
+      toast.error("Failed to save grades. Please try again.", {
+        id: "save-grades",
+      });
+      console.error("Error saving grades:", error);
+
+      // Re-queue the save after a delay
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        savePendingScores();
+      }, 2000);
     }
   };
 
@@ -696,13 +759,34 @@ export function ClassRecordTable({
       score: number | null;
     }>
   ) => {
+    // Validate grades before sending
+    const validGrades = grades.filter((g) => {
+      if (g.score === null) return true; // null is valid (delete)
+      if (typeof g.score !== "number") return false;
+      if (g.score < 0) return false;
+      if (!g.studentId || !g.assessmentId) return false;
+      return true;
+    });
+
+    if (validGrades.length !== grades.length) {
+      toast.error("Some grades are invalid and were not saved", {
+        id: "bulk-save",
+      });
+      return;
+    }
+
     try {
       toast.loading("Updating grades...", { id: "bulk-save" });
-      await gradingService.saveAssessmentScoresBulk(courseSlug, grades);
+      await gradingService.saveAssessmentScoresBulk(courseSlug, validGrades);
       toast.success("Grades updated successfully", { id: "bulk-save" });
-    } catch (error) {
-      toast.error("Failed to save grades", { id: "bulk-save" });
-      console.error(error);
+    } catch (error: any) {
+      const errorMessage =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to save grades";
+      toast.error(errorMessage, { id: "bulk-save" });
+      console.error("Error saving bulk grades:", error);
+      throw error; // Re-throw to allow caller to handle
     }
   };
 
@@ -742,9 +826,11 @@ export function ClassRecordTable({
         assessment.linkedCriteriaId
       );
       if (percentageScore === null) return null;
-      return (
-        Math.round((percentageScore / 100) * assessment.maxScore * 100) / 100
-      );
+      // Ensure percentage is within valid range (0-100)
+      const clampedPercentage = Math.max(0, Math.min(100, percentageScore));
+      // Calculate score with proper precision (round to 2 decimal places)
+      const calculatedScore = (clampedPercentage / 100) * assessment.maxScore;
+      return Math.round(calculatedScore * 100) / 100;
     }
     return getScore(studentId, assessment.id);
   };
@@ -754,6 +840,18 @@ export function ClassRecordTable({
     assessmentId: string,
     score: number | null
   ) => {
+    // Validate score before setting
+    if (score !== null) {
+      if (typeof score !== "number" || isNaN(score)) {
+        console.error("Invalid score value:", score);
+        return;
+      }
+      if (score < 0) {
+        console.error("Score cannot be negative:", score);
+        return;
+      }
+    }
+
     const key = `${studentId}:${assessmentId}`;
     const updated = new Map(scores);
     if (score === null) {
@@ -763,14 +861,6 @@ export function ClassRecordTable({
     }
     setScores(updated);
     queueScoreForSaving(studentId, assessmentId, score);
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      if (pendingScoresRef.current.size > 0) {
-        savePendingScores();
-      }
-    };
   };
 
   const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -799,6 +889,12 @@ export function ClassRecordTable({
         return;
       }
       const num = Number(digits);
+      // Validate: score must be non-negative and not exceed max
+      if (num < 0) {
+        notifyOnce(`Score cannot be negative.`);
+        setScore(studentId, assessmentId, 0);
+        return;
+      }
       if (num === 0) {
         setScore(studentId, assessmentId, 0);
         return;
@@ -823,41 +919,66 @@ export function ClassRecordTable({
     const examAssessment = config.assessments.find(
       (a) => a.type === "EXAM" && a.enabled
     );
+    // Apply transmutation to raw scores before calculating percentages
+    const transmutationBase = config.transmutationBase ?? 0;
+
     let ptPercentages: number[] = [];
     ptAssessments.forEach((pt) => {
-      const score = getEffectiveScore(studentId, pt);
-      if (score !== null) {
-        const pct = percent(score, pt.maxScore);
+      const rawScore = getEffectiveScore(studentId, pt);
+      // Apply transmutation to raw score
+      const transmutedScore = transmuteScore(
+        rawScore,
+        pt.maxScore,
+        transmutationBase
+      );
+      if (transmutedScore !== null) {
+        const pct = percent(transmutedScore, pt.maxScore);
         if (pct !== null) ptPercentages.push(pct);
       }
     });
     let quizPercentages: number[] = [];
     quizAssessments.forEach((quiz) => {
-      const score = getEffectiveScore(studentId, quiz);
-      if (score !== null) {
-        const pct = percent(score, quiz.maxScore);
+      const rawScore = getEffectiveScore(studentId, quiz);
+      // Apply transmutation to raw score
+      const transmutedScore = transmuteScore(
+        rawScore,
+        quiz.maxScore,
+        transmutationBase
+      );
+      if (transmutedScore !== null) {
+        const pct = percent(transmutedScore, quiz.maxScore);
         if (pct !== null) quizPercentages.push(pct);
       }
     });
     let examPercentage: number | null = null;
     if (examAssessment) {
-      const examScore = getEffectiveScore(studentId, examAssessment);
-      if (examScore !== null) {
-        examPercentage = percent(examScore, examAssessment.maxScore);
+      const rawExamScore = getEffectiveScore(studentId, examAssessment);
+      // Apply transmutation to raw score
+      const transmutedExamScore = transmuteScore(
+        rawExamScore,
+        examAssessment.maxScore,
+        transmutationBase
+      );
+      if (transmutedExamScore !== null) {
+        examPercentage = percent(transmutedExamScore, examAssessment.maxScore);
       }
     }
-    if (examPercentage === null) return null;
+    // CRITICAL FIX: Divide by actual number of scores, not total assessments
+    // If a student has scores for 2 out of 3 PT assessments, divide by 2, not 3
     const ptAvg =
       ptPercentages.length > 0
-        ? ptPercentages.reduce((a, b) => a + b, 0) / ptAssessments.length
+        ? ptPercentages.reduce((a, b) => a + b, 0) / ptPercentages.length
         : 0;
     const quizAvg =
       quizPercentages.length > 0
-        ? quizPercentages.reduce((a, b) => a + b, 0) / quizAssessments.length
+        ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
         : 0;
+
+    // Calculate weighted scores using percentages (already transmuted)
     const ptWeighted = (ptAvg / 100) * config.ptWeight;
     const quizWeighted = (quizAvg / 100) * config.quizWeight;
-    const examWeighted = (examPercentage / 100) * config.examWeight;
+    const examWeighted =
+      examPercentage !== null ? (examPercentage / 100) * config.examWeight : 0;
     const totalPercent = ptWeighted + quizWeighted + examWeighted;
     return {
       totalPercent: totalPercent.toFixed(2),
@@ -869,16 +990,16 @@ export function ClassRecordTable({
   };
 
   const computeFinalGrade = (studentId: string) => {
-    const prelimGrade = computeTermGrade(studentId, "PRELIMS");
+    const prelimGrade = computeTermGrade(studentId, "PRELIM");
     const midtermGrade = computeTermGrade(studentId, "MIDTERM");
-    const preFinalsGrade = computeTermGrade(studentId, "PRE-FINALS");
+    const preFinalsGrade = computeTermGrade(studentId, "PREFINALS");
     const finalsGrade = computeTermGrade(studentId, "FINALS");
     if (!prelimGrade || !midtermGrade || !preFinalsGrade || !finalsGrade)
       return null;
     const finalWeighted =
-      parseFloat(prelimGrade.numericGrade) * TERM_WEIGHTS.PRELIMS +
+      parseFloat(prelimGrade.numericGrade) * TERM_WEIGHTS.PRELIM +
       parseFloat(midtermGrade.numericGrade) * TERM_WEIGHTS.MIDTERM +
-      parseFloat(preFinalsGrade.numericGrade) * TERM_WEIGHTS["PRE-FINALS"] +
+      parseFloat(preFinalsGrade.numericGrade) * TERM_WEIGHTS.PREFINALS +
       parseFloat(finalsGrade.numericGrade) * TERM_WEIGHTS.FINALS;
     return {
       grade: finalWeighted.toFixed(2),
@@ -926,6 +1047,7 @@ export function ClassRecordTable({
       await gradingService.saveTermConfigs(courseSlug, payload.termConfigs);
       toast.dismiss();
       setTermConfigs(configs);
+      setHasTermConfigs(true);
       toast.success("Settings saved successfully!");
     } catch (error: any) {
       toast.dismiss();
@@ -991,11 +1113,11 @@ export function ClassRecordTable({
       // -----------------------
       filtered.forEach((student) => {
         const prelim =
-          computeTermGrade(student.id, "PRELIMS")?.totalPercent ?? "";
+          computeTermGrade(student.id, "PRELIM")?.totalPercent ?? "";
         const midterm =
           computeTermGrade(student.id, "MIDTERM")?.totalPercent ?? "";
         const prefinal =
-          computeTermGrade(student.id, "PRE-FINALS")?.totalPercent ?? "";
+          computeTermGrade(student.id, "PREFINALS")?.totalPercent ?? "";
         const finals =
           computeTermGrade(student.id, "FINALS")?.totalPercent ?? "";
 
@@ -1062,52 +1184,54 @@ export function ClassRecordTable({
 
   if (activeTerm === "SUMMARY") {
     return (
-      <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px] flex flex-col">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[600px] md:min-h-[770px] max-h-[90vh] flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{courseCode}</h1>
-            <p className="text-sm text-gray-600">{courseSection}</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-[#124A69]">
+              {courseCode}
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-600">{courseSection}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
               <Input
                 placeholder="Search a name"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 w-[240px]"
+                className="pl-8 w-full sm:w-[200px] md:w-[240px] text-sm"
               />
             </div>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
             >
-              <Settings className="w-4 h-4" />
-              Settings
+              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Settings</span>
             </button>
             <button
               onClick={() => setIsPasteModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
             >
-              <ClipboardPaste className="w-4 h-4" />
-              Paste Grades
+              <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Paste Grades</span>
             </button>
             <button
               onClick={handleExportToExcel}
-              className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#124A69] text-white text-xs sm:text-sm rounded-lg hover:bg-[#0D3A54] transition-colors"
             >
-              <Download className="w-4 h-4" />
-              Export to Excel
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Export</span>
             </button>
           </div>
         </div>
 
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200 mb-4 sm:mb-6 overflow-x-auto">
           {TERMS.map((term) => (
             <button
               key={term}
               onClick={() => setActiveTerm(term)}
-              className={`px-6 py-3 text-sm font-medium ${
+              className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium whitespace-nowrap ${
                 term === activeTerm
                   ? "text-[#124A69] border-b-2 border-[#124A69]"
                   : "text-gray-500 hover:text-gray-700"
@@ -1119,13 +1243,11 @@ export function ClassRecordTable({
         </div>
 
         <div className="w-full overflow-x-auto flex-1 min-h-0">
-          <table className="table-fixed w-full border border-gray-300">
+          <table className="table-fixed w-full min-w-[700px] border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
-                <th className="w-[30%] border border-gray-300 px-4 py-2 text-left font-medium text-gray-700">
-                  Students
-                </th>
-                {(["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const).map(
+                <th className="w-[30%] border border-gray-300 px-4 py-2 text-left font-medium text-gray-700"></th>
+                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const).map(
                   (term) => (
                     <th
                       key={term}
@@ -1145,7 +1267,7 @@ export function ClassRecordTable({
               </tr>
               <tr className="bg-gray-50 text-xs">
                 <th className="border border-gray-300"></th>
-                {(["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const).map(
+                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const).map(
                   (term) => (
                     <React.Fragment key={term}>
                       <th className="border border-gray-300 px-2 py-1">
@@ -1163,61 +1285,151 @@ export function ClassRecordTable({
               {paginatedStudents.map((student) => {
                 const finalGrade = computeFinalGrade(student.id);
                 return (
-                  <tr key={student.id} className="hover:bg-gray-50">
-                    <td className="border border-gray-300 px-2 py-2">
+                  <tr
+                    key={student.id}
+                    onClick={() =>
+                      setSelectedStudentId(
+                        student.id === selectedStudentId ? null : student.id
+                      )
+                    }
+                    className={`border-b border-gray-300 cursor-pointer transition-colors ${
+                      selectedStudentId === student.id
+                        ? "bg-[#124A69] hover:bg-[#0D3A54]"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <td
+                      className={`border px-2 py-2 ${
+                        selectedStudentId === student.id
+                          ? "bg-[#124A69] text-white border-white"
+                          : "border-gray-300"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
-                          <span className="text-[10px]">👤</span>
-                        </div>
-                        <span className="text-sm text-gray-700 truncate">
+                        {student.image ? (
+                          <img
+                            src={student.image}
+                            alt={studentName(student)}
+                            className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              selectedStudentId === student.id
+                                ? "bg-white"
+                                : "bg-[#124A69]"
+                            }`}
+                          >
+                            <span
+                              className={`text-[10px] font-semibold ${
+                                selectedStudentId === student.id
+                                  ? "text-[#124A69]"
+                                  : "text-white"
+                              }`}
+                            >
+                              {student.firstName[0]?.toUpperCase() || ""}
+                              {student.lastName[0]?.toUpperCase() || ""}
+                            </span>
+                          </div>
+                        )}
+                        <span
+                          className={`text-sm truncate ${
+                            selectedStudentId === student.id
+                              ? "text-white"
+                              : "text-gray-700"
+                          }`}
+                        >
                           {studentName(student)}
                         </span>
                       </div>
                     </td>
                     {(
-                      ["PRELIMS", "MIDTERM", "PRE-FINALS", "FINALS"] as const
+                      ["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const
                     ).map((term) => {
                       const termGrade = computeTermGrade(student.id, term);
+                      const isSelected = selectedStudentId === student.id;
                       return (
                         <React.Fragment key={term}>
-                          <td className="border border-gray-300 py-3 text-center">
+                          <td
+                            className={`border py-3 text-center ${
+                              isSelected ? "border-white" : "border-gray-300"
+                            }`}
+                          >
                             <input
                               type="text"
-                              className="w-14 h-8 text-center border border-gray-200 rounded text-sm"
+                              className={`w-14 h-8 text-center border rounded text-sm ${
+                                isSelected
+                                  ? "border-white text-white bg-transparent"
+                                  : "border-gray-200"
+                              }`}
                               value={termGrade?.totalPercent || "-"}
                               readOnly
+                              onClick={(e) => e.stopPropagation()}
                             />
                           </td>
-                          <td className="border border-gray-300 py-3 text-center">
+                          <td
+                            className={`border py-3 text-center ${
+                              isSelected ? "border-white" : "border-gray-300"
+                            }`}
+                          >
                             <input
                               type="text"
-                              className="w-14 h-8 text-center border border-gray-200 rounded text-sm"
+                              className={`w-14 h-8 text-center border rounded text-sm ${
+                                isSelected
+                                  ? "border-white text-white bg-transparent"
+                                  : "border-gray-200"
+                              }`}
                               value={termGrade?.numericGrade || "-"}
                               readOnly
+                              onClick={(e) => e.stopPropagation()}
                             />
                           </td>
                         </React.Fragment>
                       );
                     })}
-                    <td className="border border-gray-300 py-3 text-center">
+                    <td
+                      className={`border py-3 text-center ${
+                        selectedStudentId === student.id
+                          ? "border-white"
+                          : "border-gray-300"
+                      }`}
+                    >
                       <input
                         type="text"
-                        className={`w-14 h-8 text-center border border-gray-200 rounded text-sm font-medium ${
-                          finalGrade && parseFloat(finalGrade.grade) > 3.0
-                            ? "text-red-500"
-                            : ""
+                        className={`w-14 h-8 text-center border rounded text-sm font-medium ${
+                          selectedStudentId === student.id
+                            ? finalGrade && parseFloat(finalGrade.grade) > 3.0
+                              ? "border-white text-red-500 bg-transparent"
+                              : "border-white text-white bg-transparent"
+                            : finalGrade && parseFloat(finalGrade.grade) > 3.0
+                            ? "text-red-500 border-gray-200"
+                            : "border-gray-200"
                         }`}
                         value={finalGrade?.grade || "-"}
                         readOnly
+                        onClick={(e) => e.stopPropagation()}
                       />
                     </td>
-                    <td className="border border-gray-300 py-3 text-center">
+                    <td
+                      className={`border py-3 text-center ${
+                        selectedStudentId === student.id
+                          ? "border-white"
+                          : "border-gray-300"
+                      }`}
+                    >
                       <span
                         className={`text-sm font-medium ${
-                          finalGrade?.remarks === "PASSED"
+                          selectedStudentId === student.id
+                            ? finalGrade?.remarks === "PASSED"
+                              ? "text-green-600"
+                              : finalGrade?.remarks === "FAILED"
+                              ? "text-red-500"
+                              : "text-white"
+                            : finalGrade?.remarks === "PASSED"
                             ? "text-green-600"
                             : "text-red-500"
                         }`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {finalGrade?.remarks || "-"}
                       </span>
@@ -1231,15 +1443,15 @@ export function ClassRecordTable({
 
         {/* Pagination */}
         {filtered.length > 0 && (
-          <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-200">
-            <div className="flex items-center gap-4 w-full">
-              <span className="text-sm text-gray-600">
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
+            <div className="flex items-center gap-4 w-full sm:w-auto">
+              <span className="text-xs sm:text-sm text-gray-600">
                 Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)}{" "}
                 of {filtered.length} student{filtered.length !== 1 ? "s" : ""}
               </span>
             </div>
             <Pagination className="flex justify-end">
-              <PaginationContent>
+              <PaginationContent className="flex-wrap">
                 <PaginationItem>
                   <PaginationPrevious
                     onClick={() =>
@@ -1327,25 +1539,51 @@ export function ClassRecordTable({
             studentNumber: s.id,
           }))}
           onPasteGrades={async (columnId, grades) => {
-            // Update local state first
-            const updated = new Map(scores);
-            grades.forEach(({ studentId, score }) => {
-              const key = `${studentId}:${columnId}`;
-              if (score === null) {
-                updated.delete(key);
-              } else {
-                updated.set(key, { studentId, assessmentId: columnId, score });
-              }
-            });
-            setScores(updated);
+            try {
+              // Validate all grades before updating state
+              const validGrades = grades.filter((g) => {
+                if (g.score === null) return true;
+                if (typeof g.score !== "number" || isNaN(g.score)) return false;
+                if (g.score < 0) return false;
+                return true;
+              });
 
-            // Save all grades to API
-            const gradesToSave = grades.map(({ studentId, score }) => ({
-              studentId,
-              assessmentId: columnId,
-              score,
-            }));
-            await saveBulkScoresToAPI(gradesToSave);
+              if (validGrades.length !== grades.length) {
+                toast.error(
+                  "Some pasted grades are invalid and were not saved"
+                );
+                return;
+              }
+
+              // Update local state first (optimistic update)
+              const updated = new Map(scores);
+              validGrades.forEach(({ studentId, score }) => {
+                const key = `${studentId}:${columnId}`;
+                if (score === null) {
+                  updated.delete(key);
+                } else {
+                  updated.set(key, {
+                    studentId,
+                    assessmentId: columnId,
+                    score,
+                  });
+                }
+              });
+              setScores(updated);
+
+              // Save all grades to API
+              const gradesToSave = validGrades.map(({ studentId, score }) => ({
+                studentId,
+                assessmentId: columnId,
+                score,
+              }));
+              await saveBulkScoresToAPI(gradesToSave);
+            } catch (error) {
+              // On error, reload data from server to ensure consistency
+              console.error("Error pasting grades:", error);
+              // Optionally reload data to ensure state consistency
+              // This could be done by calling the load function again
+            }
           }}
         />
       </div>
@@ -1353,7 +1591,7 @@ export function ClassRecordTable({
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px] flex flex-col">
+    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[600px] md:min-h-[770px] max-h-[90vh] flex flex-col">
       <Tutorial
         isActive={showTutorial}
         currentStep={tutorialStep}
@@ -1361,70 +1599,83 @@ export function ClassRecordTable({
         onSkip={handleSkipTutorial}
         totalSteps={tutorialSteps.length}
       />
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">{courseCode}</h1>
-          <p className="text-sm text-gray-600">{courseSection}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#124A69]">
+            {courseCode}
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-600">{courseSection}</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={() => {
               setShowTutorial(true);
               setTutorialStep(0);
             }}
-            className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-blue-600"
+            className="p-2 hover:bg-[#124A69]/10 rounded-lg transition-colors text-[#124A69]"
             title="Show Tutorial"
           >
-            <Lightbulb className="w-5 h-5" />
+            <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
-          <div className="relative" data-tutorial="search-bar">
+          <div className="relative w-full sm:w-auto" data-tutorial="search-bar">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
             <Input
               placeholder="Search a name"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 w-[240px]"
+              className="pl-8 w-full sm:w-[200px] md:w-[240px] text-sm"
+              disabled={!hasTermConfigs}
             />
           </div>
           <button
             onClick={() => setSettingsOpen(true)}
             data-tutorial="settings-button"
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
           >
-            <Settings className="w-4 h-4" />
-            Settings
+            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Settings</span>
           </button>
           <button
             onClick={() => setIsPasteModalOpen(true)}
             data-tutorial="paste-grades-button"
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-gray-50"
+            disabled={!hasTermConfigs}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-xs sm:text-sm rounded-lg transition-colors ${
+              hasTermConfigs
+                ? "text-[#124A69] hover:bg-[#124A69]/5"
+                : "text-gray-400 cursor-not-allowed opacity-50"
+            }`}
           >
-            <ClipboardPaste className="w-4 h-4" />
-            Paste Grades
+            <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Paste Grades</span>
           </button>
           <button
-            className="flex items-center gap-2 px-4 py-2 bg-[#124A69] text-white text-sm rounded-lg hover:bg-[#0D3A54]"
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white text-xs sm:text-sm rounded-lg transition-colors ${
+              hasTermConfigs
+                ? "bg-[#124A69] hover:bg-[#0D3A54]"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
             onClick={handleExportToExcel}
             data-tutorial="export-button"
+            disabled={!hasTermConfigs}
           >
-            <Download className="w-4 h-4" />
-            Export to Excel
+            <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Export</span>
           </button>
           {loading && (
-            <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+            <Loader2 className="h-4 w-4 animate-spin text-[#124A69]" />
           )}
         </div>
       </div>
 
       <div
-        className="flex border-b border-gray-200 mb-6"
+        className="flex border-b border-gray-200 mb-4 sm:mb-6 overflow-x-auto"
         data-tutorial="term-tabs"
       >
         {TERMS.map((term) => (
           <button
             key={term}
             onClick={() => setActiveTerm(term)}
-            className={`px-6 py-3 text-sm font-medium ${
+            className={`px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium whitespace-nowrap ${
               term === activeTerm
                 ? "text-[#124A69] border-b-2 border-[#124A69]"
                 : "text-gray-500 hover:text-gray-700"
@@ -1435,7 +1686,85 @@ export function ClassRecordTable({
         ))}
       </div>
 
-      {!currentConfig ? (
+      {!hasTermConfigs ? (
+        <>
+          <style>{`
+            @keyframes tumbleweedHorizontal {
+              0% {
+                left: -100px;
+              }
+              100% {
+                left: calc(100% + 20px);
+              }
+            }
+            @keyframes tumbleweedBounce {
+              0% {
+                transform: translateY(0px);
+              }
+              25% {
+                transform: translateY(-12px);
+              }
+              50% {
+                transform: translateY(0px);
+              }
+              75% {
+                transform: translateY(-10px);
+              }
+              100% {
+                transform: translateY(0px);
+              }
+            }
+            @keyframes tumbleweedRotate {
+              from {
+                transform: rotate(0deg);
+              }
+              to {
+                transform: rotate(360deg);
+              }
+            }
+            .tumbleweed-container {
+              animation: tumbleweedHorizontal 8s linear infinite,
+                         tumbleweedBounce 1.6s ease-in-out infinite;
+            }
+            .tumbleweed-svg {
+              animation: tumbleweedRotate 4s linear infinite;
+            }
+          `}</style>
+          <div className="flex flex-col items-center justify-center flex-1 min-h-[400px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
+            <div className="text-center px-4 pb-8 z-10 relative">
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                Configure your class record settings
+              </h3>
+              <p className="text-gray-500 mb-4">
+                Set up assessments, weights, and dates for each term before you
+                can start recording grades
+              </p>
+              <div className="flex items-center justify-center">
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#124A69] hover:bg-[#0D3A54] text-white rounded-lg transition-colors"
+                >
+                  <Settings className="w-4 h-4" />
+                  Open Settings
+                </button>
+              </div>
+            </div>
+            {/* Tumbleweed Animation */}
+            <div className="relative w-full flex items-end">
+              {/* Outer container: horizontal movement + vertical bounce */}
+              <div className="absolute bottom-0 tumbleweed-container">
+                {/* Inner SVG: rotation only */}
+                <img
+                  src="/svg/tumbleweed.svg"
+                  alt="Tumbleweed"
+                  className="w-20 h-20 tumbleweed-svg"
+                  style={{ filter: "brightness(0.8)" }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : !currentConfig ? (
         <div className="text-center py-12">
           <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 mb-4">
@@ -1453,15 +1782,13 @@ export function ClassRecordTable({
           className="w-full overflow-x-auto flex-1 min-h-0"
           data-tutorial="grade-table"
         >
-          <table className="table-fixed w-full border border-gray-300">
+          <table className="table-fixed w-full min-w-[1300px] border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
                 <th
                   className="w-[30%] border border-gray-300 px-2 py-2 text-left font-medium text-gray-700"
                   rowSpan={2}
-                >
-                  Students
-                </th>
+                ></th>
                 {pts.length > 0 && (
                   <th
                     className="border border-gray-300 px-2 py-2 text-center font-medium text-gray-700"
@@ -1580,32 +1907,98 @@ export function ClassRecordTable({
               {paginatedStudents.map((student) => {
                 const termGrade = computeTermGrade(student.id, activeTerm);
                 return (
-                  <tr key={student.id} className="hover:bg-gray-50">
-                    <td className="border border-gray-300 px-2 py-2">
+                  <tr
+                    key={student.id}
+                    onClick={() =>
+                      setSelectedStudentId(
+                        student.id === selectedStudentId ? null : student.id
+                      )
+                    }
+                    className={`border-b border-gray-300 cursor-pointer transition-colors ${
+                      selectedStudentId === student.id
+                        ? "bg-[#124A69] hover:bg-[#0D3A54]"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <td
+                      className={`border px-2 py-2 ${
+                        selectedStudentId === student.id
+                          ? "bg-[#124A69] text-white border-white"
+                          : "border-gray-300"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center">
-                          <span className="text-[10px]">👤</span>
-                        </div>
-                        <span className="text-sm text-gray-700 truncate">
+                        {student.image ? (
+                          <img
+                            src={student.image}
+                            alt={studentName(student)}
+                            className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              selectedStudentId === student.id
+                                ? "bg-white"
+                                : "bg-[#124A69]"
+                            }`}
+                          >
+                            <span
+                              className={`text-[10px] font-semibold ${
+                                selectedStudentId === student.id
+                                  ? "text-[#124A69]"
+                                  : "text-white"
+                              }`}
+                            >
+                              {student.firstName[0]?.toUpperCase() || ""}
+                              {student.lastName[0]?.toUpperCase() || ""}
+                            </span>
+                          </div>
+                        )}
+                        <span
+                          className={`text-sm truncate ${
+                            selectedStudentId === student.id
+                              ? "text-white"
+                              : "text-gray-700"
+                          }`}
+                        >
                           {studentName(student)}
                         </span>
                       </div>
                     </td>
                     {pts.map((pt) => {
                       const score = getEffectiveScore(student.id, pt);
+                      const isSelected = selectedStudentId === student.id;
                       return (
                         <td
                           key={pt.id}
-                          className="border border-gray-300 py-3 text-center text-sm w-14"
+                          className={`border py-3 text-center text-sm w-14 ${
+                            isSelected ? "border-white" : "border-gray-300"
+                          }`}
                         >
                           <input
                             type="text"
                             inputMode="numeric"
-                            className={`w-[90%] h-8 text-center border border-gray-200 rounded ${
-                              pt.linkedCriteriaId
-                                ? "bg-blue-50 cursor-not-allowed"
-                                : ""
-                            } ${getScoreStyle(score, pt.maxScore)}`}
+                            className={`w-[90%] h-8 text-center border rounded ${
+                              isSelected
+                                ? (() => {
+                                    const style = getScoreStyle(
+                                      score,
+                                      pt.maxScore
+                                    );
+                                    return `border-white bg-transparent ${
+                                      style.includes("text-red-500") ||
+                                      style.includes("bg-red-500")
+                                        ? "text-red-500"
+                                        : "text-white"
+                                    }`;
+                                  })()
+                                : pt.linkedCriteriaId
+                                ? "bg-blue-50 cursor-not-allowed border-gray-200"
+                                : `border-gray-200 ${getScoreStyle(
+                                    score,
+                                    pt.maxScore
+                                  )}`
+                            }`}
                             value={score ?? ""}
                             onChange={handleScoreChange(
                               student.id,
@@ -1613,6 +2006,7 @@ export function ClassRecordTable({
                               pt.maxScore
                             )}
                             onKeyDown={handleNumericKeyDown}
+                            onClick={(e) => e.stopPropagation()}
                             disabled={!!pt.linkedCriteriaId}
                             title={
                               pt.linkedCriteriaId
@@ -1624,30 +2018,60 @@ export function ClassRecordTable({
                       );
                     })}
                     {pts.length > 0 && (
-                      <td className="border border-gray-300 py-3 text-center text-sm">
+                      <td
+                        className={`border py-3 text-center text-sm ${
+                          selectedStudentId === student.id
+                            ? "border-white"
+                            : "border-gray-300"
+                        }`}
+                      >
                         <input
                           type="text"
-                          className="w-[90%] h-8 text-center border border-gray-200 rounded"
+                          className={`w-[90%] h-8 text-center border rounded ${
+                            selectedStudentId === student.id
+                              ? "border-white text-white bg-transparent"
+                              : "border-gray-200"
+                          }`}
                           value={termGrade?.ptWeighted ?? ""}
                           readOnly
+                          onClick={(e) => e.stopPropagation()}
                         />
                       </td>
                     )}
                     {quizzes.map((quiz) => {
                       const score = getEffectiveScore(student.id, quiz);
+                      const isSelected = selectedStudentId === student.id;
                       return (
                         <td
                           key={quiz.id}
-                          className="border border-gray-300 py-3 text-center text-sm"
+                          className={`border py-3 text-center text-sm ${
+                            isSelected ? "border-white" : "border-gray-300"
+                          }`}
                         >
                           <input
                             type="text"
                             inputMode="numeric"
-                            className={`w-[90%] h-8 text-center border border-gray-200 rounded ${
-                              quiz.linkedCriteriaId
-                                ? "bg-blue-50 cursor-not-allowed"
-                                : ""
-                            } ${getScoreStyle(score, quiz.maxScore)}`}
+                            className={`w-[90%] h-8 text-center border rounded ${
+                              isSelected
+                                ? (() => {
+                                    const style = getScoreStyle(
+                                      score,
+                                      quiz.maxScore
+                                    );
+                                    return `border-white bg-transparent ${
+                                      style.includes("text-red-500") ||
+                                      style.includes("bg-red-500")
+                                        ? "text-red-500"
+                                        : "text-white"
+                                    }`;
+                                  })()
+                                : quiz.linkedCriteriaId
+                                ? "bg-blue-50 cursor-not-allowed border-gray-200"
+                                : `border-gray-200 ${getScoreStyle(
+                                    score,
+                                    quiz.maxScore
+                                  )}`
+                            }`}
                             value={score ?? ""}
                             onChange={handleScoreChange(
                               student.id,
@@ -1655,6 +2079,7 @@ export function ClassRecordTable({
                               quiz.maxScore
                             )}
                             onKeyDown={handleNumericKeyDown}
+                            onClick={(e) => e.stopPropagation()}
                             disabled={!!quiz.linkedCriteriaId}
                             title={
                               quiz.linkedCriteriaId
@@ -1666,29 +2091,63 @@ export function ClassRecordTable({
                       );
                     })}
                     {quizzes.length > 0 && (
-                      <td className="border border-gray-300 py-3 text-center text-sm">
+                      <td
+                        className={`border py-3 text-center text-sm ${
+                          selectedStudentId === student.id
+                            ? "border-white"
+                            : "border-gray-300"
+                        }`}
+                      >
                         <input
                           type="text"
-                          className="w-[90%] h-8 text-center border border-gray-200 rounded"
+                          className={`w-[90%] h-8 text-center border rounded ${
+                            selectedStudentId === student.id
+                              ? "border-white text-white bg-transparent"
+                              : "border-gray-200"
+                          }`}
                           value={termGrade?.quizWeighted ?? ""}
                           readOnly
+                          onClick={(e) => e.stopPropagation()}
                         />
                       </td>
                     )}
                     {exam && (
                       <>
-                        <td className="border border-gray-300 py-3 text-center text-sm">
+                        <td
+                          className={`border py-3 text-center text-sm ${
+                            selectedStudentId === student.id
+                              ? "border-white"
+                              : "border-gray-300"
+                          }`}
+                        >
                           {(() => {
                             const score = getEffectiveScore(student.id, exam);
+                            const isSelected = selectedStudentId === student.id;
                             return (
                               <input
                                 type="text"
                                 inputMode="numeric"
-                                className={`w-[90%] h-8 text-center border border-gray-200 rounded ${
-                                  exam.linkedCriteriaId
-                                    ? "bg-blue-50 cursor-not-allowed"
-                                    : ""
-                                } ${getScoreStyle(score, exam.maxScore)}`}
+                                className={`w-[90%] h-8 text-center border rounded ${
+                                  isSelected
+                                    ? (() => {
+                                        const style = getScoreStyle(
+                                          score,
+                                          exam.maxScore
+                                        );
+                                        return `border-white bg-transparent ${
+                                          style.includes("text-red-500") ||
+                                          style.includes("bg-red-500")
+                                            ? "text-red-500"
+                                            : "text-white"
+                                        }`;
+                                      })()
+                                    : exam.linkedCriteriaId
+                                    ? "bg-blue-50 cursor-not-allowed border-gray-200"
+                                    : `border-gray-200 ${getScoreStyle(
+                                        score,
+                                        exam.maxScore
+                                      )}`
+                                }`}
                                 value={score == null ? "" : score}
                                 onChange={handleScoreChange(
                                   student.id,
@@ -1696,6 +2155,7 @@ export function ClassRecordTable({
                                   exam.maxScore
                                 )}
                                 onKeyDown={handleNumericKeyDown}
+                                onClick={(e) => e.stopPropagation()}
                                 disabled={!!exam.linkedCriteriaId}
                                 title={
                                   exam.linkedCriteriaId
@@ -1706,38 +2166,75 @@ export function ClassRecordTable({
                             );
                           })()}
                         </td>
-                        <td className="border border-gray-300 py-3 text-center text-sm">
+                        <td
+                          className={`border py-3 text-center text-sm ${
+                            selectedStudentId === student.id
+                              ? "border-white"
+                              : "border-gray-300"
+                          }`}
+                        >
                           <input
                             type="text"
-                            className="w-[90%] h-8 text-center border border-gray-200 rounded"
+                            className={`w-[90%] h-8 text-center border rounded ${
+                              selectedStudentId === student.id
+                                ? "border-white text-white bg-transparent"
+                                : "border-gray-200"
+                            }`}
                             value={termGrade?.examWeighted ?? ""}
                             readOnly
+                            onClick={(e) => e.stopPropagation()}
                           />
                         </td>
                       </>
                     )}
-                    <td className="border border-gray-300 py-3 text-center text-sm">
+                    <td
+                      className={`border py-3 text-center text-sm ${
+                        selectedStudentId === student.id
+                          ? "border-white"
+                          : "border-gray-300"
+                      }`}
+                    >
                       <input
                         type="text"
-                        className={`w-[90%] h-8 text-center border border-gray-200 rounded font-medium ${
-                          termGrade && parseFloat(termGrade.numericGrade) > 3.0
-                            ? "text-red-500"
-                            : ""
+                        className={`w-[90%] h-8 text-center border rounded font-medium ${
+                          selectedStudentId === student.id
+                            ? termGrade &&
+                              parseFloat(termGrade.numericGrade) > 3.0
+                              ? "border-white text-red-500 bg-transparent"
+                              : "border-white text-white bg-transparent"
+                            : termGrade &&
+                              parseFloat(termGrade.numericGrade) > 3.0
+                            ? "text-red-500 border-gray-200"
+                            : "border-gray-200"
                         }`}
                         value={termGrade?.totalPercent ?? ""}
                         readOnly
+                        onClick={(e) => e.stopPropagation()}
                       />
                     </td>
-                    <td className="border border-gray-300 py-3 text-center text-sm">
+                    <td
+                      className={`border py-3 text-center text-sm ${
+                        selectedStudentId === student.id
+                          ? "border-white"
+                          : "border-gray-300"
+                      }`}
+                    >
                       <input
                         type="text"
-                        className={`w-[90%] h-8 text-center border border-gray-200 rounded font-medium ${
-                          termGrade && parseFloat(termGrade.numericGrade) > 3.0
-                            ? "text-red-500"
-                            : ""
+                        className={`w-[90%] h-8 text-center border rounded font-medium ${
+                          selectedStudentId === student.id
+                            ? termGrade &&
+                              parseFloat(termGrade.numericGrade) > 3.0
+                              ? "border-white text-red-500 bg-transparent"
+                              : "border-white text-white bg-transparent"
+                            : termGrade &&
+                              parseFloat(termGrade.numericGrade) > 3.0
+                            ? "text-red-500 border-gray-200"
+                            : "border-gray-200"
                         }`}
                         value={termGrade?.numericGrade ?? ""}
                         readOnly
+                        onClick={(e) => e.stopPropagation()}
                       />
                     </td>
                   </tr>
@@ -1750,15 +2247,15 @@ export function ClassRecordTable({
 
       {/* Pagination for Term Grades */}
       {filtered.length > 0 && currentConfig && (
-        <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-200">
-          <div className="flex items-center gap-4 w-full">
-            <span className="text-sm text-gray-600">
+        <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+            <span className="text-xs sm:text-sm text-gray-600">
               Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)} of{" "}
               {filtered.length} student{filtered.length !== 1 ? "s" : ""}
             </span>
           </div>
           <Pagination className="flex justify-end">
-            <PaginationContent>
+            <PaginationContent className="flex-wrap">
               <PaginationItem>
                 <PaginationPrevious
                   onClick={() =>
@@ -1846,25 +2343,45 @@ export function ClassRecordTable({
           studentNumber: s.id,
         }))}
         onPasteGrades={async (columnId, grades) => {
-          // Update local state first
-          const updated = new Map(scores);
-          grades.forEach(({ studentId, score }) => {
-            const key = `${studentId}:${columnId}`;
-            if (score === null) {
-              updated.delete(key);
-            } else {
-              updated.set(key, { studentId, assessmentId: columnId, score });
-            }
-          });
-          setScores(updated);
+          try {
+            // Validate all grades before updating state
+            const validGrades = grades.filter((g) => {
+              if (g.score === null) return true;
+              if (typeof g.score !== "number" || isNaN(g.score)) return false;
+              if (g.score < 0) return false;
+              return true;
+            });
 
-          // Save all grades to API
-          const gradesToSave = grades.map(({ studentId, score }) => ({
-            studentId,
-            assessmentId: columnId,
-            score,
-          }));
-          await saveBulkScoresToAPI(gradesToSave);
+            if (validGrades.length !== grades.length) {
+              toast.error("Some pasted grades are invalid and were not saved");
+              return;
+            }
+
+            // Update local state first (optimistic update)
+            const updated = new Map(scores);
+            validGrades.forEach(({ studentId, score }) => {
+              const key = `${studentId}:${columnId}`;
+              if (score === null) {
+                updated.delete(key);
+              } else {
+                updated.set(key, { studentId, assessmentId: columnId, score });
+              }
+            });
+            setScores(updated);
+
+            // Save all grades to API
+            const gradesToSave = validGrades.map(({ studentId, score }) => ({
+              studentId,
+              assessmentId: columnId,
+              score,
+            }));
+            await saveBulkScoresToAPI(gradesToSave);
+          } catch (error) {
+            // On error, reload data from server to ensure consistency
+            console.error("Error pasting grades:", error);
+            // Optionally reload data to ensure state consistency
+            // This could be done by calling the load function again
+          }
         }}
       />
     </div>
