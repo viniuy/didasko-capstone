@@ -73,6 +73,13 @@ import { ImportDialog } from "../dialogs/import-dialog";
 import { ImportStatusDialog } from "../dialogs/import-status-dialog";
 import { ScheduleAssignmentDialog } from "../dialogs/schedule-assignment-dialog";
 import { CourseSettingsDialog } from "../dialogs/course-settings-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/svdialog";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import axiosInstance from "@/lib/axios";
@@ -698,7 +705,11 @@ export function CourseDataTable({
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
+  const [showValidatingDialog, setShowValidatingDialog] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [preImportValidationErrors, setPreImportValidationErrors] = useState<
+    Array<{ row: number; code: string; status: string; message: string }>
+  >([]);
   const [previewData, setPreviewData] = useState<CsvRow[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isValidFile, setIsValidFile] = useState(false);
@@ -1438,6 +1449,18 @@ export function CourseDataTable({
         }.xlsx`;
         saveAs(blob, filename);
 
+        // Log course export
+        try {
+          await axiosInstance.post("/courses/export", {
+            filter: exportFilter,
+            count: coursesToExport.length,
+            exportedAt: new Date().toISOString(),
+          });
+        } catch (logError) {
+          console.error("Error logging course export:", logError);
+          // Don't fail export if logging fails
+        }
+
         toast.success(
           `Successfully exported ${coursesToExport.length} ${filterSuffix} course(s)`
         );
@@ -1779,10 +1802,21 @@ export function CourseDataTable({
       return;
     }
 
+    // Close import preview dialog immediately
+    setShowImportPreview(false);
+
+    // Show validating dialog
+    setShowValidatingDialog(true);
+
     try {
       setIsLoading(true);
       // Check for duplicate courses BEFORE preparing import
-      const duplicates: string[] = [];
+      const validationErrors: Array<{
+        row: number;
+        code: string;
+        status: string;
+        message: string;
+      }> = [];
       const validCourses: any[] = [];
 
       // Fetch existing courses once instead of in a loop
@@ -1793,7 +1827,7 @@ export function CourseDataTable({
 
       for (let rowIndex = 0; rowIndex < previewData.length; rowIndex++) {
         const row = previewData[rowIndex];
-        const code = row["Course Code"]?.trim().toUpperCase();
+        const code = row["Course Code"]?.trim().toUpperCase() || "N/A";
         const section = row["Section"]?.trim().toUpperCase() || "A";
         let academicYear = row["Academic Year"]?.trim() || "";
         let semester = row["Semester"]?.trim() || "";
@@ -1841,12 +1875,14 @@ export function CourseDataTable({
           }
         }
 
-        // If there are validation errors, skip this course
+        // If there are validation errors, collect them (no toast)
         if (errors.length > 0) {
-          toast.error(
-            `Row ${rowIndex + 1} (${code || "N/A"}): ${errors.join(", ")}`,
-            { duration: 5000 }
-          );
+          validationErrors.push({
+            row: rowIndex + 2, // +2 because Excel starts at 1 and has header row
+            code,
+            status: "error",
+            message: errors.join(", "),
+          });
           continue;
         }
 
@@ -1860,7 +1896,12 @@ export function CourseDataTable({
         );
 
         if (isDuplicate) {
-          duplicates.push(`${code}-${section} (${academicYear} ${semester})`);
+          validationErrors.push({
+            row: rowIndex + 2,
+            code,
+            status: "skipped",
+            message: `Course already exists (${code}-${section} for ${academicYear} ${semester})`,
+          });
         } else {
           // Use cleaned values
           validCourses.push({
@@ -1872,24 +1913,34 @@ export function CourseDataTable({
         }
       }
 
-      // If there are duplicates, show error
-      if (duplicates.length > 0) {
-        toast.error(
-          `${duplicates.length} course(s) already exist: ${duplicates.join(
-            ", "
-          )}`,
-          { duration: 6000 }
-        );
+      // Store validation errors for later display
+      setPreImportValidationErrors(validationErrors);
 
-        // If ALL courses are duplicates, stop here
-        if (validCourses.length === 0) {
-          toast.error("All courses already exist. Nothing to import.");
-          return;
-        }
+      // If ALL courses have errors or are duplicates, show summary and return
+      if (validCourses.length === 0) {
+        const status: ImportStatus = {
+          imported: 0,
+          skipped: validationErrors.filter((e) => e.status === "skipped")
+            .length,
+          errors: validationErrors
+            .filter((e) => e.status === "error")
+            .map((e) => ({ code: e.code, message: e.message })),
+          total: previewData.length,
+          detailedFeedback: validationErrors,
+        };
+        setImportStatus(status);
+        setShowValidatingDialog(false);
+        setTimeout(() => {
+          setShowImportStatus(true);
+        }, 300);
+        setShowImportPreview(false);
+        return;
+      }
 
-        // Ask user if they want to continue with non-duplicate courses
+      // If there are validation errors/duplicates, ask user if they want to continue
+      if (validationErrors.length > 0) {
         const shouldContinue = confirm(
-          `${duplicates.length} duplicate course(s) found. Do you want to continue importing the ${validCourses.length} valid course(s)?`
+          `${validationErrors.length} course(s) have errors or already exist. Do you want to continue importing the ${validCourses.length} valid course(s)? All errors will be shown in the import summary.`
         );
 
         if (!shouldContinue) {
@@ -1910,22 +1961,14 @@ export function CourseDataTable({
         status: row["Status"],
       }));
 
-      // Close import preview
-      setShowImportPreview(false);
-
       // Set courses for schedule assignment
       setImportedCoursesForSchedule(coursesToImport);
 
-      // Show info message
-      toast.success(
-        `${coursesToImport.length} courses ready. Add schedules to complete import.`,
-        { duration: 4000 }
-      );
-
-      // Open schedule assignment dialog
+      // Close validating dialog and open schedule assignment dialog
+      setShowValidatingDialog(false);
       setTimeout(() => {
         setShowScheduleAssignment(true);
-      }, 500);
+      }, 300);
     } catch (error: any) {
       const errorMessage =
         error instanceof Error
@@ -1934,44 +1977,96 @@ export function CourseDataTable({
 
       console.error("Import preparation error:", error);
       toast.error(errorMessage);
+      setShowValidatingDialog(false);
     } finally {
       setIsLoading(false);
     }
   }, [selectedFile, isValidFile, previewData]);
 
-  const handleScheduleAssignmentComplete = useCallback(async () => {
-    // Only show success message for create/import modes, not for edit mode
-    // Edit mode already shows its own success message in the dialog
-    if (scheduleDialogMode === "create" || scheduleDialogMode === "import") {
-      toast.success("All courses have been created with schedules!");
-    }
+  const handleScheduleAssignmentComplete = useCallback(
+    async (importResults?: any) => {
+      // If import results are provided, show detailed status
+      if (importResults && scheduleDialogMode === "import") {
+        // Merge pre-import validation errors with API import results
+        const apiFeedback = importResults.detailedFeedback || [];
+        const allFeedback = [...preImportValidationErrors, ...apiFeedback];
 
-    // Show loading state
-    setIsRefreshing(true);
-    setIsLoading(true);
+        // Calculate totals
+        const imported = importResults.success || 0;
+        const skippedFromApi = importResults.skipped || 0;
+        const skippedFromValidation = preImportValidationErrors.filter(
+          (e) => e.status === "skipped"
+        ).length;
+        const totalSkipped = skippedFromApi + skippedFromValidation;
 
-    // Small delay for visual feedback
-    await new Promise((resolve) => setTimeout(resolve, 300));
+        const errorsFromApi = importResults.errors || [];
+        const errorsFromValidation = preImportValidationErrors
+          .filter((e) => e.status === "error")
+          .map((e) => ({ code: e.code, message: e.message }));
+        const allErrors = [...errorsFromValidation, ...errorsFromApi];
 
-    // Refresh table data
-    await refreshTableData(false);
-    if (onCourseAdded) onCourseAdded();
+        const total =
+          importResults.total ||
+          preImportValidationErrors.length +
+            (importResults.success || 0) +
+            (importResults.failed || 0) +
+            skippedFromApi ||
+          imported + (importResults.failed || 0) + totalSkipped;
 
-    // Reset all state
-    setImportedCoursesForSchedule([]);
-    setShowScheduleAssignment(false);
-    setSelectedFile(null);
-    setPreviewData([]);
-    setIsValidFile(false);
+        // Map the results to match ImportStatus interface
+        const status: ImportStatus = {
+          imported,
+          skipped: totalSkipped,
+          errors: allErrors,
+          total,
+          detailedFeedback: allFeedback,
+        };
 
-    // Also reset import status
-    setShowImportStatus(false);
-    setImportStatus(null);
+        // Set import status and show dialog after a small delay to ensure schedule dialog is closed
+        setImportStatus(status);
+        setTimeout(() => {
+          setShowImportStatus(true);
+        }, 300);
 
-    // Ensure loading states are cleared
-    setIsLoading(false);
-    setIsRefreshing(false);
-  }, [refreshTableData, onCourseAdded, scheduleDialogMode]);
+        // Clear pre-import errors
+        setPreImportValidationErrors([]);
+      } else {
+        // For create/edit modes, show simple success message
+        if (scheduleDialogMode === "create") {
+          toast.success("Course created successfully!");
+        }
+      }
+
+      // Show loading state
+      setIsRefreshing(true);
+      setIsLoading(true);
+
+      // Small delay for visual feedback
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // Refresh table data
+      await refreshTableData(false);
+      if (onCourseAdded) onCourseAdded();
+
+      // Reset all state
+      setImportedCoursesForSchedule([]);
+      setShowScheduleAssignment(false);
+      setSelectedFile(null);
+      setPreviewData([]);
+      setIsValidFile(false);
+      setPreImportValidationErrors([]);
+
+      // Ensure loading states are cleared
+      setIsLoading(false);
+      setIsRefreshing(false);
+    },
+    [
+      refreshTableData,
+      onCourseAdded,
+      scheduleDialogMode,
+      preImportValidationErrors,
+    ]
+  );
 
   // Handle filter apply
   const handleApplyFilters = () => {
@@ -2648,6 +2743,26 @@ export function CourseDataTable({
                 onDownloadTemplate={handleImportTemplate}
                 importProgress={importProgress}
               />
+
+              {/* Validating Dialog */}
+              <Dialog open={showValidatingDialog} onOpenChange={() => {}}>
+                <DialogContent className="w-[90vw] sm:w-[80vw] md:w-[70vw] lg:w-[60vw] max-w-[500px] p-4 sm:p-6">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-semibold text-[#124A69]">
+                      Validating Courses
+                    </DialogTitle>
+                    <DialogDescription>
+                      Please wait while we validate your import data...
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-6 flex items-center justify-center gap-4 py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69]" />
+                    <p className="text-sm font-medium text-gray-700">
+                      Checking for duplicates and validation errors...
+                    </p>
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               {/* Import Status Dialog */}
               <ImportStatusDialog

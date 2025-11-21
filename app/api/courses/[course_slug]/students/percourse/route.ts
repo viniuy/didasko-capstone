@@ -63,13 +63,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let body: any = {};
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    body = await request.json();
     const {
       studentId,
       lastName,
@@ -148,8 +149,8 @@ export async function POST(request: NextRequest) {
     try {
       await logAction({
         userId: session.user.id,
-        action: "STUDENT_REGISTERED",
-        module: "Student Management",
+        action: "Student Register",
+        module: "Student",
         reason: `Student registered: ${newStudent.firstName} ${
           newStudent.lastName
         } (${newStudent.studentId})${
@@ -184,6 +185,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(newStudent, { status: 201 });
   } catch (error) {
     console.error("Error creating student:", error);
+
+    // Log failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user) {
+        await logAction({
+          userId: session.user.id,
+          action: "Student Register",
+          module: "Student",
+          reason: `Failed to register student`,
+          status: "FAILED",
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            attemptedData: {
+              studentId: body?.studentId,
+              courseId: body?.courseId,
+            },
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging student registration failure:", logError);
+    }
+
     return NextResponse.json(
       { error: "Failed to create student" },
       { status: 500 }

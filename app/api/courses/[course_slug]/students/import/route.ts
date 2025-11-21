@@ -53,18 +53,19 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ course_slug: string }> }
 ) {
+  let course_slug: string = "";
+  let body: { students?: StudentImportRow[] } = {};
+  const batchId = generateBatchId();
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { course_slug } = await params;
-    const body = await request.json();
+    const paramsData = await params;
+    course_slug = paramsData.course_slug;
+    body = await request.json();
     const { students } = body as { students: StudentImportRow[] };
-
-    // Generate batch ID for this import operation
-    const batchId = generateBatchId();
 
     if (!students || !Array.isArray(students)) {
       return NextResponse.json(
@@ -229,8 +230,8 @@ export async function POST(
     try {
       await logAction({
         userId: session.user.id,
-        action: "STUDENTS_IMPORTED",
-        module: "Student Management",
+        action: "Student Import",
+        module: "Student",
         reason: `Imported ${result.imported} student(s) to course ${course.code}. Skipped: ${result.skipped}, Errors: ${result.errors.length}`,
         batchId,
         status: result.errors.length > 0 ? "FAILED" : "SUCCESS",
@@ -260,6 +261,30 @@ export async function POST(
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     console.error("Import error:", error);
+
+    // Log failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user) {
+        await logAction({
+          userId: session.user.id,
+          action: "Student Import",
+          module: "Student",
+          reason: `Failed to import students to course`,
+          status: "FAILED",
+          batchId,
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            courseSlug: course_slug,
+            attemptedCount: body?.students?.length || 0,
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging student import failure:", logError);
+    }
+
     return NextResponse.json(
       { error: "Failed to import students" },
       { status: 500 }

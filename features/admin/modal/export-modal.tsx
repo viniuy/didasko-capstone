@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -40,7 +41,9 @@ interface AuditLog {
   before: any;
   after: any;
   reason: string | null;
-  ip: string | null;
+  metadata: any;
+  batchId: string | null;
+  status: string | null;
   createdAt: Date;
   user: {
     id: string;
@@ -89,15 +92,9 @@ export function ExportModal({
   const [selectedFaculty, setSelectedFaculty] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Get unique actions and modules from props or logs
-  const uniqueActions =
-    availableActions.length > 0
-      ? availableActions
-      : Array.from(new Set(logs.map((log) => log.action))).sort();
-  const uniqueModules =
-    availableModules.length > 0
-      ? availableModules
-      : Array.from(new Set(logs.map((log) => log.module))).sort();
+  // Use all possible actions and modules from props (same as filter sheet)
+  const uniqueActions = availableActions.length > 0 ? availableActions : [];
+  const uniqueModules = availableModules.length > 0 ? availableModules : [];
 
   // Use faculty from props
   const faculty = availableFaculty;
@@ -272,7 +269,7 @@ export function ExportModal({
         "Email",
         "Action",
         "Module",
-        "IP Address",
+        "Status",
         "Reason",
       ];
       const headerRow = worksheet.addRow(headers);
@@ -303,7 +300,7 @@ export function ExportModal({
           log.user?.email || "N/A",
           log.action,
           log.module,
-          log.ip || "N/A",
+          log.status || "N/A",
           log.reason || "N/A",
         ]);
 
@@ -333,7 +330,7 @@ export function ExportModal({
         { width: 30 }, // Email
         { width: 25 }, // Action
         { width: 20 }, // Module
-        { width: 18 }, // IP Address
+        { width: 18 }, // Status
         { width: 40 }, // Reason
       ];
 
@@ -466,25 +463,25 @@ export function ExportModal({
                 <p className="text-sm text-gray-500">No actions available</p>
               ) : (
                 uniqueActions.map((action) => (
-                  <label
+                  <div
                     key={action}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      id={`export-action-${action}`}
                       checked={selectedActions.includes(action)}
-                      onChange={() => handleActionToggle(action)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#124A69] bg-white focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 checked:bg-[#124A69] checked:border-[#124A69] checked:text-white accent-[#124A69] cursor-pointer"
-                      style={{
-                        accentColor: "#124A69",
-                      }}
+                      onCheckedChange={() => handleActionToggle(action)}
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
-                    <span className="text-sm">
+                    <Label
+                      htmlFor={`export-action-${action}`}
+                      className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                    >
                       {action
                         .replace(/_/g, " ")
                         .replace(/\b\w/g, (char) => char.toUpperCase())}
-                    </span>
-                  </label>
+                    </Label>
+                  </div>
                 ))
               )}
             </div>
@@ -500,21 +497,23 @@ export function ExportModal({
                 <p className="text-sm text-gray-500">No modules available</p>
               ) : (
                 uniqueModules.map((module) => (
-                  <label
+                  <div
                     key={module}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      id={`export-module-${module}`}
                       checked={selectedModules.includes(module)}
-                      onChange={() => handleModuleToggle(module)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#124A69] bg-white focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 checked:bg-[#124A69] checked:border-[#124A69] checked:text-white accent-[#124A69] cursor-pointer"
-                      style={{
-                        accentColor: "#124A69",
-                      }}
+                      onCheckedChange={() => handleModuleToggle(module)}
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
-                    <span className="text-sm">{module}</span>
-                  </label>
+                    <Label
+                      htmlFor={`export-module-${module}`}
+                      className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                    >
+                      {module}
+                    </Label>
+                  </div>
                 ))
               )}
             </div>
@@ -532,23 +531,23 @@ export function ExportModal({
                 <p className="text-sm text-gray-500">No faculty available</p>
               ) : (
                 faculty.map((fac) => (
-                  <label
+                  <div
                     key={fac.id}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      id={`export-faculty-${fac.id}`}
                       checked={selectedFaculty.includes(fac.id)}
-                      onChange={() => handleFacultyToggle(fac.id)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#124A69] bg-white focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 checked:bg-[#124A69] checked:border-[#124A69] checked:text-white accent-[#124A69] cursor-pointer"
-                      style={{
-                        accentColor: "#124A69",
-                      }}
+                      onCheckedChange={() => handleFacultyToggle(fac.id)}
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
-                    <span className="text-sm">
+                    <Label
+                      htmlFor={`export-faculty-${fac.id}`}
+                      className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                    >
                       {fac.name || fac.email || "Unknown"}
-                    </span>
-                  </label>
+                    </Label>
+                  </div>
                 ))
               )}
             </div>

@@ -20,9 +20,11 @@ const pmHours = [1, 2, 3, 4, 5, 6, 7, 8];
 export function TimePicker({
   value,
   onChange,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -48,6 +50,7 @@ export function TimePicker({
         <Button
           variant="outline"
           className="w-full justify-between text-xs h-9"
+          disabled={disabled}
         >
           <Clock className="mr-1 h-3 w-3" />
           {value || "Time"}

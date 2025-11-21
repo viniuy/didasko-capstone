@@ -58,11 +58,46 @@ const handler = NextAuth({
 
         if (!dbUser) {
           console.warn(`User not found in DB: ${user.email}`);
+          // Log failed login
+          try {
+            await logAction({
+              userId: null,
+              action: "User Failed Login",
+              module: "User",
+              reason: `User not found in database: ${user.email}`,
+              status: "FAILED",
+              errorMessage: "User not found in database",
+              metadata: {
+                attemptedEmail: user.email,
+                loginMethod: account?.provider || "unknown",
+              },
+            });
+          } catch (logError) {
+            console.error("Error logging failed login:", logError);
+          }
           return false;
         }
 
         if (dbUser.status !== "ACTIVE") {
           console.warn(`User is archived for user: ${user.email}`);
+          // Log failed login
+          try {
+            await logAction({
+              userId: dbUser.id,
+              action: "User Failed Login",
+              module: "User",
+              reason: `User account is archived: ${user.email}`,
+              status: "FAILED",
+              errorMessage: "User account is archived",
+              metadata: {
+                attemptedEmail: user.email,
+                loginMethod: account?.provider || "unknown",
+                userStatus: dbUser.status,
+              },
+            });
+          } catch (logError) {
+            console.error("Error logging failed login:", logError);
+          }
           return false;
         }
 
@@ -101,8 +136,8 @@ const handler = NextAuth({
         // Log login
         await logAction({
           userId: dbUser.id,
-          action: "USER_LOGIN",
-          module: "Authentication",
+          action: "User Login",
+          module: "User",
           reason: `User logged in: ${dbUser.name} (${dbUser.email})`,
           status: "SUCCESS",
           after: {
@@ -119,6 +154,23 @@ const handler = NextAuth({
         return true;
       } catch (err) {
         console.error("Sign-in error:", err);
+        // Log failed login
+        try {
+          await logAction({
+            userId: null,
+            action: "User Failed Login",
+            module: "User",
+            reason: `Sign-in error: ${user.email}`,
+            status: "FAILED",
+            errorMessage: err instanceof Error ? err.message : "Unknown error",
+            metadata: {
+              attemptedEmail: user.email,
+              loginMethod: account?.provider || "unknown",
+            },
+          });
+        } catch (logError) {
+          console.error("Error logging failed login:", logError);
+        }
         return false;
       }
     },

@@ -6,13 +6,15 @@ import { authOptions } from "@/lib/auth-options";
 import { logAction } from "@/lib/audit";
 
 export async function POST(request: Request) {
+  let body: { rfid?: string; studentId?: string } = {};
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { rfid, studentId } = await request.json();
+    body = await request.json();
+    const { rfid, studentId } = body;
 
     if (!rfid || !studentId) {
       return NextResponse.json(
@@ -70,11 +72,18 @@ export async function POST(request: Request) {
 
     // Log RFID assignment
     try {
+      const isReassignment = studentBefore.rfid_id !== null;
       await logAction({
         userId: session.user.id,
-        action: "STUDENT_RFID_ASSIGNED",
-        module: "Student Management",
-        reason: `RFID ${rfidInt} assigned to student: ${updatedStudent.firstName} ${updatedStudent.lastName} (${updatedStudent.studentId})`,
+        action: isReassignment
+          ? "Student RFID Reassigned"
+          : "Student RFID Assigned",
+        module: "Student",
+        reason: `RFID ${rfidInt} ${
+          isReassignment ? "reassigned" : "assigned"
+        } to student: ${updatedStudent.firstName} ${updatedStudent.lastName} (${
+          updatedStudent.studentId
+        })`,
         status: "SUCCESS",
         before: {
           studentId: studentBefore.studentId,
@@ -91,7 +100,7 @@ export async function POST(request: Request) {
           entityId: updatedStudent.id,
           entityName: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
           rfidCardNumber: rfidInt,
-          isReassignment: studentBefore.rfid_id !== null,
+          isReassignment,
         },
       });
     } catch (error) {
@@ -105,6 +114,28 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("Error assigning RFID:", error);
+
+    // Log failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user) {
+        await logAction({
+          userId: session.user.id,
+          action: "Student RFID Assigned",
+          module: "Student",
+          reason: `Failed to assign RFID to student`,
+          status: "FAILED",
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            attemptedRfid: body.rfid,
+            attemptedStudentId: body.studentId,
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging RFID assignment failure:", logError);
+    }
 
     if (error instanceof PrismaClientKnownRequestError) {
       return NextResponse.json(

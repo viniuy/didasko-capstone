@@ -6,7 +6,7 @@ import { requireAdmin, handleAuthError } from "@/lib/authz";
 import { withLogging } from "@/lib/withLogging";
 
 export const POST = withLogging(
-  { action: "BREAK_GLASS_DEACTIVATE", module: "Security" },
+  { action: "BreakGlass Deactivate", module: "Security" },
   async (req: NextRequest) => {
     try {
       const session = await getServerSession(authOptions);

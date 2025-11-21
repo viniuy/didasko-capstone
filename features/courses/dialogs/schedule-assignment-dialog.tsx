@@ -52,7 +52,7 @@ interface ScheduleAssignmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courses: ImportedCourse[];
-  onComplete: () => void;
+  onComplete: (importResults?: any) => void;
   mode: "create" | "edit" | "import";
 }
 
@@ -269,6 +269,9 @@ export function ScheduleAssignmentDialog({
       setCurrentIndex(currentIndex + 1);
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     } else {
+      // Close modal immediately before starting the operation
+      onOpenChange(false);
+      // Then handle completion with loading toast
       handleComplete(updatedSchedules);
     }
   };
@@ -309,6 +312,46 @@ export function ScheduleAssignmentDialog({
   const handleComplete = async (schedules: Record<number, Schedule[]>) => {
     setIsSubmitting(true);
 
+    // Show loading toast based on mode
+    let loadingToast: string | number;
+    if (mode === "create") {
+      loadingToast = toast.loading("Creating course...", {
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+      });
+    } else if (mode === "import") {
+      loadingToast = toast.loading("Importing courses...", {
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+      });
+    } else {
+      loadingToast = toast.loading("Updating schedules...", {
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+      });
+    }
+
     try {
       if (mode === "create") {
         // Create mode: Create course WITH schedules in one transaction
@@ -324,7 +367,22 @@ export function ScheduleAssignmentDialog({
           })),
         });
 
-        // Don't show toast here - onComplete will handle it for create/import modes
+        toast.success("Course created successfully!", {
+          id: loadingToast,
+          style: {
+            background: "#fff",
+            color: "#124A69",
+            border: "1px solid #e5e7eb",
+            boxShadow:
+              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+            borderRadius: "0.5rem",
+            padding: "1rem",
+          },
+          iconTheme: {
+            primary: "#124A69",
+            secondary: "#fff",
+          },
+        });
       } else if (mode === "import") {
         // Import mode: Create courses with schedules
         const coursesWithSchedules = courses.map((course, index) => ({
@@ -345,14 +403,30 @@ export function ScheduleAssignmentDialog({
           { courses: coursesWithSchedules }
         );
 
+        // Close dialog immediately after import
+        onOpenChange(false);
+
+        // Process import results
         if (response.data.results) {
-          const { success, failed } = response.data.results;
-          if (failed > 0) {
-            toast.error(`${success} courses created, ${failed} failed.`);
+          const results = response.data.results;
+          const { success, failed } = results;
+
+          // Dismiss loading toast
+          toast.dismiss(loadingToast);
+
+          // Pass results to onComplete callback
+          if (!isCanceling) {
+            onComplete(results);
           }
-          // Don't show success toast here - onComplete will handle it
+        } else {
+          // Dismiss loading toast
+          toast.dismiss(loadingToast);
+
+          // If no results, still call onComplete
+          if (!isCanceling) {
+            onComplete(null);
+          }
         }
-        // Don't show success toast here - onComplete will handle it
       } else if (mode === "edit") {
         // Edit mode: Update schedules for existing course
         const courseSlug = currentCourse.slug;
@@ -370,14 +444,34 @@ export function ScheduleAssignmentDialog({
           })),
         });
 
-        toast.success("Schedules updated successfully!");
+        toast.success("Schedules updated successfully!", {
+          id: loadingToast,
+          style: {
+            background: "#fff",
+            color: "#124A69",
+            border: "1px solid #e5e7eb",
+            boxShadow:
+              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+            borderRadius: "0.5rem",
+            padding: "1rem",
+          },
+          iconTheme: {
+            primary: "#124A69",
+            secondary: "#fff",
+          },
+        });
+
+        // Close dialog for edit mode
+        onOpenChange(false);
       }
 
       // Only call onComplete if we're not canceling
       if (!isCanceling) {
-        onComplete();
+        // For create and edit modes, call onComplete without results
+        if (mode === "create" || mode === "edit") {
+          onComplete();
+        }
       }
-      onOpenChange(false);
       setCurrentIndex(0);
       setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
@@ -388,7 +482,22 @@ export function ScheduleAssignmentDialog({
         error?.response?.data?.message ||
         error?.message ||
         "Failed to save schedules";
-      toast.error(errorMessage);
+      toast.error(errorMessage, {
+        id: loadingToast,
+        style: {
+          background: "#fff",
+          color: "#dc2626",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+        iconTheme: {
+          primary: "#dc2626",
+          secondary: "#fff",
+        },
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -502,6 +611,7 @@ export function ScheduleAssignmentDialog({
                       variant="ghost"
                       className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7"
                       onClick={() => removeSchedule(index)}
+                      disabled={isSubmitting}
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
                       Remove
@@ -519,6 +629,7 @@ export function ScheduleAssignmentDialog({
                       onValueChange={(value) =>
                         updateSchedule(index, "day", value)
                       }
+                      disabled={isSubmitting}
                     >
                       <SelectTrigger
                         className={cn(
@@ -545,6 +656,7 @@ export function ScheduleAssignmentDialog({
                     <TimePicker
                       value={schedule.fromTime}
                       onChange={(val) => updateSchedule(index, "fromTime", val)}
+                      disabled={isSubmitting}
                     />
                   </div>
 
@@ -555,6 +667,7 @@ export function ScheduleAssignmentDialog({
                     <TimePicker
                       value={schedule.toTime}
                       onChange={(val) => updateSchedule(index, "toTime", val)}
+                      disabled={isSubmitting}
                     />
                   </div>
                 </div>
@@ -567,6 +680,7 @@ export function ScheduleAssignmentDialog({
             variant="outline"
             className="w-full border-dashed border-2 hover:border-[#124A69] hover:bg-blue-50"
             onClick={addSchedule}
+            disabled={isSubmitting}
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Another Schedule Slot

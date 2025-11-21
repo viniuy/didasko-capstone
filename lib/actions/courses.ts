@@ -110,8 +110,8 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
         const session = await getServerSession(authOptions);
         await logAction({
           userId: session?.user?.id || null,
-          action: "COURSE_CREATED",
-          module: "Course Management",
+          action: "Course Create",
+          module: "Course",
           reason: `Course created: ${newCourse.code} - ${newCourse.title}${
             isFromImport ? " (via import)" : ""
           }`,
@@ -169,6 +169,29 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
     }
   } catch (err) {
     console.error("createCourse error:", err);
+    
+    // Log failure
+    try {
+      const session = await getServerSession(authOptions);
+      await logAction({
+        userId: session?.user?.id || null,
+        action: "Course Create",
+        module: "Course",
+        reason: `Failed to create course`,
+        status: "FAILED",
+        errorMessage: err instanceof Error ? err.message : "Unknown error",
+        metadata: {
+          attemptedData: {
+            code: data.code,
+            title: data.title,
+            section: data.section,
+          },
+        },
+      });
+    } catch (logError) {
+      console.error("Error logging course creation failure:", logError);
+    }
+    
     return {
       success: false,
       error: err instanceof Error ? err.message : "Failed to create course",

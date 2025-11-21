@@ -6,7 +6,7 @@ import { withLogging } from "@/lib/withLogging";
 import { handleAuthError } from "@/lib/authz";
 
 export const POST = withLogging(
-  { action: "BREAK_GLASS_PROMOTE", module: "Security" },
+  { action: "BreakGlass Promote", module: "Security" },
   async (req: NextRequest) => {
     try {
       const session = await getServerSession(authOptions);

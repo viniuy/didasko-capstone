@@ -84,6 +84,8 @@ function normalizeSemester(semester: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const batchId = generateBatchId();
+  let coursesData: ImportRow[] = [];
   try {
     const session = await getServerSession(authOptions);
 
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const coursesData: ImportRow[] = body;
+    coursesData = body;
 
     const results: ImportResult = {
       imported: 0,
@@ -268,9 +270,56 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log course import success
+    try {
+      await logAction({
+        userId: session.user.id,
+        action: "Course Import",
+        module: "Course",
+        reason: `Imported ${results.imported} course(s), skipped ${results.skipped}`,
+        status: "SUCCESS",
+        batchId,
+        metadata: {
+          imported: results.imported,
+          skipped: results.skipped,
+          total: results.total,
+          errors: results.errors.length,
+          importedCourses: results.importedCourses.map((c) => ({
+            id: c.id,
+            code: c.code,
+            title: c.title,
+          })),
+        },
+      });
+    } catch (logError) {
+      console.error("Error logging course import:", logError);
+    }
+
     return NextResponse.json(results);
   } catch (error) {
     console.error("Import error:", error);
+    
+    // Log course import failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user) {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Import",
+          module: "Course",
+          reason: `Failed to import courses`,
+          status: "FAILED",
+          batchId,
+          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            attemptedCount: coursesData?.length || 0,
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging course import failure:", logError);
+    }
+    
     return NextResponse.json(
       {
         error: "Failed to import courses",

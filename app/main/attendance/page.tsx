@@ -25,12 +25,7 @@ export default function AttendancePage() {
                 </h2>
 
                 <div className="grid gap-4 md:gap-6 lg:gap-8">
-                  <div className="space-y-2">
-                    <h2 className="pl-2 pb-1 text-lg sm:text-xl font-bold text-muted-foreground">
-                      Courses
-                    </h2>
-                    <SemesterCourses type="attendance" />
-                  </div>
+                  <SemesterCourses type="attendance" />
                 </div>
               </div>
             </div>

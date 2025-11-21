@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ interface ImportStatus {
   errors: Array<{ code: string; message: string }>;
   total: number;
   detailedFeedback: Array<{
-    row: number;
+    row?: number;
     code: string;
     status: string;
     message: string;
@@ -49,9 +49,27 @@ export function ImportStatusDialog({
   onClose,
   onImportMore,
 }: ImportStatusDialogProps) {
+  const [windowHeight, setWindowHeight] = useState(800);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setWindowHeight(window.innerHeight);
+      const handleResize = () => setWindowHeight(window.innerHeight);
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }
+  }, []);
+
+  // Calculate dynamic height based on content
+  const feedbackCount = importStatus?.detailedFeedback?.length || 0;
+  const tableHeight =
+    feedbackCount > 0
+      ? Math.min(Math.max(feedbackCount * 50 + 100, 200), windowHeight * 0.5)
+      : 200;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[40vw] p-4 sm:p-6">
+      <DialogContent className="w-[90vw] sm:w-[80vw] md:w-[70vw] lg:w-[60vw] max-w-[1200px] max-h-[90vh] p-4 sm:p-6 flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-[#124A69]">
             Import Status
@@ -64,7 +82,7 @@ export function ImportStatusDialog({
         </DialogHeader>
 
         {importProgress ? (
-          <div className="mt-6 space-y-6">
+          <div className="mt-6 space-y-6 flex-1 overflow-auto">
             <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border">
               {importProgress.hasError ? (
                 <svg
@@ -119,11 +137,11 @@ export function ImportStatusDialog({
           </div>
         ) : (
           importStatus && (
-            <div className="mt-6 space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="mt-6 space-y-4 sm:space-y-6 flex-1 flex flex-col min-h-0">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 flex-shrink-0">
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <h3 className="text-sm font-medium text-green-800">
-                    Successfully Imported
+                    Imported
                   </h3>
                   <p className="text-2xl font-semibold text-green-600">
                     {
@@ -158,29 +176,32 @@ export function ImportStatusDialog({
               </div>
 
               {importStatus.detailedFeedback?.length > 0 && (
-                <div className="border rounded-lg overflow-hidden max-w-[2100px]">
-                  <div className="bg-gray-50 p-4 border-b">
-                    <h3 className="font-medium text-gray-700">
+                <div className="border rounded-lg overflow-hidden flex-1 flex flex-col min-h-0">
+                  <div className="bg-gray-50 p-3 sm:p-4 border-b flex-shrink-0">
+                    <h3 className="font-medium text-gray-700 text-sm sm:text-base">
                       Detailed Import Feedback
                     </h3>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
                       Status of each row processed during import.
                     </p>
                   </div>
-                  <div className="max-h-[300px] overflow-auto">
+                  <div
+                    className="flex-1 overflow-auto min-h-0"
+                    style={{ maxHeight: `${tableHeight}px` }}
+                  >
                     <table className="w-full border-collapse">
-                      <thead className="bg-gray-50 sticky top-0">
+                      <thead className="bg-gray-50 sticky top-0 z-10">
                         <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                          <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500">
                             Row
                           </th>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                          <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500">
                             Course Code
                           </th>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                          <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500">
                             Status
                           </th>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                          <th className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500">
                             Message
                           </th>
                         </tr>
@@ -190,15 +211,15 @@ export function ImportStatusDialog({
                           (feedback, index) => (
                             <tr
                               key={index}
-                              className="border-t hover:bg-gray-50"
+                              className="border-t hover:bg-gray-50 transition-colors"
                             >
-                              <td className="px-4 py-2 text-sm text-gray-900">
-                                {feedback.row}
+                              <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 whitespace-nowrap">
+                                {feedback.row || index + 1}
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-900">
-                                {feedback.code}
+                              <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 font-medium">
+                                {feedback.code || "N/A"}
                               </td>
-                              <td className="px-4 py-2 text-sm font-medium">
+                              <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium">
                                 <Badge
                                   variant={
                                     feedback.status === "imported"
@@ -209,8 +230,10 @@ export function ImportStatusDialog({
                                   }
                                   className={
                                     feedback.status === "imported"
-                                      ? "bg-green-500 text-white"
-                                      : ""
+                                      ? "bg-green-500 hover:bg-green-600 text-white text-xs border-0"
+                                      : feedback.status === "skipped"
+                                      ? "text-xs"
+                                      : "text-xs"
                                   }
                                 >
                                   {feedback.status.charAt(0).toUpperCase() +
@@ -218,11 +241,11 @@ export function ImportStatusDialog({
                                 </Badge>
                               </td>
                               <td
-                                className={`px-4 py-2 text-sm ${
+                                className={`px-2 sm:px-4 py-2 text-xs sm:text-sm ${
                                   feedback.status === "error"
                                     ? "text-red-600"
                                     : "text-gray-900"
-                                }`}
+                                } break-words`}
                               >
                                 {feedback.message || "-"}
                               </td>
@@ -235,12 +258,16 @@ export function ImportStatusDialog({
                 </div>
               )}
 
-              <div className="flex justify-end gap-4">
-                <Button variant="outline" onClick={onClose}>
+              <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4 pt-4 border-t flex-shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className="w-full sm:w-auto"
+                >
                   Close
                 </Button>
                 <Button
-                  className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                  className="bg-[#124A69] hover:bg-[#0D3A54] text-white w-full sm:w-auto"
                   onClick={onImportMore}
                 >
                   Import More Courses

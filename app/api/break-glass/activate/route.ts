@@ -7,7 +7,7 @@ import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
 
 export const POST = withLogging(
-  { action: "BREAK_GLASS_ACTIVATE", module: "Security" },
+  { action: "BreakGlass Activated", module: "Security" },
   async (req: NextRequest) => {
     try {
       const session = await getServerSession(authOptions);

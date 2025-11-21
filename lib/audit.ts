@@ -124,7 +124,6 @@ export async function logAction(params: LogActionParams): Promise<void> {
         before: sanitizedBefore,
         after: sanitizedAfter,
         reason: reason || null,
-        ip: null, // IP address removed per user request
         batchId: truncatedBatchId,
         status: truncatedStatus,
         errorMessage: truncatedErrorMessage,

@@ -16,6 +16,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import axiosInstance from "@/lib/axios";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingSpinner } from "./ui-components";
 
 interface Course {
   id: string;
@@ -76,7 +77,7 @@ const CourseCard = ({
     <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[320px] sm:max-w-[360px] md:max-w-[320px] lg:max-w-[380px] xl:max-w-[440px] flex flex-col justify-between h-38">
       <div>
         <CardHeader className="-mt-4 flex justify-between items-center">
-          <CardTitle className="text-2xl font-bold">{course.title}</CardTitle>
+          <CardTitle className="text-2xl font-bold">{course.code}</CardTitle>
           <BookOpenText size={50} />
         </CardHeader>
         <CardContent>
@@ -143,7 +144,44 @@ export default function ActiveCourses({ type }: CoursesProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [showRedirectSpinner, setShowRedirectSpinner] = useState(false);
   const itemsPerPage = 3;
+
+  // Get loading messages based on type
+  const getLoadingMessages = () => {
+    switch (type) {
+      case "attendance":
+        return {
+          main: "Loading Attendance...",
+          secondary: "Please wait while we prepare the attendance page...",
+        };
+      case "recitation":
+        return {
+          main: "Loading Recitation...",
+          secondary: "Please wait while we prepare the recitation page...",
+        };
+      case "quiz":
+        return {
+          main: "Loading Quiz...",
+          secondary: "Please wait while we prepare the quiz page...",
+        };
+      case "class-record":
+        return {
+          main: "Loading Class Record...",
+          secondary: "Please wait while we prepare the class record page...",
+        };
+      case "reporting":
+        return {
+          main: "Loading Reporting...",
+          secondary: "Please wait while we prepare the reporting page...",
+        };
+      default:
+        return {
+          main: "Loading...",
+          secondary: "Please wait while we redirect you...",
+        };
+    }
+  };
 
   const fetchActiveCourses = async () => {
     if (!session?.user?.id) return;
@@ -200,75 +238,97 @@ export default function ActiveCourses({ type }: CoursesProps) {
 
   const handleNavigate = () => {
     setIsNavigating(true);
+    // After fade-out completes, show loading spinner
+    setTimeout(() => {
+      setShowRedirectSpinner(true);
+    }, 200);
   };
 
+  // Show loading spinner after fade-out
+  if (showRedirectSpinner) {
+    const messages = getLoadingMessages();
+    return (
+      <LoadingSpinner
+        mainMessage={messages.main}
+        secondaryMessage={messages.secondary}
+      />
+    );
+  }
+
   return (
-    <Card
-      className={`p-4 shadow-md rounded-lg transition-opacity duration-200 ${
+    <div
+      className={`transition-opacity duration-200 ${
         isNavigating ? "opacity-0" : "opacity-100"
       }`}
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
-        {currentCourses.map((course) => (
-          <CourseCard
-            key={course.id}
-            course={course}
-            type={type}
-            onNavigate={handleNavigate}
-          />
-        ))}
+      <div className="mb-2">
+        <h2 className="pl-2 pb-1 text-3xl font-bold text-muted-foreground">
+          Courses
+        </h2>
       </div>
-
-      {courses.length > itemsPerPage && (
-        <div className="flex justify-between items-center px-2 -mt-4">
-          <p className="text-sm text-gray-500 w-40">
-            {currentPage * itemsPerPage - (itemsPerPage - 1)}-
-            {Math.min(currentPage * itemsPerPage, courses.length)} out of{" "}
-            {courses.length} classes
-          </p>
-          <Pagination className="flex justify-end">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.max(prev - 1, 1))
-                  }
-                  className={
-                    currentPage === 1 ? "pointer-events-none opacity-50" : ""
-                  }
-                />
-              </PaginationItem>
-              {[...Array(totalPages || 1)].map((_, i) => (
-                <PaginationItem key={i}>
-                  <PaginationLink
-                    isActive={currentPage === i + 1}
-                    onClick={() => setCurrentPage(i + 1)}
-                    className={
-                      currentPage === i + 1 ? "bg-[#124A69] text-white" : ""
-                    }
-                  >
-                    {i + 1}
-                  </PaginationLink>
-                </PaginationItem>
-              ))}
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() =>
-                    setCurrentPage((prev) =>
-                      Math.min(prev + 1, totalPages || 1)
-                    )
-                  }
-                  className={
-                    currentPage === totalPages
-                      ? "pointer-events-none opacity-50"
-                      : ""
-                  }
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+      <Card className="p-4 shadow-md rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
+          {currentCourses.map((course) => (
+            <CourseCard
+              key={course.id}
+              course={course}
+              type={type}
+              onNavigate={handleNavigate}
+            />
+          ))}
         </div>
-      )}
-    </Card>
+
+        {courses.length > itemsPerPage && (
+          <div className="flex justify-between items-center px-2 -mt-4">
+            <p className="text-sm text-gray-500 w-40">
+              {currentPage * itemsPerPage - (itemsPerPage - 1)}-
+              {Math.min(currentPage * itemsPerPage, courses.length)} out of{" "}
+              {courses.length} classes
+            </p>
+            <Pagination className="flex justify-end">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    className={
+                      currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                    }
+                  />
+                </PaginationItem>
+                {[...Array(totalPages || 1)].map((_, i) => (
+                  <PaginationItem key={i}>
+                    <PaginationLink
+                      isActive={currentPage === i + 1}
+                      onClick={() => setCurrentPage(i + 1)}
+                      className={
+                        currentPage === i + 1 ? "bg-[#124A69] text-white" : ""
+                      }
+                    >
+                      {i + 1}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() =>
+                      setCurrentPage((prev) =>
+                        Math.min(prev + 1, totalPages || 1)
+                      )
+                    }
+                    className={
+                      currentPage === totalPages
+                        ? "pointer-events-none opacity-50"
+                        : ""
+                    }
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }

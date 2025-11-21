@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -118,35 +119,6 @@ export function AuditLogsFilterSheet({
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Action Filter */}
-          <div className="space-y-4">
-            <Label className="text-sm font-medium text-gray-700">Action</Label>
-            <div className="space-y-3 border rounded-lg p-4 max-h-[200px] overflow-y-auto">
-              {availableActions.length === 0 ? (
-                <p className="text-sm text-gray-500">No actions available</p>
-              ) : (
-                availableActions.map((action) => (
-                  <label
-                    key={action}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={filters.actions.includes(action)}
-                      onChange={() => handleActionToggle(action)}
-                      className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
-                    />
-                    <span className="text-sm">
-                      {action
-                        .replace(/_/g, " ")
-                        .replace(/\b\w/g, (char) => char.toUpperCase())}
-                    </span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-
           {/* Faculty Filter */}
           <div className="space-y-4">
             <Label className="text-sm font-medium text-gray-700">Faculty</Label>
@@ -157,20 +129,55 @@ export function AuditLogsFilterSheet({
                 <p className="text-sm text-gray-500">No faculty available</p>
               ) : (
                 faculty.map((fac) => (
-                  <label
+                  <div
                     key={fac.id}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      id={`faculty-${fac.id}`}
                       checked={filters.faculty.includes(fac.id)}
-                      onChange={() => handleFacultyToggle(fac.id)}
-                      className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
+                      onCheckedChange={() => handleFacultyToggle(fac.id)}
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
-                    <span className="text-sm">
+                    <Label
+                      htmlFor={`faculty-${fac.id}`}
+                      className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                    >
                       {fac.name || fac.email || "Unknown"}
-                    </span>
-                  </label>
+                    </Label>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Action Filter */}
+          <div className="space-y-4">
+            <Label className="text-sm font-medium text-gray-700">Action</Label>
+            <div className="space-y-3 border rounded-lg p-4 max-h-[200px] overflow-y-auto">
+              {availableActions.length === 0 ? (
+                <p className="text-sm text-gray-500">No actions available</p>
+              ) : (
+                availableActions.map((action) => (
+                  <div
+                    key={action}
+                    className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
+                  >
+                    <Checkbox
+                      id={`action-${action}`}
+                      checked={filters.actions.includes(action)}
+                      onCheckedChange={() => handleActionToggle(action)}
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
+                    />
+                    <Label
+                      htmlFor={`action-${action}`}
+                      className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                    >
+                      {action
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (char) => char.toUpperCase())}
+                    </Label>
+                  </div>
                 ))
               )}
             </div>
@@ -184,18 +191,23 @@ export function AuditLogsFilterSheet({
                 <p className="text-sm text-gray-500">No modules available</p>
               ) : (
                 availableModules.map((module) => (
-                  <label
+                  <div
                     key={module}
-                    className="flex items-center gap-2 cursor-pointer"
+                    className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      id={`module-${module}`}
                       checked={filters.modules.includes(module)}
-                      onChange={() => handleModuleToggle(module)}
-                      className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
+                      onCheckedChange={() => handleModuleToggle(module)}
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
-                    <span className="text-sm">{module}</span>
-                  </label>
+                    <Label
+                      htmlFor={`module-${module}`}
+                      className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                    >
+                      {module}
+                    </Label>
+                  </div>
                 ))
               )}
             </div>

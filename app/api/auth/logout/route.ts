@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
       // Log logout before session is destroyed
       await logAction({
         userId: session.user.id,
-        action: "USER_LOGOUT",
-        module: "Authentication",
+        action: "User Logout",
+        module: "User",
         reason: `User logged out: ${session.user.name} (${session.user.email})`,
         status: "SUCCESS",
         before: {

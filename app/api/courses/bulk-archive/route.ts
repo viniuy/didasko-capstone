@@ -7,6 +7,7 @@ import { logAction } from "@/lib/audit";
 const prisma = new PrismaClient();
 
 export async function PATCH(request: NextRequest) {
+  let body: { courseIds?: string[]; status?: string } = {};
   try {
     const session = await getServerSession(authOptions);
 
@@ -14,7 +15,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    body = await request.json();
     const { courseIds, status } = body;
 
     // Validate input
@@ -55,18 +56,18 @@ export async function PATCH(request: NextRequest) {
     try {
       const action =
         status === "ARCHIVED"
-          ? "COURSE_ARCHIVED"
+          ? "Course Archived"
           : status === "ACTIVE"
-          ? "COURSE_ACTIVATED"
-          : "COURSE_STATUS_CHANGED";
+          ? "Course Activated"
+          : "Course Status Changed";
       await logAction({
         userId: session.user.id,
         action,
-        module: "Course Management",
+        module: "Course",
         reason: `${
-          action === "COURSE_ARCHIVED"
+          status === "ARCHIVED"
             ? "Archived"
-            : action === "COURSE_ACTIVATED"
+            : status === "ACTIVE"
             ? "Activated"
             : "Changed status"
         } ${result.count} course(s)`,
@@ -107,6 +108,34 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Bulk archive error:", error);
+    
+    // Log failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user && body.status) {
+        const action =
+          body.status === "ARCHIVED"
+            ? "Course Archived"
+            : body.status === "ACTIVE"
+            ? "Course Activated"
+            : "Course Status Changed";
+        await logAction({
+          userId: session.user.id,
+          action,
+          module: "Course",
+          reason: `Failed to update course status`,
+          status: "FAILED",
+          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            courseIds: body.courseIds || [],
+            attemptedStatus: body.status,
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging failure:", logError);
+    }
+    
     return NextResponse.json(
       {
         error: "Failed to update courses",

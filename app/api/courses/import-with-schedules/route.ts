@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { PrismaClient, CourseStatus } from "@prisma/client";
+import { logAction, generateBatchId } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
@@ -25,8 +26,11 @@ interface CourseWithSchedule {
 interface ImportResult {
   success: number;
   failed: number;
+  skipped: number;
+  total: number;
   errors: Array<{ code: string; message: string }>;
   detailedFeedback: Array<{
+    row?: number;
     code: string;
     status: string;
     message: string;
@@ -74,6 +78,16 @@ function generateSlug(code: string, section: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const batchId = generateBatchId();
+  let body: any = {};
+  let results: ImportResult = {
+    success: 0,
+    failed: 0,
+    skipped: 0,
+    total: 0,
+    errors: [],
+    detailedFeedback: [],
+  };
   try {
     const session = await getServerSession(authOptions);
 
@@ -81,21 +95,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    body = await request.json();
     const { courses } = body;
 
     console.log("Received courses:", courses); // Debug log
 
     if (!courses || !Array.isArray(courses) || courses.length === 0) {
+      // Log validation failure
+      try {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Import",
+          module: "Course",
+          reason: `Course import failed: No courses provided`,
+          status: "FAILED",
+          errorMessage: "No courses provided",
+          batchId,
+          metadata: {
+            totalRecords: 0,
+          },
+        });
+      } catch (logError) {
+        console.error("Error logging import failure:", logError);
+      }
+
       return NextResponse.json(
         { error: "No courses provided" },
         { status: 400 }
       );
     }
 
-    const results: ImportResult = {
+    results = {
       success: 0,
       failed: 0,
+      skipped: 0,
+      total: courses.length,
       errors: [],
       detailedFeedback: [],
     };
@@ -127,8 +161,8 @@ export async function POST(request: NextRequest) {
           });
           results.detailedFeedback.push({
             code: courseData.code || "N/A",
-            status: "failed",
-            message: "Missing required fields",
+            status: "error",
+            message: "Missing required fields (code or title)",
           });
           continue;
         }
@@ -156,7 +190,7 @@ export async function POST(request: NextRequest) {
           });
           results.detailedFeedback.push({
             code,
-            status: "failed",
+            status: "error",
             message: "Class number must be a positive integer",
           });
           continue;
@@ -202,14 +236,15 @@ export async function POST(request: NextRequest) {
           });
           results.detailedFeedback.push({
             code,
-            status: "failed",
-            message: "All schedules are incomplete",
+            status: "error",
+            message:
+              "All schedules are incomplete (missing day, start time, or end time)",
           });
           continue;
         }
 
         // Create course WITH schedules in a single transaction
-        await prisma.course.create({
+        const newCourse = await prisma.course.create({
           data: {
             code,
             title,
@@ -229,7 +264,43 @@ export async function POST(request: NextRequest) {
               })),
             },
           },
+          include: {
+            schedules: true,
+          },
         });
+
+        // Log individual course creation success
+        try {
+          await logAction({
+            userId: session.user.id,
+            action: "Course Create",
+            module: "Course",
+            reason: `Course created: ${newCourse.code} - ${newCourse.title} (via import with schedules)`,
+            status: "SUCCESS",
+            batchId,
+            after: {
+              id: newCourse.id,
+              code: newCourse.code,
+              title: newCourse.title,
+              section: newCourse.section,
+              semester: newCourse.semester,
+              academicYear: newCourse.academicYear,
+              status: newCourse.status,
+              facultyId: newCourse.facultyId,
+              source: "import",
+            },
+            metadata: {
+              entityType: "Course",
+              entityId: newCourse.id,
+              entityName: `${newCourse.code} - ${newCourse.title}`,
+              source: "import",
+              scheduleCount: newCourse.schedules?.length || 0,
+            },
+          });
+        } catch (logError) {
+          console.error("Error logging course creation:", logError);
+          // Don't fail course creation if logging fails
+        }
 
         results.success++;
         results.detailedFeedback.push({
@@ -253,6 +324,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log overall import success
+    try {
+      await logAction({
+        userId: session.user.id,
+        action: "Course Import",
+        module: "Course",
+        reason: `Course import with schedules completed: ${results.success} successful, ${results.failed} failed, ${results.errors.length} errors.`,
+        status: "SUCCESS",
+        batchId,
+        metadata: {
+          totalRecords: courses.length,
+          importedCount: results.success,
+          failedCount: results.failed,
+          errorCount: results.errors.length,
+          detailedFeedback: results.detailedFeedback,
+        },
+      });
+    } catch (logError) {
+      console.error("Error logging import success:", logError);
+    }
+
     // Return results
     return NextResponse.json({
       message: `Import completed: ${results.success} successful, ${results.failed} failed`,
@@ -260,6 +352,30 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Import with schedules error:", error);
+
+    // Log overall import failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user) {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Import",
+          module: "Course",
+          reason: `Course import with schedules failed.`,
+          status: "FAILED",
+          batchId,
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
+          metadata: {
+            totalRecords: body?.courses?.length || 0,
+            errorDetails: results?.errors || [],
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging import failure:", logError);
+    }
+
     return NextResponse.json(
       {
         error: error.message || "Failed to import courses with schedules",

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getCourses, createCourse } from "@/lib/services";
 import { CourseResponse } from "@/shared/types/course";
+import { logAction } from "@/lib/audit";
 
 export async function GET(request: Request) {
   try {
@@ -45,13 +46,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  let body: any = {};
   try {
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    body = await request.json();
     const {
       code,
       title,
@@ -67,6 +69,23 @@ export async function POST(request: Request) {
 
     // Validate required fields
     if (!code || !title || !section || !semester || !academicYear) {
+      // Log validation failure
+      try {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Create",
+          module: "Course",
+          reason: `Failed to create course: Missing required fields`,
+          status: "FAILED",
+          errorMessage: "Missing required fields",
+          metadata: {
+            attemptedData: { code, title, section, semester, academicYear },
+          },
+        });
+      } catch (logError) {
+        console.error("Error logging validation failure:", logError);
+      }
+
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -87,8 +106,66 @@ export async function POST(request: Request) {
         schedules,
       });
 
+      // Log successful course creation
+      try {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Create",
+          module: "Course",
+          reason: `Course created: ${course.code} - ${course.title}`,
+          status: "SUCCESS",
+          after: {
+            id: course.id,
+            code: course.code,
+            title: course.title,
+            section: course.section,
+            semester: course.semester,
+            academicYear: course.academicYear,
+            status: course.status,
+            facultyId: course.facultyId,
+            source: "manual",
+          },
+          metadata: {
+            entityType: "Course",
+            entityId: course.id,
+            entityName: `${course.code} - ${course.title}`,
+            source: "manual",
+            scheduleCount: course.schedules?.length || 0,
+          },
+        });
+      } catch (logError) {
+        console.error("Error logging course creation:", logError);
+        // Don't fail course creation if logging fails
+      }
+
       return NextResponse.json(course, { status: 201 });
     } catch (error: any) {
+      // Log failure for duplicate/conflict errors
+      try {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Create",
+          module: "Course",
+          reason: `Failed to create course: ${code} - ${title}`,
+          status: "FAILED",
+          errorMessage: error.message || "Unknown error",
+          metadata: {
+            attemptedData: {
+              code,
+              title,
+              section,
+              semester,
+              academicYear,
+            },
+            errorType: error.message.includes("already exists")
+              ? "duplicate"
+              : "unknown",
+          },
+        });
+      } catch (logError) {
+        console.error("Error logging course creation failure:", logError);
+      }
+
       if (error.message.includes("already exists")) {
         return NextResponse.json({ error: error.message }, { status: 409 });
       }
@@ -96,6 +173,27 @@ export async function POST(request: Request) {
     }
   } catch (error: any) {
     console.error("Error creating course:", error);
+
+    // Log general failure
+    try {
+      const session = await getServerSession(authOptions);
+      if (session?.user) {
+        await logAction({
+          userId: session.user.id,
+          action: "Course Create",
+          module: "Course",
+          reason: `Failed to create course`,
+          status: "FAILED",
+          errorMessage: error.message || "Unknown error",
+          metadata: {
+            attemptedData: body,
+          },
+        });
+      }
+    } catch (logError) {
+      console.error("Error logging course creation failure:", logError);
+    }
+
     return NextResponse.json(
       { error: error.message || "Failed to create course" },
       { status: 500 }

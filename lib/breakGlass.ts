@@ -132,18 +132,25 @@ export async function activateBreakGlass(
 
   // Log the activation
   await logAction({
-    userId: facultyUserId,
-    action: "BREAK_GLASS_ACTIVATED",
+    userId: activatedBy,
+    action: "BreakGlass Activated",
     module: "Security",
-    reason: `Faculty member ${facultyUser.name} (${facultyUser.email}) temporarily promoted to Admin. Reason: ${reason}`,
+    reason: reason,
     before: {
+      userId: facultyUserId,
       role: "FACULTY",
+      name: facultyUser.name,
+      email: facultyUser.email,
     },
     after: {
+      userId: facultyUserId,
       role: "ADMIN",
-      activatedBy,
+      name: facultyUser.name,
+      email: facultyUser.email,
     },
+    status: "SUCCESS",
     metadata: {
+      facultyUserId,
       academicHeadId: activatedBy,
     },
   });
@@ -212,17 +219,27 @@ export async function deactivateBreakGlass(
 
     // Log the deactivation
     await logAction({
-      userId,
-      action: "BREAK_GLASS_DEACTIVATED",
+      userId: deactivatedBy,
+      action: "BreakGlass Deactivate",
       module: "Security",
-      reason: `Break-glass deactivated by ${deactivatedBy}. Role restored from ADMIN to ${session.originalRole}.`,
+      reason: session.reason || null,
       before: {
+        userId: session.userId,
         role: "ADMIN",
+        name: session.user.name,
+        email: session.user.email,
         activatedBy: session.activatedBy,
-        reason: session.reason,
       },
       after: {
+        userId: session.userId,
         role: session.originalRole,
+        name: session.user.name,
+        email: session.user.email,
+      },
+      status: "SUCCESS",
+      metadata: {
+        targetUserId: session.userId,
+        originalRole: session.originalRole,
       },
     });
   }
@@ -335,16 +352,26 @@ export async function promoteToPermanentAdmin(
   // Log the promotion
   await logAction({
     userId: promotedBy,
-    action: "BREAK_GLASS_PROMOTED_TO_PERMANENT",
+    action: "BreakGlass Promote",
     module: "Security",
-    reason: `Temporary admin ${session.user.name} (${session.user.email}) promoted to permanent Admin by user ${promotedBy}`,
+    reason: `Temporary admin promoted to permanent Admin`,
     before: {
+      userId: session.userId,
       role: "ADMIN",
+      name: session.user.name,
+      email: session.user.email,
       isTemporary: true,
     },
     after: {
+      userId: session.userId,
       role: "ADMIN",
+      name: session.user.name,
+      email: session.user.email,
       isTemporary: false,
+    },
+    status: "SUCCESS",
+    metadata: {
+      targetUserId: session.userId,
     },
   });
 }
