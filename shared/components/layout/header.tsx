@@ -102,7 +102,7 @@ export default function Header() {
 
   return (
     <>
-      <div className="w-screen bg-white border-b border-gray-400 flex shadow-lg items-center -ml-16 ">
+      <div className="w-screen bg-white border-b border-gray-400 flex shadow-lg items-center ml-16">
         {/* Left Section */}
         <div className="flex items-center flex-shrink-0">
           <Image
