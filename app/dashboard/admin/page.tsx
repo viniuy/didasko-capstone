@@ -21,11 +21,10 @@ export default async function AdminDashboardPage() {
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <AppSidebar />
+      <Header />
 
       <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex flex-col flex-grow px-4">
-          <Header />
-
           {/* Stats Cards */}
           <div className="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6 mt-4">
             <Card>

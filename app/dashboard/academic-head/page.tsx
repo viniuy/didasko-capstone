@@ -16,12 +16,12 @@ export default function AcademicHeadDashboard() {
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <AppSidebar />
+      <Header />
 
       <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-0 sm:pl-12 md:pl-16 lg:pl-[4rem] xl:pl-[5rem] transition-all overflow-y-auto">
         <div className="flex-1 px-2 sm:px-4 md:px-6">
           <div className="flex flex-col flex-grow">
             <div className="px-2 sm:px-4">
-              <Header />
               <Greet />
 
               <Stats />

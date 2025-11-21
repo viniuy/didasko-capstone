@@ -13,10 +13,11 @@ export default function FacultyLoadPage() {
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="relative h-screen w-screen overflow-hidden">
+        <Header />
+
         <AppSidebar />
         <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
           <div className="flex flex-col flex-grow px-4">
-            <Header />
             <div className="flex items-center justify-between mb-2">
               <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
                 Faculty Load

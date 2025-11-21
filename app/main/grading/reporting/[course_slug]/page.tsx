@@ -50,12 +50,11 @@ function ReportingTypeContent({ course_slug }: { course_slug: string }) {
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="relative h-screen w-screen overflow-hidden">
+        <Header />
         <AppSidebar />
 
         <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
           <div className="flex flex-col flex-grow px-4">
-            <Header />
-
             <div className="flex-1 overflow-y-auto pb-6">
               <div className="mb-6 flex items-center mt-2 gap-4">
                 <Button asChild variant="ghost" size="icon">

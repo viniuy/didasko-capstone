@@ -17,14 +17,12 @@ export default function FacultyDashboard() {
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="relative h-screen w-screen overflow-hidden">
+        <Header />
         <AppSidebar />
 
-        <main className="h-full w-full lg:w-[calc(100%-22.5rem)] transition-all overflow-y-auto">
-          <div className="flex-1 pl-[4rem] ">
+        <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-0 sm:pl-12 md:pl-16 lg:pl-[4rem] xl:pl-[5rem] transition-all overflow-y-auto">
+          <div className="flex-1 px-2 sm:px-4 md:px-6">
             <div className="flex flex-col flex-grow">
-              <div>
-                <Header />
-              </div>
               <div className="px-2 sm:px-4">
                 <Greet />
                 <Stats />
