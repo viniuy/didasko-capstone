@@ -450,7 +450,9 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 ))}
 
-                {!isAdmin && (
+                {(isAcademicHead ||
+                  isFaculty ||
+                  (isAdmin && selectedRole === "FACULTY")) && (
                   <>
                     <SidebarMenuItem>
                       <Collapsible
