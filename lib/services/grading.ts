@@ -29,8 +29,7 @@ export async function getTermConfigs(courseSlug: string) {
       ptWeight: config.ptWeight,
       quizWeight: config.quizWeight,
       examWeight: config.examWeight,
-      transmutationBase: config.transmutationBase ?? 0,
-      assessments: config.assessments.map((a) => ({
+      assessments: config.assessments.map((a: any) => ({
         id: a.id,
         name: a.name,
         type: a.type,
@@ -39,6 +38,7 @@ export async function getTermConfigs(courseSlug: string) {
         enabled: a.enabled,
         order: a.order,
         linkedCriteriaId: a.linkedCriteriaId ?? null,
+        transmutationBase: a.transmutationBase ?? 0,
       })),
     };
   });
@@ -83,13 +83,11 @@ export async function saveTermConfigs(
           ptWeight: config.ptWeight,
           quizWeight: config.quizWeight,
           examWeight: config.examWeight,
-          transmutationBase: config.transmutationBase ?? 0,
         },
         update: {
           ptWeight: config.ptWeight,
           quizWeight: config.quizWeight,
           examWeight: config.examWeight,
-          transmutationBase: config.transmutationBase ?? 0,
         },
       });
 
@@ -121,6 +119,7 @@ export async function saveTermConfigs(
           enabled: assessment.enabled,
           order: assessment.order,
           linkedCriteriaId: assessment.linkedCriteriaId ?? null,
+          transmutationBase: assessment.transmutationBase ?? 0,
         };
 
         if (!existsInDb || !assessment.id || assessment.id.startsWith("temp")) {

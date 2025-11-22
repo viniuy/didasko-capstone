@@ -19,6 +19,7 @@ export interface Assessment {
   enabled: boolean;
   order: number;
   linkedCriteriaId?: string | null;
+  transmutationBase?: number; // Base for grade transmutation (0-75) per assessment
 }
 
 // Term Configuration
@@ -28,7 +29,6 @@ export interface TermConfig {
   ptWeight: number;
   quizWeight: number;
   examWeight: number;
-  transmutationBase: number; // Base for grade transmutation (0-75)
   assessments: Assessment[];
 }
 

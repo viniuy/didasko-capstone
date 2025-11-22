@@ -331,6 +331,7 @@ export function SettingsModal({
       date: null,
       enabled: true,
       order: maxOrder + 1,
+      transmutationBase: 0,
     };
 
     updateConfig({ assessments: [...config.assessments, newAssessment] });
@@ -377,11 +378,6 @@ export function SettingsModal({
         errors.push(`${term}: Exam weight must be between 0-100%`);
       }
 
-      const transmutationBase = cfg.transmutationBase ?? 0;
-      if (transmutationBase < 0 || transmutationBase > 75) {
-        errors.push(`${term}: Transmutation base must be between 0-75`);
-      }
-
       const enabledPTs = cfg.assessments.filter(
         (a) => a.type === "PT" && a.enabled
       );
@@ -398,6 +394,12 @@ export function SettingsModal({
         }
         if (pt.maxScore > 200) {
           errors.push(`${term}: ${pt.name} max score cannot exceed 200`);
+        }
+        const transmutationBase = pt.transmutationBase ?? 0;
+        if (transmutationBase < 0 || transmutationBase > 75) {
+          errors.push(
+            `${term}: ${pt.name} transmutation base must be between 0-75`
+          );
         }
       });
 
@@ -418,6 +420,12 @@ export function SettingsModal({
         if (quiz.maxScore > 200) {
           errors.push(`${term}: ${quiz.name} max score cannot exceed 200`);
         }
+        const transmutationBase = quiz.transmutationBase ?? 0;
+        if (transmutationBase < 0 || transmutationBase > 75) {
+          errors.push(
+            `${term}: ${quiz.name} transmutation base must be between 0-75`
+          );
+        }
       });
 
       const exam = cfg.assessments.find((a) => a.type === "EXAM");
@@ -435,6 +443,10 @@ export function SettingsModal({
         }
         if (exam.maxScore > 200) {
           errors.push(`${term}: Exam max score cannot exceed 200`);
+        }
+        const transmutationBase = exam.transmutationBase ?? 0;
+        if (transmutationBase < 0 || transmutationBase > 75) {
+          errors.push(`${term}: Exam transmutation base must be between 0-75`);
         }
       }
 
@@ -701,39 +713,6 @@ export function SettingsModal({
                 </div>
               </div>
             </div>
-
-            {/* Grade Transmutation */}
-            <div className="p-3 sm:p-4 bg-[#124A69]/5 border border-[#124A69]/20 rounded-lg">
-              <h3 className="text-xs sm:text-sm font-semibold text-[#124A69] mb-2">
-                Grade Transmutation
-              </h3>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-gray-700">
-                  Base:
-                </label>
-                <input
-                  type="number"
-                  value={config.transmutationBase ?? 0}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = clamp(raw, 0, 75);
-                    updateConfig({ transmutationBase: value });
-                  }}
-                  onKeyDown={(e) => {
-                    if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  min="0"
-                  max="75"
-                  className="w-16 px-2 py-1.5 border border-[#124A69]/30 rounded-lg text-xs focus:ring-2 focus:ring-[#124A69] focus:border-[#124A69]"
-                />
-                <span className="text-xs text-gray-600 font-medium">%</span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-1.5">
-                Adds {config.transmutationBase ?? 0}% of max to raw scores
-              </p>
-            </div>
           </div>
 
           {/* PT/Lab Section */}
@@ -783,13 +762,16 @@ export function SettingsModal({
                       type="text"
                       value={pt.name}
                       onChange={(e) =>
-                        updateAssessment("PT", pt.id, { name: e.target.value })
+                        updateAssessment("PT", pt.id, {
+                          name: e.target.value,
+                        })
                       }
                       className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       placeholder="Name"
                       maxLength={5}
                     />
                     <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600">Max Score:</span>
                       <input
                         type="number"
                         value={pt.maxScore}
@@ -808,7 +790,28 @@ export function SettingsModal({
                         min="0"
                         max="200"
                       />
-                      <span className="text-xs text-gray-500">pts</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-600">Base</span>
+                      <input
+                        type="number"
+                        value={pt.transmutationBase ?? 0}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value);
+                          const value = clamp(raw, 0, 75);
+                          updateAssessment("PT", pt.id, {
+                            transmutationBase: value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        min="0"
+                        max="75"
+                        className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-xs"
+                      />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
                       <Calendar className="w-4 h-4 text-gray-400" />
@@ -853,7 +856,7 @@ export function SettingsModal({
                   </div>
 
                   {/* Second Row: Linking dropdowns */}
-                  <div className="flex items-center gap-2 flex-1">
+                  <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 w-32">
                       Link to Existing Grades:
                     </span>
@@ -948,91 +951,181 @@ export function SettingsModal({
               {quizzes.map((quiz) => (
                 <div
                   key={quiz.id}
-                  className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                  className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg"
                 >
-                  <input
-                    type="checkbox"
-                    checked={quiz.enabled}
-                    onChange={(e) =>
-                      updateAssessment("QUIZ", quiz.id, {
-                        enabled: e.target.checked,
-                      })
-                    }
-                    className="w-4 h-4 text-[#124A69]"
-                  />
-                  <input
-                    type="text"
-                    value={quiz.name}
-                    onChange={(e) =>
-                      updateAssessment("QUIZ", quiz.id, {
-                        name: e.target.value,
-                      })
-                    }
-                    className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    placeholder="Name"
-                    maxLength={5}
-                  />
-                  <div className="flex items-center gap-2">
+                  {/* First Row: Checkbox, Name, Max Score, Date */}
+                  <div className="flex items-center gap-3">
                     <input
-                      type="number"
-                      value={quiz.maxScore}
+                      type="checkbox"
+                      checked={quiz.enabled}
                       onChange={(e) =>
                         updateAssessment("QUIZ", quiz.id, {
-                          maxScore: Number(e.target.value),
+                          enabled: e.target.checked,
                         })
                       }
-                      onKeyDown={(e) => {
-                        if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                          e.preventDefault();
-                        }
-                      }}
-                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      placeholder="Max"
-                      min="0"
-                      max="200"
+                      className="w-4 h-4 text-[#124A69]"
                     />
-                    <span className="text-xs text-gray-500">pts</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-1">
-                    <Calendar className="w-4 h-4 text-gray-400" />
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="flex-1 justify-start text-left font-normal"
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" />
-                          {quiz.date ? (
-                            format(new Date(quiz.date), "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="single"
-                          selected={quiz.date ? new Date(quiz.date) : undefined}
-                          onSelect={(date) => {
-                            if (date) {
-                              updateAssessment("QUIZ", quiz.id, {
-                                date: format(date, "yyyy-MM-dd"),
-                              });
+                    <input
+                      type="text"
+                      value={quiz.name}
+                      onChange={(e) =>
+                        updateAssessment("QUIZ", quiz.id, {
+                          name: e.target.value,
+                        })
+                      }
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="Name"
+                      maxLength={5}
+                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600">Max Score:</span>
+                      <input
+                        type="number"
+                        value={quiz.maxScore}
+                        onChange={(e) =>
+                          updateAssessment("QUIZ", quiz.id, {
+                            maxScore: Number(e.target.value),
+                          })
+                        }
+                        onKeyDown={(e) => {
+                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        placeholder="Max"
+                        min="0"
+                        max="200"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-600">Base</span>
+                      <input
+                        type="number"
+                        value={quiz.transmutationBase ?? 0}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value);
+                          const value = clamp(raw, 0, 75);
+                          updateAssessment("QUIZ", quiz.id, {
+                            transmutationBase: value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        min="0"
+                        max="75"
+                        className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 flex-1">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="flex-1 justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" />
+                            {quiz.date ? (
+                              format(new Date(quiz.date), "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={
+                              quiz.date ? new Date(quiz.date) : undefined
                             }
-                          }}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                            onSelect={(date) => {
+                              if (date) {
+                                updateAssessment("QUIZ", quiz.id, {
+                                  date: format(date, "yyyy-MM-dd"),
+                                });
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {quizzes.length > 1 && (
+                      <button
+                        onClick={() => removeAssessment("QUIZ", quiz.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  {quizzes.length > 1 && (
-                    <button
-                      onClick={() => removeAssessment("QUIZ", quiz.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+
+                  {/* Second Row: Linking dropdowns */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-32">
+                      Link to Existing Grades:
+                    </span>
+
+                    <select
+                      value={quiz.linkedCriteriaId || ""}
+                      onChange={(e) => {
+                        const linkedId = e.target.value || null;
+                        const linkedCriteria = availableCriteria.find(
+                          (c) => c.id === linkedId
+                        );
+
+                        updateAssessment("QUIZ", quiz.id, {
+                          linkedCriteriaId: linkedId,
+                          ...(linkedCriteria?.maxScore && {
+                            maxScore: linkedCriteria.maxScore,
+                          }),
+                        });
+                      }}
+                      className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-xs"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                      <option value="">No Link</option>
+
+                      <optgroup label="Recitation">
+                        {availableCriteria
+                          .filter((c) => c.type === "RECITATION")
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} {c.maxScore ? `(${c.maxScore} pts)` : ""}
+                            </option>
+                          ))}
+                      </optgroup>
+
+                      <optgroup label="Group Reporting">
+                        {availableCriteria
+                          .filter((c) => c.type === "GROUP_REPORTING")
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} {c.maxScore ? `(${c.maxScore} pts)` : ""}
+                            </option>
+                          ))}
+                      </optgroup>
+
+                      <optgroup label="Individual Reporting">
+                        {availableCriteria
+                          .filter((c) => c.type === "INDIVIDUAL_REPORTING")
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} {c.maxScore ? `(${c.maxScore} pts)` : ""}
+                            </option>
+                          ))}
+                      </optgroup>
+                    </select>
+
+                    {quiz.linkedCriteriaId && (
+                      <span className="text-xs text-green-600 font-medium">
+                        ✓ Linked
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1050,79 +1143,106 @@ export function SettingsModal({
               </span>
             </h3>
             {exam && (
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <input
-                  type="checkbox"
-                  checked={exam.enabled}
-                  onChange={(e) =>
-                    updateAssessment("EXAM", exam.id, {
-                      enabled: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4 text-[#124A69]"
-                />
-                <input
-                  type="text"
-                  value={exam.name}
-                  onChange={(e) =>
-                    updateAssessment("EXAM", exam.id, { name: e.target.value })
-                  }
-                  className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  placeholder="Name"
-                  maxLength={5}
-                />
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
+                {/* First Row: Checkbox, Name, Max Score, Date */}
+                <div className="flex items-center gap-3">
                   <input
-                    type="number"
-                    value={exam.maxScore}
+                    type="checkbox"
+                    checked={exam.enabled}
                     onChange={(e) =>
                       updateAssessment("EXAM", exam.id, {
-                        maxScore: Number(e.target.value),
+                        enabled: e.target.checked,
                       })
                     }
-                    onKeyDown={(e) => {
-                      if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                        e.preventDefault();
-                      }
-                    }}
-                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    placeholder="Max"
-                    min="0"
-                    max="200"
+                    className="w-4 h-4 text-[#124A69]"
                   />
-                  <span className="text-xs text-gray-500">pts</span>
-                </div>
-                <div className="flex items-center gap-2 flex-1">
-                  <Calendar className="w-4 h-4 text-gray-400" />
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="flex-1 justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" />
-                        {exam.date ? (
-                          format(new Date(exam.date), "PPP")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent
-                        mode="single"
-                        selected={exam.date ? new Date(exam.date) : undefined}
-                        onSelect={(date) => {
-                          if (date) {
-                            updateAssessment("EXAM", exam.id, {
-                              date: format(date, "yyyy-MM-dd"),
-                            });
-                          }
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <input
+                    type="text"
+                    value={exam.name}
+                    onChange={(e) =>
+                      updateAssessment("EXAM", exam.id, {
+                        name: e.target.value,
+                      })
+                    }
+                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    placeholder="Name"
+                    maxLength={5}
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600">Max Score:</span>
+                    <input
+                      type="number"
+                      value={exam.maxScore}
+                      onChange={(e) =>
+                        updateAssessment("EXAM", exam.id, {
+                          maxScore: Number(e.target.value),
+                        })
+                      }
+                      onKeyDown={(e) => {
+                        if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="Max"
+                      min="0"
+                      max="200"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-600">Base</span>
+                    <input
+                      type="number"
+                      value={exam.transmutationBase ?? 0}
+                      onChange={(e) => {
+                        const raw = Number(e.target.value);
+                        const value = clamp(raw, 0, 75);
+                        updateAssessment("EXAM", exam.id, {
+                          transmutationBase: value,
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
+                      min="0"
+                      max="75"
+                      className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 flex-1">
+                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="flex-1 justify-start text-left font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" />
+                          {exam.date ? (
+                            format(new Date(exam.date), "PPP")
+                          ) : (
+                            <span>Pick a date</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarComponent
+                          mode="single"
+                          selected={exam.date ? new Date(exam.date) : undefined}
+                          onSelect={(date) => {
+                            if (date) {
+                              updateAssessment("EXAM", exam.id, {
+                                date: format(date, "yyyy-MM-dd"),
+                              });
+                            }
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
               </div>
             )}

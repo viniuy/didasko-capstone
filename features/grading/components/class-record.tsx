@@ -285,6 +285,7 @@ interface Assessment {
   enabled: boolean;
   order: number;
   linkedCriteriaId?: string | null;
+  transmutationBase?: number;
 }
 
 interface TermConfig {
@@ -293,7 +294,6 @@ interface TermConfig {
   ptWeight: number;
   quizWeight: number;
   examWeight: number;
-  transmutationBase: number;
   assessments: Assessment[];
 }
 
@@ -339,13 +339,17 @@ function transmuteScore(
   // If base is 0, no transmutation (raw score stays the same)
   if (base === 0 || rawScore === null) return rawScore;
 
-  // Calculate base score: base% of max score
-  const baseScore = (base / 100) * maxScore;
+  // Calculate base threshold: base% of max score
+  const baseThreshold = (base / 100) * maxScore;
 
-  // Transmuted score = raw score + base score, capped at max score
-  const transmutedScore = Math.min(maxScore, rawScore + baseScore);
+  // Only apply transmutation if raw score is below the base threshold
+  if (rawScore < baseThreshold) {
+    // Set score to base threshold (not adding, just setting to minimum)
+    return baseThreshold;
+  }
 
-  return transmutedScore;
+  // If raw score is at or above threshold, no transmutation
+  return rawScore;
 }
 
 function getNumericGrade(totalPercent: number): string {
@@ -400,7 +404,6 @@ export function ClassRecordTable({
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
-      transmutationBase: 0,
       assessments: [
         {
           id: "pt1",
@@ -437,7 +440,6 @@ export function ClassRecordTable({
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
-      transmutationBase: 0,
       assessments: [
         {
           id: "pt2",
@@ -474,7 +476,6 @@ export function ClassRecordTable({
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
-      transmutationBase: 0,
       assessments: [
         {
           id: "pt3",
@@ -511,7 +512,6 @@ export function ClassRecordTable({
       ptWeight: 30,
       quizWeight: 20,
       examWeight: 50,
-      transmutationBase: 0,
       assessments: [
         {
           id: "pt4",
@@ -556,6 +556,8 @@ export function ClassRecordTable({
     null
   );
   const [hasTermConfigs, setHasTermConfigs] = useState(false);
+  // Track which score inputs are currently being edited (focused)
+  const [editingScores, setEditingScores] = useState<Set<string>>(new Set());
 
   const pendingScoresRef = useRef<
     Map<
@@ -883,7 +885,12 @@ export function ClassRecordTable({
   const handleScoreChange =
     (studentId: string, assessmentId: string, max: number) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const digits = sanitizeDigits(e.target.value);
+      // Extract just the raw score (number before parenthesis if present)
+      const inputValue = e.target.value;
+      const rawValue = inputValue.includes("(")
+        ? inputValue.split("(")[0].trim()
+        : inputValue;
+      const digits = sanitizeDigits(rawValue);
       if (digits === "") {
         setScore(studentId, assessmentId, null);
         return;
@@ -919,17 +926,15 @@ export function ClassRecordTable({
     const examAssessment = config.assessments.find(
       (a) => a.type === "EXAM" && a.enabled
     );
-    // Apply transmutation to raw scores before calculating percentages
-    const transmutationBase = config.transmutationBase ?? 0;
-
+    // Apply transmutation to raw scores before calculating percentages (per-assessment)
     let ptPercentages: number[] = [];
     ptAssessments.forEach((pt) => {
       const rawScore = getEffectiveScore(studentId, pt);
-      // Apply transmutation to raw score
+      // Apply transmutation using assessment's own transmutationBase
       const transmutedScore = transmuteScore(
         rawScore,
         pt.maxScore,
-        transmutationBase
+        pt.transmutationBase ?? 0
       );
       if (transmutedScore !== null) {
         const pct = percent(transmutedScore, pt.maxScore);
@@ -939,11 +944,11 @@ export function ClassRecordTable({
     let quizPercentages: number[] = [];
     quizAssessments.forEach((quiz) => {
       const rawScore = getEffectiveScore(studentId, quiz);
-      // Apply transmutation to raw score
+      // Apply transmutation using assessment's own transmutationBase
       const transmutedScore = transmuteScore(
         rawScore,
         quiz.maxScore,
-        transmutationBase
+        quiz.transmutationBase ?? 0
       );
       if (transmutedScore !== null) {
         const pct = percent(transmutedScore, quiz.maxScore);
@@ -953,11 +958,11 @@ export function ClassRecordTable({
     let examPercentage: number | null = null;
     if (examAssessment) {
       const rawExamScore = getEffectiveScore(studentId, examAssessment);
-      // Apply transmutation to raw score
+      // Apply transmutation using assessment's own transmutationBase
       const transmutedExamScore = transmuteScore(
         rawExamScore,
         examAssessment.maxScore,
-        transmutationBase
+        examAssessment.transmutationBase ?? 0
       );
       if (transmutedExamScore !== null) {
         examPercentage = percent(transmutedExamScore, examAssessment.maxScore);
@@ -1966,12 +1971,38 @@ export function ClassRecordTable({
                       </div>
                     </td>
                     {pts.map((pt) => {
-                      const score = getEffectiveScore(student.id, pt);
+                      const rawScore = getEffectiveScore(student.id, pt);
+                      const transmutedScore = transmuteScore(
+                        rawScore,
+                        pt.maxScore,
+                        pt.transmutationBase ?? 0
+                      );
+                      const scoreKey = `${student.id}:${pt.id}`;
+                      const isEditing = editingScores.has(scoreKey);
+                      // Calculate base threshold to check if student passed it
+                      const baseThreshold =
+                        (pt.transmutationBase ?? 0) > 0
+                          ? ((pt.transmutationBase ?? 0) / 100) * pt.maxScore
+                          : null;
+                      // Only show transmuted score if:
+                      // 1. Not currently being edited
+                      // 2. Raw score is below base threshold
+                      const showTransmuted =
+                        !isEditing &&
+                        rawScore !== null &&
+                        transmutedScore !== null &&
+                        baseThreshold !== null &&
+                        rawScore < baseThreshold;
+                      const displayValue = showTransmuted
+                        ? `${rawScore} (${transmutedScore})`
+                        : rawScore ?? "";
                       const isSelected = selectedStudentId === student.id;
+                      // Use transmuted score for styling (75% check)
+                      const scoreForStyling = transmutedScore ?? rawScore;
                       return (
                         <td
                           key={pt.id}
-                          className={`border py-3 text-center text-sm w-14 ${
+                          className={`border py-3 text-center text-sm w-20 ${
                             isSelected ? "border-white" : "border-gray-300"
                           }`}
                         >
@@ -1982,7 +2013,7 @@ export function ClassRecordTable({
                               isSelected
                                 ? (() => {
                                     const style = getScoreStyle(
-                                      score,
+                                      scoreForStyling,
                                       pt.maxScore
                                     );
                                     return `border-white bg-transparent ${
@@ -1995,22 +2026,39 @@ export function ClassRecordTable({
                                 : pt.linkedCriteriaId
                                 ? "bg-blue-50 cursor-not-allowed border-gray-200"
                                 : `border-gray-200 ${getScoreStyle(
-                                    score,
+                                    scoreForStyling,
                                     pt.maxScore
                                   )}`
                             }`}
-                            value={score ?? ""}
+                            value={displayValue}
                             onChange={handleScoreChange(
                               student.id,
                               pt.id,
                               pt.maxScore
                             )}
+                            onFocus={() => {
+                              setEditingScores((prev) =>
+                                new Set(prev).add(scoreKey)
+                              );
+                            }}
+                            onBlur={() => {
+                              setEditingScores((prev) => {
+                                const next = new Set(prev);
+                                next.delete(scoreKey);
+                                return next;
+                              });
+                            }}
                             onKeyDown={handleNumericKeyDown}
                             onClick={(e) => e.stopPropagation()}
                             disabled={!!pt.linkedCriteriaId}
                             title={
                               pt.linkedCriteriaId
                                 ? "This score is linked from existing grades"
+                                : pt.transmutationBase &&
+                                  pt.transmutationBase > 0
+                                ? `Raw: ${rawScore ?? 0}, Transmuted: ${
+                                    transmutedScore ?? 0
+                                  }`
                                 : ""
                             }
                           />
@@ -2039,12 +2087,39 @@ export function ClassRecordTable({
                       </td>
                     )}
                     {quizzes.map((quiz) => {
-                      const score = getEffectiveScore(student.id, quiz);
+                      const rawScore = getEffectiveScore(student.id, quiz);
+                      const transmutedScore = transmuteScore(
+                        rawScore,
+                        quiz.maxScore,
+                        quiz.transmutationBase ?? 0
+                      );
+                      const scoreKey = `${student.id}:${quiz.id}`;
+                      const isEditing = editingScores.has(scoreKey);
+                      // Calculate base threshold to check if student passed it
+                      const baseThreshold =
+                        (quiz.transmutationBase ?? 0) > 0
+                          ? ((quiz.transmutationBase ?? 0) / 100) *
+                            quiz.maxScore
+                          : null;
+                      // Only show transmuted score if:
+                      // 1. Not currently being edited
+                      // 2. Raw score is below base threshold
+                      const showTransmuted =
+                        !isEditing &&
+                        rawScore !== null &&
+                        transmutedScore !== null &&
+                        baseThreshold !== null &&
+                        rawScore < baseThreshold;
+                      const displayValue = showTransmuted
+                        ? `${rawScore} (${transmutedScore})`
+                        : rawScore ?? "";
                       const isSelected = selectedStudentId === student.id;
+                      // Use transmuted score for styling (75% check)
+                      const scoreForStyling = transmutedScore ?? rawScore;
                       return (
                         <td
                           key={quiz.id}
-                          className={`border py-3 text-center text-sm ${
+                          className={`border py-3 text-center text-sm w-20 ${
                             isSelected ? "border-white" : "border-gray-300"
                           }`}
                         >
@@ -2055,7 +2130,7 @@ export function ClassRecordTable({
                               isSelected
                                 ? (() => {
                                     const style = getScoreStyle(
-                                      score,
+                                      scoreForStyling,
                                       quiz.maxScore
                                     );
                                     return `border-white bg-transparent ${
@@ -2068,22 +2143,39 @@ export function ClassRecordTable({
                                 : quiz.linkedCriteriaId
                                 ? "bg-blue-50 cursor-not-allowed border-gray-200"
                                 : `border-gray-200 ${getScoreStyle(
-                                    score,
+                                    scoreForStyling,
                                     quiz.maxScore
                                   )}`
                             }`}
-                            value={score ?? ""}
+                            value={displayValue}
                             onChange={handleScoreChange(
                               student.id,
                               quiz.id,
                               quiz.maxScore
                             )}
+                            onFocus={() => {
+                              setEditingScores((prev) =>
+                                new Set(prev).add(scoreKey)
+                              );
+                            }}
+                            onBlur={() => {
+                              setEditingScores((prev) => {
+                                const next = new Set(prev);
+                                next.delete(scoreKey);
+                                return next;
+                              });
+                            }}
                             onKeyDown={handleNumericKeyDown}
                             onClick={(e) => e.stopPropagation()}
                             disabled={!!quiz.linkedCriteriaId}
                             title={
                               quiz.linkedCriteriaId
                                 ? "This score is linked from existing grades"
+                                : quiz.transmutationBase &&
+                                  quiz.transmutationBase > 0
+                                ? `Raw: ${rawScore ?? 0}, Transmuted: ${
+                                    transmutedScore ?? 0
+                                  }`
                                 : ""
                             }
                           />
@@ -2121,8 +2213,38 @@ export function ClassRecordTable({
                           }`}
                         >
                           {(() => {
-                            const score = getEffectiveScore(student.id, exam);
+                            const rawScore = getEffectiveScore(
+                              student.id,
+                              exam
+                            );
+                            const transmutedScore = transmuteScore(
+                              rawScore,
+                              exam.maxScore,
+                              exam.transmutationBase ?? 0
+                            );
+                            const scoreKey = `${student.id}:${exam.id}`;
+                            const isEditing = editingScores.has(scoreKey);
+                            // Calculate base threshold to check if student passed it
+                            const baseThreshold =
+                              (exam.transmutationBase ?? 0) > 0
+                                ? ((exam.transmutationBase ?? 0) / 100) *
+                                  exam.maxScore
+                                : null;
+                            // Only show transmuted score if:
+                            // 1. Not currently being edited
+                            // 2. Raw score is below base threshold
+                            const showTransmuted =
+                              !isEditing &&
+                              rawScore !== null &&
+                              transmutedScore !== null &&
+                              baseThreshold !== null &&
+                              rawScore < baseThreshold;
+                            const displayValue = showTransmuted
+                              ? `${rawScore} (${transmutedScore})`
+                              : rawScore ?? "";
                             const isSelected = selectedStudentId === student.id;
+                            // Use transmuted score for styling (75% check)
+                            const scoreForStyling = transmutedScore ?? rawScore;
                             return (
                               <input
                                 type="text"
@@ -2131,7 +2253,7 @@ export function ClassRecordTable({
                                   isSelected
                                     ? (() => {
                                         const style = getScoreStyle(
-                                          score,
+                                          scoreForStyling,
                                           exam.maxScore
                                         );
                                         return `border-white bg-transparent ${
@@ -2144,22 +2266,39 @@ export function ClassRecordTable({
                                     : exam.linkedCriteriaId
                                     ? "bg-blue-50 cursor-not-allowed border-gray-200"
                                     : `border-gray-200 ${getScoreStyle(
-                                        score,
+                                        scoreForStyling,
                                         exam.maxScore
                                       )}`
                                 }`}
-                                value={score == null ? "" : score}
+                                value={displayValue}
                                 onChange={handleScoreChange(
                                   student.id,
                                   exam.id,
                                   exam.maxScore
                                 )}
+                                onFocus={() => {
+                                  setEditingScores((prev) =>
+                                    new Set(prev).add(scoreKey)
+                                  );
+                                }}
+                                onBlur={() => {
+                                  setEditingScores((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete(scoreKey);
+                                    return next;
+                                  });
+                                }}
                                 onKeyDown={handleNumericKeyDown}
                                 onClick={(e) => e.stopPropagation()}
                                 disabled={!!exam.linkedCriteriaId}
                                 title={
                                   exam.linkedCriteriaId
                                     ? "This score is linked from existing grades"
+                                    : exam.transmutationBase &&
+                                      exam.transmutationBase > 0
+                                    ? `Raw: ${rawScore ?? 0}, Transmuted: ${
+                                        transmutedScore ?? 0
+                                      }`
                                     : ""
                                 }
                               />

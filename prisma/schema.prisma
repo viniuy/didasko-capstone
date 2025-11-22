@@ -356,18 +356,17 @@ model QuizScore {
 }
 
 model TermConfiguration {
-  id               String       @id @default(uuid())
-  courseId         String
-  term             String
-  ptWeight         Float         @default(30)
-  quizWeight       Float         @default(20)
-  examWeight       Float         @default(50)
-  transmutationBase Float        @default(0) @map("transmutation_base")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  assessments      Assessment[]
-  course           Course       @relation("CourseTermConfigs", fields: [courseId], references: [id], onDelete: Cascade)
-  termGrades       TermGrade[]
+  id          String       @id @default(uuid())
+  courseId    String
+  term        String
+  ptWeight    Float        @default(30)
+  quizWeight  Float        @default(20)
+  examWeight  Float        @default(50)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  assessments Assessment[]
+  course      Course       @relation("CourseTermConfigs", fields: [courseId], references: [id], onDelete: Cascade)
+  termGrades  TermGrade[]
 
   @@unique([courseId, term])
   @@index([courseId])
@@ -383,6 +382,7 @@ model Assessment {
   date             DateTime?
   enabled          Boolean           @default(true)
   order            Int               @default(0)
+  transmutationBase Float            @default(0) @map("transmutation_base")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
   linkedCriteriaId String?
