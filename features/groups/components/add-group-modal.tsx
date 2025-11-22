@@ -20,6 +20,7 @@ import {
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AttendanceStatus } from "@prisma/client";
+import { useCreateGroup } from "@/lib/hooks/queries";
 
 interface AddGroupModalProps {
   courseCode: string;
@@ -60,10 +61,12 @@ export function AddGroupModal({
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [selectedLeader, setSelectedLeader] = useState<string>("");
   const [studentSearch, setStudentSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [studentSelectionError, setStudentSelectionError] = useState("");
   const [groupNumberError, setGroupNumberError] = useState("");
   const [groupNameError, setGroupNameError] = useState("");
+
+  // React Query hook
+  const createGroupMutation = useCreateGroup();
 
   // --- Helpers ---
   const calculateGroupSizes = (total: number) => {
@@ -110,13 +113,18 @@ export function AddGroupModal({
     const { maxGroups } = calculateGroupSizes(totalStudents);
 
     // Group number validation
-    if (!groupNumber || isNaN(groupNum) || groupNum < 1 || groupNum > maxGroups) {
+    if (
+      !groupNumber ||
+      isNaN(groupNum) ||
+      groupNum < 1 ||
+      groupNum > maxGroups
+    ) {
       setGroupNumberError(`Must be between 1 and ${maxGroups}`);
       return false;
     }
 
     // Check if group number already exists (convert to number for comparison)
-    if (groupMeta.usedNumbers.some(num => Number(num) === groupNum)) {
+    if (groupMeta.usedNumbers.some((num) => Number(num) === groupNum)) {
       setGroupNumberError("This group number already exists");
       return false;
     }
@@ -152,37 +160,29 @@ export function AddGroupModal({
     e.preventDefault();
     if (!validateInputs()) return;
 
-    setIsLoading(true);
     try {
-      const response = await fetch(`/api/courses/${courseCode}/groups`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupNumber,
+      await createGroupMutation.mutateAsync({
+        courseSlug: courseCode,
+        groupData: {
+          groupNumber: parseInt(groupNumber) || 0,
           groupName,
           studentIds: selectedStudents,
-          leaderId: selectedLeader,
-        }),
+          leaderId: selectedLeader || undefined,
+        },
       });
 
-      if (!response.ok) throw new Error("Failed to create group");
-
-      toast.success("Group created successfully!");
       setOpen(false);
-      
+
       // Reset form
       setGroupNumber("");
       setGroupName("");
       setSelectedStudents([]);
       setSelectedLeader("");
       setStudentSearch("");
-      
+
       onGroupAdded?.();
     } catch (error) {
-      console.error(error);
-      toast.error("Error creating group");
-    } finally {
-      setIsLoading(false);
+      // Error is handled by the mutation hook
     }
   };
 
@@ -348,9 +348,9 @@ export function AddGroupModal({
             <Button
               type="submit"
               className="w-1/2 bg-[#124A69] text-white"
-              disabled={isLoading}
+              disabled={createGroupMutation.isPending}
             >
-              {isLoading ? (
+              {createGroupMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Adding...

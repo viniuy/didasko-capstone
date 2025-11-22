@@ -139,7 +139,7 @@ export async function createGroup(
 
   return prisma.group.create({
     data: {
-      number: data.groupNumber,
+      number: String(data.groupNumber),
       name: data.groupName,
       courseId: course.id,
       leaderId: data.leaderId || null,
@@ -165,7 +165,8 @@ export async function updateGroup(
   }
 ) {
   const updateData: any = {};
-  if (data.groupNumber !== undefined) updateData.number = data.groupNumber;
+  if (data.groupNumber !== undefined)
+    updateData.number = String(data.groupNumber);
   if (data.groupName !== undefined) updateData.name = data.groupName;
   if (data.leaderId !== undefined) updateData.leaderId = data.leaderId;
 

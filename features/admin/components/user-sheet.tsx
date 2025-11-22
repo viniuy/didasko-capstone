@@ -26,6 +26,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
+import { useBreakGlassStatus } from "@/lib/hooks/queries";
 
 // Available departments
 const DEPARTMENTS = ["IT Department", "BA Department", "HM Department"];
@@ -89,27 +90,10 @@ export function UserSheet({
   const { data: session } = useSession();
   const [open, setOpen] = useState(mode === "edit");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
 
-  // Check if current user is temporary admin
-  useEffect(() => {
-    const checkTempAdmin = async () => {
-      if (session?.user?.id) {
-        try {
-          const response = await fetch(
-            `/api/break-glass/status?userId=${session.user.id}`
-          );
-          if (response.ok) {
-            const data = await response.json();
-            setIsCurrentUserTempAdmin(!!data.isActive);
-          }
-        } catch (error) {
-          console.error("Error checking temp admin status:", error);
-        }
-      }
-    };
-    checkTempAdmin();
-  }, [session]);
+  // Check if current user is temporary admin using React Query
+  const { data: breakGlassData } = useBreakGlassStatus(session?.user?.id);
+  const isCurrentUserTempAdmin = !!breakGlassData?.isActive;
 
   const initialFormData = {
     name: mode === "edit" ? user?.name || "" : "",

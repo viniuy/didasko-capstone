@@ -28,12 +28,6 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import {
-  coursesService,
-  criteriaService,
-  gradesService,
-  groupsService,
-} from "@/lib/services/client";
 import GradingTableHeader from "./grading-table-header";
 import GradingTableRow from "./grading-table-row";
 import * as XLSX from "xlsx";
@@ -68,7 +62,20 @@ import {
 import { HeaderSection } from "./header-section";
 import { BottomActionBar } from "./bottom-action-bar";
 import { EmptyState } from "./empty-state";
-import axiosInstance from "@/lib/axios";
+import axios from "@/lib/axios";
+import {
+  useStudentsByCourse,
+  useGroupStudents,
+  useGrades,
+  useSaveGrades,
+  useDeleteGrades,
+  useCriteriaByCourse,
+  useRecitationCriteria,
+  useCreateCriteria,
+  useUpdateCriteria,
+  useUploadImage,
+  useDeleteImage,
+} from "@/lib/hooks/queries";
 
 interface Student {
   id: string;
@@ -108,6 +115,7 @@ interface GradingReport {
     name: string;
   };
   isGroupCriteria: boolean;
+  isRecitationCriteria?: boolean;
 }
 
 interface RubricDetail {
@@ -385,7 +393,6 @@ export function GradingTable({
   const [totalPages, setTotalPages] = useState(1);
   const [totalStudents, setTotalStudents] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
   const [isLoadingGroup, setIsLoadingGroup] = useState(false);
   const [previousScores, setPreviousScores] = useState<Record<
     string,
@@ -439,187 +446,205 @@ export function GradingTable({
     }
   };
 
-  // Fetch grades when both date and criteria are available
-  // Optimized to reduce redundant calls
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!courseId || !selectedDate || !activeReport) {
-        // Clear data if prerequisites not met
-        if (!selectedDate || !activeReport) {
-          setStudents([]);
-          setScores({});
-        }
-        return;
-      }
+  // React Query hooks for data fetching
+  const formattedDate = selectedDate?.toISOString().split("T")[0];
 
-      setIsLoading(true);
-      setIsLoadingStudents(true);
-      try {
-        // 1. Fetch students (only if groupId changed or refreshKey changed)
-        let studentsData: Student[] = [];
-        if (isGroupView && groupId) {
-          setIsLoadingGroup(true);
-          try {
-            const studentsRes = await groupsService.getGroupStudents(
-              courseSlug,
-              groupId
-            );
-            studentsData = studentsRes.students || [];
-          } finally {
-            setIsLoadingGroup(false);
-          }
-        } else {
-          const studentsRes = await coursesService.getStudents(courseSlug);
-          studentsData = studentsRes.students || [];
-        }
-        setStudents(studentsData);
-        setIsLoadingStudents(false);
+  // Fetch students
+  const { data: studentsData, isLoading: isLoadingStudentsQuery } =
+    useStudentsByCourse(courseSlug, selectedDate || undefined);
+  const { data: groupStudentsData, isLoading: isLoadingGroupQuery } =
+    useGroupStudents(courseSlug, groupId || "");
 
-        // 2. Fetch grades for the selected date/criteria
-        const formattedDate = selectedDate.toISOString().split("T")[0];
-        const grades = await gradesService.getGrades(courseSlug, {
-          date: formattedDate,
-          courseCode,
-          courseSection,
-          criteriaId: activeReport.id,
-          groupId: isGroupView ? groupId : undefined,
-        });
-
-        // 3. Map grades by studentId
-        const gradesMap: Record<string, GradingScore> = {};
-        grades.forEach((grade: GradingScore) => {
-          gradesMap[grade.studentId] = grade;
-        });
-
-        // 4. Initialize scores state for all students, even those without grades
-        const newScores: Record<string, GradingScore> = {};
-        studentsData.forEach((student: Student) => {
-          newScores[student.id] = {
-            studentId: student.id,
-            scores:
-              gradesMap[student.id]?.scores ||
-              new Array(rubricDetails.length).fill(0),
-            total: gradesMap[student.id]?.total || 0,
-          };
-        });
-        setScores(newScores);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        toast.error("Failed to fetch data");
-      } finally {
-        setIsLoading(false);
-        setIsLoadingStudents(false);
-      }
-    };
-
-    fetchData();
-  }, [
-    courseId,
-    selectedDate,
-    activeReport?.id, // Only depend on id to avoid unnecessary refetches
-    courseCode,
-    courseSection,
-    groupId,
-    isGroupView,
+  // Fetch grades
+  const { data: gradesData, isLoading: isLoadingGrades } = useGrades(
     courseSlug,
+    {
+      date: formattedDate,
+      criteriaId: activeReport?.id,
+      courseCode,
+      courseSection,
+      groupId: isGroupView ? groupId : undefined,
+    }
+  );
+
+  // Determine which students to use
+  const currentStudents =
+    isGroupView && groupId
+      ? groupStudentsData?.students || []
+      : studentsData?.students || [];
+
+  const isLoadingStudents =
+    isGroupView && groupId ? isLoadingGroupQuery : isLoadingStudentsQuery;
+
+  // Update students and scores when data changes
+  useEffect(() => {
+    if (!selectedDate || !activeReport) {
+      setStudents([]);
+      setScores({});
+      return;
+    }
+
+    if (currentStudents.length > 0) {
+      setStudents(currentStudents);
+    }
+
+    if (gradesData && currentStudents.length > 0) {
+      // Map grades by studentId
+      const gradesMap: Record<string, GradingScore> = {};
+      (gradesData as GradingScore[]).forEach((grade: GradingScore) => {
+        gradesMap[grade.studentId] = grade;
+      });
+
+      // Initialize scores state for all students, even those without grades
+      const newScores: Record<string, GradingScore> = {};
+      currentStudents.forEach((student: Student) => {
+        newScores[student.id] = {
+          studentId: student.id,
+          scores:
+            gradesMap[student.id]?.scores ||
+            new Array(rubricDetails.length).fill(0),
+          total: gradesMap[student.id]?.total || 0,
+        };
+      });
+      setScores(newScores);
+    }
+  }, [
+    currentStudents,
+    gradesData,
+    selectedDate,
+    activeReport?.id,
     rubricDetails.length,
-    refreshKey, // Add refreshKey to trigger refetch when groups change
   ]);
 
-  // Check for existing criteria when date is selected or on mount
-  // Optimized to only fetch when necessary
+  // Update loading states
   useEffect(() => {
-    const checkExistingCriteria = async () => {
-      if (!selectedDate) {
-        setActiveReport(null);
-        setRubricDetails([]);
-        setSelectedReport("");
+    setIsLoading(isLoadingGrades || isLoadingStudents);
+    setIsLoadingGroup(isLoadingGroupQuery);
+  }, [isLoadingGrades, isLoadingStudents, isLoadingGroupQuery]);
+
+  // React Query hooks for criteria fetching
+  const { data: allCriteriaData, isLoading: isLoadingCriteria } =
+    useCriteriaByCourse(courseSlug);
+  const { data: recitationCriteriaData, isLoading: isLoadingRecitation } =
+    useRecitationCriteria(courseSlug);
+
+  // Determine which criteria to use
+  const allReports = isRecitationCriteria
+    ? recitationCriteriaData || []
+    : allCriteriaData || [];
+
+  // Check for existing criteria when date is selected or on mount
+  useEffect(() => {
+    if (!selectedDate) {
+      setActiveReport(null);
+      setRubricDetails([]);
+      setSelectedReport("");
+      setShowCriteriaDialog(false);
+      setSavedReports([]);
+      setInitialLoading(false);
+      setHasSelectedCriteria(false);
+      return;
+    }
+
+    // Don't show dialog if we already have an active report for this date
+    if (activeReport) {
+      const reportDate = new Date(activeReport.date);
+      reportDate.setHours(0, 0, 0, 0);
+      const selected = new Date(selectedDate);
+      selected.setHours(0, 0, 0, 0);
+      if (reportDate.getTime() === selected.getTime()) {
+        // Active report matches selected date, no need to refetch
+        setInitialLoading(false);
+        return;
+      }
+    }
+
+    // If criteria has already been selected, don't show dialog again
+    if (hasSelectedCriteria && activeReport) {
+      setInitialLoading(false);
+      return;
+    }
+
+    setInitialLoading(true);
+    setCriteriaLoading(isLoadingCriteria || isLoadingRecitation);
+
+    if (isLoadingCriteria || isLoadingRecitation) {
+      return;
+    }
+
+    try {
+      // Filter reports based on view type and selected date
+      let filteredReports: GradingReport[] = [];
+      if (isGroupView) {
+        // Group criteria is for the whole section, not specific to a group
+        filteredReports = (allReports as GradingReport[]).filter(
+          (report: GradingReport) => {
+            const reportDate = new Date(report.date);
+            reportDate.setHours(0, 0, 0, 0);
+            const selected = new Date(selectedDate);
+            selected.setHours(0, 0, 0, 0);
+            return (
+              report.isGroupCriteria === true &&
+              reportDate.getTime() === selected.getTime()
+            );
+          }
+        );
+      } else if (isRecitationCriteria) {
+        filteredReports = (allReports as GradingReport[]).filter(
+          (report: GradingReport) => {
+            const reportDate = new Date(report.date);
+            reportDate.setHours(0, 0, 0, 0);
+            const selected = new Date(selectedDate);
+            selected.setHours(0, 0, 0, 0);
+            return (
+              report.isRecitationCriteria === true &&
+              reportDate.getTime() === selected.getTime()
+            );
+          }
+        );
+      } else {
+        filteredReports = (allReports as GradingReport[]).filter(
+          (report: GradingReport) => {
+            const reportDate = new Date(report.date);
+            reportDate.setHours(0, 0, 0, 0);
+            const selected = new Date(selectedDate);
+            selected.setHours(0, 0, 0, 0);
+            return (
+              report.isGroupCriteria === false &&
+              report.isRecitationCriteria === false &&
+              reportDate.getTime() === selected.getTime()
+            );
+          }
+        );
+      }
+      setSavedReports(filteredReports);
+
+      // Auto-select the first report if one exists and no criteria has been selected
+      if (filteredReports.length > 0 && !hasSelectedCriteria && !activeReport) {
+        const firstReport = filteredReports[0];
+        setActiveReport(firstReport);
+        setRubricDetails(firstReport.rubrics);
+        setSelectedReport(firstReport.id);
+        setHasSelectedCriteria(true);
         setShowCriteriaDialog(false);
-        setSavedReports([]);
-        setInitialLoading(false);
-        setHasSelectedCriteria(false);
-        return;
+      } else if (!hasSelectedCriteria) {
+        // Only show dialog if no criteria has been selected yet and no report was auto-selected
+        setShowCriteriaDialog(true);
       }
-
-      // Don't show dialog if we already have an active report for this date
-      if (activeReport) {
-        const reportDate = new Date(activeReport.date);
-        reportDate.setHours(0, 0, 0, 0);
-        const selected = new Date(selectedDate);
-        selected.setHours(0, 0, 0, 0);
-        if (reportDate.getTime() === selected.getTime()) {
-          // Active report matches selected date, no need to refetch
-          setInitialLoading(false);
-          return;
-        }
-      }
-
-      // If criteria has already been selected, don't show dialog again
-      if (hasSelectedCriteria && activeReport) {
-        setInitialLoading(false);
-        return;
-      }
-
-      setInitialLoading(true);
-      setCriteriaLoading(true);
-
-      try {
-        // Fetch all criteria for this course
-        let allReports;
-        if (isGroupView) {
-          // Group criteria is for the whole section, not specific to a group
-          allReports = await criteriaService.getCriteria(courseSlug, {
-            isGroupCriteria: true,
-          });
-        } else if (isRecitationCriteria) {
-          allReports = await criteriaService.getCriteria(courseSlug, {
-            isRecitationCriteria: true,
-          });
-        } else {
-          allReports = await criteriaService.getCriteria(courseSlug);
-        }
-        // Filter reports for the selected date
-        const filteredReports = allReports.filter((report: GradingReport) => {
-          const reportDate = new Date(report.date);
-          reportDate.setHours(0, 0, 0, 0);
-          const selected = new Date(selectedDate);
-          selected.setHours(0, 0, 0, 0);
-          return reportDate.getTime() === selected.getTime();
-        });
-        setSavedReports(filteredReports);
-
-        // Auto-select the first report if one exists and no criteria has been selected
-        if (
-          filteredReports.length > 0 &&
-          !hasSelectedCriteria &&
-          !activeReport
-        ) {
-          const firstReport = filteredReports[0];
-          setActiveReport(firstReport);
-          setRubricDetails(firstReport.rubrics);
-          setSelectedReport(firstReport.id);
-          setHasSelectedCriteria(true);
-          setShowCriteriaDialog(false);
-        } else if (!hasSelectedCriteria) {
-          // Only show dialog if no criteria has been selected yet and no report was auto-selected
-          setShowCriteriaDialog(true);
-        }
-      } catch (error) {
-        console.error("Error fetching criteria:", error);
-        toast.error("Failed to load saved criteria", {
-          duration: 3000,
-          style: {
-            background: "#fff",
-            color: "#dc2626",
-            border: "1px solid #e5e7eb",
-          },
-        });
-      } finally {
-        setCriteriaLoading(false);
-        setInitialLoading(false);
-      }
-    };
-    checkExistingCriteria();
+    } catch (error) {
+      console.error("Error processing criteria:", error);
+      toast.error("Failed to load saved criteria", {
+        duration: 3000,
+        style: {
+          background: "#fff",
+          color: "#dc2626",
+          border: "1px solid #e5e7eb",
+        },
+      });
+    } finally {
+      setCriteriaLoading(false);
+      setInitialLoading(false);
+    }
   }, [
     selectedDate,
     courseId,
@@ -629,6 +654,9 @@ export function GradingTable({
     courseSlug,
     activeReport?.id,
     hasSelectedCriteria,
+    allReports,
+    isLoadingCriteria,
+    isLoadingRecitation,
   ]);
 
   // Reset scores and criteria selection when date changes
@@ -676,6 +704,14 @@ export function GradingTable({
     });
   };
 
+  // React Query mutations
+  const saveGradesMutation = useSaveGrades();
+  const deleteGradesMutation = useDeleteGrades();
+  const createCriteriaMutation = useCreateCriteria();
+  const updateCriteriaMutation = useUpdateCriteria();
+  const uploadImageMutation = useUploadImage();
+  const deleteImageMutation = useDeleteImage();
+
   const handleSaveGrades = async () => {
     if (!session?.user?.id || !selectedDate || !activeReport) {
       toast.error("Missing required information to save grades", {
@@ -690,84 +726,63 @@ export function GradingTable({
     }
 
     setIsSaving(true);
-    const savePromise = new Promise<string>(async (resolve, reject) => {
-      try {
-        const formattedDate = selectedDate.toISOString().split("T")[0];
+    try {
+      const formattedDate = selectedDate.toISOString().split("T")[0];
 
-        // Calculate total scores for each student
-        const gradesToSave = Object.values(scores).map((score) => {
-          const total = calculateTotal(score.scores);
+      // Calculate total scores for each student
+      const gradesToSave = Object.values(scores).map((score) => {
+        const total = calculateTotal(score.scores);
 
-          return {
-            studentId: score.studentId,
-            scores: score.scores,
-            total: total,
-            reportingScore: isRecitationCriteria ? 0 : total,
-            recitationScore: isRecitationCriteria ? total : 0,
-          };
-        });
+        return {
+          studentId: score.studentId,
+          scores: score.scores,
+          total: total,
+          reportingScore: isRecitationCriteria ? 0 : total,
+          recitationScore: isRecitationCriteria ? total : 0,
+        };
+      });
 
-        // Log the data being sent
-        console.log("Saving grades data:", {
+      // Log the data being sent
+      console.log("Saving grades data:", {
+        date: formattedDate,
+        criteriaId: activeReport.id,
+        courseCode,
+        courseSection,
+        grades: gradesToSave,
+        isRecitationCriteria,
+      });
+
+      // Save all grades in a single request
+      await saveGradesMutation.mutateAsync({
+        courseSlug,
+        gradeData: {
           date: formattedDate,
           criteriaId: activeReport.id,
           courseCode,
           courseSection,
           grades: gradesToSave,
           isRecitationCriteria,
-        });
+        },
+      });
 
-        // Save all grades in a single request
-        await gradesService.saveGrades(courseSlug, {
-          date: formattedDate,
-          criteriaId: activeReport.id,
-          courseCode,
-          courseSection,
-          grades: gradesToSave,
-          isRecitationCriteria,
-        });
-
-        // Update original scores after successful save
-        setOriginalScores(JSON.parse(JSON.stringify(scores)));
-        resolve("Grades saved successfully");
-      } catch (error: any) {
-        console.error("Error saving grades:", {
-          error,
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status,
-          url: error.config?.url,
-          params: error.config?.params,
-          stack: error.stack,
-        });
-
-        if (error.response?.status === 500) {
-          reject(
-            error.response?.data?.details ||
-              "Server error occurred while saving grades. Please try again."
-          );
-        } else if (error.response?.data?.message) {
-          reject(error.response.data.message);
-        } else {
-          reject(
-            "Failed to save grades. Please check your data and try again."
-          );
-        }
-      } finally {
-        setIsSaving(false);
-      }
-    });
-
-    toast.promise(savePromise, {
-      loading: "Saving Grades",
-      success: (message: string) => "Grades saved successfully",
-      error: (err: string) => err,
-    });
+      // Update original scores after successful save
+      setOriginalScores(JSON.parse(JSON.stringify(scores)));
+    } catch (error: any) {
+      console.error("Error saving grades:", {
+        error,
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        stack: error.stack,
+      });
+      // Error is handled by the mutation hook
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleApplyCriteria = async () => {
     if (selectedReport) {
-      setIsLoadingStudents(true);
       const selected = savedReports.find((c) => c.id === selectedReport);
       if (selected) {
         setActiveReport(selected);
@@ -775,9 +790,6 @@ export function GradingTable({
         setHasSelectedCriteria(true); // Mark criteria as selected
       }
       setShowCriteriaDialog(false);
-      // Add a small delay to ensure smooth transition
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setIsLoadingStudents(false);
     }
   };
 
@@ -796,11 +808,11 @@ export function GradingTable({
         // For now, we'll delete all grades for the criteria/date and recreate without this student
         // This is a limitation - the service should support studentId filter
         if (activeReport?.id && formattedDate) {
-          await gradesService.deleteGrades(
+          await deleteGradesMutation.mutateAsync({
             courseSlug,
-            activeReport.id,
-            formattedDate
-          );
+            criteriaId: activeReport.id,
+            date: formattedDate,
+          });
         }
 
         // Update local state
@@ -1187,17 +1199,24 @@ export function GradingTable({
       if (dateToSend) {
         dateToSend.setHours(0, 0, 0, 0);
       }
-      const response = await axiosInstance.post(endpoint, {
-        name: newReport.name,
-        rubrics,
-        scoringRange: newReport.scoringRange,
-        passingScore: newReport.passingScore,
-        userId: session.user.id,
-        date: dateToSend ? dateToSend.toISOString() : undefined,
-        isGroupCriteria: isGroupView,
-        isRecitationCriteria: isRecitationCriteria,
+      const created = await createCriteriaMutation.mutateAsync({
+        courseSlug,
+        criteriaData: {
+          name: newReport.name,
+          userId: session.user.id,
+          date: dateToSend
+            ? dateToSend.toISOString()
+            : new Date().toISOString(),
+          scoringRange: Number(newReport.scoringRange),
+          passingScore: Number(newReport.passingScore),
+          isGroupCriteria: isGroupView,
+          isRecitationCriteria: isRecitationCriteria,
+          rubrics: rubrics.map((r) => ({
+            name: r.name,
+            percentage: r.percentage,
+          })),
+        },
       });
-      const created = response.data;
       setSavedReports((prev) => [created, ...prev]);
       setActiveReport(created);
       setRubricDetails(created.rubrics);
@@ -1252,11 +1271,17 @@ export function GradingTable({
             endpoint = `/courses/${courseSlug}/criteria`;
           }
 
-          const response = await axiosInstance.get(endpoint);
+          // Use React Query data instead of fetching
+          const allReportsData = isRecitationCriteria
+            ? recitationCriteriaData || []
+            : allCriteriaData || [];
+
           // Filter group criteria if in group view (group criteria is for the whole section)
           const reports = isGroupView
-            ? response.data.filter((r: any) => r.isGroupCriteria === true)
-            : response.data.filter(
+            ? (allReportsData as GradingReport[]).filter(
+                (r: any) => r.isGroupCriteria === true
+              )
+            : (allReportsData as GradingReport[]).filter(
                 (r: any) =>
                   r.isGroupCriteria === false &&
                   r.isRecitationCriteria === false
@@ -2053,30 +2078,34 @@ export function GradingTable({
             };
           });
 
-          await gradesService.saveGrades(courseSlug, {
-            date: formattedDate,
-            criteriaId: editingReport.id,
-            courseCode,
-            courseSection,
-            grades: gradesToSave,
-            isRecitationCriteria,
+          await saveGradesMutation.mutateAsync({
+            courseSlug,
+            gradeData: {
+              date: formattedDate,
+              criteriaId: editingReport.id,
+              courseCode,
+              courseSection,
+              grades: gradesToSave,
+              isRecitationCriteria,
+            },
           });
         }
       }
 
       // Use the new PUT endpoint
-      const updated = await criteriaService.update(
+      const updated = await updateCriteriaMutation.mutateAsync({
         courseSlug,
-        editingReport.id,
-        {
+        criteriaId: editingReport.id,
+        criteriaData: {
           name: newReport.name,
-          rubrics,
-          scoringRange: newReport.scoringRange,
-          passingScore: newReport.passingScore,
-          isGroupCriteria: isGroupView,
-          isRecitationCriteria: isRecitationCriteria,
-        }
-      );
+          rubrics: rubrics.map((r) => ({
+            name: r.name,
+            percentage: r.percentage,
+          })),
+          scoringRange: Number(newReport.scoringRange),
+          passingScore: Number(newReport.passingScore),
+        },
+      });
       setSavedReports((prev) =>
         prev.map((report) => (report.id === updated.id ? updated : report))
       );
@@ -2122,31 +2151,20 @@ export function GradingTable({
       const student = students[index];
       if (!student) return;
 
-      const formData = new FormData();
-      formData.append("image", file);
+      // Use the upload mutation
+      const result = await uploadImageMutation.mutateAsync(file);
 
-      const response = await axiosInstance.post(
-        `/courses/${courseSlug}/students/${student.id}/image`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-
-      if (response.data) {
+      if (result?.imageUrl) {
         // Update the student's image in the local state
         setStudents((prevStudents) =>
           prevStudents.map((s) =>
-            s.id === student.id ? { ...s, image: response.data.imageUrl } : s
+            s.id === student.id ? { ...s, image: result.imageUrl } : s
           )
         );
-        toast.success("Profile picture updated successfully");
       }
     } catch (error) {
       console.error("Error uploading image:", error);
-      toast.error("Failed to upload profile picture");
+      // Error is handled by the mutation hook
       throw error;
     }
   };
@@ -2156,12 +2174,10 @@ export function GradingTable({
 
     try {
       setIsSaving(true);
-      const formData = new FormData();
+
       // Convert base64 to blob
-      const base64Response = await axiosInstance.get(tempImage.dataUrl, {
-        responseType: "arraybuffer",
-      });
-      const blob = new Blob([base64Response.data]);
+      const base64Response = await fetch(tempImage.dataUrl);
+      const blob = await base64Response.blob();
 
       // Get file extension from data URL
       const ext = tempImage.dataUrl.split(";")[0].split("/")[1];
@@ -2169,51 +2185,31 @@ export function GradingTable({
 
       // Create file from blob with proper name and type
       const file = new File([blob], fileName, { type: `image/${ext}` });
-      formData.append("image", file);
 
-      const uploadResponse = await axiosInstance.post("/upload", formData);
-      const { imageUrl } = uploadResponse.data;
+      // Use the upload mutation
+      const result = await uploadImageMutation.mutateAsync(file);
+      const imageUrl = result?.imageUrl;
 
-      // Update the student's image in the database
-      const student = students[index];
-      const updateResponse = await axiosInstance.put(
-        `/students/${student.id}/image`,
-        { imageUrl }
-      );
-      const updatedStudent = updateResponse.data;
+      if (imageUrl) {
+        // Update student list with new image URL
+        setStudents((prev) =>
+          prev.map((student, i) =>
+            i === index ? { ...student, image: imageUrl } : student
+          )
+        );
 
-      // Update student list with new image URL
-      setStudents((prev) =>
-        prev.map((student, i) =>
-          i === index ? { ...student, image: imageUrl } : student
-        )
-      );
+        // Clear temp image
+        setTempImage(null);
 
-      // Clear temp image
-      setTempImage(null);
-
-      // Show success message
-      setShowSuccessMessage((prev) => ({ ...prev, [index]: true }));
-      setTimeout(() => {
-        setShowSuccessMessage((prev) => ({ ...prev, [index]: false }));
-      }, 3000);
+        // Show success message
+        setShowSuccessMessage((prev) => ({ ...prev, [index]: true }));
+        setTimeout(() => {
+          setShowSuccessMessage((prev) => ({ ...prev, [index]: false }));
+        }, 3000);
+      }
     } catch (error) {
       console.error("Error saving image:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save image",
-        {
-          duration: 3000,
-          style: {
-            background: "#fff",
-            color: "#dc2626",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-        }
-      );
+      // Error is handled by the mutation hook
     } finally {
       setIsSaving(false);
     }
@@ -2224,19 +2220,10 @@ export function GradingTable({
       try {
         const student = students[imageToRemove.index];
 
-        // Delete the image file from public/uploads
+        // Delete the image file
         if (student.image) {
-          const deleteResponse = await axiosInstance.delete("/upload", {
-            data: { imageUrl: student.image },
-          });
+          await deleteImageMutation.mutateAsync(student.image);
         }
-
-        // Update the database
-        const updateResponse = await axiosInstance.put(
-          `/students/${student.id}/image`,
-          { imageUrl: null }
-        );
-        const updatedStudent = updateResponse.data;
 
         // Update local state
         setStudents((prev) =>
@@ -2251,19 +2238,19 @@ export function GradingTable({
           setTempImage(null);
         }
         setImageToRemove(null);
-        toast.success("Profile picture removed successfully");
+        // Success toast is handled by the mutation hook
       } catch (error) {
         console.error("Error removing image:", error);
-        toast.error("Failed to remove profile picture");
+        // Error is handled by the mutation hook
       }
     }
   };
 
   const handleRemoveImage = async (student: Student) => {
     try {
-      await axiosInstance.delete(
-        `/courses/${courseSlug}/students/${student.id}/image`
-      );
+      if (student.image) {
+        await deleteImageMutation.mutateAsync(student.image);
+      }
 
       // Update the student's image in the local state
       setStudents((prevStudents) =>
@@ -2271,10 +2258,10 @@ export function GradingTable({
           s.id === student.id ? { ...s, image: undefined } : s
         )
       );
-      toast.success("Profile picture removed successfully");
+      // Success toast is handled by the mutation hook
     } catch (error) {
       console.error("Error removing image:", error);
-      toast.error("Failed to remove profile picture");
+      // Error is handled by the mutation hook
       throw error;
     }
   };

@@ -45,7 +45,13 @@ import toast from "react-hot-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
-import { coursesService, usersService } from "@/lib/services/client";
+import { usersService } from "@/lib/services/client";
+import {
+  useCourses,
+  useCoursesStatsBatch,
+  useFaculty,
+  useBulkArchiveCourses,
+} from "@/lib/hooks/queries";
 import {
   Sheet,
   SheetContent,
@@ -83,6 +89,7 @@ import {
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import axiosInstance from "@/lib/axios";
+import axios from "@/lib/axios";
 
 interface CourseStats {
   passingRate: number;
@@ -651,6 +658,19 @@ export function CourseDataTable({
   // Responsive items per page
   const itemsPerPage = useItemsPerPage();
 
+  // React Query hooks
+  const { data: coursesData, isLoading: isLoadingCourses } = useCourses();
+  const { data: facultyData } = useFaculty();
+  const bulkArchiveMutation = useBulkArchiveCourses();
+
+  // Get course slugs for batch stats
+  const courseSlugs = useMemo(
+    () => initialCourses.map((c) => c.slug),
+    [initialCourses]
+  );
+  const { data: statsData, isLoading: isLoadingStats } =
+    useCoursesStatsBatch(courseSlugs);
+
   // State
   const [tableData, setTableData] = useState<Course[]>(initialCourses);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -725,190 +745,69 @@ export function CourseDataTable({
     hasError?: boolean;
   } | null>(null);
 
-  // Load initial data - only on first mount
+  // Sync faculty data from React Query
   useEffect(() => {
-    const loadAllData = async () => {
-      // Only show initial loading spinner on first load
-      if (!hasLoadedOnce) {
-        setIsInitialLoading(true);
-      }
-      setIsLoading(true);
+    if (facultyData && Array.isArray(facultyData)) {
+      const facultyOnly = facultyData.filter(
+        (user: any) => user.role === "FACULTY"
+      );
+      setFaculties(facultyOnly);
+    }
+  }, [facultyData]);
 
-      try {
-        // Batch all API calls together
-        const [facultyResponse, coursesWithStats] = await Promise.all([
-          // Fetch faculty
-          usersService.getFaculty().catch((error) => {
-            console.error("Error fetching faculty:", error);
-            return [];
-          }),
-          // Fetch stats for all courses in parallel
-          initialCourses.length > 0
-            ? Promise.all(
-                initialCourses.map(async (course) => {
-                  try {
-                    const stats = await coursesService.getStats(course.slug);
-                    return {
-                      ...course,
-                      stats,
-                    };
-                  } catch (error: any) {
-                    // Silently handle 404s (courses without stats yet)
-                    if (error?.response?.status !== 404) {
-                      console.error(
-                        `Error fetching stats for course ${course.code}:`,
-                        error
-                      );
-                    }
-                    return {
-                      ...course,
-                      stats: {
-                        passingRate: 0,
-                        attendanceRate: 0,
-                        totalStudents: 0,
-                      },
-                    };
-                  }
-                })
-              )
-            : Promise.resolve([]),
-        ]);
+  // Sync courses with stats from React Query
+  useEffect(() => {
+    if (initialCourses.length === 0) {
+      setTableData([]);
+      return;
+    }
 
-        if (Array.isArray(facultyResponse)) {
-          // Filter to only FACULTY role (exclude ACADEMIC_HEAD if needed)
-          const facultyOnly = facultyResponse.filter(
-            (user: any) => user.role === "FACULTY"
-          );
-          setFaculties(facultyOnly);
-        }
-
-        if (coursesWithStats.length > 0) {
-          setTableData(coursesWithStats);
-        } else if (initialCourses.length === 0) {
-          // If no courses, still set empty array to show empty state
-          setTableData([]);
-        }
-      } catch (error) {
-        console.error("Error loading initial data:", error);
-        toast.error("Failed to load some data");
-      } finally {
-        setIsInitialLoading(false);
-        setIsLoading(false);
-        setHasLoadedOnce(true);
-      }
+    // Map stats from batch response to courses
+    const defaultStats: CourseStats = {
+      passingRate: 0,
+      attendanceRate: 0,
+      totalStudents: 0,
     };
 
-    // Only load on first mount
-    if (!hasLoadedOnce) {
-      loadAllData();
-    } else {
-      // If already loaded, just update tableData if initialCourses changed
-      // but don't show loading spinner
-      // Only update if initialCourses has actual data - don't clear existing data
-      if (initialCourses.length > 0) {
-        // Update tableData with new courses, preserving stats from existing courses
-        setTableData((prevData) => {
-          // Only update if we have new courses, don't clear if initialCourses is empty
-          if (prevData.length === 0 && initialCourses.length > 0) {
-            // If we have no data but initialCourses has data, use initialCourses
-            return initialCourses.map((newCourse) => ({
-              ...newCourse,
-              stats: {
-                passingRate: 0,
-                attendanceRate: 0,
-                totalStudents: 0,
-              },
-            }));
-          }
-          // Merge new courses with existing data, preserving stats
-          return initialCourses.map((newCourse) => {
-            const existingCourse = prevData.find((c) => c.id === newCourse.id);
-            return existingCourse
-              ? { ...newCourse, stats: existingCourse.stats }
-              : {
-                  ...newCourse,
-                  stats: {
-                    passingRate: 0,
-                    attendanceRate: 0,
-                    totalStudents: 0,
-                  },
-                };
-          });
+    const statsMap = new Map<string, CourseStats>();
+    (statsData?.stats || []).forEach((item: any) => {
+      if (item.slug && item.stats) {
+        statsMap.set(item.slug, {
+          passingRate: item.stats.passingRate ?? 0,
+          attendanceRate: item.stats.attendanceRate ?? 0,
+          totalStudents: item.stats.totalStudents ?? 0,
         });
       }
-      // Don't clear tableData if initialCourses is empty - preserve existing data
-      // Only clear if we explicitly want to (e.g., on logout or data refresh)
-    }
-  }, [initialCourses, hasLoadedOnce]);
+    });
+
+    const coursesWithStats: Course[] = initialCourses.map((course) => {
+      const stats: CourseStats = statsMap.get(course.slug) || defaultStats;
+
+      return {
+        ...course,
+        stats,
+      };
+    });
+
+    setTableData(coursesWithStats);
+    setHasLoadedOnce(true);
+  }, [initialCourses, statsData]);
+
+  // Update loading state based on query
+  useEffect(() => {
+    setIsInitialLoading(isLoadingStats && !hasLoadedOnce);
+    setIsLoading(isLoadingStats);
+  }, [isLoadingStats, hasLoadedOnce]);
 
   const refreshTableData = useCallback(async (skipStats = false) => {
     try {
       setIsRefreshing(true);
-      const data = await coursesService.getCourses();
-
-      if (data && Array.isArray(data)) {
-        const courses = data;
-        if (skipStats) {
-          // Just update the courses without fetching stats - preserve existing stats
-          setTableData((prevData) =>
-            courses.map((newCourse: Course) => {
-              const existingCourse = prevData.find(
-                (c) => c.id === newCourse.id
-              );
-              return existingCourse
-                ? { ...newCourse, stats: existingCourse.stats }
-                : {
-                    ...newCourse,
-                    stats: {
-                      passingRate: 0,
-                      attendanceRate: 0,
-                      totalStudents: 0,
-                    },
-                  };
-            })
-          );
-        } else {
-          // Fetch stats only if explicitly requested
-          const coursesWithStats = await Promise.all(
-            courses.map(async (course: Course) => {
-              try {
-                const stats = await coursesService.getStats(course.slug);
-                return {
-                  ...course,
-                  stats,
-                };
-              } catch (error: any) {
-                // Silently handle 404s - course has no stats yet
-                if (error?.response?.status === 404) {
-                  return {
-                    ...course,
-                    stats: {
-                      passingRate: 0,
-                      attendanceRate: 0,
-                      totalStudents: 0,
-                    },
-                  };
-                }
-
-                // Log other errors but still return default stats
-                console.warn(
-                  `Could not fetch stats for course ${course.code}:`,
-                  error?.response?.status
-                );
-
-                return {
-                  ...course,
-                  stats: {
-                    passingRate: 0,
-                    attendanceRate: 0,
-                    totalStudents: 0,
-                  },
-                };
-              }
-            })
-          );
-          setTableData(coursesWithStats);
-        }
+      // React Query will handle the refetch automatically
+      // We just need to invalidate queries if needed
+      // Stats will be refetched automatically via useCoursesStatsBatch
+      if (!skipStats) {
+        // Stats will be refetched via React Query automatically
+        // No manual fetching needed
       }
     } catch (error: any) {
       console.error("Error refreshing table data:", error);
@@ -1177,7 +1076,7 @@ export function CourseDataTable({
         )
       );
 
-      await axiosInstance.patch("/courses/bulk-archive", {
+      await bulkArchiveMutation.mutateAsync({
         courseIds: coursesToArchive,
         status: "ARCHIVED",
       });
@@ -1265,7 +1164,7 @@ export function CourseDataTable({
         )
       );
 
-      await axiosInstance.patch("/courses/bulk-archive", {
+      await bulkArchiveMutation.mutateAsync({
         courseIds,
         status: "ACTIVE",
       });
@@ -1820,10 +1719,18 @@ export function CourseDataTable({
       const validCourses: any[] = [];
 
       // Fetch existing courses once instead of in a loop
-      const existingCoursesResponse = await coursesService.getCourses();
-      const existingCourses = Array.isArray(existingCoursesResponse)
-        ? existingCoursesResponse
-        : existingCoursesResponse.courses || [];
+      // Use React Query hook data if available
+      let existingCourses: any[] = [];
+      if (coursesData?.courses) {
+        existingCourses = coursesData.courses;
+      } else {
+        // Fallback: fetch directly if hook data not available
+        // This should rarely happen as useCourses should provide the data
+        const response = await axios.get("/courses");
+        existingCourses = Array.isArray(response.data)
+          ? response.data
+          : response.data.courses || [];
+      }
 
       for (let rowIndex = 0; rowIndex < previewData.length; rowIndex++) {
         const row = previewData[rowIndex];

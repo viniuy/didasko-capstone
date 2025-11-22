@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import axiosInstance from "@/lib/axios";
+import { useUsers } from "@/lib/hooks/queries";
 
 interface User {
   id: string;
@@ -28,53 +28,44 @@ const LoadingSkeleton = () => (
 
 export default function UserIdSearch() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [shouldSearch, setShouldSearch] = useState(false);
 
-  const handleSearch = async () => {
+  // React Query hook - only fetch when shouldSearch is true
+  const {
+    data: users = [],
+    isLoading: isSearching,
+    error: queryError,
+  } = useUsers(
+    shouldSearch && searchQuery.trim()
+      ? { search: searchQuery.trim() }
+      : undefined
+  );
+
+  const handleSearch = () => {
     if (!searchQuery.trim()) {
-      setError("Please enter a user ID");
       return;
     }
-
-    setIsLoading(true);
-    setError(null);
-    setUser(null);
-
-    try {
-      // Search for user by ID - try exact match first
-      const response = await axiosInstance.get("/users", {
-        params: { search: searchQuery.trim() },
-      });
-
-      const users = Array.isArray(response.data)
-        ? response.data
-        : [response.data];
-
-      // Find exact ID match
-      const foundUser = users.find((u: User) => u.id === searchQuery.trim());
-
-      if (foundUser) {
-        setUser(foundUser);
-      } else if (users.length > 0) {
-        // If no exact match but found similar, use first result
-        setUser(users[0]);
-      } else {
-        setError("User not found");
-      }
-    } catch (err: any) {
-      console.error("Error searching user:", err);
-      setError(err.response?.data?.error || "Failed to search user");
-    } finally {
-      setIsLoading(false);
-    }
+    setShouldSearch(true);
   };
+
+  // Find user from search results
+  const foundUser =
+    shouldSearch && users.length > 0
+      ? users.find((u: User) => u.id === searchQuery.trim()) || users[0]
+      : null;
+
+  const error =
+    shouldSearch && users.length === 0 && !isSearching
+      ? "User not found"
+      : queryError
+      ? queryError instanceof Error
+        ? queryError.message
+        : "Failed to search user"
+      : null;
 
   const handleClear = () => {
     setSearchQuery("");
-    setUser(null);
-    setError(null);
+    setShouldSearch(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -115,10 +106,10 @@ export default function UserIdSearch() {
           </div>
           <Button
             onClick={handleSearch}
-            disabled={isLoading || !searchQuery.trim()}
+            disabled={isSearching || !searchQuery.trim()}
             className="w-full bg-white/10 hover:bg-white/20 text-white border border-white/20 disabled:opacity-50"
           >
-            {isLoading ? (
+            {isSearching ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Searching...
@@ -131,7 +122,7 @@ export default function UserIdSearch() {
             )}
           </Button>
 
-          {isLoading && (
+          {isSearching && (
             <div className="mt-4">
               <LoadingSkeleton />
             </div>
@@ -143,7 +134,7 @@ export default function UserIdSearch() {
             </div>
           )}
 
-          {user && !isLoading && (
+          {foundUser && !isSearching && (
             <div className="mt-4 bg-white/10 border border-white/20 rounded-lg p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -151,9 +142,11 @@ export default function UserIdSearch() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-semibold text-white truncate">
-                    {user.name || "No name"}
+                    {foundUser.name || "No name"}
                   </h3>
-                  <p className="text-xs text-white/70 truncate">{user.email}</p>
+                  <p className="text-xs text-white/70 truncate">
+                    {foundUser.email}
+                  </p>
                 </div>
               </div>
 
@@ -161,39 +154,41 @@ export default function UserIdSearch() {
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-white/60">User ID:</span>
                   <span className="text-xs font-mono text-white">
-                    {user.id}
+                    {foundUser.id}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-white/60">Role:</span>
                   <span className="text-xs text-white font-semibold uppercase">
-                    {user.role}
+                    {foundUser.role}
                   </span>
                 </div>
-                {user.department && (
+                {foundUser.department && (
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-white/60">Department:</span>
                     <span className="text-xs text-white">
-                      {user.department}
+                      {foundUser.department}
                     </span>
                   </div>
                 )}
-                {user.workType && (
+                {foundUser.workType && (
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-white/60">Work Type:</span>
-                    <span className="text-xs text-white">{user.workType}</span>
+                    <span className="text-xs text-white">
+                      {foundUser.workType}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-white/60">Status:</span>
                   <span
                     className={`text-xs font-semibold ${
-                      user.status === "ACTIVE"
+                      foundUser.status === "ACTIVE"
                         ? "text-green-300"
                         : "text-red-300"
                     }`}
                   >
-                    {user.status}
+                    {foundUser.status}
                   </span>
                 </div>
               </div>

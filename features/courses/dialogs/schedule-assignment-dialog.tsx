@@ -21,7 +21,11 @@ import {
 } from "@/components/ui/select";
 import { Calendar, Plus, Trash2, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
-import axiosInstance from "@/lib/axios";
+import {
+  useCreateCourse,
+  useImportCoursesWithSchedulesArray,
+  useAssignSchedules,
+} from "@/lib/hooks/queries";
 import { cn } from "@/lib/utils";
 
 const DAYS = [
@@ -90,8 +94,17 @@ export function ScheduleAssignmentDialog({
   const [currentSchedules, setCurrentSchedules] = useState<Schedule[]>([
     { day: "", fromTime: "", toTime: "" },
   ]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
+
+  // React Query mutations
+  const createCourseMutation = useCreateCourse();
+  const importCoursesMutation = useImportCoursesWithSchedulesArray();
+  const assignSchedulesMutation = useAssignSchedules();
+
+  const isSubmitting =
+    createCourseMutation.isPending ||
+    importCoursesMutation.isPending ||
+    assignSchedulesMutation.isPending;
 
   const currentCourse = courses[currentIndex];
   const progress = ((currentIndex + 1) / courses.length) * 100;
@@ -310,79 +323,22 @@ export function ScheduleAssignmentDialog({
   };
 
   const handleComplete = async (schedules: Record<number, Schedule[]>) => {
-    setIsSubmitting(true);
-
-    // Show loading toast based on mode
-    let loadingToast: string | number;
-    if (mode === "create") {
-      loadingToast = toast.loading("Creating course...", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
-    } else if (mode === "import") {
-      loadingToast = toast.loading("Importing courses...", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
-    } else {
-      loadingToast = toast.loading("Updating schedules...", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
-    }
-
     try {
       if (mode === "create") {
         // Create mode: Create course WITH schedules in one transaction
         const courseData = currentCourse;
         const schedulesToAdd = schedules[0] || [];
 
-        const response = await axiosInstance.post("/courses", {
+        await createCourseMutation.mutateAsync({
           ...courseData,
           schedules: schedulesToAdd.map((s) => ({
             day: s.day.slice(0, 3), // Convert to short form
             fromTime: s.fromTime,
             toTime: s.toTime,
           })),
-        });
+        } as any);
 
-        toast.success("Course created successfully!", {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#124A69",
-            secondary: "#fff",
-          },
-        });
+        // Success toast is handled by the mutation
       } else if (mode === "import") {
         // Import mode: Create courses with schedules
         const coursesWithSchedules = courses.map((course, index) => ({
@@ -395,33 +351,28 @@ export function ScheduleAssignmentDialog({
           classNumber: course.classNumber,
           status: course.status,
           facultyId: course.facultyId,
-          schedules: schedules[index] || [],
+          schedules: (schedules[index] || []).map((s) => ({
+            day: s.day.slice(0, 3), // Convert to short form
+            fromTime: s.fromTime,
+            toTime: s.toTime,
+          })),
         }));
 
-        const response = await axiosInstance.post(
-          "/courses/import-with-schedules",
-          { courses: coursesWithSchedules }
+        const response = await importCoursesMutation.mutateAsync(
+          coursesWithSchedules
         );
 
         // Close dialog immediately after import
         onOpenChange(false);
 
         // Process import results
-        if (response.data.results) {
-          const results = response.data.results;
-          const { success, failed } = results;
-
-          // Dismiss loading toast
-          toast.dismiss(loadingToast);
-
+        if (response?.results) {
+          const results = response.results;
           // Pass results to onComplete callback
           if (!isCanceling) {
             onComplete(results);
           }
         } else {
-          // Dismiss loading toast
-          toast.dismiss(loadingToast);
-
           // If no results, still call onComplete
           if (!isCanceling) {
             onComplete(null);
@@ -436,7 +387,8 @@ export function ScheduleAssignmentDialog({
 
         const schedulesToUpdate = schedules[0] || [];
 
-        await axiosInstance.put(`/courses/${courseSlug}/schedules`, {
+        await assignSchedulesMutation.mutateAsync({
+          courseSlug,
           schedules: schedulesToUpdate.map((s) => ({
             day: s.day.slice(0, 3), // Convert to short form
             fromTime: s.fromTime,
@@ -444,23 +396,7 @@ export function ScheduleAssignmentDialog({
           })),
         });
 
-        toast.success("Schedules updated successfully!", {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#124A69",
-            secondary: "#fff",
-          },
-        });
-
+        // Success toast is handled by the mutation
         // Close dialog for edit mode
         onOpenChange(false);
       }
@@ -476,30 +412,8 @@ export function ScheduleAssignmentDialog({
       setAllSchedules({});
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     } catch (error: any) {
+      // Error is already handled by the mutations
       console.error("Error handling schedules:", error);
-      const errorMessage =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to save schedules";
-      toast.error(errorMessage, {
-        id: loadingToast,
-        style: {
-          background: "#fff",
-          color: "#dc2626",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-        iconTheme: {
-          primary: "#dc2626",
-          secondary: "#fff",
-        },
-      });
-    } finally {
-      setIsSubmitting(false);
     }
   };
 

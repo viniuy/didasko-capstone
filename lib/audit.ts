@@ -2,13 +2,27 @@ import { PrismaClient } from "@prisma/client";
 
 // Create a separate PrismaClient instance for audit logging to prevent recursion
 // This instance should NOT have middleware applied
+// Note: We still need a separate instance to avoid recursion, but we'll configure it properly
 let auditPrisma: PrismaClient | null = null;
 
 function getAuditPrisma(): PrismaClient {
   if (!auditPrisma) {
     auditPrisma = new PrismaClient({
       log: process.env.NODE_ENV === "development" ? ["error"] : [],
+      // Use connection pooling to share connections efficiently
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
     });
+
+    // Clean up on process termination
+    if (process.env.NODE_ENV === "production") {
+      process.on("beforeExit", async () => {
+        await auditPrisma?.$disconnect();
+      });
+    }
   }
   return auditPrisma;
 }

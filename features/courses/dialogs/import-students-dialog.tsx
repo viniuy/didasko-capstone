@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, Download, AlertCircle } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { useImportStudentsToCourse } from "@/lib/hooks/queries";
 
 const MAX_PREVIEW_ROWS = 100;
 const EXPECTED_HEADERS = ["Student Number", "Full Name"];
@@ -66,6 +67,9 @@ export function StudentImportDialog({
   );
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+
+  // React Query hook
+  const importMutation = useImportStudentsToCourse();
 
   const validateHeaders = (headers: string[]): boolean => {
     const trimmedHeaders = headers.map((h) => h?.toString().trim() || "");
@@ -140,24 +144,10 @@ export function StudentImportDialog({
     });
 
     try {
-      const response = await fetch(
-        `/api/courses/${courseSlug}/students/import`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            students: previewData,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Import failed");
-      }
-
-      const result = await response.json();
+      const result = await importMutation.mutateAsync({
+        courseSlug,
+        students: previewData,
+      });
 
       setImportStatus(result);
       setImportProgress(null);

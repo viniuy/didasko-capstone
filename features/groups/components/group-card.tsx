@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Trash2, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { useDeleteGroup } from "@/lib/hooks/queries";
 
 interface GroupCardProps {
   group: Group;
@@ -28,45 +29,27 @@ export function GroupCard({
   courseCode,
   onGroupDeleted,
 }: GroupCardProps) {
-  const [isDeleting, setIsDeleting] = React.useState(false);
   const [isViewing, setIsViewing] = React.useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
   const router = useRouter();
 
+  // React Query hook
+  const deleteGroupMutation = useDeleteGroup();
+
   const handleDelete = async () => {
     try {
-      setIsDeleting(true);
-      console.log("🗑️ Deleting group:", group.id);
+      await deleteGroupMutation.mutateAsync({
+        courseSlug: courseCode,
+        groupId: group.id,
+      });
 
-      const response = await fetch(
-        `/api/courses/${courseCode}/groups/${group.id}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to delete group");
-      }
-
-      console.log("✅ API responded, waiting for DB...");
-
-      // Wait longer to ensure database transaction completes
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      console.log("🔄 Refreshing data...");
       if (onGroupDeleted) {
         await onGroupDeleted();
       }
 
-      console.log("✅ Refresh complete");
-      toast.success("Group disbanded successfully");
-    } catch (error) {
-      console.error("❌ Error deleting group:", error);
-      toast.error("Failed to delete group");
-    } finally {
-      setIsDeleting(false);
       setShowConfirmDialog(false);
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
@@ -149,9 +132,9 @@ export function GroupCard({
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-[#124A69] hover:bg-gray-600 text-white w-full sm:w-auto"
-              disabled={isDeleting}
+              disabled={deleteGroupMutation.isPending}
             >
-              {isDeleting ? "Deleting..." : "Disband Group"}
+              {deleteGroupMutation.isPending ? "Deleting..." : "Disband Group"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

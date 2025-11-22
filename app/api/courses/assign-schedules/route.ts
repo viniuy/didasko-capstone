@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,7 +74,10 @@ export async function POST(request: NextRequest) {
 
         results.success++;
       } catch (error) {
-        console.error(`Error assigning schedules to course ${courseId}:`, error);
+        console.error(
+          `Error assigning schedules to course ${courseId}:`,
+          error
+        );
         results.failed++;
         results.errors.push({
           courseId,

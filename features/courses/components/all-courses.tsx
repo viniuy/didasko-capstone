@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpenText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Pagination,
   PaginationContent,
@@ -15,21 +15,22 @@ import {
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import axiosInstance from "@/lib/axios";
 import { Skeleton } from "@/components/ui/skeleton";
-import axios from "axios";
+import { useActiveCourses } from "@/lib/hooks/queries";
+import { useQueries } from "@tanstack/react-query";
+import axios from "@/lib/axios";
 
 interface Course {
   id: string;
   title: string;
   code: string;
-  description: string | null;
+  description?: string | null;
   semester: string;
   section: string;
   slug: string;
   attendanceStats?: {
     totalAbsents: number;
-    lastAttendanceDate: string | null;
+    lastAttendanceDate: string | Date | null;
   };
   latestAbsents?: number;
 }
@@ -139,76 +140,73 @@ const useItemsPerPage = () => {
 export default function AllCourses({ type }: AllCoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = useItemsPerPage();
 
-  const fetchSchedules = async () => {
-    if (!session?.user?.id) {
-      setIsLoading(false);
-      return;
+  // React Query hook
+  const { data: coursesData, isLoading: isLoadingCourses } = useActiveCourses({
+    facultyId: session?.user?.id,
+  });
+
+  const coursesList = coursesData?.courses || [];
+
+  // Prepare attendance queries for courses with last attendance date
+  const attendanceQueries = coursesList
+    .filter((course) => course.attendanceStats?.lastAttendanceDate)
+    .map((course) => {
+      const dateStr = new Date(course.attendanceStats!.lastAttendanceDate!)
+        .toISOString()
+        .split("T")[0];
+      return { courseSlug: course.slug, date: dateStr, course };
+    });
+
+  // Use useQueries for parallel attendance fetching
+  // Note: We can't directly use useAttendanceByCourse in useQueries, so we use the queryFn pattern
+  // but with the same structure as the hook for consistency
+  const attendanceResults = useQueries({
+    queries: attendanceQueries.map(({ courseSlug, date }) => ({
+      queryKey: ["attendance", "byCourse", courseSlug, date, { limit: 1000 }],
+      queryFn: async () => {
+        const params = new URLSearchParams();
+        params.append("date", date);
+        params.append("limit", "1000");
+        const { data } = await axios.get(
+          `/courses/${courseSlug}/attendance?${params.toString()}`
+        );
+        return { courseSlug, data };
+      },
+      enabled: !!courseSlug && !!date,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    })),
+  });
+
+  // Map attendance results to courses
+  const courses = coursesList.map((course) => {
+    if (!course.attendanceStats?.lastAttendanceDate) {
+      return { ...course, latestAbsents: 0 };
     }
 
-    try {
-      const response = await axiosInstance.get("/courses/active", {
-        params: { facultyId: session.user.id, isCourseActive: "true" },
-      });
+    const dateStr = new Date(course.attendanceStats.lastAttendanceDate)
+      .toISOString()
+      .split("T")[0];
 
-      const courses = response.data.courses || [];
+    const attendanceResult = attendanceResults.find(
+      (result) => result.data?.courseSlug === course.slug
+    );
 
-      // Fetch latest attendance absents for each course
-      const coursesWithLatestAbsents = await Promise.all(
-        courses.map(async (course: Course) => {
-          if (!course.attendanceStats?.lastAttendanceDate) {
-            return { ...course, latestAbsents: 0 };
-          }
-
-          try {
-            const dateStr = new Date(course.attendanceStats.lastAttendanceDate)
-              .toISOString()
-              .split("T")[0];
-
-            const attendanceResponse = await axiosInstance.get(
-              `/courses/${course.slug}/attendance`,
-              {
-                params: {
-                  date: dateStr,
-                  limit: 1000,
-                },
-              }
-            );
-
-            const attendanceRecords = attendanceResponse.data.attendance || [];
-            const absentsCount = attendanceRecords.filter(
-              (record: any) => record.status === "ABSENT"
-            ).length;
-
-            return { ...course, latestAbsents: absentsCount };
-          } catch (error) {
-            console.error(
-              `Error fetching latest attendance for ${course.code}:`,
-              error
-            );
-            return { ...course, latestAbsents: 0 };
-          }
-        })
-      );
-
-      setCourses(coursesWithLatestAbsents);
-    } catch (error) {
-      console.error("Error fetching courses:", error);
-      setCourses([]);
-    } finally {
-      setIsLoading(false);
+    if (attendanceResult?.data?.data) {
+      const attendanceRecords = attendanceResult.data.data.attendance || [];
+      const absentsCount = attendanceRecords.filter(
+        (record: any) => record.status === "ABSENT"
+      ).length;
+      return { ...course, latestAbsents: absentsCount };
     }
-  };
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchSchedules();
-    }
-  }, [status, session?.user?.id]);
+    return { ...course, latestAbsents: 0 };
+  });
+
+  const isLoading =
+    isLoadingCourses || attendanceResults.some((q) => q.isLoading);
 
   // Reset to page 1 when itemsPerPage changes
   useEffect(() => {

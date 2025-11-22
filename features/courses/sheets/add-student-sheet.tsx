@@ -12,7 +12,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Search, AlertCircle, Loader2, Users } from "lucide-react";
 import { Student } from "../types/types";
 import { getInitials } from "../utils/initials";
-import { studentsService } from "@/lib/services/client";
+import { useStudents } from "@/lib/hooks/queries";
 
 interface AddStudentSheetProps {
   isOpen: boolean;
@@ -29,68 +29,42 @@ export const AddStudentSheet = ({
 }: AddStudentSheetProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [searchResults, setSearchResults] = useState<Student[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
-  // Debounced search function
-  const performSearch = useCallback(
-    async (query: string) => {
-      if (!query.trim()) {
-        setSearchResults([]);
-        setIsSearching(false);
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        const response = await studentsService.getStudents({
-          search: query.trim(),
-          limit: 50, // Increase limit for better results
-        });
-        const students = Array.isArray(response.students)
-          ? response.students
-          : response.students || [];
-
-        // Map and filter to only students with RFID and not already enrolled
-        const filtered = students
-          .map((s: any) => ({
-            id: s.id,
-            lastName: s.lastName,
-            firstName: s.firstName,
-            middleInitial: s.middleInitial || "",
-            studentId: s.studentId,
-            image: s.image,
-            rfid_id: s.rfid_id,
-          }))
-          .filter(
-            (s: Student) => s.rfid_id && !enrolledStudentIds.includes(s.id)
-          );
-
-        setSearchResults(filtered);
-      } catch (error) {
-        console.error("Error searching students:", error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    },
-    [enrolledStudentIds]
+  // React Query hook with debounced search
+  const { data: studentsData, isLoading: isSearching } = useStudents(
+    searchQuery.trim()
+      ? {
+          search: searchQuery.trim(),
+          limit: 50,
+        }
+      : undefined
   );
 
-  // Debounce search input
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      performSearch(searchQuery);
-    }, 300); // 300ms debounce
+  // Filter students with RFID and not already enrolled
+  const searchResults = useMemo(() => {
+    if (!studentsData?.students) return [];
 
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery, performSearch]);
+    const students = Array.isArray(studentsData.students)
+      ? studentsData.students
+      : studentsData.students || [];
+
+    return students
+      .map((s: any) => ({
+        id: s.id,
+        lastName: s.lastName,
+        firstName: s.firstName,
+        middleInitial: s.middleInitial || "",
+        studentId: s.studentId,
+        image: s.image,
+        rfid_id: s.rfid_id,
+      }))
+      .filter((s: Student) => s.rfid_id && !enrolledStudentIds.includes(s.id));
+  }, [studentsData, enrolledStudentIds]);
 
   // Reset search when sheet closes
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery("");
-      setSearchResults([]);
     }
   }, [isOpen]);
 
@@ -154,7 +128,7 @@ export const AddStudentSheet = ({
                 </p>
               </div>
             ) : searchResults.length > 0 ? (
-              searchResults.map((student) => (
+              searchResults.map((student: Student) => (
                 <div
                   key={student.id}
                   className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"

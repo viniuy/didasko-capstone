@@ -15,43 +15,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
+import { useBreakGlassStatus, useSelfPromote } from "@/lib/hooks/queries";
 
 export default function Header() {
   const { data: session } = useSession();
-  const [isTempAdmin, setIsTempAdmin] = useState(false);
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [promotionCode, setPromotionCode] = useState("");
-  const [isPromoting, setIsPromoting] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
 
-  // Check if user is temporary admin
-  useEffect(() => {
-    const checkTempAdmin = async () => {
-      if (session?.user?.id) {
-        try {
-          setIsChecking(true);
-          const response = await fetch(
-            `/api/break-glass/status?userId=${session.user.id}`
-          );
-          if (response.ok) {
-            const data = await response.json();
-            setIsTempAdmin(!!data.isActive);
-          }
-        } catch (error) {
-          console.error("Error checking temp admin status:", error);
-        } finally {
-          setIsChecking(false);
-        }
-      } else {
-        setIsChecking(false);
-      }
-    };
-    checkTempAdmin();
+  // React Query hooks
+  const { data: breakGlassStatus } = useBreakGlassStatus(session?.user?.id);
+  const selfPromoteMutation = useSelfPromote();
 
-    // Poll every 5 seconds to check if break-glass status changed
-    const interval = setInterval(checkTempAdmin, 5000);
-    return () => clearInterval(interval);
-  }, [session]);
+  const isTempAdmin = !!breakGlassStatus?.isActive;
+  const isChecking = breakGlassStatus === undefined;
 
   // Close dialog when user is no longer a temporary admin
   useEffect(() => {
@@ -67,36 +43,20 @@ export default function Header() {
       return;
     }
 
-    setIsPromoting(true);
     try {
-      const response = await fetch("/api/break-glass/self-promote", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          promotionCode: promotionCode.trim(),
-        }),
+      await selfPromoteMutation.mutateAsync({
+        promotionCode: promotionCode.trim(),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to promote");
-      }
-
-      toast.success("You have been promoted to permanent Admin!");
       setShowPromoteDialog(false);
       setPromotionCode("");
-      setIsTempAdmin(false);
 
       // Reload page to refresh session
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to promote");
-    } finally {
-      setIsPromoting(false);
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
@@ -227,16 +187,16 @@ export default function Header() {
                 setShowPromoteDialog(false);
                 setPromotionCode("");
               }}
-              disabled={isPromoting}
+              disabled={selfPromoteMutation.isPending}
             >
               Cancel
             </Button>
             <Button
               className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
               onClick={handleSelfPromote}
-              disabled={isPromoting || !promotionCode.trim()}
+              disabled={selfPromoteMutation.isPending || !promotionCode.trim()}
             >
-              {isPromoting ? (
+              {selfPromoteMutation.isPending ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                   Promoting...

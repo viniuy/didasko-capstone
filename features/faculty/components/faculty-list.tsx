@@ -1,7 +1,8 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Role, WorkType } from "@prisma/client";
 import { UserCircle2 } from "lucide-react";
+import { useFaculty } from "@/lib/hooks/queries";
 import {
   Pagination,
   PaginationContent,
@@ -60,31 +61,10 @@ const FacultyList: React.FC<FacultyListProps> = ({
 }) => {
   // Ensure itemsPerPage is capped at 10
   const itemsPerPage = Math.min(rawItemsPerPage, 10);
-  const [faculty, setFaculty] = useState<FacultyMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
 
-  useEffect(() => {
-    const fetchFaculty = async () => {
-      try {
-        const response = await fetch("/api/users/faculty");
-        if (!response.ok) {
-          throw new Error("Failed to fetch faculty");
-        }
-        const data = await response.json();
-        setFaculty(data);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch faculty"
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchFaculty();
-  }, []);
+  // React Query hook
+  const { data: faculty = [], isLoading, error } = useFaculty();
 
   if (isLoading) {
     return (
@@ -95,15 +75,22 @@ const FacultyList: React.FC<FacultyListProps> = ({
   }
 
   if (error) {
-    return <div className="text-center text-red-500 p-4">Error: {error}</div>;
+    return (
+      <div className="text-center text-red-500 p-4">
+        Error:{" "}
+        {error instanceof Error ? error.message : "Failed to fetch faculty"}
+      </div>
+    );
   }
 
   const filteredFaculty = faculty
-    .filter((faculty) =>
+    .filter((faculty: { name: string }) =>
       faculty.name.toLowerCase().includes(search.toLowerCase())
     )
-    .filter((faculty) =>
-      sortOption.length > 0 ? sortOption.includes(faculty.department) : true
+    .filter((faculty: { department: string | null }) =>
+      sortOption.length > 0
+        ? sortOption.includes(faculty.department || "")
+        : true
     );
 
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -138,7 +125,7 @@ const FacultyList: React.FC<FacultyListProps> = ({
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 items-start justify-center min-h-[610px] max-h-[610px]">
-            {currentFaculty.map((faculty) => (
+            {currentFaculty.map((faculty: any) => (
               <div
                 key={faculty.id}
                 className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow mt-5 h-fit"

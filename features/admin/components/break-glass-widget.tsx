@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +32,12 @@ import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { Role } from "@prisma/client";
+import {
+  useBreakGlassStatus,
+  useActivateBreakGlass,
+  useDeactivateBreakGlass,
+  useFaculty,
+} from "@/lib/hooks/queries";
 
 interface FacultyMember {
   id: string;
@@ -40,20 +46,22 @@ interface FacultyMember {
   role: string;
 }
 
+type BreakGlassSession = {
+  id: string;
+  reason: string;
+  activatedAt: Date;
+  activatedBy: string | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+};
+
 interface BreakGlassStatus {
   isActive: boolean;
-  sessions?: Array<{
-    id: string;
-    reason: string;
-    activatedAt: Date;
-    activatedBy: string | null;
-    user: {
-      id: string;
-      name: string;
-      email: string;
-      role: string;
-    };
-  }>;
+  sessions?: BreakGlassSession[];
   session: {
     id: string;
     reason: string;
@@ -70,61 +78,26 @@ interface BreakGlassStatus {
 
 export function BreakGlassWidget() {
   const { data: session } = useSession();
-  const [status, setStatus] = useState<BreakGlassStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>("");
-  const [facultyList, setFacultyList] = useState<FacultyMember[]>([]);
-  const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
-  const [isActivating, setIsActivating] = useState(false);
+
+  // React Query hooks
+  const { data: status, isLoading } = useBreakGlassStatus();
+  const { data: facultyData, isLoading: isLoadingFaculty } = useFaculty();
+  const activateMutation = useActivateBreakGlass();
+  const deactivateMutation = useDeactivateBreakGlass();
+
+  // Filter faculty to only FACULTY role
+  const facultyList = useMemo(() => {
+    if (!facultyData || !Array.isArray(facultyData)) return [];
+    return facultyData.filter((user: FacultyMember) => user.role === "FACULTY");
+  }, [facultyData]);
 
   // Only show for Academic Head
   if (session?.user?.role !== Role.ACADEMIC_HEAD) {
     return null;
   }
-
-  const fetchStatus = async () => {
-    try {
-      const response = await fetch("/api/break-glass/status");
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch break-glass status:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStatus();
-    // Poll every 30 seconds to check status
-    const interval = setInterval(fetchStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch faculty list when dialog opens
-  useEffect(() => {
-    if (isDialogOpen) {
-      setIsLoadingFaculty(true);
-      fetch("/api/users/faculty")
-        .then((res) => res.json())
-        .then((data) => {
-          // Filter to only FACULTY role (exclude ACADEMIC_HEAD)
-          const facultyOnly = data.filter(
-            (user: FacultyMember) => user.role === "FACULTY"
-          );
-          setFacultyList(facultyOnly);
-        })
-        .catch((err) => {
-          console.error("Failed to fetch faculty:", err);
-          toast.error("Failed to load faculty list");
-        })
-        .finally(() => setIsLoadingFaculty(false));
-    }
-  }, [isDialogOpen]);
 
   const handleActivate = async () => {
     if (!selectedFacultyId) {
@@ -139,60 +112,24 @@ export function BreakGlassWidget() {
       return;
     }
 
-    setIsActivating(true);
     try {
-      const response = await fetch("/api/break-glass/activate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          facultyUserId: selectedFacultyId,
-          reason: reason.trim(),
-        }),
+      await activateMutation.mutateAsync({
+        facultyUserId: selectedFacultyId,
+        reason: reason.trim(),
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to activate break-glass");
-      }
-
-      const result = await response.json();
-      toast.success(
-        result.message || "Break-glass override activated successfully"
-      );
       setIsDialogOpen(false);
       setReason("");
       setSelectedFacultyId("");
-      await fetchStatus();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to activate break-glass override");
-    } finally {
-      setIsActivating(false);
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
   const handleDeactivate = async (userId: string) => {
     try {
-      const response = await fetch("/api/break-glass/deactivate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to deactivate break-glass");
-      }
-
-      toast.success("Break-glass override deactivated");
-      await fetchStatus();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to deactivate break-glass override");
+      await deactivateMutation.mutateAsync(userId);
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
@@ -243,7 +180,7 @@ export function BreakGlassWidget() {
               </h3>
               {isActive && status?.sessions && status.sessions.length > 0 ? (
                 <div className="space-y-3">
-                  {status.sessions.map((session) => (
+                  {status.sessions.map((session: BreakGlassSession) => (
                     <div key={session.id} className="space-y-1">
                       <p className="text-sm text-gray-700 dark:text-gray-300">
                         <span className="font-medium">Active:</span>{" "}
@@ -419,12 +356,12 @@ export function BreakGlassWidget() {
               disabled={
                 !selectedFacultyId ||
                 !reason.trim() ||
-                isActivating ||
+                activateMutation.isPending ||
                 isLoadingFaculty
               }
               className="bg-[#124A69] dark:bg-[#1a5f7f] hover:bg-[#0a2f42] dark:hover:bg-[#134f6b] text-white"
             >
-              {isActivating ? (
+              {activateMutation.isPending ? (
                 <>
                   <span className="animate-spin mr-2">⏳</span>
                   Activating...

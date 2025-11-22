@@ -11,6 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { X, Save } from "lucide-react";
 import { toast } from "react-hot-toast";
+import {
+  useUploadImage,
+  useDeleteImage,
+  useUpdateProfile,
+} from "@/lib/hooks/queries";
 
 interface EditProfileModalProps {
   open: boolean;
@@ -30,9 +35,12 @@ export default function EditProfileModal({
 }: EditProfileModalProps) {
   const [image, setImage] = useState(user.image);
   const [file, setFile] = useState<File | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // React Query hooks
+  const uploadImageMutation = useUploadImage();
+  const deleteImageMutation = useDeleteImage();
+  const updateProfileMutation = useUpdateProfile();
 
   const displayName = user.name || "Loading...";
   const initial = displayName.charAt(0).toUpperCase();
@@ -73,34 +81,17 @@ export default function EditProfileModal({
   const handleRemoveImage = async () => {
     if (!image) return;
 
-    setIsRemoving(true);
     try {
       // Delete from uploads folder
-      const res = await fetch("/api/upload", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: image }),
-      });
-      if (!res.ok) throw new Error("Failed to delete image file.");
+      await deleteImageMutation.mutateAsync(image);
 
       // Update user record to remove image
-      const update = await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: null }),
-      });
-      if (!update.ok) throw new Error("Failed to update profile.");
+      await updateProfileMutation.mutateAsync({ image: null });
 
       setImage("");
       setFile(null);
-      toast.success(
-        "Profile image removed successfully! Refresh to see changes."
-      );
     } catch (error) {
-      console.error("Remove error:", error);
-      toast.error("Failed to remove image.");
-    } finally {
-      setIsRemoving(false);
+      // Error is handled by the mutation hooks
     }
   };
 
@@ -111,36 +102,18 @@ export default function EditProfileModal({
       return;
     }
 
-    setIsSaving(true);
     try {
-      const formData = new FormData();
-      formData.append("image", file);
-      formData.append("userId", user.id);
+      // Upload image first
+      const uploadResult = await uploadImageMutation.mutateAsync(file);
+      const imageUrl = uploadResult.imageUrl;
 
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      // Update profile with new image URL
+      await updateProfileMutation.mutateAsync({ image: imageUrl });
 
-      if (!uploadRes.ok) throw new Error("Failed to upload image.");
-      const { imageUrl } = await uploadRes.json();
-
-      const res = await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imageUrl }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update profile.");
-
-      toast.success("Profile updated successfully! Refresh to see changes.");
       setFile(null);
       onClose();
     } catch (error) {
-      console.error("Save error:", error);
-      toast.error("Failed to save profile changes.");
-    } finally {
-      setIsSaving(false);
+      // Error is handled by the mutation hooks
     }
   };
 
@@ -181,7 +154,9 @@ export default function EditProfileModal({
             <button
               type="button"
               onClick={handleRemoveImage}
-              disabled={isRemoving}
+              disabled={
+                deleteImageMutation.isPending || updateProfileMutation.isPending
+              }
               className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-sm hover:bg-gray-100 z-10"
             >
               <X className="w-8 h-8 text-red-500" />
@@ -204,10 +179,14 @@ export default function EditProfileModal({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={
+              uploadImageMutation.isPending || updateProfileMutation.isPending
+            }
             className="w-1/2 ml-2 bg-[#003049] hover:bg-[#00263a]"
           >
-            {isSaving ? "Saving..." : "Save changes"}
+            {uploadImageMutation.isPending || updateProfileMutation.isPending
+              ? "Saving..."
+              : "Save changes"}
           </Button>
         </div>
       </DialogContent>

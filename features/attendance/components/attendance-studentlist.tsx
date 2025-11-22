@@ -68,8 +68,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import axiosInstance from "@/lib/axios";
-import axios from "axios";
+import axios from "@/lib/axios";
+import {
+  useStudentsByCourse,
+  useAttendanceByCourse,
+  useAttendanceStats,
+  useAttendanceDates,
+  useRecordAttendance,
+  useBatchAttendance,
+  useClearAttendance,
+  useCreateStudent,
+  useImportStudentsToCourse,
+} from "@/lib/hooks/queries";
 
 // Add interface for Excel data
 interface ExcelRow {
@@ -370,15 +380,25 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     );
   };
 
-  const fetchStudents = async () => {
-    if (!courseSlug) return;
+  // React Query hooks for data fetching
+  const { data: studentsData, isLoading: isLoadingStudents } =
+    useStudentsByCourse(courseSlug, selectedDate || undefined);
+  const { data: attendanceData, isLoading: isLoadingAttendance } =
+    useAttendanceByCourse(courseSlug, selectedDateStr || "", { limit: 1000 });
+  const { data: attendanceStatsData } = useAttendanceStats(courseSlug);
+  const { data: attendanceDatesData } = useAttendanceDates(courseSlug);
 
-    try {
-      setIsLoading(true);
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/students`
-      );
-      const students = response.data.students.map((student: any) => ({
+  // React Query mutations
+  const recordAttendanceMutation = useRecordAttendance();
+  const batchAttendanceMutation = useBatchAttendance();
+  const clearAttendanceMutation = useClearAttendance();
+  const createStudentMutation = useCreateStudent();
+  const importStudentsMutation = useImportStudentsToCourse();
+
+  // Update local state when React Query data changes
+  useEffect(() => {
+    if (studentsData?.students) {
+      const students = studentsData.students.map((student: any) => ({
         ...student,
         name: `${student.lastName}, ${student.firstName}${
           student.middleInitial ? ` ${student.middleInitial}.` : ""
@@ -387,49 +407,29 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         attendanceRecords: [],
       }));
       setStudentList(students);
-      setCourseInfo({
-        id: response.data.course.id,
-        code: response.data.course.code,
-        title: response.data.course.title,
-        description: response.data.course.description,
-        semester: response.data.course.semester,
-        section: response.data.course.section,
-        slug: response.data.course.slug,
-        academicYear: response.data.course.academicYear,
-        status: response.data.course.status,
-      });
-
-      if (selectedDate) {
-        await fetchAttendance(selectedDate);
+      if (studentsData.course) {
+        setCourseInfo({
+          id: studentsData.course.id,
+          code: studentsData.course.code,
+          title: studentsData.course.title,
+          description: studentsData.course.description,
+          semester: studentsData.course.semester,
+          section: studentsData.course.section,
+          slug: studentsData.course.slug,
+          academicYear: studentsData.course.academicYear,
+          status: studentsData.course.status,
+        });
       }
-    } catch (error) {
-      console.error("Error fetching students:", error);
-      setStudentList([]);
-      toast.error("Failed to fetch students");
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [studentsData]);
 
-  const fetchAttendance = async (date: Date) => {
-    if (!courseSlug) return;
-
-    try {
-      setIsDateLoading(true);
-      const dateStr = format(date, "yyyy-MM-dd");
-
-      const attendanceResponse = await axiosInstance.get<{
-        attendance: AttendanceRecord[];
-      }>(`/courses/${courseSlug}/attendance`, {
-        params: {
-          date: dateStr,
-          limit: 1000,
-        },
-      });
-
-      const attendanceData = attendanceResponse.data.attendance;
+  useEffect(() => {
+    if (attendanceData?.attendance && selectedDateStr) {
       const attendanceMap = new Map<string, AttendanceRecord>(
-        attendanceData.map((record) => [record.studentId, record])
+        attendanceData.attendance.map((record: any) => [
+          record.studentId,
+          record,
+        ])
       );
 
       setStudentList((prevStudents) =>
@@ -445,7 +445,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                     studentId: student.id,
                     courseId: courseInfo?.id || "",
                     status: record.status,
-                    date: dateStr,
+                    date: selectedDateStr,
                     reason: record.reason,
                   },
                 ]
@@ -453,79 +453,35 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           };
         })
       );
-
       setUnsavedChanges({});
-    } catch (error) {
-      console.error("Error fetching attendance:", error);
-      if (axios.isAxiosError(error)) {
-        toast.error(
-          error.response?.data?.error || "Failed to fetch attendance records"
-        );
-      } else {
-        toast.error("Failed to fetch attendance records");
-      }
-    } finally {
-      setIsDateLoading(false);
     }
-  };
+  }, [attendanceData, selectedDateStr, courseInfo?.id]);
 
-  const fetchAttendanceStats = async () => {
-    if (!courseSlug) return;
-
-    try {
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/attendance/stats`
-      );
-      setAttendanceStats(response.data);
-    } catch (error) {
-      console.error("Error fetching attendance stats:", error);
+  useEffect(() => {
+    if (attendanceStatsData) {
+      setAttendanceStats(attendanceStatsData);
     }
-  };
+  }, [attendanceStatsData]);
 
-  const fetchAttendanceDates = async () => {
-    if (!courseSlug) return;
-
-    try {
-      const response = await axiosInstance.get(
-        `/courses/${courseSlug}/attendance/dates`
-      );
-
-      if (!response.data || !Array.isArray(response.data.dates)) {
-        console.error("Invalid response structure:", response.data);
-        toast.error(
-          "Failed to fetch attendance dates: Invalid response format"
-        );
-        return;
-      }
-
-      const uniqueDates = response.data.dates
+  useEffect(() => {
+    if (attendanceDatesData?.dates) {
+      const uniqueDates = attendanceDatesData.dates
         .map((dateStr: string) => {
           const date = new Date(dateStr);
           return isNaN(date.getTime()) ? null : date;
         })
         .filter((date: Date | null): date is Date => date !== null)
         .sort((a: Date, b: Date) => a.getTime() - b.getTime());
-
       setAttendanceDates(uniqueDates);
-    } catch (error) {
-      console.error("Error fetching attendance dates:", error);
-      if (axios.isAxiosError(error)) {
-        toast.error(
-          error.response?.data?.error || "Failed to fetch attendance dates"
-        );
-      } else {
-        toast.error("Failed to fetch attendance dates");
-      }
     }
-  };
+  }, [attendanceDatesData]);
 
   useEffect(() => {
-    if (courseSlug) {
-      fetchStudents();
-      fetchAttendanceStats();
-      fetchAttendanceDates();
-    }
-  }, [courseSlug]);
+    setIsLoading(isLoadingStudents || isLoadingAttendance);
+    setIsDateLoading(isLoadingAttendance);
+  }, [isLoadingStudents, isLoadingAttendance]);
+
+  // Data fetching is now handled by React Query hooks above
 
   // Track window dimensions for responsive itemsPerPage
   useEffect(() => {
@@ -731,7 +687,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     toast.loading("Updating excused students...", { id: "attendance-update" });
 
     try {
-      await axiosInstance.post(`/courses/${courseSlug}/attendance`, {
+      await recordAttendanceMutation.mutateAsync({
+        courseSlug,
         date: nextDay.toISOString(),
         attendance: updates.map((u) => ({
           studentId: u.studentId,
@@ -894,17 +851,15 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           return;
         }
 
-        const promise = axiosInstance.post(
-          `/courses/${courseSlug}/attendance`,
-          {
-            date: nextDay.toISOString(),
-            attendance: updates.map((u) => ({
-              studentId: u.studentId,
-              status: u.status,
-              reason: u.reason ?? null,
-            })),
-          }
-        );
+        const promise = recordAttendanceMutation.mutateAsync({
+          courseSlug,
+          date: nextDay.toISOString(),
+          attendance: updates.map((u) => ({
+            studentId: u.studentId,
+            status: u.status,
+            reason: u.reason ?? undefined,
+          })),
+        });
 
         setStudentList((prev) =>
           prev.map((s) => {
@@ -1267,11 +1222,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     image?: string;
   }) => {
     try {
-      const response = await axiosInstance.post("/students", {
+      // Generate a temporary studentId if not provided
+      const studentId = `TEMP-${Date.now()}-${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      const newStudent = await createStudentMutation.mutateAsync({
         ...student,
+        studentId,
         courseId: courseSlug,
       });
-      const newStudent = response.data;
 
       const fullName = `${newStudent.lastName}, ${newStudent.firstName}${
         newStudent.middleInitial ? ` ${newStudent.middleInitial}.` : ""
@@ -1282,7 +1242,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         {
           id: newStudent.id,
           name: fullName,
-          image: newStudent.image,
+          image: newStudent.image ?? undefined,
           status: "NOT_SET" as AttendanceStatusWithNotSet,
           attendanceRecords: [],
         },
@@ -1303,12 +1263,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     image?: string;
   }) => {
     try {
-      const response = await axiosInstance.post(
-        `/courses/${courseSlug}/students`,
-        {
-          studentId: student.id,
-        }
-      );
+      await importStudentsMutation.mutateAsync({
+        courseSlug,
+        students: [{ studentId: student.id }],
+      });
 
       const fullName = `${student.lastName}, ${student.firstName}${
         student.middleInitial ? ` ${student.middleInitial}.` : ""
@@ -1377,13 +1335,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       return;
     }
 
-    const promise = axiosInstance.post(
-      `/courses/${courseSlug}/attendance/clear`,
-      {
-        date: dateStr,
-        recordsToDelete,
-      }
-    );
+    const promise = clearAttendanceMutation.mutateAsync({
+      courseSlug,
+      date: dateStr,
+    });
 
     toast.promise(promise, {
       loading: "Clearing attendance...",
@@ -1444,12 +1399,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     }
   };
 
-  useEffect(() => {
-    if (courseSlug && selectedDateStr) {
-      fetchAttendance(selectedDate!);
-      fetchAttendanceDates();
-    }
-  }, [selectedDateStr, courseSlug]);
+  // Removed - data is now fetched via React Query hooks
+  // useEffect(() => {
+  //   if (courseSlug && selectedDateStr) {
+  //     fetchAttendance(selectedDate!);
+  //     fetchAttendanceDates();
+  //   }
+  // }, [selectedDateStr, courseSlug]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1626,7 +1582,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
         if (!student) {
           try {
-            const res = await axiosInstance.post("/students/rfid", {
+            // Use axios directly for RFID lookup (no hook available yet)
+            const res = await axios.post("/students/rfid", {
               rfidUid: rfid,
             });
             const resolved = res.data?.student;
@@ -1791,17 +1748,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     try {
       const dateStr = format(selectedDate!, "yyyy-MM-dd");
 
-      const updatePromise = axiosInstance.post(
-        `/courses/${courseSlug}/attendance/batch`,
-        {
-          date: dateStr,
-          updates: Object.entries(sourceUpdates).map(([studentId, update]) => ({
+      const updatePromise = batchAttendanceMutation.mutateAsync({
+        courseSlug,
+        date: dateStr,
+        attendance: Object.entries(sourceUpdates).map(
+          ([studentId, update]) => ({
             studentId,
             status: update.status,
-            timestamp: update.timestamp,
-          })),
-        }
-      );
+            reason: undefined,
+          })
+        ),
+      });
 
       // Update local state with attendance records before awaiting the promise
       const records = Object.entries(sourceUpdates).map(
@@ -1865,11 +1822,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       toast.error("Failed to batch update attendance", {
         id: "rfid-attendance-saving",
       });
-      try {
-        await fetchAttendance(selectedDate!);
-      } catch (fetchError) {
-        console.error("Error fetching attendance after save:", fetchError);
-      }
+      // Attendance will be refetched automatically by React Query
     } finally {
       // Always re-enable buttons - reset both ref and state immediately
       isSavingRfidAttendanceRef.current = false;
@@ -1960,7 +1913,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         status: "PRESENT" as AttendanceStatus,
       }));
 
-      const promise = axiosInstance.post(`/courses/${courseSlug}/attendance`, {
+      const promise = recordAttendanceMutation.mutateAsync({
+        courseSlug,
         date: dateStr,
         attendance: attendanceRecords,
       });
@@ -2029,10 +1983,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         status: "PRESENT" as AttendanceStatus,
       }));
 
-      const promise = axiosInstance.post(`/courses/${courseSlug}/attendance`, {
+      const promise = recordAttendanceMutation.mutateAsync({
+        courseSlug,
         date: dateStr,
         attendance: attendanceRecords,
-        reason: null,
       });
 
       toast.promise(promise, {

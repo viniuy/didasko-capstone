@@ -2,9 +2,8 @@
 
 import { User, BookOpen, GraduationCap, Users } from "lucide-react";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
-import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { statsService } from "@/lib/services/client";
+import { useFacultyStats, useFacultyCount } from "@/lib/hooks/queries";
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -37,50 +36,27 @@ const StatCard = ({ icon, count, label, isLoading = false }: StatCardProps) => {
   );
 };
 
-async function getFacultyStats() {
-  try {
-    return await statsService.getFacultyStats();
-  } catch (error) {
-    console.error("Error fetching faculty stats:", error);
-    return { totalStudents: 0, totalCourses: 0, totalClasses: 0 };
-  }
-}
-
-async function getFacultyCount() {
-  try {
-    return await statsService.getFacultyCount();
-  } catch (error) {
-    console.error("Error fetching faculty count:", error);
-    return { fullTime: 0, partTime: 0 };
-  }
-}
-
 export default function Dashboard() {
   const { data: session } = useSession();
-  const [stats, setStats] = useState({
-    totalStudents: 0,
-    totalCourses: 0,
-    totalClasses: 0,
-    fullTime: 0,
-    partTime: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      setIsLoading(true);
-      if (session?.user?.role === "ACADEMIC_HEAD") {
-        const data = await getFacultyCount();
-        setStats((prev) => ({ ...prev, ...data }));
-      } else {
-        const data = await getFacultyStats();
-        setStats((prev) => ({ ...prev, ...data }));
-      }
-      setIsLoading(false);
-    };
+  // React Query hooks
+  const { data: facultyStats, isLoading: isLoadingStats } = useFacultyStats();
+  const { data: facultyCount, isLoading: isLoadingCount } = useFacultyCount();
 
-    fetchStats();
-  }, [session?.user?.role]);
+  const isLoading =
+    session?.user?.role === "ACADEMIC_HEAD" ? isLoadingCount : isLoadingStats;
+
+  const stats =
+    session?.user?.role === "ACADEMIC_HEAD"
+      ? {
+          fullTime: facultyCount?.fullTime || 0,
+          partTime: facultyCount?.partTime || 0,
+        }
+      : {
+          totalStudents: facultyStats?.totalStudents || 0,
+          totalCourses: facultyStats?.totalCourses || 0,
+          totalClasses: facultyStats?.totalClasses || 0,
+        };
 
   if (session?.user?.role === "ACADEMIC_HEAD") {
     return (

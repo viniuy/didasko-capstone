@@ -2,6 +2,7 @@ import type React from "react";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/shared/components/theme-provider";
 import { AuthProvider } from "@/shared/components/auth-provider";
+import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
@@ -74,7 +75,9 @@ export default function RootLayout({
             }}
           />
 
-          <AuthProvider>{children}</AuthProvider>
+          <QueryProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

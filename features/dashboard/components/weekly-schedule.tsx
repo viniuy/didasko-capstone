@@ -1,9 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { CourseSchedule } from "@prisma/client";
-import axiosInstance from "@/lib/axios";
 import { ScheduleResponse } from "@/shared/types/schedule";
+import { useFacultySchedules } from "@/lib/hooks/queries";
 
 const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -32,75 +31,23 @@ export default function WeeklySchedule({
   isViewingOtherTeacher = false,
 }: WeeklyScheduleProps) {
   const { data: session, status } = useSession();
-  const [schedules, setSchedules] = useState<ScheduleWithCourse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const currentDay = new Date().toLocaleDateString("en-US", {
     weekday: "short",
   });
 
-  const fetchSchedules = async () => {
-    console.log("Fetching schedules for teacher:", teacherInfo?.id);
+  // React Query hook
+  const {
+    data: schedulesData,
+    isLoading: loading,
+    error: queryError,
+  } = useFacultySchedules(teacherInfo?.id, { limit: 100 });
 
-    if (!teacherInfo?.id) {
-      console.log("No teacher ID provided");
-      setLoading(false);
-      return;
-    }
-
-    if (status === "loading") {
-      console.log("Session is still loading");
-      return;
-    }
-
-    if (status === "unauthenticated") {
-      console.log("User is not authenticated");
-      setError("Please sign in to view schedules");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      console.log("Making API request to fetch schedules");
-      const response = await axiosInstance.get<ScheduleResponse>(
-        "/courses/schedules",
-        {
-          params: {
-            facultyId: teacherInfo.id,
-            limit: 100,
-          },
-        }
-      );
-
-      console.log("API Response:", response.data);
-
-      if (response.data && Array.isArray(response.data.schedules)) {
-        console.log("Schedules found:", response.data.schedules.length);
-        setSchedules(
-          response.data.schedules as unknown as ScheduleWithCourse[]
-        );
-        setError(null);
-      } else {
-        console.error("Error fetching schedules: Invalid response format");
-        setError("Failed to load schedules");
-        setSchedules([]);
-      }
-    } catch (error) {
-      console.error("Error in fetchSchedules:", error);
-      setError("Failed to load schedules");
-      setSchedules([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    console.log("WeeklySchedule mounted/updated");
-    console.log("Teacher Info:", teacherInfo);
-    console.log("Session Status:", status);
-    setLoading(true);
-    fetchSchedules();
-  }, [teacherInfo?.id, status]);
+  const schedules = (schedulesData?.schedules || []) as ScheduleWithCourse[];
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : "Failed to load schedules"
+    : null;
 
   const getSchedulesForDay = (dayName: string) => {
     // Map abbreviated day names to full day names for comparison

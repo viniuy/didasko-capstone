@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { PrismaClient, CourseStatus } from "@prisma/client";
+import { CourseStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
-
-const prisma = new PrismaClient();
 
 export async function PATCH(request: NextRequest) {
   let body: { courseIds?: string[]; status?: string } = {};
@@ -108,7 +107,7 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Bulk archive error:", error);
-    
+
     // Log failure
     try {
       const session = await getServerSession(authOptions);
@@ -125,7 +124,8 @@ export async function PATCH(request: NextRequest) {
           module: "Course",
           reason: `Failed to update course status`,
           status: "FAILED",
-          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
           metadata: {
             courseIds: body.courseIds || [],
             attemptedStatus: body.status,
@@ -135,7 +135,7 @@ export async function PATCH(request: NextRequest) {
     } catch (logError) {
       console.error("Error logging failure:", logError);
     }
-    
+
     return NextResponse.json(
       {
         error: "Failed to update courses",

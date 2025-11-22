@@ -58,7 +58,6 @@ import {
 } from "@/components/ui/svdialog";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import axiosInstance from "@/lib/axios";
 import {
   Pagination,
   PaginationContent,
@@ -67,6 +66,15 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import {
+  useUsers,
+  useBreakGlassStatus,
+  usePromoteUser,
+  useImportUsers,
+  queryKeys,
+} from "@/lib/hooks/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import axios from "@/lib/axios";
 import {
   ColumnDef,
   flexRender,
@@ -234,46 +242,46 @@ export function AdminDataTable({
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [userToPromote, setUserToPromote] = useState<User | null>(null);
   const [promotionCode, setPromotionCode] = useState("");
-  const [isPromoting, setIsPromoting] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<Role | null>(null);
   const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
 
-  // Check if current user is temporary admin on mount
+  // React Query hooks
+  const { data: currentUserBreakGlass } = useBreakGlassStatus(
+    session?.user?.id
+  );
+  const promoteUserMutation = usePromoteUser();
+  const importUsersMutation = useImportUsers();
+
+  // Set current user temp admin status
   useEffect(() => {
-    const checkCurrentUser = async () => {
-      if (session?.user?.id) {
-        try {
-          const response = await fetch(
-            `/api/break-glass/status?userId=${session.user.id}`
-          );
-          if (response.ok) {
-            const data = await response.json();
-            setIsCurrentUserTempAdmin(!!data.isActive);
-            setCurrentUserRole(session.user.role as Role);
-          }
-        } catch (error) {
-          console.error("Error checking temp admin status:", error);
-        }
-      }
-    };
-    checkCurrentUser();
-  }, [session]);
+    if (currentUserBreakGlass) {
+      setIsCurrentUserTempAdmin(!!currentUserBreakGlass.isActive);
+      setCurrentUserRole(session?.user?.role as Role);
+    }
+  }, [currentUserBreakGlass, session?.user?.role]);
 
   // Check if a user is a temporary admin
   const checkIsTempAdmin = async (userId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/break-glass/status?userId=${userId}`);
-      if (response.ok) {
-        const data = await response.json();
-        return !!data.isActive;
-      }
+      // Use React Query to fetch break-glass status
+      const data = await queryClient.fetchQuery({
+        queryKey: queryKeys.admin.breakGlass(userId),
+        queryFn: async () => {
+          const { data } = await axios.get(
+            `/break-glass/status?userId=${userId}`
+          );
+          return data;
+        },
+      });
+      return !!data?.isActive;
     } catch (error) {
       console.error("Error checking temp admin status:", error);
+      return false;
     }
-    return false;
   };
 
   const handlePromote = async () => {
@@ -282,60 +290,44 @@ export function AdminDataTable({
       return;
     }
 
-    setIsPromoting(true);
     try {
-      const response = await fetch("/api/break-glass/promote", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: userToPromote.id,
-          promotionCode: promotionCode.trim(),
-        }),
+      await promoteUserMutation.mutateAsync({
+        userId: userToPromote.id,
+        promotionCode: promotionCode.trim(),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to promote user");
-      }
-
-      toast.success("User has been promoted to permanent Admin");
       setShowPromoteDialog(false);
       setPromotionCode("");
       setUserToPromote(null);
       await refreshTableData();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to promote user");
-    } finally {
-      setIsPromoting(false);
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
   const refreshTableData = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      const response = await axiosInstance.get("/users");
-      const data = await response.data;
-      if (data.users) {
-        const existingUsersMap = new Map(
-          tableData.map((user) => [user.id, user])
-        );
-        const mergedUsers = data.users.map((newUser: User) => {
-          const existingUser = existingUsersMap.get(newUser.id);
-          return existingUser ? { ...existingUser, ...newUser } : newUser;
-        });
-        const newUsers = tableData.filter(
-          (user) => !data.users.some((newUser: User) => newUser.id === user.id)
-        );
-        setTableData([...mergedUsers, ...newUsers]);
+      // Invalidate and refetch users
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.admin.users(),
+      });
+      const data = await queryClient.fetchQuery({
+        queryKey: queryKeys.admin.users(),
+        queryFn: async () => {
+          const { data } = await axios.get("/users");
+          return data;
+        },
+      });
+      if (data?.users) {
+        setTableData(data.users);
       }
     } catch (error) {
       console.error("Error refreshing table data:", error);
     } finally {
       setIsRefreshing(false);
     }
-  }, [tableData]);
+  }, [queryClient]);
 
   useEffect(() => {
     if (initialUsers.length > 0) {
@@ -759,14 +751,14 @@ export function AdminDataTable({
         status: "Importing users...",
       });
 
-      const response = await axiosInstance.post("/users/import", previewData);
+      const result = await importUsersMutation.mutateAsync(previewData);
       const {
         imported,
         skipped,
         errors,
         total: backendTotalProcessed,
         detailedFeedback,
-      } = response.data;
+      } = result;
 
       setImportStatus({
         imported: imported || 0,
@@ -1647,9 +1639,16 @@ export function AdminDataTable({
               <Button
                 className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
                 onClick={handleImport}
-                disabled={!selectedFile || !isValidFile || !!importProgress}
+                disabled={
+                  !selectedFile ||
+                  !isValidFile ||
+                  !!importProgress ||
+                  importUsersMutation.isPending
+                }
               >
-                Import Users
+                {importUsersMutation.isPending
+                  ? "Importing..."
+                  : "Import Users"}
               </Button>
             </div>
           </div>
@@ -1929,16 +1928,16 @@ export function AdminDataTable({
                 setPromotionCode("");
                 setUserToPromote(null);
               }}
-              disabled={isPromoting}
+              disabled={promoteUserMutation.isPending}
             >
               Cancel
             </Button>
             <Button
               className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
               onClick={handlePromote}
-              disabled={isPromoting || !promotionCode.trim()}
+              disabled={promoteUserMutation.isPending || !promotionCode.trim()}
             >
-              {isPromoting ? (
+              {promoteUserMutation.isPending ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                   Promoting...

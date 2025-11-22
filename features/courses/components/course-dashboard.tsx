@@ -36,7 +36,10 @@ import {
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { useRouter } from "next/navigation";
-import { coursesService, studentsService } from "@/lib/services/client";
+import {
+  useCourseAnalytics,
+  useImportStudentsToCourse,
+} from "@/lib/hooks/queries";
 import { StudentImportDialog } from "../dialogs/import-students-dialog";
 import { AddStudentSheet } from "../sheets/add-student-sheet";
 import { RemoveStudentSheet } from "../sheets/remove-student-sheet";
@@ -115,17 +118,15 @@ export function CourseDashboard({
     return () => window.removeEventListener("resize", checkWidth);
   }, []);
 
-  useEffect(() => {
-    if (courseSlug) {
-      fetchCourseData();
-    }
-  }, [courseSlug]);
+  // React Query hooks
+  const { data: analyticsData, isLoading: isLoadingAnalytics } =
+    useCourseAnalytics(courseSlug);
+  const importStudentsMutation = useImportStudentsToCourse();
 
-  const fetchCourseData = async () => {
-    try {
-      setIsLoading(true);
-      const response = await coursesService.getAnalytics(courseSlug);
-      const { course, stats, students } = response;
+  // Update local state when React Query data changes
+  useEffect(() => {
+    if (analyticsData) {
+      const { course, stats, students } = analyticsData;
       setCourseInfo(course);
       setStats(stats);
       setTableData(students);
@@ -147,12 +148,12 @@ export function CourseDashboard({
           detail: { courseSlug },
         })
       );
-    } catch (error) {
-      toast.error("Failed to load course data");
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [analyticsData, courseSlug]);
+
+  useEffect(() => {
+    setIsLoading(isLoadingAnalytics);
+  }, [isLoadingAnalytics]);
 
   const columns = useMemo<ColumnDef<StudentWithGrades>[]>(
     () => [
@@ -213,16 +214,27 @@ export function CourseDashboard({
 
   const handleSelectExistingStudent = async (student: Student) => {
     try {
-      await studentsService.importToCourse(courseSlug, [
-        {
-          "Student ID": student.studentId,
-          "First Name": student.firstName,
-          "Last Name": student.lastName,
-          "Middle Initial": student.middleInitial || "",
-        },
-      ]);
-      await fetchCourseData();
-      // Event is already dispatched in fetchCourseData
+      // Format: "Last Name, First Name M."
+      const fullName = `${student.lastName}, ${student.firstName}${
+        student.middleInitial ? ` ${student.middleInitial}.` : ""
+      }`;
+
+      await importStudentsMutation.mutateAsync({
+        courseSlug,
+        students: [
+          {
+            "Student Number": student.studentId,
+            "Full Name": fullName,
+          },
+        ],
+      });
+      // Data will be refetched automatically by React Query
+      // Dispatch custom event to refresh sidebar components
+      window.dispatchEvent(
+        new CustomEvent("courseStudentsUpdated", {
+          detail: { courseSlug },
+        })
+      );
       toast.success("Student added successfully!");
       setShowAddSheet(false);
     } catch (error: any) {
@@ -591,8 +603,13 @@ export function CourseDashboard({
           isLoading={false}
           courseSlug={courseSlug}
           onRemoveSuccess={async () => {
-            await fetchCourseData();
-            // Event is already dispatched in fetchCourseData
+            // Data will be refetched automatically by React Query
+            // Dispatch custom event to refresh sidebar components
+            window.dispatchEvent(
+              new CustomEvent("courseStudentsUpdated", {
+                detail: { courseSlug },
+              })
+            );
           }}
         />
 
@@ -601,8 +618,13 @@ export function CourseDashboard({
           onOpenChange={setShowImportDialog}
           courseSlug={courseSlug}
           onImportComplete={async () => {
-            await fetchCourseData();
-            // Event is already dispatched in fetchCourseData
+            // Data will be refetched automatically by React Query
+            // Dispatch custom event to refresh sidebar components
+            window.dispatchEvent(
+              new CustomEvent("courseStudentsUpdated", {
+                detail: { courseSlug },
+              })
+            );
           }}
         />
       </div>

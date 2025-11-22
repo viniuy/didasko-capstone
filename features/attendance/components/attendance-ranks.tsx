@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Trophy } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Pagination,
   PaginationContent,
@@ -13,7 +13,7 @@ import {
   PaginationNext,
 } from "@/components/ui/pagination";
 import { useSession } from "next-auth/react";
-import axiosInstance from "@/lib/axios";
+import { useAttendanceRanking } from "@/lib/hooks/queries";
 
 interface ClassStat {
   id: string;
@@ -24,49 +24,28 @@ interface ClassStat {
 
 export default function AttendanceLeaderboard() {
   const { data: session, status } = useSession();
-  const [classStats, setClassStats] = useState<ClassStat[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
 
-  useEffect(() => {
-    const fetchClassStats = async () => {
-      if (!session?.user?.id) {
-        setIsLoading(false);
-        return;
-      }
+  // React Query hook
+  const { data: rankingData, isLoading } = useAttendanceRanking(
+    session?.user?.id
+  );
 
-      try {
-        const response = await axiosInstance.get(
-          "/courses/attendance-ranking",
-          { params: { facultyId: session.user.id } }
-        );
-
-        let data: ClassStat[] = [];
-        if (Array.isArray(response.data)) {
-          data = response.data;
-        } else if (Array.isArray(response.data.classes)) {
-          data = response.data.classes;
-        } else if (Array.isArray(response.data.data)) {
-          data = response.data.data;
-        }
-
-        setClassStats(data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error fetching attendance stats:", error);
-        setClassStats([]);
-        setIsLoading(false);
-      }
-    };
-
-    if (status === "authenticated") {
-      fetchClassStats();
+  // Extract class stats from response
+  let classStats: ClassStat[] = [];
+  if (rankingData) {
+    if (Array.isArray(rankingData)) {
+      classStats = rankingData;
+    } else if (Array.isArray(rankingData.classes)) {
+      classStats = rankingData.classes;
+    } else if (Array.isArray(rankingData.data)) {
+      classStats = rankingData.data;
     }
-  }, [status, session?.user?.id]);
+  }
 
   // ✅ Skeleton Loader (Shadcn)
-  if (isLoading || status === "loading") {
+  if (isLoading || status === "loading" || !session?.user?.id) {
     return (
       <Card className="w-full p-4 -mb-5 shadow-md rounded-lg">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

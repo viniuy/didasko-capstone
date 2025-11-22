@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { CalendarClock } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Pagination,
   PaginationContent,
@@ -14,7 +14,7 @@ import {
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import axiosInstance from "@/lib/axios";
+import { useFacultySchedules } from "@/lib/hooks/queries";
 
 interface Course {
   id: string;
@@ -104,46 +104,25 @@ export default function AttendanceSchedule({
 }) {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 4;
 
-  const fetchSchedules = async () => {
-    if (!session?.user?.id) {
-      setIsLoading(false);
-      return;
+  // React Query hook
+  const { data: schedulesData, isLoading } = useFacultySchedules(
+    session?.user?.id,
+    {
+      semester,
+      courseSlug,
+      limit: 100,
     }
+  );
 
-    try {
-      const response = await axiosInstance.get("/courses/schedules", {
-        params: {
-          facultyId: session.user.id,
-          ...(semester ? { semester } : {}),
-          limit: 100,
-          courseSlug,
-        },
-      });
-      // Sort schedules by day of the week
-      const sortedSchedules = (response.data.schedules || []).sort(
-        (a: Schedule, b: Schedule) => {
-          return (dayOrder[a.day] || 0) - (dayOrder[b.day] || 0);
-        }
-      );
-      setSchedules(sortedSchedules);
-    } catch (error) {
-      console.error("Error fetching schedules:", error);
-      setSchedules([]);
-    } finally {
-      setIsLoading(false);
+  // Sort schedules by day of the week
+  const schedules = (schedulesData?.schedules || []).sort(
+    (a: Schedule, b: Schedule) => {
+      return (dayOrder[a.day] || 0) - (dayOrder[b.day] || 0);
     }
-  };
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchSchedules();
-    }
-  }, [status, session?.user?.id]);
+  );
 
   // Calculate pagination
   const totalPages = Math.ceil(schedules.length / itemsPerPage);
@@ -168,7 +147,7 @@ export default function AttendanceSchedule({
     <Card className="w-full p-3 shadow-md rounded-lg">
       <div className="flex flex-wrap justify-center min-w-0 ">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
-          {currentSchedules.map((schedule) => (
+          {currentSchedules.map((schedule: Schedule) => (
             <CourseCard key={schedule.id} schedule={schedule} />
           ))}
         </div>

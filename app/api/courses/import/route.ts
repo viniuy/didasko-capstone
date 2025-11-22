@@ -2,10 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { PrismaClient, CourseStatus } from "@prisma/client";
+import { CourseStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { logAction, generateBatchId } from "@/lib/audit";
-
-const prisma = new PrismaClient();
 
 interface ImportRow {
   "Course Code": string;
@@ -298,7 +297,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(results);
   } catch (error) {
     console.error("Import error:", error);
-    
+
     // Log course import failure
     try {
       const session = await getServerSession(authOptions);
@@ -310,7 +309,8 @@ export async function POST(request: NextRequest) {
           reason: `Failed to import courses`,
           status: "FAILED",
           batchId,
-          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          errorMessage:
+            error instanceof Error ? error.message : "Unknown error",
           metadata: {
             attemptedCount: coursesData?.length || 0,
           },
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
     } catch (logError) {
       console.error("Error logging course import failure:", logError);
     }
-    
+
     return NextResponse.json(
       {
         error: "Failed to import courses",

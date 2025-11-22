@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "react-hot-toast";
+import { useCreateGroup } from "@/lib/hooks/queries";
 
 interface Student {
   id: string;
@@ -116,36 +117,28 @@ export function WheelRandomizer({
     setAssignedGroups(groups);
   };
 
+  // React Query hook
+  const createGroupMutation = useCreateGroup();
+
   const createGroups = async () => {
     try {
       setIsCreating(true);
       console.log("🎲 Creating groups:", assignedGroups.length);
 
-      for (let i = 0; i < assignedGroups.length; i++) {
-        const group = assignedGroups[i];
-
-        const response = await fetch(`/api/courses/${courseCode}/groups`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            groupNumber: String(i + 1),
-            groupName: `Random Group ${i + 1}`,
-            studentIds: group.map((s) => s.id),
-            leaderId: group[0].id,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to create group");
-        }
-
-        // Small delay between group creations
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      }
-
-      // Wait longer to ensure all database writes are complete
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Create all groups in parallel
+      await Promise.all(
+        assignedGroups.map((group, i) =>
+          createGroupMutation.mutateAsync({
+            courseSlug: courseCode,
+            groupData: {
+              groupNumber: i + 1,
+              groupName: `Random Group ${i + 1}`,
+              studentIds: group.map((s) => s.id),
+              leaderId: group[0].id,
+            },
+          })
+        )
+      );
 
       // Make sure the callback is awaited
       await onGroupsCreated();

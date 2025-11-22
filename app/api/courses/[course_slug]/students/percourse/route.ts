@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
-
-const prisma = new PrismaClient();
 
 // GET - Fetch all students or filter by query params
 export async function GET(request: NextRequest) {

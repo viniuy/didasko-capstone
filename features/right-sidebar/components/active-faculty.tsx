@@ -1,10 +1,9 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, UserCircle, Shield, Loader2, Wifi } from "lucide-react";
-import { useState, useEffect } from "react";
-import axiosInstance from "@/lib/axios";
+import { Users, UserCircle, Shield, Wifi } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useOnlineUsers } from "@/lib/hooks/queries";
 
 interface FacultyUser {
   id: string;
@@ -71,38 +70,16 @@ const FacultyItem = ({ user }: { user: FacultyUser }) => {
 };
 
 export default function ActiveFaculty() {
-  const [faculty, setFaculty] = useState<FacultyUser[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchOnlineFaculty = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await axiosInstance.get("/users/online");
-        const users = Array.isArray(response.data) ? response.data : [];
-        setFaculty(users);
-      } catch (err: any) {
-        console.error("Error fetching online faculty:", err);
-        setError(err.response?.data?.error || "Failed to fetch online faculty");
-        setFaculty([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchOnlineFaculty();
-
-    // Refresh every 30 seconds to update online status
-    const interval = setInterval(fetchOnlineFaculty, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
+  // React Query hook with polling
+  const { data: faculty = [], isLoading, error } = useOnlineUsers();
 
   // Separate faculty and academic heads
-  const academicHeads = faculty.filter((u) => u.role === "ACADEMIC_HEAD");
-  const regularFaculty = faculty.filter((u) => u.role === "FACULTY");
+  const academicHeads = faculty.filter(
+    (u: FacultyUser) => u.role === "ACADEMIC_HEAD"
+  );
+  const regularFaculty = faculty.filter(
+    (u: FacultyUser) => u.role === "FACULTY"
+  );
 
   return (
     <Card className="bg-[#124A69] border-white/20 h-full flex flex-col">
@@ -117,7 +94,11 @@ export default function ActiveFaculty() {
           <LoadingSkeleton />
         ) : error ? (
           <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-200">{error}</p>
+            <p className="text-sm text-red-200">
+              {error instanceof Error
+                ? error.message
+                : "Failed to load online users"}
+            </p>
           </div>
         ) : faculty.length === 0 ? (
           <div className="text-sm text-white/60 text-center py-4">
@@ -135,7 +116,7 @@ export default function ActiveFaculty() {
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {academicHeads.map((user) => (
+                  {academicHeads.map((user: FacultyUser) => (
                     <FacultyItem key={user.id} user={user} />
                   ))}
                 </div>
@@ -152,7 +133,7 @@ export default function ActiveFaculty() {
                   </span>
                 </div>
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {regularFaculty.map((user) => (
+                  {regularFaculty.map((user: FacultyUser) => (
                     <FacultyItem key={user.id} user={user} />
                   ))}
                 </div>

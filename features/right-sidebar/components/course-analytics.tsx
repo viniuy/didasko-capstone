@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UserCheck, TrendingUp, UserX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { coursesService } from "@/lib/services/client";
+import { useCourseAnalytics } from "@/lib/hooks/queries";
 
 interface CourseStats {
   totalStudents: number;
@@ -56,75 +56,17 @@ export default function CourseAnalytics({
 }: {
   courseSlug: string;
 }) {
-  const [stats, setStats] = useState<CourseStats | null>(null);
-  const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // React Query hook
+  const {
+    data: analyticsData,
+    isLoading,
+    isRefetching,
+  } = useCourseAnalytics(courseSlug);
 
-  const fetchStats = useCallback(
-    async (isRefresh = false) => {
-      try {
-        if (isRefresh) {
-          setIsRefreshing(true);
-        } else {
-          setIsLoading(true);
-        }
-        const response = await coursesService.getAnalytics(courseSlug);
-        setStats(response.stats);
-        setCourseInfo(response.course);
-      } catch (error) {
-        console.error("Failed to load course stats:", error);
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [courseSlug]
-  );
+  const stats = analyticsData?.stats || null;
+  const courseInfo = analyticsData?.course || null;
 
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
-
-  // Listen for course students updated and attendance updated events
-  useEffect(() => {
-    const handleStudentsUpdated = (event: CustomEvent) => {
-      // Only refresh if the event is for this course
-      if (event.detail?.courseSlug === courseSlug) {
-        // Keep existing data visible while refreshing
-        fetchStats(true);
-      }
-    };
-
-    const handleAttendanceUpdated = (event: CustomEvent) => {
-      // Only refresh if the event is for this course
-      if (event.detail?.courseSlug === courseSlug) {
-        // Keep existing data visible while refreshing
-        fetchStats(true);
-      }
-    };
-
-    window.addEventListener(
-      "courseStudentsUpdated",
-      handleStudentsUpdated as EventListener
-    );
-    window.addEventListener(
-      "attendanceUpdated",
-      handleAttendanceUpdated as EventListener
-    );
-    return () => {
-      window.removeEventListener(
-        "courseStudentsUpdated",
-        handleStudentsUpdated as EventListener
-      );
-      window.removeEventListener(
-        "attendanceUpdated",
-        handleAttendanceUpdated as EventListener
-      );
-    };
-  }, [courseSlug, fetchStats]);
-
-  if (isLoading && !isRefreshing) {
+  if (isLoading && !isRefetching) {
     return <LoadingSkeleton />;
   }
 

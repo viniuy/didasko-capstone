@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
-import { coursesService } from "@/lib/services/client";
+import { useActiveCourses } from "@/lib/hooks/queries";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Course {
@@ -118,8 +118,6 @@ export default function CourseShortcuts({
 }: CourseShortcutsProps) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   const moduleConfig = getModuleConfig(pathname);
   const basePath = propBasePath || moduleConfig.basePath;
@@ -127,33 +125,34 @@ export default function CourseShortcuts({
   const showAttendanceStats =
     propShowAttendanceStats ?? moduleConfig.showAttendanceStats;
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      if (!session?.user?.id) return;
+  // React Query hook
+  const { data: coursesData, isLoading } = useActiveCourses(
+    status === "authenticated" && session?.user?.id
+      ? { facultyId: session.user.id }
+      : undefined
+  );
 
-      try {
-        const response = await coursesService.getActiveCourses({
-          facultyId: session.user.id,
-        });
-
-        const filteredCourses = (response.courses || []).filter(
-          (course: Course) =>
-            !excludeCourseSlug || course.slug !== excludeCourseSlug
-        );
-
-        setCourses(filteredCourses);
-      } catch (error) {
-        console.error("Error fetching courses:", error);
-        setCourses([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (status === "authenticated") {
-      fetchCourses();
-    }
-  }, [status, session?.user?.id, excludeCourseSlug]);
+  // Transform and filter courses to match local Course interface
+  const courses: Course[] = (coursesData?.courses || [])
+    .filter((course) => !excludeCourseSlug || course.slug !== excludeCourseSlug)
+    .map((course) => ({
+      id: course.id,
+      title: course.title,
+      code: course.code,
+      section: course.section,
+      slug: course.slug,
+      status: course.status as "ACTIVE" | "INACTIVE" | "ARCHIVED",
+      attendanceStats: course.attendanceStats
+        ? {
+            totalAbsents: course.attendanceStats.totalAbsents,
+            lastAttendanceDate: course.attendanceStats.lastAttendanceDate
+              ? course.attendanceStats.lastAttendanceDate instanceof Date
+                ? course.attendanceStats.lastAttendanceDate.toISOString()
+                : String(course.attendanceStats.lastAttendanceDate)
+              : null,
+          }
+        : undefined,
+    }));
 
   if (isLoading) {
     return (

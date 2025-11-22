@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,11 +17,15 @@ import { Trash, Edit, Plus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { handleSaveNewNote, handleUpdateNote } from "@/lib/note-handlers";
 import { useSession } from "next-auth/react";
-import axiosInstance from "axios";
 import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
+import {
+  useNotes,
+  useCreateNote,
+  useUpdateNote,
+  useDeleteNote,
+} from "@/lib/hooks/queries";
 
 interface Note {
   id: string;
@@ -54,12 +58,8 @@ function formatDate(dateString: string): string {
 
 export default function Notes() {
   const { data: session, status } = useSession();
-  const [noteList, setNoteList] = useState<Note[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
   const [openDelete, setOpenDelete] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
-  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
 
   const [openEdit, setOpenEdit] = useState(false);
   const [editData, setEditData] = useState<Note>({
@@ -76,32 +76,14 @@ export default function Notes() {
     createdAt: "",
   });
 
-  const previousStatus = useRef(status);
+  // React Query hooks
+  const { data: notesData, isLoading } = useNotes();
+  const createNoteMutation = useCreateNote();
+  const updateNoteMutation = useUpdateNote();
+  const deleteNoteMutation = useDeleteNote();
 
-  useEffect(() => {
-    if (
-      (!noteList.length && status === "authenticated") ||
-      (status === "authenticated" &&
-        previousStatus.current === "unauthenticated")
-    ) {
-      fetchNotes();
-    }
-
-    previousStatus.current = status;
-  }, [status, session]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && !noteList.length) {
-        fetchNotes();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [noteList.length]);
+  // Extract notes from response
+  const noteList = notesData?.notes || [];
 
   // Function to show alert notifications
   const showAlert = (
@@ -128,31 +110,6 @@ export default function Notes() {
         },
       });
     }
-  };
-
-  async function fetchNotes() {
-    try {
-      setIsLoading(true);
-      const response = await axiosInstance.get("/api/notes");
-      const data = response.data;
-
-      if (Array.isArray(data.notes)) {
-        setNoteList(data.notes);
-      } else {
-        setNoteList([]);
-      }
-    } catch (error) {
-      showAlert("Error", "Failed to fetch notes", "error");
-      setNoteList([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  const refreshNotes = async () => {
-    setIsLoading(true);
-    await fetchNotes();
-    setIsLoading(false);
   };
 
   // Skeleton UI for loading state
@@ -236,28 +193,21 @@ export default function Notes() {
       return;
     }
 
-    const result = await handleSaveNewNote(
-      {
+    try {
+      await createNoteMutation.mutateAsync({
         title: newNote.title,
-        description: newNote.description || "",
-      },
-      session.user.id,
-      () => {
-        setOpenAdd(false);
-        setNewNote({
-          id: "",
-          title: "",
-          description: "",
-          createdAt: "",
-        });
-        refreshNotes();
-      }
-    );
-
-    if (result.success) {
-      showAlert("Success", "Note added successfully", "success");
-    } else {
-      showAlert("Error", result.error || "Failed to add note", "error");
+        description: newNote.description || null,
+        userId: session.user.id,
+      });
+      setOpenAdd(false);
+      setNewNote({
+        id: "",
+        title: "",
+        description: "",
+        createdAt: "",
+      });
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
@@ -267,68 +217,16 @@ export default function Notes() {
   }
 
   async function confirmDelete() {
+    if (!noteToDelete) {
+      return;
+    }
+
     try {
-      if (!noteToDelete) {
-        return;
-      }
-
-      setDeletingNoteId(noteToDelete);
-      const loadingToast = toast.loading("Deleting note...", {
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-      });
-
-      const response = await axiosInstance.delete(`/api/notes/${noteToDelete}`);
-      if (response.status === 200) {
-        setOpenDelete(false);
-        setNoteToDelete(null);
-        refreshNotes();
-        toast.success("Note deleted successfully", {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#124A69",
-            secondary: "#fff",
-          },
-        });
-      } else {
-        toast.error("Failed to delete note", {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#dc2626",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#dc2626",
-            secondary: "#fff",
-          },
-        });
-      }
+      await deleteNoteMutation.mutateAsync(noteToDelete);
+      setOpenDelete(false);
+      setNoteToDelete(null);
     } catch (error) {
-      console.error("Error deleting note:", error);
-      showAlert("Error", "An error occurred while deleting the note", "error");
-    } finally {
-      setDeletingNoteId(null);
+      // Error is handled by the mutation hook
     }
   }
 
@@ -343,28 +241,26 @@ export default function Notes() {
       return;
     }
 
+    if (!editData.id) {
+      showAlert("Error", "Note ID not found", "error");
+      return;
+    }
+
     if (!session?.user?.id) {
       showAlert("Error", "User ID not found. Please sign in again.", "error");
       return;
     }
 
-    const result = await handleUpdateNote(
-      {
+    try {
+      await updateNoteMutation.mutateAsync({
         id: editData.id,
         title: editData.title,
-        description: editData.description || "",
-      },
-      session.user.id,
-      () => {
-        setOpenEdit(false);
-        refreshNotes();
-      }
-    );
-
-    if (result.success) {
-      toast.success("Note updated successfully");
-    } else {
-      showAlert("Error", result.error || "Failed to update note", "error");
+        description: editData.description || null,
+        userId: session.user.id,
+      });
+      setOpenEdit(false);
+    } catch (error) {
+      // Error is handled by the mutation hook
     }
   };
 
@@ -383,7 +279,7 @@ export default function Notes() {
       </div>
       <div className="flex-1 bg-white rounded-lg p-2 shadow-md overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#124A69] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#0a2f42]">
         {noteList.length > 0 ? (
-          noteList.map((note) => (
+          noteList.map((note: Note) => (
             <Card
               key={note.id}
               className="border-l-[8px] border-[#FAEDCB] mb-1 hover:shadow-md transition-shadow"
@@ -394,7 +290,9 @@ export default function Notes() {
                     variant="ghost"
                     className="h-5 w-5 p-0 hover:bg-transparent"
                     onClick={() => handleEditClick(note)}
-                    disabled={deletingNoteId === note.id}
+                    disabled={
+                      deleteNoteMutation.isPending && noteToDelete === note.id
+                    }
                   >
                     <Edit className="h-3 w-3" color="#124a69" />
                   </Button>
@@ -402,9 +300,12 @@ export default function Notes() {
                     variant="ghost"
                     className="h-5 w-5 p-0 hover:bg-transparent"
                     onClick={() => handleDeleteClick(note.id)}
-                    disabled={deletingNoteId === note.id}
+                    disabled={
+                      deleteNoteMutation.isPending && noteToDelete === note.id
+                    }
                   >
-                    {deletingNoteId === note.id ? (
+                    {deleteNoteMutation.isPending &&
+                    noteToDelete === note.id ? (
                       <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#124A69]" />
                     ) : (
                       <Trash className="h-3 w-3" color="#124a69" />

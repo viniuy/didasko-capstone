@@ -3,7 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import axiosInstance from "@/lib/axios";
+import {
+  useCourse,
+  useActiveCourses,
+  useAttendanceLeaderboardAll,
+} from "@/lib/hooks/queries";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -194,15 +198,35 @@ export default function AttendanceLeaderboard({
   courseSlug,
 }: AttendanceLeaderboardProps = {}) {
   const { data: session, status } = useSession();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [allLeaderboards, setAllLeaderboards] = useState<LeaderboardData>({});
   const [sortBy, setSortBy] = useState<SortOption>("absents");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [courseTitle, setCourseTitle] = useState<string>("");
-  const [courseSection, setCourseSection] = useState<string>("");
 
   const isSingleCourse = !!courseSlug;
+
+  // React Query hooks
+  const { data: courseData } = useCourse(courseSlug || "");
+  const { data: activeCoursesData, isLoading: isLoadingCourses } =
+    useActiveCourses(
+      status === "authenticated" && !isSingleCourse && session?.user?.id
+        ? { facultyId: session.user.id }
+        : undefined
+    );
+  const { data: leaderboardData, isLoading: isLoadingLeaderboard } =
+    useAttendanceLeaderboardAll(
+      status === "authenticated"
+        ? {
+            facultyId: session?.user?.id,
+            courseSlug: isSingleCourse ? courseSlug : undefined,
+          }
+        : undefined
+    );
+
+  const courses = activeCoursesData?.courses || [];
+  const allLeaderboards = leaderboardData?.leaderboards || {};
+  const courseTitle = courseData?.title || "";
+  const courseSection = courseData?.section || "";
+
+  const isLoading = isLoadingCourses || isLoadingLeaderboard;
+
   // Single course view remains unchanged
   const currentLeaderboard = useMemo(() => {
     if (!isSingleCourse) return [];
@@ -224,101 +248,8 @@ export default function AttendanceLeaderboard({
       }
     });
   }, [allLeaderboards, isSingleCourse, courseSlug, sortBy]);
-  // Fetch course title if courseSlug is provided
-  useEffect(() => {
-    if (!courseSlug) return;
 
-    const fetchCourseTitle = async () => {
-      try {
-        const response = await axiosInstance.get(`/courses/${courseSlug}`);
-        setCourseTitle(response.data.title || "");
-        setCourseSection(response.data.section || "");
-      } catch (error) {
-        console.error("Error fetching course title:", error);
-        setCourseTitle("");
-        setCourseSection("");
-      }
-    };
-
-    fetchCourseTitle();
-  }, [courseSlug]);
-
-  const fetchAllData = useCallback(
-    async (isRefresh = false) => {
-      if (!session?.user?.id) return;
-
-      try {
-        if (isRefresh) {
-          setIsRefreshing(true);
-        } else {
-          setIsLoading(true);
-        }
-
-        if (isSingleCourse) {
-          const response = await axiosInstance.get(
-            "/attendance/leaderboard/all",
-            {
-              params: {
-                facultyId: session.user.id,
-                courseSlug: courseSlug,
-              },
-            }
-          );
-          setAllLeaderboards(response.data.leaderboards || {});
-        } else {
-          // Fetch active courses instead of semester-based
-          const [activeCourses, leaderboardsResponse] = await Promise.all([
-            axiosInstance.get("/courses/active", {
-              params: { facultyId: session.user.id },
-            }),
-            axiosInstance.get("/attendance/leaderboard/all", {
-              params: { facultyId: session.user.id },
-            }),
-          ]);
-
-          setCourses(activeCourses.data.courses || []);
-          setAllLeaderboards(leaderboardsResponse.data.leaderboards || {});
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setAllLeaderboards({});
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [session?.user?.id, courseSlug, isSingleCourse]
-  );
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchAllData(false);
-    }
-  }, [status, fetchAllData]);
-
-  // Listen for attendance updates
-  useEffect(() => {
-    const handleAttendanceUpdate = (event: CustomEvent) => {
-      // Only refresh if the event is for this course (or all courses if no courseSlug)
-      if (!courseSlug || event.detail?.courseSlug === courseSlug) {
-        // Keep existing data visible while refreshing
-        fetchAllData(true);
-      }
-    };
-
-    window.addEventListener(
-      "attendanceUpdated",
-      handleAttendanceUpdate as EventListener
-    );
-    return () => {
-      window.removeEventListener(
-        "attendanceUpdated",
-        handleAttendanceUpdate as EventListener
-      );
-    };
-  }, [courseSlug, fetchAllData]);
-
-  if (isLoading && !isRefreshing) {
+  if (isLoading) {
     return (
       <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
         <CardHeader className="pb-3 flex-shrink-0">

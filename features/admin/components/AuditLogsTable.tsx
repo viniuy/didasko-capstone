@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from "date-fns";
 import { Role } from "@prisma/client";
+import { useAuditLogs, useExportLogs } from "@/lib/hooks/queries/useAuditLogs";
+import { useFaculty } from "@/lib/hooks/queries";
 import {
   Table,
   TableBody,
@@ -124,12 +126,65 @@ export default function AuditLogsTable({
   );
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const [faculty, setFaculty] = useState<
-    Array<{ id: string; name: string | null; email: string | null }>
-  >([]);
-  const [isLoadingFaculty, setIsLoadingFaculty] = useState(false);
   const [windowHeight, setWindowHeight] = useState(800);
   const [windowWidth, setWindowWidth] = useState(1024);
+
+  // React Query hooks
+  const currentPageFromUrl = parseInt(
+    searchParams.get("p") || searchParams.get("page") || "1"
+  );
+  const auditLogsFilters = useMemo(() => {
+    const filters: any = {
+      page: currentPageFromUrl,
+      pageSize: 9,
+    };
+
+    if (searchParams.get("actions")) {
+      filters.actions = searchParams.get("actions")!.split(",");
+    }
+    if (searchParams.get("action")) {
+      filters.action = searchParams.get("action")!;
+    }
+    if (searchParams.get("faculty")) {
+      filters.faculty = searchParams.get("faculty")!.split(",");
+    }
+    if (searchParams.get("userId")) {
+      filters.userId = searchParams.get("userId")!;
+    }
+    if (searchParams.get("modules")) {
+      filters.modules = searchParams.get("modules")!.split(",");
+    }
+    if (searchParams.get("module")) {
+      filters.module = searchParams.get("module")!;
+    }
+    if (searchParams.get("startDate")) {
+      filters.startDate = searchParams.get("startDate")!;
+    }
+    if (searchParams.get("endDate")) {
+      filters.endDate = searchParams.get("endDate")!;
+    }
+
+    return filters;
+  }, [searchParams, currentPageFromUrl]);
+
+  const {
+    data: auditLogsData,
+    isLoading: isLoadingLogs,
+    isRefetching: isRefetchingLogs,
+  } = useAuditLogs(auditLogsFilters);
+
+  const { data: facultyData, isLoading: isLoadingFaculty } = useFaculty();
+  const exportLogsMutation = useExportLogs();
+
+  // Extract faculty from React Query
+  const faculty = useMemo(() => {
+    if (!facultyData || !Array.isArray(facultyData)) return [];
+    return facultyData.map((user: any) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    }));
+  }, [facultyData]);
 
   // Track window dimensions for dynamic sizing
   useEffect(() => {
@@ -188,82 +243,25 @@ export default function AuditLogsTable({
     setFilters(parsedFilters);
   }, [parsedFilters]);
 
-  // Sync initial props with state when they change (e.g., page navigation)
+  // Sync logs from React Query
   useEffect(() => {
-    setLogs(initialLogs);
-    setCurrentPage(initialPage);
-    setTotalPages(initialTotalPages);
-  }, [initialLogs, initialPage, initialTotalPages]);
-
-  // Seamless polling for fresh audit logs every 5 seconds
-  useEffect(() => {
-    // Don't poll if initial load is still happening
-    if (isLoading) return;
-
-    const fetchFreshLogs = async () => {
-      try {
-        // Build query params from current search params
-        const params = new URLSearchParams();
-        const page = searchParams.get("p") || searchParams.get("page") || "1";
-        params.set("p", page);
-
-        // Add all filter params
-        if (searchParams.get("actions")) {
-          params.set("actions", searchParams.get("actions")!);
-        }
-        if (searchParams.get("action")) {
-          params.set("action", searchParams.get("action")!);
-        }
-        if (searchParams.get("faculty")) {
-          params.set("faculty", searchParams.get("faculty")!);
-        }
-        if (searchParams.get("userId")) {
-          params.set("userId", searchParams.get("userId")!);
-        }
-        if (searchParams.get("modules")) {
-          params.set("modules", searchParams.get("modules")!);
-        }
-        if (searchParams.get("module")) {
-          params.set("module", searchParams.get("module")!);
-        }
-        if (searchParams.get("startDate")) {
-          params.set("startDate", searchParams.get("startDate")!);
-        }
-        if (searchParams.get("endDate")) {
-          params.set("endDate", searchParams.get("endDate")!);
-        }
-
-        const response = await fetch(`/api/logs?${params.toString()}`);
-        if (!response.ok) {
-          throw new Error("Failed to fetch logs");
-        }
-
-        const data = await response.json();
-
-        // Update state seamlessly (React will handle the diff and only re-render if needed)
-        setLogs((prevLogs) => {
-          // Only update if data has actually changed
-          const prevIds = prevLogs.map((log) => log.id).join(",");
-          const newIds = data.logs.map((log: AuditLog) => log.id).join(",");
-          if (prevIds !== newIds) {
-            return data.logs;
-          }
-          return prevLogs;
-        });
-        setCurrentPage(data.currentPage);
-        setTotalPages(data.totalPages);
-      } catch (error) {
-        console.error("Error fetching fresh audit logs:", error);
-        // Silently fail - don't disrupt the UI
-      }
-    };
-
-    // Set up polling interval (5 seconds)
-    const intervalId = setInterval(fetchFreshLogs, 5000);
-
-    // Cleanup on unmount
-    return () => clearInterval(intervalId);
-  }, [searchParams, isLoading]);
+    if (auditLogsData) {
+      setLogs(auditLogsData.logs || []);
+      setCurrentPage(auditLogsData.currentPage || currentPageFromUrl);
+      setTotalPages(auditLogsData.totalPages || initialTotalPages);
+    } else {
+      // Fallback to initial props if React Query hasn't loaded yet
+      setLogs(initialLogs);
+      setCurrentPage(initialPage);
+      setTotalPages(initialTotalPages);
+    }
+  }, [
+    auditLogsData,
+    initialLogs,
+    initialPage,
+    initialTotalPages,
+    currentPageFromUrl,
+  ]);
 
   // All possible actions based on audit logging requirements
   const allPossibleActions = [
@@ -294,27 +292,6 @@ export default function AuditLogsTable({
   const uniqueActions = Array.from(
     new Set(logs.map((log) => log.action))
   ).sort();
-
-  // Fetch faculty data once when component mounts
-  useEffect(() => {
-    const fetchFaculty = async () => {
-      setIsLoadingFaculty(true);
-      try {
-        const response = await fetch("/api/users/faculty");
-        if (!response.ok) {
-          throw new Error("Failed to fetch faculty");
-        }
-        const data = await response.json();
-        setFaculty(data);
-      } catch (error) {
-        console.error("Error fetching faculty:", error);
-      } finally {
-        setIsLoadingFaculty(false);
-      }
-    };
-
-    fetchFaculty();
-  }, []);
 
   // Count active filters
   const activeFilterCount =
@@ -555,19 +532,7 @@ export default function AuditLogsTable({
     faculty?: string[];
   }): Promise<AuditLog[]> => {
     try {
-      const response = await fetch("/api/logs/export", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(filters),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch logs for export");
-      }
-
-      const data = await response.json();
+      const data = await exportLogsMutation.mutateAsync(filters);
       return data;
     } catch (error) {
       console.error("Export error:", error);
@@ -576,7 +541,7 @@ export default function AuditLogsTable({
   };
 
   // Show loading spinner if loading
-  if (isLoading) {
+  if (isLoading || isLoadingLogs) {
     return <LoadingSpinner />;
   }
 

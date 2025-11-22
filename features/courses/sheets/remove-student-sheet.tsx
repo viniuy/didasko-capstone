@@ -18,7 +18,7 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Search, AlertCircle, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
-import axiosInstance from "@/lib/axios";
+import { useRemoveStudentsFromCourse } from "@/lib/hooks/queries";
 import { StudentWithRecords } from "../types/types";
 import { getInitials } from "../utils/initials";
 
@@ -43,7 +43,9 @@ export const RemoveStudentSheet = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmationInput, setConfirmationInput] = useState("");
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [isRemoving, setIsRemoving] = useState(false);
+
+  // React Query mutation
+  const removeStudentsMutation = useRemoveStudentsFromCourse();
 
   const hasStudentsWithRecords = useMemo(
     () =>
@@ -108,9 +110,9 @@ export const RemoveStudentSheet = ({
     }
 
     try {
-      setIsRemoving(true);
-      await axiosInstance.delete(`/courses/${courseSlug}/students`, {
-        data: { studentIds: selectedStudents },
+      await removeStudentsMutation.mutateAsync({
+        courseSlug,
+        studentIds: selectedStudents,
       });
 
       toast.success(
@@ -121,9 +123,7 @@ export const RemoveStudentSheet = ({
       resetSheet();
       onRemoveSuccess();
     } catch (error: any) {
-      toast.error(error?.response?.data?.error || "Failed to remove students");
-    } finally {
-      setIsRemoving(false);
+      // Error is already handled by the mutation
     }
   };
 
@@ -227,7 +227,7 @@ export const RemoveStudentSheet = ({
               <Button
                 variant="outline"
                 onClick={resetSheet}
-                disabled={isRemoving}
+                disabled={removeStudentsMutation.isPending}
               >
                 Cancel
               </Button>
@@ -237,10 +237,13 @@ export const RemoveStudentSheet = ({
                     ? setShowConfirmation(true)
                     : confirmRemoval()
                 }
-                disabled={selectedStudents.length === 0 || isRemoving}
+                disabled={
+                  selectedStudents.length === 0 ||
+                  removeStudentsMutation.isPending
+                }
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                {isRemoving ? (
+                {removeStudentsMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                     Removing...
@@ -275,16 +278,19 @@ export const RemoveStudentSheet = ({
             <Button
               variant="outline"
               onClick={() => setShowConfirmation(false)}
-              disabled={isRemoving}
+              disabled={removeStudentsMutation.isPending}
             >
               Cancel
             </Button>
             <Button
               onClick={confirmRemoval}
-              disabled={confirmationInput !== "Remove" || isRemoving}
+              disabled={
+                confirmationInput !== "Remove" ||
+                removeStudentsMutation.isPending
+              }
               className="bg-red-600"
             >
-              {isRemoving ? (
+              {removeStudentsMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 "Confirm"

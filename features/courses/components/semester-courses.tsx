@@ -14,15 +14,15 @@ import {
 } from "@/components/ui/pagination";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import axiosInstance from "@/lib/axios";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingSpinner } from "./ui-components";
+import { useActiveCourses } from "@/lib/hooks/queries";
 
 interface Course {
   id: string;
   title: string;
   code: string;
-  description: string | null;
+  description?: string | null;
   section: string;
   slug: string;
   academicYear: string;
@@ -140,12 +140,40 @@ const LoadingSkeleton = ({ index }: { index: number }) => (
 export default function ActiveCourses({ type }: CoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [isNavigating, setIsNavigating] = useState(false);
   const [showRedirectSpinner, setShowRedirectSpinner] = useState(false);
   const itemsPerPage = 3;
+
+  // React Query hook
+  const { data: coursesData, isLoading } = useActiveCourses(
+    session?.user?.id ? { facultyId: session.user.id } : undefined
+  );
+  // Transform courses to match local Course interface (convert Date to string for lastAttendanceDate)
+  const courses: Course[] = (coursesData?.courses || []).map((course) => ({
+    id: course.id,
+    title: course.title,
+    code: course.code,
+    description: null, // Course type doesn't have description
+    section: course.section,
+    slug: course.slug,
+    academicYear: course.academicYear,
+    status: course.status as "ACTIVE" | "INACTIVE" | "ARCHIVED",
+    attendanceStats: course.attendanceStats
+      ? {
+          attendanceRate: course.attendanceStats.attendanceRate,
+          lastAttendanceDate: course.attendanceStats.lastAttendanceDate
+            ? course.attendanceStats.lastAttendanceDate instanceof Date
+              ? course.attendanceStats.lastAttendanceDate.toISOString()
+              : String(course.attendanceStats.lastAttendanceDate)
+            : null,
+          totalAbsents: course.attendanceStats.totalAbsents,
+          totalLate: course.attendanceStats.totalLate,
+          totalPresent: course.attendanceStats.totalPresent,
+          totalStudents: course.attendanceStats.totalStudents,
+        }
+      : undefined,
+  }));
 
   // Get loading messages based on type
   const getLoadingMessages = () => {
@@ -182,27 +210,6 @@ export default function ActiveCourses({ type }: CoursesProps) {
         };
     }
   };
-
-  const fetchActiveCourses = async () => {
-    if (!session?.user?.id) return;
-    try {
-      const response = await axiosInstance.get("/courses/active", {
-        params: { facultyId: session.user.id, isCourseActive: "true" },
-      });
-      setCourses(response.data.courses);
-    } catch (error) {
-      console.error(error);
-      setCourses([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchActiveCourses();
-    }
-  }, [status, session?.user?.id]);
 
   const totalPages = Math.ceil(courses.length / itemsPerPage);
   const currentCourses = courses.slice(

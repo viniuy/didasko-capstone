@@ -50,7 +50,7 @@ export interface Course {
   slug: string;
   academicYear: string;
   classNumber: number;
-  status: "ACTIVE" | "ARCHIVED";
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   section: string;
   facultyId: string | null;
   createdAt: Date;
