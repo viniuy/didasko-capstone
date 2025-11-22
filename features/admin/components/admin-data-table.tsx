@@ -103,7 +103,7 @@ interface User {
 }
 
 interface AdminDataTableProps {
-  users: User[];
+  users?: User[]; // Make optional since we'll fetch via hook
   onUserAdded?: () => void;
 }
 
@@ -211,7 +211,7 @@ export function AdminDataTable({
   users: initialUsers,
   onUserAdded,
 }: AdminDataTableProps) {
-  const [tableData, setTableData] = useState<User[]>(initialUsers);
+  const [tableData, setTableData] = useState<User[]>(initialUsers || []);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -249,7 +249,13 @@ export function AdminDataTable({
   const { data: session } = useSession();
   const queryClient = useQueryClient();
 
-  // React Query hooks
+  // React Query hooks - Fetch users using the hook
+  const {
+    data: usersData,
+    isLoading: isLoadingUsers,
+    error: usersError,
+    refetch: refetchUsers,
+  } = useUsers();
   const { data: currentUserBreakGlass } = useBreakGlassStatus(
     session?.user?.id
   );
@@ -305,35 +311,44 @@ export function AdminDataTable({
     }
   };
 
+  // Update table data when users are fetched
+  useEffect(() => {
+    // API returns users array directly (not wrapped in { users: [...] })
+    if (usersData) {
+      if (Array.isArray(usersData)) {
+        setTableData(usersData);
+      } else if (usersData.users && Array.isArray(usersData.users)) {
+        // Handle case where response is wrapped
+        setTableData(usersData.users);
+      }
+    } else if (initialUsers && initialUsers.length > 0) {
+      // Fallback to initialUsers if hook data is not available yet
+      setTableData(initialUsers);
+    }
+  }, [usersData, initialUsers]);
+
+  // Log error if users fetch fails
+  useEffect(() => {
+    if (usersError) {
+      console.error("Error fetching users:", usersError);
+      toast.error("Failed to fetch users");
+    }
+  }, [usersError]);
+
   const refreshTableData = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      // Invalidate and refetch users
+      // Invalidate and refetch users using the hook
       await queryClient.invalidateQueries({
         queryKey: queryKeys.admin.users(),
       });
-      const data = await queryClient.fetchQuery({
-        queryKey: queryKeys.admin.users(),
-        queryFn: async () => {
-          const { data } = await axios.get("/users");
-          return data;
-        },
-      });
-      if (data?.users) {
-        setTableData(data.users);
-      }
+      await refetchUsers();
     } catch (error) {
       console.error("Error refreshing table data:", error);
     } finally {
       setIsRefreshing(false);
     }
-  }, [queryClient]);
-
-  useEffect(() => {
-    if (initialUsers.length > 0) {
-      setTableData(initialUsers);
-    }
-  }, [initialUsers]);
+  }, [queryClient, refetchUsers]);
 
   const handleRoleChange = useCallback(
     async (userId: string, newRole: Role) => {
@@ -347,6 +362,11 @@ export function AdminDataTable({
               user.id === userId ? { ...user, role: newRole } : user
             )
           );
+          // Invalidate and refetch users to update stats
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.admin.users(),
+          });
+          await refetchUsers();
           toast.success(`Role updated to ${formatEnumValue(newRole)}`, {
             duration: 3000,
             position: "top-center",
@@ -362,7 +382,7 @@ export function AdminDataTable({
         setIsRoleUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    []
+    [queryClient, refetchUsers]
   );
 
   const handleStatusChange = useCallback(
@@ -377,6 +397,11 @@ export function AdminDataTable({
               user.id === userId ? { ...user, status: newStatus } : user
             )
           );
+          // Invalidate and refetch users to update stats (active/archived counts)
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.admin.users(),
+          });
+          await refetchUsers();
           toast.success(`Status updated to ${formatEnumValue(newStatus)}`, {
             duration: 3000,
             position: "top-center",
@@ -392,7 +417,7 @@ export function AdminDataTable({
         setIsStatusUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    []
+    [queryClient, refetchUsers]
   );
 
   //Done
@@ -488,7 +513,7 @@ export function AdminDataTable({
           "IT Department",
           "Full Time",
           "Faculty",
-          "Granted",
+          "Active",
         ],
         [
           "Jane B. Doe",
@@ -496,7 +521,7 @@ export function AdminDataTable({
           "Mathematics Department",
           "Part Time",
           "Faculty",
-          "Granted",
+          "Active",
         ],
         [
           "Robert C. Johnson",
@@ -504,7 +529,7 @@ export function AdminDataTable({
           "Computer Science Department",
           "Full Time",
           "Academic Head",
-          "Granted",
+          "Active",
         ],
       ];
 
@@ -1287,7 +1312,7 @@ export function AdminDataTable({
               ))}
             </TableHeader>
             <TableBody>
-              {isRefreshing ? (
+              {isRefreshing || isLoadingUsers ? (
                 <TableRow>
                   <TableCell colSpan={columns.length} className="h-24">
                     <div className="flex justify-center items-center">
@@ -1382,6 +1407,18 @@ export function AdminDataTable({
           mode="edit"
           user={editingUser}
           onSuccess={refreshTableData}
+          onSave={async (userId, data) => {
+            const result = await editUser(userId, data);
+            if (result.success) {
+              // Invalidate and refetch users to update stats (including workType changes)
+              await queryClient.invalidateQueries({
+                queryKey: queryKeys.admin.users(),
+              });
+              await refetchUsers();
+            } else {
+              throw new Error(result.error || "Failed to update user");
+            }
+          }}
           onClose={() => setEditingUser(null)}
         />
       )}

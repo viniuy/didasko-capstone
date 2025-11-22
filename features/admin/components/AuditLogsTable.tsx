@@ -26,6 +26,13 @@ import {
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
+import {
   Search,
   ChevronDown,
   ChevronUp,
@@ -35,6 +42,7 @@ import {
   Activity,
   Download,
   Filter,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { ExportModal } from "../modal/export-modal";
 import { AuditLogsFilterSheet } from "./AuditLogsFilterSheet";
@@ -114,9 +122,7 @@ export default function AuditLogsTable({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [logs, setLogs] = useState<AuditLog[]>(initialLogs);
-  const [currentPage, setCurrentPage] = useState(initialPage);
-  const [totalPages, setTotalPages] = useState(initialTotalPages);
+  const [currentPage, setCurrentPage] = useState(1);
   const isAcademicHead = userRole === "ACADEMIC_HEAD";
   const [searchAction, setSearchAction] = useState(
     searchParams.get("action") || ""
@@ -129,43 +135,73 @@ export default function AuditLogsTable({
   const [windowHeight, setWindowHeight] = useState(800);
   const [windowWidth, setWindowWidth] = useState(1024);
 
-  // React Query hooks
-  const currentPageFromUrl = parseInt(
-    searchParams.get("p") || searchParams.get("page") || "1"
-  );
+  // Get today's date range (start and end of today)
+  const getTodayDateRange = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
+    return { start: today, end: endOfToday };
+  }, []);
+
+  // Initialize filters in state only (not in URL)
+  const [filters, setFilters] = useState<{
+    actions: string[];
+    faculty: string[];
+    modules: string[];
+    startDate: Date | undefined;
+    endDate: Date | undefined;
+  }>({
+    actions: [],
+    faculty: [],
+    modules: [],
+    startDate: getTodayDateRange.start,
+    endDate: getTodayDateRange.end,
+  });
+
+  // Local state for date range picker (not applied until "Apply" is clicked)
+  const [localDateRange, setLocalDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: filters.startDate,
+    to: filters.endDate,
+  });
+
+  // Sync local date range with filters when filters change externally
+  useEffect(() => {
+    setLocalDateRange({
+      from: filters.startDate,
+      to: filters.endDate,
+    });
+  }, [filters.startDate, filters.endDate]);
+
+  // Build filters from state (not URL) - use state currentPage
   const auditLogsFilters = useMemo(() => {
-    const filters: any = {
-      page: currentPageFromUrl,
+    const filterParams: any = {
+      page: currentPage,
       pageSize: 9,
     };
 
-    if (searchParams.get("actions")) {
-      filters.actions = searchParams.get("actions")!.split(",");
+    // Use filters from state
+    if (filters.actions.length > 0) {
+      filterParams.actions = filters.actions;
     }
-    if (searchParams.get("action")) {
-      filters.action = searchParams.get("action")!;
+    if (filters.faculty.length > 0) {
+      filterParams.faculty = filters.faculty;
     }
-    if (searchParams.get("faculty")) {
-      filters.faculty = searchParams.get("faculty")!.split(",");
+    if (filters.modules.length > 0) {
+      filterParams.modules = filters.modules;
     }
-    if (searchParams.get("userId")) {
-      filters.userId = searchParams.get("userId")!;
+    if (filters.startDate) {
+      filterParams.startDate = filters.startDate.toISOString();
     }
-    if (searchParams.get("modules")) {
-      filters.modules = searchParams.get("modules")!.split(",");
-    }
-    if (searchParams.get("module")) {
-      filters.module = searchParams.get("module")!;
-    }
-    if (searchParams.get("startDate")) {
-      filters.startDate = searchParams.get("startDate")!;
-    }
-    if (searchParams.get("endDate")) {
-      filters.endDate = searchParams.get("endDate")!;
+    if (filters.endDate) {
+      filterParams.endDate = filters.endDate.toISOString();
     }
 
-    return filters;
-  }, [searchParams, currentPageFromUrl]);
+    return filterParams;
+  }, [filters, currentPage]);
 
   const {
     data: auditLogsData,
@@ -209,59 +245,9 @@ export default function AuditLogsTable({
     return Math.max(400, Math.min(availableHeight, windowHeight * 0.8));
   }, [windowHeight]);
 
-  // Parse filters from URL params
-  const parsedFilters = useMemo(() => {
-    const actions = searchParams.get("actions")
-      ? searchParams.get("actions")!.split(",")
-      : [];
-    const faculty = searchParams.get("faculty")
-      ? searchParams.get("faculty")!.split(",")
-      : [];
-    const modules = searchParams.get("modules")
-      ? searchParams.get("modules")!.split(",")
-      : [];
-    const startDate = searchParams.get("startDate")
-      ? new Date(searchParams.get("startDate")!)
-      : undefined;
-    const endDate = searchParams.get("endDate")
-      ? new Date(searchParams.get("endDate")!)
-      : undefined;
-
-    return {
-      actions,
-      faculty,
-      modules,
-      startDate,
-      endDate,
-    };
-  }, [searchParams]);
-
-  const [filters, setFilters] = useState(parsedFilters);
-
-  // Sync filters with URL params when they change
-  useEffect(() => {
-    setFilters(parsedFilters);
-  }, [parsedFilters]);
-
-  // Sync logs from React Query
-  useEffect(() => {
-    if (auditLogsData) {
-      setLogs(auditLogsData.logs || []);
-      setCurrentPage(auditLogsData.currentPage || currentPageFromUrl);
-      setTotalPages(auditLogsData.totalPages || initialTotalPages);
-    } else {
-      // Fallback to initial props if React Query hasn't loaded yet
-      setLogs(initialLogs);
-      setCurrentPage(initialPage);
-      setTotalPages(initialTotalPages);
-    }
-  }, [
-    auditLogsData,
-    initialLogs,
-    initialPage,
-    initialTotalPages,
-    currentPageFromUrl,
-  ]);
+  // Use query data directly - no need to sync to local state (makes it dynamic)
+  const logs = auditLogsData?.logs || initialLogs;
+  const totalPages = auditLogsData?.totalPages || initialTotalPages;
 
   // All possible actions based on audit logging requirements
   const allPossibleActions = [
@@ -287,10 +273,10 @@ export default function AuditLogsTable({
 
   // Get unique modules and actions from logs (for display)
   const uniqueModules = Array.from(
-    new Set(logs.map((log) => log.module))
+    new Set(logs.map((log: AuditLog) => log.module))
   ).sort();
   const uniqueActions = Array.from(
-    new Set(logs.map((log) => log.action))
+    new Set(logs.map((log: AuditLog) => log.action))
   ).sort();
 
   // Count active filters
@@ -315,57 +301,26 @@ export default function AuditLogsTable({
   const currentPath = pathname || "/main/logs";
 
   const handleSearch = () => {
-    const params = new URLSearchParams(searchParams.toString());
+    // Update filters state instead of URL
     if (searchAction) {
-      params.set("action", searchAction);
-    } else {
-      params.delete("action");
+      setFilters((prev) => ({
+        ...prev,
+        actions: prev.actions.includes(searchAction)
+          ? prev.actions
+          : [...prev.actions, searchAction],
+      }));
     }
-    params.delete("p"); // Remove page param, defaults to 1
-    router.push(`${currentPath}?${params.toString()}`);
+    // Reset to page 1 when searching
+    setCurrentPage(1);
   };
 
   const handlePageChange = (page: number) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (page === 1) {
-      params.delete("p"); // Don't show page=1 in URL
-    } else {
-      params.set("p", page.toString());
-    }
-    router.push(`${currentPath}?${params.toString()}`);
+    setCurrentPage(page);
   };
 
   const handleApplyFilters = () => {
-    const params = new URLSearchParams(searchParams.toString());
-
-    // Clear existing filter params
-    params.delete("actions");
-    params.delete("faculty");
-    params.delete("modules");
-    params.delete("startDate");
-    params.delete("endDate");
-    params.delete("action"); // Clear old single action filter
-    params.delete("module"); // Clear old single module filter
-    params.delete("p"); // Reset to page 1 (don't show in URL)
-
-    // Set new filter params
-    if (filters.actions.length > 0) {
-      params.set("actions", filters.actions.join(","));
-    }
-    if (filters.faculty.length > 0) {
-      params.set("faculty", filters.faculty.join(","));
-    }
-    if (filters.modules.length > 0) {
-      params.set("modules", filters.modules.join(","));
-    }
-    if (filters.startDate) {
-      params.set("startDate", filters.startDate.toISOString());
-    }
-    if (filters.endDate) {
-      params.set("endDate", filters.endDate.toISOString());
-    }
-
-    router.push(`${currentPath}?${params.toString()}`);
+    // Filters are already in state, just reset to page 1 and close sheet
+    setCurrentPage(1);
     setFilterSheetOpen(false);
   };
 
@@ -540,39 +495,103 @@ export default function AuditLogsTable({
     }
   };
 
-  // Show loading spinner if loading
-  if (isLoading || isLoadingLogs) {
+  // Show loading spinner if loading (only for initial load, not refetching)
+  if (isLoading || (isLoadingLogs && !auditLogsData)) {
     return <LoadingSpinner />;
   }
 
   return (
     <>
-      <Card className="p-4 sm:p-6 bg-white shadow-sm border border-gray-200">
+      <Card className="p-4 flex-1 sm:p-6 bg-white shadow-sm border border-gray-200">
         {/* Filters and Export */}
         <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
           <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Input
-              placeholder="Search by action..."
-              value={searchAction}
-              onChange={(e) => setSearchAction(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleSearch();
-                }
-              }}
-              className="w-full sm:max-w-sm text-sm sm:text-base"
-            />
-            <Button
-              onClick={handleSearch}
-              variant="outline"
-              className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white w-full sm:w-auto text-sm sm:text-base"
-            >
-              <Search className="w-4 h-4 mr-2" />
-              Search
-            </Button>
+            {" "}
+            <div>
+              <h2 className="pb-1 text-xl sm:text-2xl font-bold text-[#124A69]">
+                Audit Logs
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {userRole === Role.ADMIN
+                  ? "All system activity logs"
+                  : "Course and faculty management logs"}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full sm:w-auto justify-start text-left font-normal border-[#124A69] text-sm sm:text-base",
+                    !filters.startDate &&
+                      !filters.endDate &&
+                      "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {filters.startDate && filters.endDate ? (
+                    <>
+                      {format(filters.startDate, "LLL dd, y")} -{" "}
+                      {format(filters.endDate, "LLL dd, y")}
+                    </>
+                  ) : filters.startDate ? (
+                    format(filters.startDate, "LLL dd, y")
+                  ) : (
+                    "Pick a date range"
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={{
+                    from: localDateRange.from,
+                    to: localDateRange.to,
+                  }}
+                  onSelect={(range: { from?: Date; to?: Date } | undefined) => {
+                    setLocalDateRange({
+                      from: range?.from,
+                      to: range?.to,
+                    });
+                  }}
+                  numberOfMonths={2}
+                  className="[&_button[data-range-start='true']]:!bg-[#124A69] [&_button[data-range-start='true']]:!text-white [&_button[data-range-end='true']]:!bg-[#124A69] [&_button[data-range-end='true']]:!text-white"
+                />
+                <div className="flex items-center gap-2 p-3 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setLocalDateRange({
+                        from: filters.startDate,
+                        to: filters.endDate,
+                      });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-[#124A69] hover:bg-[#0D3A54]"
+                    onClick={() => {
+                      setFilters({
+                        ...filters,
+                        startDate: localDateRange.from,
+                        endDate: localDateRange.to,
+                      });
+                      setCurrentPage(1);
+                    }}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
             <Button
               variant="outline"
               className="relative border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white w-full sm:w-auto text-sm sm:text-base"
@@ -636,7 +655,7 @@ export default function AuditLogsTable({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {logs.map((log) => {
+                  {logs.map((log: AuditLog) => {
                     const isExpanded = expandedRows.has(log.id);
                     return (
                       <React.Fragment key={log.id}>
@@ -812,9 +831,9 @@ export default function AuditLogsTable({
 
             {/* Pagination */}
             {totalPages > 0 && (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
-                <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-                  <span className="text-xs sm:text-sm text-gray-600">
+              <div className="flex flex-col sm:flex-row justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
+                <div className="flex justify-start gap-2 sm:gap-4 w-full sm:w-auto">
+                  <span className="w-[300px] text-xs sm:text-sm text-gray-600">
                     Showing {(currentPage - 1) * 9 + 1}-
                     {(currentPage - 1) * 9 + logs.length} of{" "}
                     {currentPage === totalPages
@@ -830,8 +849,8 @@ export default function AuditLogsTable({
                       : ""}
                   </span>
                 </div>
-                <Pagination className="flex justify-start sm:justify-end w-full sm:w-auto">
-                  <PaginationContent className="flex-wrap">
+                <Pagination className="flex justify-end sm:justify-end w-full sm:w-auto">
+                  <PaginationContent className="flex gap-1">
                     <PaginationItem>
                       <PaginationPrevious
                         onClick={(e) => {
@@ -847,24 +866,84 @@ export default function AuditLogsTable({
                         }
                       />
                     </PaginationItem>
-                    {Array.from({ length: totalPages }, (_, i) => (
-                      <PaginationItem key={i}>
-                        <PaginationLink
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handlePageChange(i + 1);
-                          }}
-                          isActive={currentPage === i + 1}
-                          className={
-                            currentPage === i + 1
-                              ? "bg-[#124A69] text-white hover:bg-[#0d3a56] cursor-pointer"
-                              : "cursor-pointer"
+
+                    {(() => {
+                      const pages: number[] = [];
+
+                      // If total pages is 5 or less, show all pages
+                      if (totalPages <= 5) {
+                        for (let i = 1; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // Always show first 2 pages
+                        pages.push(1, 2);
+
+                        // Determine which pages to show around current
+                        const showAroundCurrent: number[] = [];
+                        if (currentPage > 2 && currentPage < totalPages - 1) {
+                          // Show current-1, current, current+1 if in middle
+                          showAroundCurrent.push(
+                            currentPage - 1,
+                            currentPage,
+                            currentPage + 1
+                          );
+                        } else if (currentPage <= 2) {
+                          // If current is 1 or 2, show 3, 4
+                          showAroundCurrent.push(3, 4);
+                        } else if (currentPage >= totalPages - 1) {
+                          // If current is near end, show last-3, last-2, last-1
+                          showAroundCurrent.push(
+                            totalPages - 3,
+                            totalPages - 2,
+                            totalPages - 1
+                          );
+                        }
+
+                        // Remove duplicates and sort
+                        const uniquePages = Array.from(
+                          new Set([...pages, ...showAroundCurrent, totalPages])
+                        ).sort((a, b) => a - b) as number[];
+
+                        // Build final array with ellipsis
+                        const finalPages: (number | string)[] = [];
+                        for (let i = 0; i < uniquePages.length; i++) {
+                          const page = uniquePages[i];
+                          if (i > 0 && page - uniquePages[i - 1] > 1) {
+                            finalPages.push("…");
                           }
-                        >
-                          {i + 1}
-                        </PaginationLink>
+                          finalPages.push(page);
+                        }
+
+                        return finalPages;
+                      }
+
+                      return pages;
+                    })().map((item, i) => (
+                      <PaginationItem key={i}>
+                        {item === "…" ? (
+                          <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                            …
+                          </span>
+                        ) : (
+                          <PaginationLink
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handlePageChange(item as number);
+                            }}
+                            isActive={currentPage === item}
+                            className={
+                              currentPage === item
+                                ? "bg-[#124A69] text-white hover:bg-[#0d3a56] cursor-pointer"
+                                : "cursor-pointer"
+                            }
+                          >
+                            {item}
+                          </PaginationLink>
+                        )}
                       </PaginationItem>
                     ))}
+
                     <PaginationItem>
                       <PaginationNext
                         onClick={(e) => {

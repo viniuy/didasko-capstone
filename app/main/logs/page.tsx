@@ -181,16 +181,6 @@ export default async function LogsPage({ searchParams }: PageProps) {
           <div className="space-y-2 md:space-y-6 lg:space-y-8">
             <div className="space-y-2">
               <div className="flex items-center justify-between pl-2">
-                <div>
-                  <h2 className="pb-1 text-xl sm:text-2xl font-bold text-[#124A69]">
-                    Audit Logs
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {userRole === Role.ADMIN
-                      ? "All system activity logs"
-                      : "Course and faculty management logs"}
-                  </p>
-                </div>
                 <div className="flex items-center">
                   <BreakGlassCompact />
                 </div>

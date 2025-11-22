@@ -43,7 +43,8 @@ export function useAuditLogs(filters?: {
       const { data } = await axios.get(`/logs?${params.toString()}`);
       return data;
     },
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval: false, // Disable auto-refetch to prevent pagination lag
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
 }
 

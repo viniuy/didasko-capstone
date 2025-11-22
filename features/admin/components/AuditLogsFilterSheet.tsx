@@ -10,15 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { CalendarIcon, Filter } from "lucide-react";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { Filter } from "lucide-react";
 
 interface Faculty {
   id: string;
@@ -60,35 +52,46 @@ export function AuditLogsFilterSheet({
   // Use faculty from props
   const faculty = availableFaculty;
 
+  // Local state for temporary filter changes (not applied until "Apply" is clicked)
+  const [localFilters, setLocalFilters] =
+    useState<AuditLogsFilterState>(filters);
+
+  // Sync local filters with props when sheet opens or filters change externally
+  useEffect(() => {
+    if (isOpen) {
+      setLocalFilters(filters);
+    }
+  }, [filters, isOpen]);
+
   const handleActionToggle = (action: string) => {
-    onFiltersChange({
-      ...filters,
-      actions: filters.actions.includes(action)
-        ? filters.actions.filter((a) => a !== action)
-        : [...filters.actions, action],
+    setLocalFilters({
+      ...localFilters,
+      actions: localFilters.actions.includes(action)
+        ? localFilters.actions.filter((a) => a !== action)
+        : [...localFilters.actions, action],
     });
   };
 
   const handleFacultyToggle = (facultyId: string) => {
-    onFiltersChange({
-      ...filters,
-      faculty: filters.faculty.includes(facultyId)
-        ? filters.faculty.filter((f) => f !== facultyId)
-        : [...filters.faculty, facultyId],
+    setLocalFilters({
+      ...localFilters,
+      faculty: localFilters.faculty.includes(facultyId)
+        ? localFilters.faculty.filter((f) => f !== facultyId)
+        : [...localFilters.faculty, facultyId],
     });
   };
 
   const handleModuleToggle = (module: string) => {
-    onFiltersChange({
-      ...filters,
-      modules: filters.modules.includes(module)
-        ? filters.modules.filter((m) => m !== module)
-        : [...filters.modules, module],
+    setLocalFilters({
+      ...localFilters,
+      modules: localFilters.modules.includes(module)
+        ? localFilters.modules.filter((m) => m !== module)
+        : [...localFilters.modules, module],
     });
   };
 
   const handleClearAll = () => {
-    onFiltersChange({
+    setLocalFilters({
       actions: [],
       faculty: [],
       modules: [],
@@ -97,12 +100,18 @@ export function AuditLogsFilterSheet({
     });
   };
 
+  const handleApply = () => {
+    // Apply local filters to parent component
+    onFiltersChange(localFilters);
+    onApplyFilters();
+  };
+
   const hasActiveFilters =
-    filters.actions.length > 0 ||
-    filters.faculty.length > 0 ||
-    filters.modules.length > 0 ||
-    filters.startDate !== undefined ||
-    filters.endDate !== undefined;
+    localFilters.actions.length > 0 ||
+    localFilters.faculty.length > 0 ||
+    localFilters.modules.length > 0 ||
+    localFilters.startDate !== undefined ||
+    localFilters.endDate !== undefined;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -135,7 +144,7 @@ export function AuditLogsFilterSheet({
                   >
                     <Checkbox
                       id={`faculty-${fac.id}`}
-                      checked={filters.faculty.includes(fac.id)}
+                      checked={localFilters.faculty.includes(fac.id)}
                       onCheckedChange={() => handleFacultyToggle(fac.id)}
                       className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
@@ -165,7 +174,7 @@ export function AuditLogsFilterSheet({
                   >
                     <Checkbox
                       id={`action-${action}`}
-                      checked={filters.actions.includes(action)}
+                      checked={localFilters.actions.includes(action)}
                       onCheckedChange={() => handleActionToggle(action)}
                       className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
@@ -197,7 +206,7 @@ export function AuditLogsFilterSheet({
                   >
                     <Checkbox
                       id={`module-${module}`}
-                      checked={filters.modules.includes(module)}
+                      checked={localFilters.modules.includes(module)}
                       onCheckedChange={() => handleModuleToggle(module)}
                       className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
@@ -210,82 +219,6 @@ export function AuditLogsFilterSheet({
                   </div>
                 ))
               )}
-            </div>
-          </div>
-
-          {/* Date Range Filter */}
-          <div className="space-y-4">
-            <Label className="text-sm font-medium text-gray-700">
-              Date Range
-            </Label>
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label className="text-xs text-gray-600">Start Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal border-[#124A69]",
-                        !filters.startDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {filters.startDate ? (
-                        format(filters.startDate, "PPP")
-                      ) : (
-                        <span>Pick a start date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={filters.startDate}
-                      onSelect={(date) => {
-                        onFiltersChange({
-                          ...filters,
-                          startDate: date,
-                        });
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-gray-600">End Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal border-[#124A69]",
-                        !filters.endDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {filters.endDate ? (
-                        format(filters.endDate, "PPP")
-                      ) : (
-                        <span>Pick an end date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={filters.endDate}
-                      onSelect={(date) => {
-                        onFiltersChange({
-                          ...filters,
-                          endDate: date,
-                        });
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
             </div>
           </div>
         </div>
@@ -303,13 +236,8 @@ export function AuditLogsFilterSheet({
             variant="outline"
             className="flex-1 rounded-lg"
             onClick={() => {
-              onFiltersChange({
-                actions: [],
-                faculty: [],
-                modules: [],
-                startDate: undefined,
-                endDate: undefined,
-              });
+              // Reset local filters to current applied filters on cancel
+              setLocalFilters(filters);
               onOpenChange(false);
             }}
           >
@@ -317,7 +245,7 @@ export function AuditLogsFilterSheet({
           </Button>
           <Button
             className="flex-1 rounded-lg bg-[#124A69] hover:bg-[#0D3A54]"
-            onClick={onApplyFilters}
+            onClick={handleApply}
           >
             Apply
           </Button>

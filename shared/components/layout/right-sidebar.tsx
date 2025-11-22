@@ -10,8 +10,6 @@ import CourseShortcut from "@/features/right-sidebar/components/my-subjects";
 import AttendanceLeaderboard from "@/features/right-sidebar/components/student-attendance";
 import GradingLeaderboard from "@/features/right-sidebar/components/grading-leaderboard";
 import CourseAnalytics from "@/features/right-sidebar/components/course-analytics";
-import UserIdSearch from "@/features/right-sidebar/components/user-id-search";
-import ActiveFaculty from "@/features/right-sidebar/components/active-faculty";
 
 export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
@@ -31,9 +29,6 @@ export default function Rightsidebar() {
   const { data: session } = useSession();
   const courseSlug = (params.course_slug || params.slug) as string;
 
-  // Check if user is ADMIN
-  const isAdmin = session?.user?.role === "ADMIN";
-
   // Route detection
   const isAttendanceList = pathname === "/main/attendance";
   const isClassAttendance =
@@ -43,11 +38,6 @@ export default function Rightsidebar() {
   const isGradingList =
     pathname === "/main/grading" || pathname === "/main/grading/class-record";
   const isCourseDashboard = pathname.startsWith("/main/course/") && courseSlug;
-  const isAdminDashboard =
-    isAdmin &&
-    (pathname.startsWith("/dashboard/admin") ||
-      pathname.startsWith("/main/logs") ||
-      pathname.startsWith("/main/students"));
 
   return (
     <>
@@ -114,15 +104,6 @@ export default function Rightsidebar() {
               </div>
               <div className="h-[calc(50vh-20px)]">
                 <GradingLeaderboard />
-              </div>
-            </>
-          ) : isAdminDashboard ? (
-            <>
-              <div className="h-[calc(50vh-25px)]">
-                <UserIdSearch />
-              </div>
-              <div className="h-[calc(50vh-25px)]">
-                <ActiveFaculty />
               </div>
             </>
           ) : (

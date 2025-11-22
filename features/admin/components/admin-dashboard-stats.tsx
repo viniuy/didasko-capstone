@@ -1,47 +1,66 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Library, Users, UserCheck, UserX } from "lucide-react";
-import { useAdminDashboardData } from "@/lib/hooks/queries";
+import {
+  User as UserIcon,
+  Library,
+  Users,
+  UserCheck,
+  UserX,
+} from "lucide-react";
+import { useUsers } from "@/lib/hooks/queries";
 import { AdminDataTable } from "./admin-data-table";
+import { useMemo } from "react";
+import { WorkType, UserStatus, Role } from "@prisma/client";
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  department: string;
+  workType: WorkType;
+  role: Role;
+  status: UserStatus;
+  [key: string]: string | WorkType | Role | UserStatus;
+}
 
 export function AdminDashboardStats() {
-  const queries = useAdminDashboardData();
+  // Fetch users once - stats will be calculated from this data
+  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
 
-  // Extract data from queries
-  const [
-    studentsCountQuery,
-    teachersCountQuery,
-    coursesCountQuery,
-    attendanceCountQuery,
-    recentActivityQuery,
-    usersQuery,
-    fullTimeCountQuery,
-    partTimeCountQuery,
-    grantedCountQuery,
-    deniedCountQuery,
-    totalUsersQuery,
-  ] = queries;
+  // Extract users array from response
+  const users = useMemo(() => {
+    if (!usersData) return [];
+    if (Array.isArray(usersData)) return usersData;
+    if (usersData.users && Array.isArray(usersData.users))
+      return usersData.users;
+    return [];
+  }, [usersData]);
 
-  const isLoading =
-    studentsCountQuery.isLoading ||
-    teachersCountQuery.isLoading ||
-    coursesCountQuery.isLoading ||
-    attendanceCountQuery.isLoading ||
-    recentActivityQuery.isLoading ||
-    usersQuery.isLoading ||
-    fullTimeCountQuery.isLoading ||
-    partTimeCountQuery.isLoading ||
-    grantedCountQuery.isLoading ||
-    deniedCountQuery.isLoading ||
-    totalUsersQuery.isLoading;
+  // Calculate stats from users data
+  const stats = useMemo(() => {
+    const fullTimeCount = users.filter(
+      (user: User) => user.workType === "FULL_TIME"
+    ).length;
+    const partTimeCount = users.filter(
+      (user: User) => user.workType === "PART_TIME"
+    ).length;
+    const activeCount = users.filter(
+      (user: User) => user.status === "ACTIVE"
+    ).length;
+    const archivedCount = users.filter(
+      (user: User) => user.status === "ARCHIVED"
+    ).length;
+    const totalUsers = users.length;
 
-  const fullTimeCount = fullTimeCountQuery.data || 0;
-  const partTimeCount = partTimeCountQuery.data || 0;
-  const grantedCount = grantedCountQuery.data || 0;
-  const deniedCount = deniedCountQuery.data || 0;
-  const totalUsers = totalUsersQuery.data || 0;
-  const users = usersQuery.data || [];
+    return {
+      fullTimeCount,
+      partTimeCount,
+      activeCount,
+      archivedCount,
+      totalUsers,
+    };
+  }, [users]);
 
   return (
     <>
@@ -52,11 +71,11 @@ export function AdminDashboardStats() {
             <CardTitle className="text-sm font-medium">
               Faculty Full-Time
             </CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
+            <UserIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLoading ? "..." : fullTimeCount}
+              {isLoadingUsers ? "..." : stats.fullTimeCount}
             </div>
           </CardContent>
         </Card>
@@ -69,29 +88,31 @@ export function AdminDashboardStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLoading ? "..." : partTimeCount}
+              {isLoadingUsers ? "..." : stats.partTimeCount}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Granted Users</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLoading ? "..." : grantedCount}
+              {isLoadingUsers ? "..." : stats.activeCount}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Denied Users</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Archived Users
+            </CardTitle>
             <UserX className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLoading ? "..." : deniedCount}
+              {isLoadingUsers ? "..." : stats.archivedCount}
             </div>
           </CardContent>
         </Card>
@@ -102,7 +123,7 @@ export function AdminDashboardStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLoading ? "..." : totalUsers}
+              {isLoadingUsers ? "..." : stats.totalUsers}
             </div>
           </CardContent>
         </Card>
