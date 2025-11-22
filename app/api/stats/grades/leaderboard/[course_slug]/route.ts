@@ -5,12 +5,36 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getAssessmentScores } from "@/lib/services";
 
+// Helper: Check if term config weights are properly configured
+function isTermConfigValid(termConfig: any): boolean {
+  const ptWeight = termConfig.ptWeight ?? 0;
+  const quizWeight = termConfig.quizWeight ?? 0;
+  const examWeight = termConfig.examWeight ?? 0;
+  const totalWeight = ptWeight + quizWeight + examWeight;
+
+  // Weights should sum to 100 and all should be valid numbers
+  return (
+    totalWeight === 100 &&
+    ptWeight >= 0 &&
+    quizWeight >= 0 &&
+    examWeight >= 0 &&
+    !isNaN(ptWeight) &&
+    !isNaN(quizWeight) &&
+    !isNaN(examWeight)
+  );
+}
+
 // Helper: Compute term grade from assessment scores
 function computeTermGradeFromScores(
   termConfig: any,
   assessmentScores: Record<string, any>,
   studentId: string
 ): number | null {
+  // Don't compute if weights are not properly configured
+  if (!isTermConfigValid(termConfig)) {
+    return null;
+  }
+
   const ptAssessments = termConfig.assessments.filter(
     (a: any) => a.type === "PT" && a.enabled
   );
@@ -166,7 +190,13 @@ export async function GET(
     });
 
     // Collect all term grades for each student (from saved termGrades or compute from scores)
+    // Only process term configs with valid weights
     course.termConfigs.forEach((termConfig) => {
+      // Skip if weights are not properly configured
+      if (!isTermConfigValid(termConfig)) {
+        return;
+      }
+
       course.students.forEach((student) => {
         const studentKey = student.id;
         const studentData = studentPerformanceMap.get(studentKey)!;
@@ -235,19 +265,24 @@ export async function GET(
         const prefinalGrade = getTermGrade(student.termGrades, "PREFINALS");
         const finalGrade = getTermGrade(student.termGrades, "FINALS");
 
-        // Determine which is the latest term and compare to previous terms
-        if (finalGrade !== null) {
-          // FINALS: Compare to average of PRELIM + MIDTERM + PREFINALS
-          const previousTerms: number[] = [];
-          if (prelimGrade !== null) previousTerms.push(prelimGrade);
-          if (midtermGrade !== null) previousTerms.push(midtermGrade);
-          if (prefinalGrade !== null) previousTerms.push(prefinalGrade);
+        // Sort term grades by term order to get proper progression
+        const termOrder = ["PRELIM", "MIDTERM", "PREFINALS", "FINALS"];
+        const sortedTermGrades = [...student.termGrades].sort((a, b) => {
+          const aIndex = termOrder.indexOf(a.term.toUpperCase());
+          const bIndex = termOrder.indexOf(b.term.toUpperCase());
+          return aIndex - bIndex;
+        });
+
+        // Calculate improvement: Compare latest term vs average of all previous terms
+        if (sortedTermGrades.length >= 2) {
+          const latestTerm = sortedTermGrades[sortedTermGrades.length - 1];
+          const previousTerms = sortedTermGrades.slice(0, -1);
 
           if (previousTerms.length > 0) {
             const avgPrevious =
-              previousTerms.reduce((sum, grade) => sum + grade, 0) /
+              previousTerms.reduce((sum, tg) => sum + tg.grade, 0) /
               previousTerms.length;
-            const absoluteImprovement = finalGrade - avgPrevious;
+            const absoluteImprovement = latestTerm.grade - avgPrevious;
 
             if (avgPrevious > 0) {
               improvement = (absoluteImprovement / avgPrevious) * 100;
@@ -257,38 +292,21 @@ export async function GET(
 
             isImproving = absoluteImprovement > 0;
           }
-        } else if (prefinalGrade !== null) {
-          // PREFINALS: Compare to average of PRELIM + MIDTERM
-          const previousTerms: number[] = [];
-          if (prelimGrade !== null) previousTerms.push(prelimGrade);
-          if (midtermGrade !== null) previousTerms.push(midtermGrade);
-
-          if (previousTerms.length > 0) {
-            const avgPrevious =
-              previousTerms.reduce((sum, grade) => sum + grade, 0) /
-              previousTerms.length;
-            const absoluteImprovement = prefinalGrade - avgPrevious;
-
-            if (avgPrevious > 0) {
-              improvement = (absoluteImprovement / avgPrevious) * 100;
-            } else if (absoluteImprovement > 0) {
-              improvement = absoluteImprovement * 10;
-            }
-
-            isImproving = absoluteImprovement > 0;
-          }
-        } else if (midtermGrade !== null && prelimGrade !== null) {
-          // MIDTERM: Compare to PRELIM
-          const absoluteImprovement = midtermGrade - prelimGrade;
-
-          if (prelimGrade > 0) {
-            improvement = (absoluteImprovement / prelimGrade) * 100;
-          } else if (absoluteImprovement > 0) {
-            improvement = absoluteImprovement * 10;
-          }
-
-          isImproving = absoluteImprovement > 0;
         }
+
+        // Calculate numeric grade from percentage
+        const getNumericGrade = (totalPercent: number): string => {
+          if (totalPercent >= 97.5) return "1.00";
+          if (totalPercent >= 94.5) return "1.25";
+          if (totalPercent >= 91.5) return "1.50";
+          if (totalPercent >= 86.5) return "1.75";
+          if (totalPercent >= 81.5) return "2.00";
+          if (totalPercent >= 76.0) return "2.25";
+          if (totalPercent >= 70.5) return "2.50";
+          if (totalPercent >= 65.0) return "2.75";
+          if (totalPercent >= 59.5) return "3.00";
+          return "5.00";
+        };
 
         return {
           id: `${student.studentId}-${courseSlug}`,
@@ -296,6 +314,7 @@ export async function GET(
           studentName: student.studentName,
           studentNumber: student.studentNumber,
           currentGrade,
+          numericGrade: getNumericGrade(currentGrade),
           improvement,
           isImproving,
           rank: 0, // Will be set after sorting

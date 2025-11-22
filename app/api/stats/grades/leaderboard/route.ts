@@ -4,12 +4,36 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getAssessmentScores } from "@/lib/services";
 
+// Helper: Check if term config weights are properly configured
+function isTermConfigValid(termConfig: any): boolean {
+  const ptWeight = termConfig.ptWeight ?? 0;
+  const quizWeight = termConfig.quizWeight ?? 0;
+  const examWeight = termConfig.examWeight ?? 0;
+  const totalWeight = ptWeight + quizWeight + examWeight;
+
+  // Weights should sum to 100 and all should be valid numbers
+  return (
+    totalWeight === 100 &&
+    ptWeight >= 0 &&
+    quizWeight >= 0 &&
+    examWeight >= 0 &&
+    !isNaN(ptWeight) &&
+    !isNaN(quizWeight) &&
+    !isNaN(examWeight)
+  );
+}
+
 // Helper: Compute term grade from assessment scores
 function computeTermGradeFromScores(
   termConfig: any,
   assessmentScores: Record<string, any>,
   studentId: string
 ): number | null {
+  // Don't compute if weights are not properly configured
+  if (!isTermConfigValid(termConfig)) {
+    return null;
+  }
+
   const ptAssessments = termConfig.assessments.filter(
     (a: any) => a.type === "PT" && a.enabled
   );
@@ -179,6 +203,11 @@ export async function GET(request: Request) {
         const studentData = studentPerformanceMap.get(studentKey)!;
 
         course.termConfigs.forEach((termConfig) => {
+          // Skip if weights are not properly configured
+          if (!isTermConfigValid(termConfig)) {
+            return;
+          }
+
           // Try to get saved term grade first
           const savedTermGrade = termConfig.termGrades.find(
             (tg: any) => tg.studentId === studentKey
@@ -230,51 +259,55 @@ export async function GET(request: Request) {
               student.totalGrades.length
             : 0;
 
-        // Calculate improvement: Compare current term vs average of all previous terms
-        // - MIDTERM vs PRELIM
-        // - PREFINALS vs average of (PRELIM + MIDTERM)
-        // - FINALS vs average of (PRELIM + MIDTERM + PREFINALS)
+        // Calculate improvement: Compare latest term vs average of all previous terms
+        // Build term progression array
+        const termProgression: { term: string; avg: number }[] = [];
+        if (student.prelimsGrades.length > 0) {
+          termProgression.push({
+            term: "PRELIM",
+            avg:
+              student.prelimsGrades.reduce((a, b) => a + b, 0) /
+              student.prelimsGrades.length,
+          });
+        }
+        if (student.midtermGrades.length > 0) {
+          termProgression.push({
+            term: "MIDTERM",
+            avg:
+              student.midtermGrades.reduce((a, b) => a + b, 0) /
+              student.midtermGrades.length,
+          });
+        }
+        if (student.prefinalsGrades.length > 0) {
+          termProgression.push({
+            term: "PREFINALS",
+            avg:
+              student.prefinalsGrades.reduce((a, b) => a + b, 0) /
+              student.prefinalsGrades.length,
+          });
+        }
+        if (student.finalsGrades.length > 0) {
+          termProgression.push({
+            term: "FINALS",
+            avg:
+              student.finalsGrades.reduce((a, b) => a + b, 0) /
+              student.finalsGrades.length,
+          });
+        }
+
         let improvement = 0;
         let isImproving = false;
 
-        // Calculate averages for each term across all courses
-        const avgPrelim =
-          student.prelimsGrades.length > 0
-            ? student.prelimsGrades.reduce((a, b) => a + b, 0) /
-              student.prelimsGrades.length
-            : 0;
-
-        const avgMidterm =
-          student.midtermGrades.length > 0
-            ? student.midtermGrades.reduce((a, b) => a + b, 0) /
-              student.midtermGrades.length
-            : 0;
-
-        const avgPrefinals =
-          student.prefinalsGrades.length > 0
-            ? student.prefinalsGrades.reduce((a, b) => a + b, 0) /
-              student.prefinalsGrades.length
-            : 0;
-
-        const avgFinals =
-          student.finalsGrades.length > 0
-            ? student.finalsGrades.reduce((a, b) => a + b, 0) /
-              student.finalsGrades.length
-            : 0;
-
-        // Determine which is the latest term and compare to previous terms
-        if (avgFinals > 0) {
-          // FINALS: Compare to average of PRELIM + MIDTERM + PREFINALS
-          const previousTerms: number[] = [];
-          if (avgPrelim > 0) previousTerms.push(avgPrelim);
-          if (avgMidterm > 0) previousTerms.push(avgMidterm);
-          if (avgPrefinals > 0) previousTerms.push(avgPrefinals);
+        // Compare latest term vs average of all previous terms
+        if (termProgression.length >= 2) {
+          const latestTerm = termProgression[termProgression.length - 1];
+          const previousTerms = termProgression.slice(0, -1);
 
           if (previousTerms.length > 0) {
             const avgPrevious =
-              previousTerms.reduce((sum, grade) => sum + grade, 0) /
+              previousTerms.reduce((sum, t) => sum + t.avg, 0) /
               previousTerms.length;
-            const absoluteImprovement = avgFinals - avgPrevious;
+            const absoluteImprovement = latestTerm.avg - avgPrevious;
 
             if (avgPrevious > 0) {
               improvement = (absoluteImprovement / avgPrevious) * 100;
@@ -284,38 +317,21 @@ export async function GET(request: Request) {
 
             isImproving = absoluteImprovement > 0;
           }
-        } else if (avgPrefinals > 0) {
-          // PREFINALS: Compare to average of PRELIM + MIDTERM
-          const previousTerms: number[] = [];
-          if (avgPrelim > 0) previousTerms.push(avgPrelim);
-          if (avgMidterm > 0) previousTerms.push(avgMidterm);
-
-          if (previousTerms.length > 0) {
-            const avgPrevious =
-              previousTerms.reduce((sum, grade) => sum + grade, 0) /
-              previousTerms.length;
-            const absoluteImprovement = avgPrefinals - avgPrevious;
-
-            if (avgPrevious > 0) {
-              improvement = (absoluteImprovement / avgPrevious) * 100;
-            } else if (absoluteImprovement > 0) {
-              improvement = absoluteImprovement * 10;
-            }
-
-            isImproving = absoluteImprovement > 0;
-          }
-        } else if (avgMidterm > 0 && avgPrelim > 0) {
-          // MIDTERM: Compare to PRELIM
-          const absoluteImprovement = avgMidterm - avgPrelim;
-
-          if (avgPrelim > 0) {
-            improvement = (absoluteImprovement / avgPrelim) * 100;
-          } else if (absoluteImprovement > 0) {
-            improvement = absoluteImprovement * 10;
-          }
-
-          isImproving = absoluteImprovement > 0;
         }
+
+        // Calculate numeric grade from percentage
+        const getNumericGrade = (totalPercent: number): string => {
+          if (totalPercent >= 97.5) return "1.00";
+          if (totalPercent >= 94.5) return "1.25";
+          if (totalPercent >= 91.5) return "1.50";
+          if (totalPercent >= 86.5) return "1.75";
+          if (totalPercent >= 81.5) return "2.00";
+          if (totalPercent >= 76.0) return "2.25";
+          if (totalPercent >= 70.5) return "2.50";
+          if (totalPercent >= 65.0) return "2.75";
+          if (totalPercent >= 59.5) return "3.00";
+          return "5.00";
+        };
 
         return {
           id: `${student.studentId}-aggregate`,
@@ -323,6 +339,7 @@ export async function GET(request: Request) {
           studentName: student.studentName,
           studentNumber: student.studentNumber,
           currentGrade,
+          numericGrade: getNumericGrade(currentGrade),
           improvement,
           isImproving,
           rank: 0, // Will be set after sorting

@@ -958,10 +958,17 @@ export function ClassRecordTable({
     const examAssessment = config.assessments.find(
       (a) => a.type === "EXAM" && a.enabled
     );
+    // Check if any score exceeds max score
+    let hasScoreExceedingMax = false;
+
     // Apply transmutation to raw scores before calculating percentages (per-assessment)
     let ptPercentages: number[] = [];
     ptAssessments.forEach((pt) => {
       const rawScore = getEffectiveScore(studentId, pt);
+      // Check if raw score exceeds max score
+      if (rawScore !== null && rawScore > pt.maxScore) {
+        hasScoreExceedingMax = true;
+      }
       // Apply transmutation using assessment's own transmutationBase
       const transmutedScore = transmuteScore(
         rawScore,
@@ -976,6 +983,10 @@ export function ClassRecordTable({
     let quizPercentages: number[] = [];
     quizAssessments.forEach((quiz) => {
       const rawScore = getEffectiveScore(studentId, quiz);
+      // Check if raw score exceeds max score
+      if (rawScore !== null && rawScore > quiz.maxScore) {
+        hasScoreExceedingMax = true;
+      }
       // Apply transmutation using assessment's own transmutationBase
       const transmutedScore = transmuteScore(
         rawScore,
@@ -990,6 +1001,10 @@ export function ClassRecordTable({
     let examPercentage: number | null = null;
     if (examAssessment) {
       const rawExamScore = getEffectiveScore(studentId, examAssessment);
+      // Check if raw score exceeds max score
+      if (rawExamScore !== null && rawExamScore > examAssessment.maxScore) {
+        hasScoreExceedingMax = true;
+      }
       // Apply transmutation using assessment's own transmutationBase
       const transmutedExamScore = transmuteScore(
         rawExamScore,
@@ -1005,24 +1020,50 @@ export function ClassRecordTable({
     const ptAvg =
       ptPercentages.length > 0
         ? ptPercentages.reduce((a, b) => a + b, 0) / ptPercentages.length
-        : 0;
+        : null;
     const quizAvg =
       quizPercentages.length > 0
         ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
-        : 0;
+        : null;
 
     // Calculate weighted scores using percentages (already transmuted)
-    const ptWeighted = (ptAvg / 100) * config.ptWeight;
-    const quizWeighted = (quizAvg / 100) * config.quizWeight;
+    // Only calculate if we have valid averages (not null)
+    const ptWeighted = ptAvg !== null ? (ptAvg / 100) * config.ptWeight : null;
+    const quizWeighted =
+      quizAvg !== null ? (quizAvg / 100) * config.quizWeight : null;
     const examWeighted =
-      examPercentage !== null ? (examPercentage / 100) * config.examWeight : 0;
-    const totalPercent = ptWeighted + quizWeighted + examWeighted;
+      examPercentage !== null
+        ? (examPercentage / 100) * config.examWeight
+        : null;
+
+    // Only calculate total if we have all required scores
+    // If PT assessments exist, we need PT scores
+    // If Quiz assessments exist, we need Quiz scores
+    // If Exam assessment exists, we need Exam score
+    const hasRequiredPTScores =
+      ptAssessments.length === 0 || ptWeighted !== null;
+    const hasRequiredQuizScores =
+      quizAssessments.length === 0 || quizWeighted !== null;
+    const hasRequiredExamScore = !examAssessment || examWeighted !== null;
+
+    if (
+      !hasRequiredPTScores ||
+      !hasRequiredQuizScores ||
+      !hasRequiredExamScore
+    ) {
+      return null;
+    }
+
+    const totalPercent =
+      (ptWeighted ?? 0) + (quizWeighted ?? 0) + (examWeighted ?? 0);
     return {
       totalPercent: totalPercent.toFixed(2),
-      numericGrade: getNumericGrade(totalPercent),
-      ptWeighted: ptWeighted.toFixed(2),
-      quizWeighted: quizWeighted.toFixed(2),
-      examWeighted: examWeighted.toFixed(2),
+      numericGrade: hasScoreExceedingMax
+        ? "(error)"
+        : getNumericGrade(totalPercent),
+      ptWeighted: ptWeighted !== null ? ptWeighted.toFixed(2) : "-",
+      quizWeighted: quizWeighted !== null ? quizWeighted.toFixed(2) : "-",
+      examWeighted: examWeighted !== null ? examWeighted.toFixed(2) : "-",
     };
   };
 
@@ -1472,22 +1513,22 @@ export function ClassRecordTable({
               onClick={() => setSettingsOpen(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
             >
-              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline text-black">Settings</span>
+              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
+              <span className="hidden xl:inline text-black">Settings</span>
             </button>
             <button
               onClick={() => setIsPasteModalOpen(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
             >
-              <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Paste Grades</span>
+              <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
+              <span className="hidden xl:inline text-black">Paste Grades</span>
             </button>
             <button
               onClick={() => setShowExportDialog(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#124A69] text-white text-xs sm:text-sm rounded-lg hover:bg-[#0D3A54] transition-colors"
             >
               <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Export</span>
+              <span className="hidden xl:inline">Export</span>
             </button>
           </div>
         </div>
@@ -1642,7 +1683,11 @@ export function ClassRecordTable({
                               type="text"
                               className={`w-14 h-8 text-center border rounded text-sm ${
                                 isSelected
-                                  ? "border-white text-white bg-transparent"
+                                  ? termGrade?.numericGrade === "(error)"
+                                    ? "border-white text-white bg-red-500"
+                                    : "border-white text-white bg-transparent"
+                                  : termGrade?.numericGrade === "(error)"
+                                  ? "border-gray-200 bg-red-500 text-white"
                                   : "border-gray-200"
                               }`}
                               value={termGrade?.numericGrade || "-"}
@@ -1711,7 +1756,7 @@ export function ClassRecordTable({
         {filtered.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
             <div className="flex items-center gap-4 w-full sm:w-auto">
-              <span className="text-xs sm:text-sm text-gray-600">
+              <span className="text-xs sm:text-sm text-gray-600 w-[300px]">
                 Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)}{" "}
                 of {filtered.length} student{filtered.length !== 1 ? "s" : ""}
               </span>
@@ -1899,7 +1944,7 @@ export function ClassRecordTable({
             className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
           >
             <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
-            <span className="hidden sm:inline text-black">Settings</span>
+            <span className="hidden xl:inline text-black">Settings</span>
           </button>
           <button
             onClick={() => setIsPasteModalOpen(true)}
@@ -1912,7 +1957,7 @@ export function ClassRecordTable({
             }`}
           >
             <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
-            <span className="hidden sm:inline text-black">Paste Grades</span>
+            <span className="hidden xl:inline text-black">Paste Grades</span>
           </button>
           <button
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white text-xs sm:text-sm rounded-lg transition-colors ${
@@ -1925,7 +1970,7 @@ export function ClassRecordTable({
             disabled={!hasTermConfigs}
           >
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Export</span>
+            <span className="hidden xl:inline">Export</span>
           </button>
           {loading && (
             <Loader2 className="h-4 w-4 animate-spin text-[#124A69]" />
@@ -2623,10 +2668,14 @@ export function ClassRecordTable({
                         type="text"
                         className={`w-[90%] h-8 text-center border rounded font-medium ${
                           selectedStudentId === student.id
-                            ? termGrade &&
-                              parseFloat(termGrade.numericGrade) > 3.0
+                            ? termGrade?.numericGrade === "(error)"
+                              ? "border-white text-white bg-red-500"
+                              : termGrade &&
+                                parseFloat(termGrade.numericGrade) > 3.0
                               ? "border-white text-red-500 bg-transparent"
                               : "border-white text-white bg-transparent"
+                            : termGrade?.numericGrade === "(error)"
+                            ? "bg-red-500 text-white border-gray-200"
                             : termGrade &&
                               parseFloat(termGrade.numericGrade) > 3.0
                             ? "text-red-500 border-gray-200"
@@ -2649,7 +2698,7 @@ export function ClassRecordTable({
       {filtered.length > 0 && currentConfig && (
         <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
           <div className="flex items-center gap-4 w-full sm:w-auto">
-            <span className="text-xs sm:text-sm text-gray-600">
+            <span className="text-xs sm:text-sm text-gray-600 w-[300px]">
               Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)} of{" "}
               {filtered.length} student{filtered.length !== 1 ? "s" : ""}
             </span>

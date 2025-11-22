@@ -339,7 +339,23 @@ export function PasteGradesModal({
         return;
       }
 
-      const score = parseFloat(line);
+      // Check if the line contains a decimal point
+      if (line.includes(".") || line.includes(",")) {
+        errors.push(
+          `Line ${index + 1} (${
+            student.name
+          }): "${line}" contains decimals. Only whole numbers are allowed.`
+        );
+        grades.push({
+          studentId: student.id,
+          studentName: student.name,
+          score: null,
+        });
+        return;
+      }
+
+      // Use parseInt to ensure we only accept whole numbers
+      const score = parseInt(line, 10);
 
       if (isNaN(score)) {
         errors.push(

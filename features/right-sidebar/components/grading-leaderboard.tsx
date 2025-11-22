@@ -14,9 +14,15 @@ interface StudentGrade {
   studentName: string;
   studentNumber: string;
   currentGrade: number;
+  numericGrade?: string;
   rank: number;
   improvement: number; // Percentage improvement from midterm to final
   isImproving: boolean;
+}
+
+interface GradeCount {
+  grade: string;
+  count: number;
 }
 
 interface GradingLeaderboardProps {
@@ -141,11 +147,64 @@ const LoadingSkeleton = () => (
   </div>
 );
 
+const GradeCountTable = ({ gradeCounts }: { gradeCounts: GradeCount[] }) => {
+  const getGradeColor = (grade: string) => {
+    const numGrade = parseFloat(grade);
+    if (numGrade <= 1.5) return "bg-green-400";
+    if (numGrade <= 2.0) return "bg-blue-400";
+    if (numGrade <= 2.5) return "bg-yellow-400";
+    if (numGrade <= 3.0) return "bg-orange-400";
+    return "bg-red-400";
+  };
+
+  return (
+    <div className="w-full">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-white/20">
+            <th className="text-left py-2 px-2 text-white/80 font-semibold text-xs">
+              Grade
+            </th>
+            <th className="text-right py-2 px-2 text-white/80 font-semibold text-xs">
+              Count
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {gradeCounts.map((gradeCount) => (
+            <tr
+              key={gradeCount.grade}
+              className="border-b border-white/10 hover:bg-white/5"
+            >
+              <td className="py-2 px-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-8 h-8 rounded ${getGradeColor(
+                      gradeCount.grade
+                    )} flex items-center justify-center flex-shrink-0`}
+                  >
+                    <span className="text-white font-bold text-xs">
+                      {gradeCount.grade}
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <td className="py-2 px-2 text-right text-white font-medium">
+                {gradeCount.count}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 export default function GradingLeaderboard({
   courseSlug,
 }: GradingLeaderboardProps) {
   const { data: session, status } = useSession();
-  const [topPerformers, setTopPerformers] = useState<StudentGrade[]>([]);
+  const [gradeCounts, setGradeCounts] = useState<GradeCount[]>([]);
   const [mostImproved, setMostImproved] = useState<StudentGrade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -164,22 +223,63 @@ export default function GradingLeaderboard({
         );
         const data = Array.isArray(leaderboardData) ? leaderboardData : [];
 
-        // Sort by current grade for top performers
-        const sorted = [...data].sort(
-          (a, b) => b.currentGrade - a.currentGrade
-        );
-        setTopPerformers(sorted.slice(0, 10));
+        // Calculate grade counts
+        const gradeCountMap = new Map<string, number>();
+        const gradeOrder = [
+          "1.00",
+          "1.25",
+          "1.50",
+          "1.75",
+          "2.00",
+          "2.25",
+          "2.50",
+          "2.75",
+          "3.00",
+          "5.00",
+        ];
+
+        data.forEach((student) => {
+          const numericGrade =
+            student.numericGrade ||
+            (() => {
+              // Fallback: calculate from currentGrade if numericGrade not provided
+              const percent = student.currentGrade;
+              if (percent >= 97.5) return "1.00";
+              if (percent >= 94.5) return "1.25";
+              if (percent >= 91.5) return "1.50";
+              if (percent >= 86.5) return "1.75";
+              if (percent >= 81.5) return "2.00";
+              if (percent >= 76.0) return "2.25";
+              if (percent >= 70.5) return "2.50";
+              if (percent >= 65.0) return "2.75";
+              if (percent >= 59.5) return "3.00";
+              return "5.00";
+            })();
+
+          gradeCountMap.set(
+            numericGrade,
+            (gradeCountMap.get(numericGrade) || 0) + 1
+          );
+        });
+
+        // Create grade count array in order - show all grades even with 0 count
+        const counts: GradeCount[] = gradeOrder.map((grade) => ({
+          grade,
+          count: gradeCountMap.get(grade) || 0,
+        }));
+
+        setGradeCounts(counts);
 
         // Sort by improvement for most improved
         const improved = [...data]
-          .filter((s) => s.improvement > 0)
+          .filter((s) => s.improvement !== 0)
           .sort((a, b) => b.improvement - a.improvement);
         setMostImproved(improved.slice(0, 10));
       } catch (error) {
         console.error("Error fetching leaderboard:", error);
         // Only clear data if not in silent mode (initial load)
         if (!silent) {
-          setTopPerformers([]);
+          setGradeCounts([]);
           setMostImproved([]);
         }
       } finally {
@@ -242,7 +342,7 @@ export default function GradingLeaderboard({
     );
   }
 
-  if (topPerformers.length === 0 && mostImproved.length === 0) {
+  if (gradeCounts.length === 0 && mostImproved.length === 0) {
     return (
       <Card className="bg-[#124A69] border-white/20 h-full flex flex-col">
         <CardHeader className="pb-3">
@@ -270,13 +370,13 @@ export default function GradingLeaderboard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden flex flex-col">
-        <Tabs defaultValue="top" className="h-full flex flex-col">
+        <Tabs defaultValue="grades" className="h-full flex flex-col">
           <TabsList className="grid w-full grid-cols-2 bg-white/10">
             <TabsTrigger
-              value="top"
+              value="grades"
               className="data-[state=active]:bg-white/20 text-white"
             >
-              Top 10
+              Grade Count
             </TabsTrigger>
             <TabsTrigger
               value="improved"
@@ -286,18 +386,13 @@ export default function GradingLeaderboard({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent
-            value="top"
-            className="flex-1 overflow-y-auto mt-3 space-y-2"
-          >
-            {topPerformers.length === 0 ? (
+          <TabsContent value="grades" className="flex-1 overflow-y-auto mt-3">
+            {gradeCounts.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-sm text-white/70">No top performers yet</p>
+                <p className="text-sm text-white/70">No grades available yet</p>
               </div>
             ) : (
-              topPerformers.map((student) => (
-                <StudentRankCard key={student.id} student={student} />
-              ))
+              <GradeCountTable gradeCounts={gradeCounts} />
             )}
           </TabsContent>
 
