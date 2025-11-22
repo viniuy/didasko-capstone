@@ -202,6 +202,17 @@ export async function GET(
       });
     });
 
+    // Helper function to get term grade by term name
+    const getTermGrade = (
+      termGrades: { term: string; grade: number }[],
+      termName: string
+    ): number | null => {
+      const termGrade = termGrades.find(
+        (tg) => tg.term.toUpperCase() === termName.toUpperCase()
+      );
+      return termGrade ? termGrade.grade : null;
+    };
+
     // Calculate leaderboard data for each student
     const leaderboard = Array.from(studentPerformanceMap.values())
       .map((student) => {
@@ -212,13 +223,71 @@ export async function GET(
               student.termGrades.length
             : 0;
 
-        // Calculate improvement (first term vs latest term)
+        // Calculate improvement: Compare current term vs average of all previous terms
+        // - MIDTERM vs PRELIM
+        // - PREFINALS vs average of (PRELIM + MIDTERM)
+        // - FINALS vs average of (PRELIM + MIDTERM + PREFINALS)
         let improvement = 0;
-        if (student.termGrades.length >= 2) {
-          const firstTerm = student.termGrades[0].grade;
-          const latestTerm =
-            student.termGrades[student.termGrades.length - 1].grade;
-          improvement = ((latestTerm - firstTerm) / firstTerm) * 100;
+        let isImproving = false;
+
+        const prelimGrade = getTermGrade(student.termGrades, "PRELIM");
+        const midtermGrade = getTermGrade(student.termGrades, "MIDTERM");
+        const prefinalGrade = getTermGrade(student.termGrades, "PREFINALS");
+        const finalGrade = getTermGrade(student.termGrades, "FINALS");
+
+        // Determine which is the latest term and compare to previous terms
+        if (finalGrade !== null) {
+          // FINALS: Compare to average of PRELIM + MIDTERM + PREFINALS
+          const previousTerms: number[] = [];
+          if (prelimGrade !== null) previousTerms.push(prelimGrade);
+          if (midtermGrade !== null) previousTerms.push(midtermGrade);
+          if (prefinalGrade !== null) previousTerms.push(prefinalGrade);
+
+          if (previousTerms.length > 0) {
+            const avgPrevious =
+              previousTerms.reduce((sum, grade) => sum + grade, 0) /
+              previousTerms.length;
+            const absoluteImprovement = finalGrade - avgPrevious;
+
+            if (avgPrevious > 0) {
+              improvement = (absoluteImprovement / avgPrevious) * 100;
+            } else if (absoluteImprovement > 0) {
+              improvement = absoluteImprovement * 10; // Cap at reasonable value
+            }
+
+            isImproving = absoluteImprovement > 0;
+          }
+        } else if (prefinalGrade !== null) {
+          // PREFINALS: Compare to average of PRELIM + MIDTERM
+          const previousTerms: number[] = [];
+          if (prelimGrade !== null) previousTerms.push(prelimGrade);
+          if (midtermGrade !== null) previousTerms.push(midtermGrade);
+
+          if (previousTerms.length > 0) {
+            const avgPrevious =
+              previousTerms.reduce((sum, grade) => sum + grade, 0) /
+              previousTerms.length;
+            const absoluteImprovement = prefinalGrade - avgPrevious;
+
+            if (avgPrevious > 0) {
+              improvement = (absoluteImprovement / avgPrevious) * 100;
+            } else if (absoluteImprovement > 0) {
+              improvement = absoluteImprovement * 10;
+            }
+
+            isImproving = absoluteImprovement > 0;
+          }
+        } else if (midtermGrade !== null && prelimGrade !== null) {
+          // MIDTERM: Compare to PRELIM
+          const absoluteImprovement = midtermGrade - prelimGrade;
+
+          if (prelimGrade > 0) {
+            improvement = (absoluteImprovement / prelimGrade) * 100;
+          } else if (absoluteImprovement > 0) {
+            improvement = absoluteImprovement * 10;
+          }
+
+          isImproving = absoluteImprovement > 0;
         }
 
         return {
@@ -228,7 +297,7 @@ export async function GET(
           studentNumber: student.studentNumber,
           currentGrade,
           improvement,
-          isImproving: improvement > 0,
+          isImproving,
           rank: 0, // Will be set after sorting
         };
       })

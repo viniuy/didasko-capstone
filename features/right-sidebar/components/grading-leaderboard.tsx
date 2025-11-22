@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Medal, Award, TrendingUp, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { statsService } from "@/lib/services/client";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -94,6 +94,15 @@ const StudentRankCard = ({ student }: { student: StudentGrade }) => {
                   className={`text-xs flex items-center gap-1 ${
                     student.isImproving ? "text-green-400" : "text-red-400"
                   }`}
+                  title={
+                    student.isImproving
+                      ? `Improved by ${Math.abs(student.improvement).toFixed(
+                          1
+                        )}% compared to previous terms`
+                      : `Declined by ${Math.abs(student.improvement).toFixed(
+                          1
+                        )}% compared to previous terms`
+                  }
                 >
                   <TrendingUp
                     className={`h-3 w-3 ${
@@ -140,11 +149,15 @@ export default function GradingLeaderboard({
   const [mostImproved, setMostImproved] = useState<StudentGrade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(
+    async (silent = false) => {
       if (!session?.user?.id) return;
 
       try {
+        if (!silent) {
+          setIsLoading(true);
+        }
+
         const leaderboardData = await statsService.getGradesLeaderboard(
           courseSlug,
           courseSlug ? undefined : session.user.id
@@ -164,17 +177,54 @@ export default function GradingLeaderboard({
         setMostImproved(improved.slice(0, 10));
       } catch (error) {
         console.error("Error fetching leaderboard:", error);
-        setTopPerformers([]);
-        setMostImproved([]);
+        // Only clear data if not in silent mode (initial load)
+        if (!silent) {
+          setTopPerformers([]);
+          setMostImproved([]);
+        }
       } finally {
-        setIsLoading(false);
+        if (!silent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [session?.user?.id, courseSlug]
+  );
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetchLeaderboard(false);
+    }
+  }, [status, fetchLeaderboard]);
+
+  // Listen for grade updates to refresh seamlessly
+  useEffect(() => {
+    const handleGradesUpdated = (event: CustomEvent) => {
+      const updatedCourseSlug = event.detail?.courseSlug;
+      // Only refresh if this leaderboard matches the updated course
+      // or if this is the general leaderboard (no courseSlug) and the event is for a course
+      if (
+        updatedCourseSlug === courseSlug ||
+        (!courseSlug && updatedCourseSlug) ||
+        (!courseSlug && !updatedCourseSlug)
+      ) {
+        // Silent refresh - keep old data visible while fetching
+        fetchLeaderboard(true);
       }
     };
 
-    if (status === "authenticated") {
-      fetchLeaderboard();
-    }
-  }, [status, session?.user?.id, courseSlug]);
+    window.addEventListener(
+      "gradesUpdated",
+      handleGradesUpdated as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "gradesUpdated",
+        handleGradesUpdated as EventListener
+      );
+    };
+  }, [courseSlug, fetchLeaderboard]);
 
   if (isLoading) {
     return (
@@ -260,11 +310,22 @@ export default function GradingLeaderboard({
                 <p className="text-sm text-white/70">
                   No improvement data available
                 </p>
+                <p className="text-xs text-white/50 mt-2">
+                  Improvement is calculated from MIDTERM to FINALS
+                </p>
               </div>
             ) : (
-              mostImproved.map((student) => (
-                <StudentRankCard key={student.id} student={student} />
-              ))
+              <>
+                <div className="mb-2 px-1">
+                  <p className="text-xs text-white/60 italic">
+                    Ranked by improvement: compares current term vs average of
+                    previous terms
+                  </p>
+                </div>
+                {mostImproved.map((student) => (
+                  <StudentRankCard key={student.id} student={student} />
+                ))}
+              </>
             )}
           </TabsContent>
         </Tabs>

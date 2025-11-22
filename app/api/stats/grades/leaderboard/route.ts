@@ -204,13 +204,13 @@ export async function GET(request: Request) {
           if (grade !== null) {
             studentData.totalGrades.push(grade);
 
-            // Categorize by term
+            // Categorize by term (handle both "PRELIM" and "PRELIMS", "PREFINALS" and "PRE-FINALS")
             const term = termConfig.term.toUpperCase();
-            if (term === "PRELIMS") {
+            if (term === "PRELIM" || term === "PRELIMS") {
               studentData.prelimsGrades.push(grade);
             } else if (term === "MIDTERM") {
               studentData.midtermGrades.push(grade);
-            } else if (term === "PRE-FINALS") {
+            } else if (term === "PREFINALS" || term === "PRE-FINALS") {
               studentData.prefinalsGrades.push(grade);
             } else if (term === "FINALS") {
               studentData.finalsGrades.push(grade);
@@ -230,33 +230,92 @@ export async function GET(request: Request) {
               student.totalGrades.length
             : 0;
 
-        // Calculate average of early terms (PRELIMS + MIDTERM)
-        const earlyTermsGrades = [
-          ...student.prelimsGrades,
-          ...student.midtermGrades,
-        ];
-        const avgEarlyTerms =
-          earlyTermsGrades.length > 0
-            ? earlyTermsGrades.reduce((a, b) => a + b, 0) /
-              earlyTermsGrades.length
+        // Calculate improvement: Compare current term vs average of all previous terms
+        // - MIDTERM vs PRELIM
+        // - PREFINALS vs average of (PRELIM + MIDTERM)
+        // - FINALS vs average of (PRELIM + MIDTERM + PREFINALS)
+        let improvement = 0;
+        let isImproving = false;
+
+        // Calculate averages for each term across all courses
+        const avgPrelim =
+          student.prelimsGrades.length > 0
+            ? student.prelimsGrades.reduce((a, b) => a + b, 0) /
+              student.prelimsGrades.length
             : 0;
 
-        // Calculate average of later terms (PRE-FINALS + FINALS)
-        const laterTermsGrades = [
-          ...student.prefinalsGrades,
-          ...student.finalsGrades,
-        ];
-        const avgLaterTerms =
-          laterTermsGrades.length > 0
-            ? laterTermsGrades.reduce((a, b) => a + b, 0) /
-              laterTermsGrades.length
+        const avgMidterm =
+          student.midtermGrades.length > 0
+            ? student.midtermGrades.reduce((a, b) => a + b, 0) /
+              student.midtermGrades.length
             : 0;
 
-        // Calculate improvement (early terms vs later terms)
-        const improvement =
-          avgEarlyTerms > 0 && avgLaterTerms > 0
-            ? ((avgLaterTerms - avgEarlyTerms) / avgEarlyTerms) * 100
+        const avgPrefinals =
+          student.prefinalsGrades.length > 0
+            ? student.prefinalsGrades.reduce((a, b) => a + b, 0) /
+              student.prefinalsGrades.length
             : 0;
+
+        const avgFinals =
+          student.finalsGrades.length > 0
+            ? student.finalsGrades.reduce((a, b) => a + b, 0) /
+              student.finalsGrades.length
+            : 0;
+
+        // Determine which is the latest term and compare to previous terms
+        if (avgFinals > 0) {
+          // FINALS: Compare to average of PRELIM + MIDTERM + PREFINALS
+          const previousTerms: number[] = [];
+          if (avgPrelim > 0) previousTerms.push(avgPrelim);
+          if (avgMidterm > 0) previousTerms.push(avgMidterm);
+          if (avgPrefinals > 0) previousTerms.push(avgPrefinals);
+
+          if (previousTerms.length > 0) {
+            const avgPrevious =
+              previousTerms.reduce((sum, grade) => sum + grade, 0) /
+              previousTerms.length;
+            const absoluteImprovement = avgFinals - avgPrevious;
+
+            if (avgPrevious > 0) {
+              improvement = (absoluteImprovement / avgPrevious) * 100;
+            } else if (absoluteImprovement > 0) {
+              improvement = absoluteImprovement * 10; // Cap at reasonable value
+            }
+
+            isImproving = absoluteImprovement > 0;
+          }
+        } else if (avgPrefinals > 0) {
+          // PREFINALS: Compare to average of PRELIM + MIDTERM
+          const previousTerms: number[] = [];
+          if (avgPrelim > 0) previousTerms.push(avgPrelim);
+          if (avgMidterm > 0) previousTerms.push(avgMidterm);
+
+          if (previousTerms.length > 0) {
+            const avgPrevious =
+              previousTerms.reduce((sum, grade) => sum + grade, 0) /
+              previousTerms.length;
+            const absoluteImprovement = avgPrefinals - avgPrevious;
+
+            if (avgPrevious > 0) {
+              improvement = (absoluteImprovement / avgPrevious) * 100;
+            } else if (absoluteImprovement > 0) {
+              improvement = absoluteImprovement * 10;
+            }
+
+            isImproving = absoluteImprovement > 0;
+          }
+        } else if (avgMidterm > 0 && avgPrelim > 0) {
+          // MIDTERM: Compare to PRELIM
+          const absoluteImprovement = avgMidterm - avgPrelim;
+
+          if (avgPrelim > 0) {
+            improvement = (absoluteImprovement / avgPrelim) * 100;
+          } else if (absoluteImprovement > 0) {
+            improvement = absoluteImprovement * 10;
+          }
+
+          isImproving = absoluteImprovement > 0;
+        }
 
         return {
           id: `${student.studentId}-aggregate`,
@@ -265,7 +324,7 @@ export async function GET(request: Request) {
           studentNumber: student.studentNumber,
           currentGrade,
           improvement,
-          isImproving: improvement > 0,
+          isImproving,
           rank: 0, // Will be set after sorting
         };
       })

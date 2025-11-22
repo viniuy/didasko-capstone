@@ -6,6 +6,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
@@ -748,15 +749,14 @@ export function SettingsModal({
                 >
                   {/* First Row: Checkbox, Name, Max Score, Date */}
                   <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={pt.enabled}
-                      onChange={(e) =>
+                      onCheckedChange={(checked) =>
                         updateAssessment("PT", pt.id, {
-                          enabled: e.target.checked,
+                          enabled: checked === true,
                         })
                       }
-                      className="w-4 h-4 text-[#124A69]"
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
                     <input
                       type="text"
@@ -955,15 +955,14 @@ export function SettingsModal({
                 >
                   {/* First Row: Checkbox, Name, Max Score, Date */}
                   <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={quiz.enabled}
-                      onChange={(e) =>
+                      onCheckedChange={(checked) =>
                         updateAssessment("QUIZ", quiz.id, {
-                          enabled: e.target.checked,
+                          enabled: checked === true,
                         })
                       }
-                      className="w-4 h-4 text-[#124A69]"
+                      className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                     />
                     <input
                       type="text"
@@ -1146,15 +1145,14 @@ export function SettingsModal({
               <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg">
                 {/* First Row: Checkbox, Name, Max Score, Date */}
                 <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={exam.enabled}
-                    onChange={(e) =>
+                    onCheckedChange={(checked) =>
                       updateAssessment("EXAM", exam.id, {
-                        enabled: e.target.checked,
+                        enabled: checked === true,
                       })
                     }
-                    className="w-4 h-4 text-[#124A69]"
+                    className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                   />
                   <input
                     type="text"

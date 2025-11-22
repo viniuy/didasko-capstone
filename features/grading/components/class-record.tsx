@@ -24,6 +24,22 @@ import { SettingsModal } from "./SettingsModal";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import PasteGradesModal from "./paste-grades";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/svdialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function LoadingSpinner() {
   return (
@@ -305,6 +321,7 @@ interface StudentScore {
 
 interface Student {
   id: string;
+  studentId: string;
   lastName: string;
   firstName: string;
   middleInitial: string | null;
@@ -558,6 +575,7 @@ export function ClassRecordTable({
   const [hasTermConfigs, setHasTermConfigs] = useState(false);
   // Track which score inputs are currently being edited (focused)
   const [editingScores, setEditingScores] = useState<Set<string>>(new Set());
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   const pendingScoresRef = useRef<
     Map<
@@ -716,6 +734,13 @@ export function ClassRecordTable({
       toast.loading("Saving grades...", { id: "save-grades" });
       await gradingService.saveAssessmentScoresBulk(courseSlug, gradesToSave);
       toast.success("Grades saved successfully", { id: "save-grades" });
+
+      // Dispatch event to refresh leaderboard seamlessly
+      window.dispatchEvent(
+        new CustomEvent("gradesUpdated", {
+          detail: { courseSlug },
+        })
+      );
     } catch (error) {
       // Restore pending scores on failure to prevent data loss
       pendingScoresRef.current = pendingScoresBackup;
@@ -781,6 +806,13 @@ export function ClassRecordTable({
       toast.loading("Updating grades...", { id: "bulk-save" });
       await gradingService.saveAssessmentScoresBulk(courseSlug, validGrades);
       toast.success("Grades updated successfully", { id: "bulk-save" });
+
+      // Dispatch event to refresh leaderboard seamlessly
+      window.dispatchEvent(
+        new CustomEvent("gradesUpdated", {
+          detail: { courseSlug },
+        })
+      );
     } catch (error: any) {
       const errorMessage =
         error?.response?.data?.error ||
@@ -1061,34 +1093,105 @@ export function ClassRecordTable({
     }
   };
 
-  const handleExportToExcel = async () => {
+  const handleExportToExcel = async (
+    term: Term | "SUMMARY",
+    exportType: "summary" | "details"
+  ) => {
     try {
       toast.loading("Generating Excel file...");
 
-      const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("Class Record");
+      if (exportType === "summary") {
+        await exportSummary(term);
+      } else {
+        await exportDetails(term);
+      }
 
-      // -----------------------
-      // Top metadata rows
-      // -----------------------
-      ws.getCell("A1").value = `Subject Name: ${courseTitle}`;
+      toast.dismiss();
+      toast.success("Excel exported successfully!");
+      setShowExportDialog(false);
+    } catch (error) {
+      toast.dismiss();
+      console.error(error);
+      toast.error("Failed to export Excel");
+    }
+  };
 
-      ws.getCell("A2").value = `Class number: ${courseNumber}`;
+  const exportSummary = async (term: Term | "SUMMARY") => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Class Record");
 
-      ws.getCell("A3").value = `Class Section: ${courseSection}`;
+    // -----------------------
+    // Top metadata rows
+    // -----------------------
+    ws.getCell("A1").value = `Subject Name: ${courseTitle}`;
+    ws.getCell("A2").value = `Class number: ${courseNumber}`;
+    ws.getCell("A3").value = `Class Section: ${courseSection}`;
 
-      // Row 4 - Main Header
-      const headerRow = ws.addRow([
-        "",
-        "",
-        "Prelim Grade",
-        "Midterm Grade",
-        "Prefinals Grade",
-        "Finals Grade",
+    // Row 4 - Main Header
+    const headerRow = ws.addRow([
+      "",
+      "",
+      "Prelim Grade",
+      "Midterm Grade",
+      "Prefinals Grade",
+      "Finals Grade",
+    ]);
+
+    headerRow.height = 25;
+    headerRow.eachCell((cell, col) => {
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+
+      let isGradeHeader = col >= 3;
+
+      if (isGradeHeader) {
+        ws.getColumn(col).width = 10;
+      }
+
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: isGradeHeader ? "center" : "left",
+      };
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFD9D9D9" },
+      };
+    });
+
+    // -----------------------
+    // Student Rows Start Row 5
+    // -----------------------
+    filtered.forEach((student) => {
+      const prelim = computeTermGrade(student.id, "PRELIM")?.totalPercent ?? "";
+      const midterm =
+        computeTermGrade(student.id, "MIDTERM")?.totalPercent ?? "";
+      const prefinal =
+        computeTermGrade(student.id, "PREFINALS")?.totalPercent ?? "";
+      const finals = computeTermGrade(student.id, "FINALS")?.totalPercent ?? "";
+
+      const fullName = studentName(student);
+      const formattedName = fullName
+        .replace(/\s+[A-Z]\.$/, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase();
+
+      const row = ws.addRow([
+        student.studentId ?? "",
+        formattedName,
+        prelim,
+        midterm,
+        prefinal,
+        finals,
       ]);
 
-      headerRow.height = 25;
-      headerRow.eachCell((cell, col) => {
+      row.eachCell((cell, col) => {
         cell.border = {
           top: { style: "thin" },
           bottom: { style: "thin" },
@@ -1096,93 +1199,251 @@ export function ClassRecordTable({
           right: { style: "thin" },
         };
 
-        let isGradeHeader = col >= 3;
-
-        if (isGradeHeader) {
-          ws.getColumn(col).width = 10;
-        }
-
         cell.alignment = {
           vertical: "middle",
-          horizontal: isGradeHeader ? "center" : "left",
+          horizontal: col <= 2 ? "left" : "right",
         };
+      });
+    });
 
-        cell.fill = {
+    // -----------------------
+    // Column Widths
+    // -----------------------
+    ws.getColumn(1).width = 16;
+    ws.getColumn(2).width = 30;
+    ws.getColumn(3).width = 15;
+    ws.getColumn(4).width = 15;
+    ws.getColumn(5).width = 15;
+    ws.getColumn(6).width = 15;
+
+    // Freeze top rows (up to header row)
+    ws.views = [{ state: "frozen", ySplit: 4 }];
+
+    // -----------------------
+    // Save File
+    // -----------------------
+    const buffer = await wb.xlsx.writeBuffer();
+    const fileName = `${courseCode}_${courseSection}_ClassRecord_Summary.xlsx`;
+    saveAs(new Blob([buffer]), fileName);
+  };
+
+  const exportDetails = async (term: Term | "SUMMARY") => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Class Record");
+
+    // Get term config for the selected term
+    const termToExport = term === "SUMMARY" ? activeTerm : term;
+    const config = termConfigs[termToExport];
+    if (!config) {
+      throw new Error(`No configuration found for ${termToExport}`);
+    }
+
+    const pts = config.assessments
+      .filter((a) => a.type === "PT" && a.enabled)
+      .sort((a, b) => a.order - b.order);
+    const quizzes = config.assessments
+      .filter((a) => a.type === "QUIZ" && a.enabled)
+      .sort((a, b) => a.order - b.order);
+    const exam = config.assessments.find((a) => a.type === "EXAM" && a.enabled);
+
+    // Calculate total columns
+    const totalColumns =
+      2 + // Student ID, Name
+      pts.length +
+      1 + // PT Weighted
+      quizzes.length +
+      1 + // Quiz Weighted
+      (exam ? 2 : 0) + // Exam + Exam Weighted
+      2; // Total Percent, Numeric Grade
+
+    // Add title row
+    ws.mergeCells(`A1:${String.fromCharCode(64 + totalColumns)}1`);
+    const titleRow = ws.getCell("A1");
+    titleRow.value = "CLASS RECORD DATA";
+    titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+    titleRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF124A69" },
+    };
+    titleRow.alignment = { vertical: "middle", horizontal: "center" };
+    ws.getRow(1).height = 30;
+
+    // Add metadata rows
+    ws.mergeCells(`A2:${String.fromCharCode(64 + totalColumns)}2`);
+    const metadataRow = ws.getCell("A2");
+    metadataRow.value = `${courseTitle} - ${courseSection} | Class Number: ${courseNumber} | Term: ${termToExport}`;
+    metadataRow.font = { italic: true, size: 11 };
+    metadataRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    // Add date row
+    ws.mergeCells(`A3:${String.fromCharCode(64 + totalColumns)}3`);
+    const dateRow = ws.getCell("A3");
+    dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
+    dateRow.font = { italic: true, size: 11 };
+    dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+    ws.addRow([]);
+
+    // Build header row
+    const headers: string[] = ["Student ID", "Name"];
+    pts.forEach((pt) => headers.push(pt.name));
+    headers.push("PT Weighted");
+    quizzes.forEach((quiz) => headers.push(quiz.name));
+    headers.push("Quiz Weighted");
+    if (exam) {
+      headers.push(exam.name);
+      headers.push("Exam Weighted");
+    }
+    headers.push("Total %", "Numeric Grade");
+
+    const headerRow = ws.addRow(headers);
+    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF124A69" },
+    };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+    headerRow.height = 25;
+
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // Add data rows
+    filtered.forEach((student) => {
+      const termGrade = computeTermGrade(student.id, termToExport);
+      const fullName = studentName(student);
+      const formattedName = fullName
+        .replace(/\s+[A-Z]\.$/, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toUpperCase();
+
+      const rowData: (string | number)[] = [
+        student.studentId ?? "",
+        formattedName,
+      ];
+
+      // PT scores
+      pts.forEach((pt) => {
+        const rawScore = getEffectiveScore(student.id, pt);
+        const transmutedScore = transmuteScore(
+          rawScore,
+          pt.maxScore,
+          pt.transmutationBase ?? 0
+        );
+        const baseThreshold =
+          (pt.transmutationBase ?? 0) > 0
+            ? ((pt.transmutationBase ?? 0) / 100) * pt.maxScore
+            : null;
+        const showTransmuted =
+          rawScore !== null &&
+          transmutedScore !== null &&
+          baseThreshold !== null &&
+          rawScore < baseThreshold;
+        rowData.push(
+          showTransmuted ? `${rawScore} (${transmutedScore})` : rawScore ?? ""
+        );
+      });
+
+      rowData.push(termGrade?.ptWeighted ?? "");
+
+      // Quiz scores
+      quizzes.forEach((quiz) => {
+        const rawScore = getEffectiveScore(student.id, quiz);
+        const transmutedScore = transmuteScore(
+          rawScore,
+          quiz.maxScore,
+          quiz.transmutationBase ?? 0
+        );
+        const baseThreshold =
+          (quiz.transmutationBase ?? 0) > 0
+            ? ((quiz.transmutationBase ?? 0) / 100) * quiz.maxScore
+            : null;
+        const showTransmuted =
+          rawScore !== null &&
+          transmutedScore !== null &&
+          baseThreshold !== null &&
+          rawScore < baseThreshold;
+        rowData.push(
+          showTransmuted ? `${rawScore} (${transmutedScore})` : rawScore ?? ""
+        );
+      });
+
+      rowData.push(termGrade?.quizWeighted ?? "");
+
+      // Exam score
+      if (exam) {
+        const rawScore = getEffectiveScore(student.id, exam);
+        const transmutedScore = transmuteScore(
+          rawScore,
+          exam.maxScore,
+          exam.transmutationBase ?? 0
+        );
+        const baseThreshold =
+          (exam.transmutationBase ?? 0) > 0
+            ? ((exam.transmutationBase ?? 0) / 100) * exam.maxScore
+            : null;
+        const showTransmuted =
+          rawScore !== null &&
+          transmutedScore !== null &&
+          baseThreshold !== null &&
+          rawScore < baseThreshold;
+        rowData.push(
+          showTransmuted ? `${rawScore} (${transmutedScore})` : rawScore ?? ""
+        );
+        rowData.push(termGrade?.examWeighted ?? "");
+      }
+
+      rowData.push(
+        termGrade?.totalPercent ?? "",
+        termGrade?.numericGrade ?? ""
+      );
+
+      const row = ws.addRow(rowData);
+
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFD3D3D3" } },
+          left: { style: "thin", color: { argb: "FFD3D3D3" } },
+          bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+          right: { style: "thin", color: { argb: "FFD3D3D3" } },
+        };
+        cell.alignment = { vertical: "middle" };
+      });
+
+      if (row.number % 2 === 0) {
+        row.fill = {
           type: "pattern",
           pattern: "solid",
-          fgColor: { argb: "FFD9D9D9" },
+          fgColor: { argb: "FFF9FAFB" },
         };
-      });
-      // -----------------------
-      // Student Rows Start Row 5
-      // -----------------------
-      filtered.forEach((student) => {
-        const prelim =
-          computeTermGrade(student.id, "PRELIM")?.totalPercent ?? "";
-        const midterm =
-          computeTermGrade(student.id, "MIDTERM")?.totalPercent ?? "";
-        const prefinal =
-          computeTermGrade(student.id, "PREFINALS")?.totalPercent ?? "";
-        const finals =
-          computeTermGrade(student.id, "FINALS")?.totalPercent ?? "";
+      }
+    });
 
-        const fullName = studentName(student);
-        const formattedName = fullName
-          .replace(/\s+[A-Z]\.$/, "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .toUpperCase();
-
-        const row = ws.addRow([
-          student.id ?? "",
-          formattedName,
-          prelim,
-          midterm,
-          prefinal,
-          finals,
-        ]);
-
-        row.eachCell((cell, col) => {
-          cell.border = {
-            top: { style: "thin" },
-            bottom: { style: "thin" },
-            left: { style: "thin" },
-            right: { style: "thin" },
-          };
-
-          cell.alignment = {
-            vertical: "middle",
-            horizontal: col <= 2 ? "left" : "right",
-          };
-        });
-      });
-      // -----------------------
-      // Column Widths
-      // -----------------------
-      ws.getColumn(1).width = 16;
-      ws.getColumn(2).width = 30;
-      ws.getColumn(3).width = 15;
-      ws.getColumn(4).width = 15;
-      ws.getColumn(5).width = 15;
-      ws.getColumn(6).width = 15;
-
-      // Freeze top rows (up to header row)
-      ws.views = [{ state: "frozen", ySplit: 4 }];
-
-      // -----------------------
-      // Save File
-      // -----------------------
-      const buffer = await wb.xlsx.writeBuffer();
-      const fileName = `${courseCode}_${courseSection}_ClassRecord.xlsx`;
-      saveAs(new Blob([buffer]), fileName);
-
-      toast.dismiss();
-      toast.success("Excel exported successfully!");
-    } catch (error) {
-      toast.dismiss();
-      console.error(error);
-      toast.error("Failed to export Excel");
+    // Set column widths
+    const columnWidths = [16, 30]; // Student ID, Name
+    pts.forEach(() => columnWidths.push(12));
+    columnWidths.push(12); // PT Weighted
+    quizzes.forEach(() => columnWidths.push(12));
+    columnWidths.push(12); // Quiz Weighted
+    if (exam) {
+      columnWidths.push(12, 12); // Exam, Exam Weighted
     }
+    columnWidths.push(12, 12); // Total %, Numeric Grade
+
+    ws.columns = columnWidths.map((width) => ({ width }));
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const fileName = `${courseCode}_${courseSection}_ClassRecord_${termToExport}_Details.xlsx`;
+    saveAs(new Blob([buffer]), fileName);
   };
 
   if (loading) return <LoadingSpinner />;
@@ -1212,7 +1473,7 @@ export function ClassRecordTable({
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
             >
               <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Settings</span>
+              <span className="hidden sm:inline text-black">Settings</span>
             </button>
             <button
               onClick={() => setIsPasteModalOpen(true)}
@@ -1222,7 +1483,7 @@ export function ClassRecordTable({
               <span className="hidden sm:inline">Paste Grades</span>
             </button>
             <button
-              onClick={handleExportToExcel}
+              onClick={() => setShowExportDialog(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#124A69] text-white text-xs sm:text-sm rounded-lg hover:bg-[#0D3A54] transition-colors"
             >
               <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -1637,8 +1898,8 @@ export function ClassRecordTable({
             data-tutorial="settings-button"
             className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
           >
-            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Settings</span>
+            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
+            <span className="hidden sm:inline text-black">Settings</span>
           </button>
           <button
             onClick={() => setIsPasteModalOpen(true)}
@@ -1650,8 +1911,8 @@ export function ClassRecordTable({
                 : "text-gray-400 cursor-not-allowed opacity-50"
             }`}
           >
-            <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Paste Grades</span>
+            <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
+            <span className="hidden sm:inline text-black">Paste Grades</span>
           </button>
           <button
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white text-xs sm:text-sm rounded-lg transition-colors ${
@@ -1659,7 +1920,7 @@ export function ClassRecordTable({
                 ? "bg-[#124A69] hover:bg-[#0D3A54]"
                 : "bg-gray-400 cursor-not-allowed"
             }`}
-            onClick={handleExportToExcel}
+            onClick={() => setShowExportDialog(true)}
             data-tutorial="export-button"
             disabled={!hasTermConfigs}
           >
@@ -2523,7 +2784,150 @@ export function ClassRecordTable({
           }
         }}
       />
+
+      {/* Export Dialog */}
+      <ExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        onExport={handleExportToExcel}
+        availableTerms={Object.keys(termConfigs) as Term[]}
+      />
     </div>
+  );
+}
+
+// Export Dialog Component
+function ExportDialog({
+  open,
+  onOpenChange,
+  onExport,
+  availableTerms,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onExport: (term: Term | "SUMMARY", exportType: "summary" | "details") => void;
+  availableTerms: Term[];
+}) {
+  const [selectedTerm, setSelectedTerm] = useState<Term | "SUMMARY">("SUMMARY");
+  const [exportType, setExportType] = useState<"summary" | "details">(
+    "summary"
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[90vw] sm:w-[80vw] md:w-[70vw] lg:w-[60vw] max-w-[600px] p-4 sm:p-6">
+        <DialogHeader>
+          <DialogTitle className="text-lg sm:text-xl font-semibold text-[#124A69]">
+            Export Class Record
+          </DialogTitle>
+          <DialogDescription className="text-xs sm:text-sm">
+            Choose the term and export type for your class record
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-6 space-y-6">
+          {/* Term Selection */}
+          <div className="space-y-2">
+            <Label
+              htmlFor="term-select"
+              className="text-sm font-medium text-[#124A69]"
+            >
+              Select Term
+            </Label>
+            <Select
+              value={selectedTerm}
+              onValueChange={(value: Term | "SUMMARY") =>
+                setSelectedTerm(value)
+              }
+            >
+              <SelectTrigger id="term-select" className="w-full">
+                <SelectValue placeholder="Select term" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SUMMARY">Summary (All Terms)</SelectItem>
+                {availableTerms.map((term) => (
+                  <SelectItem key={term} value={term}>
+                    {term}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Export Type Selection */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium text-[#124A69]">
+              Export Type
+            </Label>
+            <div className="space-y-3">
+              <div
+                className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                  exportType === "summary"
+                    ? "border-[#124A69] bg-[#124A69]/5"
+                    : "border-gray-200 hover:bg-gray-50"
+                }`}
+                onClick={() => setExportType("summary")}
+              >
+                <div className="flex items-center h-5">
+                  <input
+                    type="radio"
+                    checked={exportType === "summary"}
+                    onChange={() => setExportType("summary")}
+                    className="w-4 h-4 text-[#124A69] border-gray-300 focus:ring-[#124A69]"
+                  />
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-sm">Summary</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Export final grades for all terms (current format)
+                  </div>
+                </div>
+              </div>
+              <div
+                className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                  exportType === "details"
+                    ? "border-[#124A69] bg-[#124A69]/5"
+                    : "border-gray-200 hover:bg-gray-50"
+                }`}
+                onClick={() => setExportType("details")}
+              >
+                <div className="flex items-center h-5">
+                  <input
+                    type="radio"
+                    checked={exportType === "details"}
+                    onChange={() => setExportType("details")}
+                    className="w-4 h-4 text-[#124A69] border-gray-300 focus:ring-[#124A69]"
+                  />
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-sm">Details</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Export all assessment scores with detailed breakdown
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="w-full sm:w-auto"
+          >
+            Cancel
+          </Button>
+          <Button
+            className="bg-[#124A69] hover:bg-[#0D3A54] text-white w-full sm:w-auto"
+            onClick={() => onExport(selectedTerm, exportType)}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export to Excel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

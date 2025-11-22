@@ -45,8 +45,7 @@ export async function getCourses(filters: {
 
   if (filters.status) where.status = filters.status;
   if (filters.facultyId) where.facultyId = filters.facultyId;
-  if (filters.department)
-    where.faculty = { department: filters.department };
+  if (filters.department) where.faculty = { department: filters.department };
   if (filters.semester) where.semester = filters.semester;
   if (filters.code) where.code = filters.code;
   if (filters.section) where.section = filters.section;
@@ -101,8 +100,7 @@ export async function getCourses(filters: {
         totalAbsents,
         totalLate,
         lastAttendanceDate,
-        attendanceRate:
-          totalStudents > 0 ? totalPresent / totalStudents : 0,
+        attendanceRate: totalStudents > 0 ? totalPresent / totalStudents : 0,
       },
       students: course.students.map((s) => ({
         ...s,
@@ -140,6 +138,7 @@ export async function getCourseStudentsWithAttendance(
       students: {
         select: {
           id: true,
+          studentId: true,
           firstName: true,
           lastName: true,
           middleInitial: true,
@@ -195,6 +194,7 @@ export async function getCourseStudentsWithAttendance(
 
     return {
       id: student.id,
+      studentId: student.studentId,
       name: `${student.firstName} ${student.lastName}`,
       firstName: student.firstName,
       lastName: student.lastName,
@@ -366,8 +366,7 @@ export async function getCourseStats(courseSlug: string) {
       ? 0
       : Math.round(
           (attendanceRecords.filter(
-            (record) =>
-              record.status === "PRESENT" || record.status === "LATE"
+            (record) => record.status === "PRESENT" || record.status === "LATE"
           ).length /
             attendanceRecords.length) *
             100
