@@ -68,7 +68,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import axios from "@/lib/axios";
 import {
   useStudentsByCourse,
   useAttendanceByCourse,
@@ -1580,31 +1579,23 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         const normalized = rfid.replace(/\s+/g, "").toUpperCase();
         let student = studentByRfidMap.get(normalized); // O(1) lookup
 
+        // If not found in map, search through studentList directly
+        // This handles cases where RFID might not be set initially
         if (!student) {
-          try {
-            // Use axios directly for RFID lookup (no hook available yet)
-            const res = await axios.post("/students/rfid", {
-              rfidUid: rfid,
-            });
-            const resolved = res.data?.student;
-            if (resolved?.id) {
-              const matchById = studentList.find((s) => s.id === resolved.id);
-              if (matchById) {
-                if (
-                  !matchById.rfid ||
-                  matchById.rfid.replace(/\s+/g, "").toUpperCase() !==
-                    normalized
-                ) {
-                  setStudentList((prev) =>
-                    prev.map((s) =>
-                      s.id === matchById.id ? { ...s, rfid } : s
-                    )
-                  );
-                }
-                student = matchById;
-              }
-            }
-          } catch {}
+          student = studentList.find((s) => {
+            if (!s.rfid) return false;
+            const studentRfidNormalized = s.rfid
+              .replace(/\s+/g, "")
+              .toUpperCase();
+            return studentRfidNormalized === normalized;
+          });
+
+          // If found, update the student's RFID in the list to ensure consistency
+          if (student && (!student.rfid || student.rfid !== rfid)) {
+            setStudentList((prev) =>
+              prev.map((s) => (s.id === student!.id ? { ...s, rfid } : s))
+            );
+          }
         }
 
         if (!student) {

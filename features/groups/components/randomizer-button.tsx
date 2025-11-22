@@ -132,9 +132,9 @@ export function WheelRandomizer({
             courseSlug: courseCode,
             groupData: {
               groupNumber: i + 1,
-              groupName: `Random Group ${i + 1}`,
-              studentIds: group.map((s) => s.id),
-              leaderId: group[0].id,
+            groupName: `Random Group ${i + 1}`,
+            studentIds: group.map((s) => s.id),
+            leaderId: group[0].id,
             },
           })
         )

@@ -78,6 +78,34 @@ export function useGrades(
   });
 }
 
+// Query: Get dates where grades exist for a criteria
+export function useGradeDates(
+  courseSlug: string,
+  filters?: {
+    criteriaId?: string;
+    courseCode?: string;
+    courseSection?: string;
+  }
+) {
+  return useQuery({
+    queryKey: [...queryKeys.grading.grades(courseSlug), "dates", filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.criteriaId) params.append("criteriaId", filters.criteriaId);
+      if (filters?.courseCode) params.append("courseCode", filters.courseCode);
+      if (filters?.courseSection)
+        params.append("courseSection", filters.courseSection);
+
+      const { data } = await axios.get(
+        `/courses/${courseSlug}/grades/dates?${params.toString()}`
+      );
+      return data;
+    },
+    enabled: !!courseSlug && !!filters?.criteriaId, // Only fetch when criteriaId is provided
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
+}
+
 // Query: Get recitation scores
 export function useRecitationScores(courseSlug: string) {
   return useQuery({

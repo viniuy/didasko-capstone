@@ -19,11 +19,21 @@ export async function getGrades(
     throw new Error("Course not found");
   }
 
+  // Parse date string (YYYY-MM-DD) and create local date range
+  const dateParts = filters.date.split("-");
+  const year = parseInt(dateParts[0], 10);
+  const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
+  const day = parseInt(dateParts[2], 10);
+
+  // Create start and end of day in local time
+  const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+  const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
+
   const where: any = {
     courseId: course.id,
     date: {
-      gte: new Date(filters.date + "T00:00:00.000Z"),
-      lt: new Date(filters.date + "T23:59:59.999Z"),
+      gte: startOfDay,
+      lte: endOfDay,
     },
   };
 
@@ -89,6 +99,17 @@ export async function saveGrades(
 
   const studentIds = data.grades.map((grade) => grade.studentId);
 
+  // Parse date string (YYYY-MM-DD) and create local date range
+  const dateParts = data.date.split("-");
+  const year = parseInt(dateParts[0], 10);
+  const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
+  const day = parseInt(dateParts[2], 10);
+
+  // Create start and end of day in local time
+  const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+  const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
+  const gradeDate = new Date(year, month, day, 0, 0, 0, 0);
+
   // Delete existing grades for these students on this date
   await prisma.grade.deleteMany({
     where: {
@@ -98,8 +119,8 @@ export async function saveGrades(
       },
       criteriaId: data.criteriaId,
       date: {
-        gte: new Date(data.date + "T00:00:00.000Z"),
-        lt: new Date(data.date + "T23:59:59.999Z"),
+        gte: startOfDay,
+        lte: endOfDay,
       },
     },
   });
@@ -115,7 +136,7 @@ export async function saveGrades(
       total: grade.total,
       reportingScore: !data.isRecitationCriteria,
       recitationScore: data.isRecitationCriteria || false,
-      date: new Date(data.date + "T00:00:00.000Z"),
+      date: gradeDate,
     })),
   });
 }
@@ -136,13 +157,23 @@ export async function deleteGrades(
     throw new Error("Course not found");
   }
 
+  // Parse date string (YYYY-MM-DD) and create local date range
+  const dateParts = filters.date.split("-");
+  const year = parseInt(dateParts[0], 10);
+  const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
+  const day = parseInt(dateParts[2], 10);
+
+  // Create start and end of day in local time
+  const startOfDay = new Date(year, month, day, 0, 0, 0, 0);
+  const endOfDay = new Date(year, month, day, 23, 59, 59, 999);
+
   return prisma.grade.deleteMany({
     where: {
       courseId: course.id,
       criteriaId: filters.criteriaId,
       date: {
-        gte: new Date(filters.date + "T00:00:00.000Z"),
-        lt: new Date(filters.date + "T23:59:59.999Z"),
+        gte: startOfDay,
+        lte: endOfDay,
       },
     },
   });

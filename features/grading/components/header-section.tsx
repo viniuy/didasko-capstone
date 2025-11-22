@@ -1,5 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Search, Filter, Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -11,10 +17,11 @@ interface HeaderSectionProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onFilterClick: () => void;
-  onDateSelect: () => void;
+  onDateSelect: (date: Date | undefined) => void;
   onManageReport: () => void;
   filterCount: number;
   onBackClick: () => void;
+  gradeDates?: string[]; // Dates where grades exist (for highlighting)
 }
 
 export function HeaderSection({
@@ -28,6 +35,7 @@ export function HeaderSection({
   onManageReport,
   filterCount,
   onBackClick,
+  gradeDates = [],
 }: HeaderSectionProps) {
   return (
     <div className="bg-white rounded-lg shadow-md">
@@ -92,17 +100,53 @@ export function HeaderSection({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            className={cn(
-              "w-[230px] justify-start text-left font-normal",
-              !selectedDate && "text-muted-foreground"
-            )}
-            onClick={onDateSelect}
-          >
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
-          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[230px] justify-start text-left font-normal",
+                  !selectedDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <CalendarComponent
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => {
+                  onDateSelect(date);
+                }}
+                modifiers={{
+                  hasGrades: gradeDates.map((dateStr) => {
+                    // Parse YYYY-MM-DD as local time (not UTC)
+                    const [year, month, day] = dateStr.split("-").map(Number);
+                    const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+                    return date;
+                  }),
+                }}
+                modifiersClassNames={{
+                  hasGrades:
+                    "bg-blue-100 text-blue-800 font-semibold rounded-md",
+                }}
+                className="rounded-md border"
+                initialFocus
+              />
+              {gradeDates.length > 0 && (
+                <div className="p-3 border-t text-xs text-gray-500 bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-100 border border-blue-300 rounded"></div>
+                    <span>
+                      Dates with grades for this criteria ({gradeDates.length})
+                    </span>
+                  </div>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
           <Button
             onClick={onManageReport}
             className="ml-2 h-9 px-4 bg-[#124A69] text-white rounded shadow flex items-center"
