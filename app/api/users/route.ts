@@ -11,6 +11,11 @@ import { logAction } from "@/lib/audit";
 import { canManageUser } from "@/lib/roles";
 import { isTemporaryAdmin } from "@/lib/breakGlass";
 
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 export const GET = withLogging(
   { action: "USER_LIST", module: "User Management" },
   async (req: NextRequest) => {

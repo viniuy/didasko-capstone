@@ -6,6 +6,11 @@ import { requireAdmin, requirePermission, handleAuthError } from "@/lib/authz";
 import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export const POST = withLogging(
   { action: "BreakGlass Activated", module: "Security" },
   async (req: NextRequest) => {

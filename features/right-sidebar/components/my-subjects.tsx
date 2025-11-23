@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpenText, Loader2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import { useActiveCourses } from "@/lib/hooks/queries";
@@ -42,8 +42,11 @@ const CourseShortcut = ({
   const router = useRouter();
 
   const handleClick = () => {
-    setIsLoading(true);
     router.push(`${basePath}/${course.slug}`);
+    // Update state after navigation starts
+    startTransition(() => {
+      setIsLoading(true);
+    });
   };
 
   return (

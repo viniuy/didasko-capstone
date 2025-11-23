@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RfidScanInput, RfidScanResponse } from "@/shared/types/student";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function POST(request: Request) {
   try {
     const body = await request.json();

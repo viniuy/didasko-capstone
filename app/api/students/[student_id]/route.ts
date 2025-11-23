@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ student_id: string }> }

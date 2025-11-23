@@ -4,6 +4,11 @@ import { authOptions } from "@/lib/auth-options";
 import { getCourseBySlug, updateCourse, deleteCourse } from "@/lib/services";
 import { CourseUpdateInput } from "@/shared/types/course";
 
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 //@ts-ignore
 export async function GET(request: Request, { params }: { params }) {
   const { course_slug } = await params;

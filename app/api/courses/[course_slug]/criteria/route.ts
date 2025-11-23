@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCriteria, createCriteria } from "@/lib/services";
 //@ts-ignore
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(request: Request, context: { params }) {
   try {
     const { course_slug } = await context.params;

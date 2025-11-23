@@ -29,6 +29,11 @@ async function getUserIdByEmail(email: string) {
   }
 }
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

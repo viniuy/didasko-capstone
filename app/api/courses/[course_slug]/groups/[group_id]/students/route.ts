@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getGroupStudents } from "@/lib/services";
 //@ts-ignore
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(request: Request, context: { params }) {
   try {
     const session = await getServerSession(authOptions);

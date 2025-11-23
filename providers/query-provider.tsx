@@ -13,6 +13,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             staleTime: 5 * 60 * 1000, // 5 minutes
             gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
             refetchOnWindowFocus: false,
+            refetchOnMount: false, // Don't refetch if data exists
+            refetchOnReconnect: false, // Don't refetch on reconnect
             retry: 1,
           },
         },

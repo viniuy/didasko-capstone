@@ -1,4 +1,4 @@
-import React from "react";
+import React, { startTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Group } from "@/shared/types/groups";
@@ -55,8 +55,11 @@ export function GroupCard({
 
   const handleViewGroup = (e: React.MouseEvent) => {
     e.preventDefault();
-    setIsViewing(true);
     router.push(`/main/grading/reporting/${courseCode}/group/${group.id}`);
+    // Update state after navigation starts
+    startTransition(() => {
+      setIsViewing(true);
+    });
   };
 
   return (

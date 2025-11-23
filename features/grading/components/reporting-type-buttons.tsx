@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, startTransition } from "react";
 
 interface ReportingTypeButtonsProps {
   courseSlug: string;
@@ -31,7 +31,11 @@ export function ReportingTypeButtons({
       >
         <Link
           href={`/main/grading/reporting/${courseSlug}/individual`}
-          onClick={() => setIsIndividualRedirecting(true)}
+          onClick={() => {
+            startTransition(() => {
+              setIsIndividualRedirecting(true);
+            });
+          }}
         >
           {isIndividualRedirecting ? (
             <span className="flex items-center gap-2">
@@ -58,7 +62,11 @@ export function ReportingTypeButtons({
       >
         <Link
           href={`/main/grading/reporting/${courseSlug}/group/`}
-          onClick={() => setIsGroupRedirecting(true)}
+          onClick={() => {
+            startTransition(() => {
+              setIsGroupRedirecting(true);
+            });
+          }}
         >
           {isGroupRedirecting ? (
             <span className="flex items-center gap-2">

@@ -2074,13 +2074,8 @@ export function CourseDataTable({
   // Handle course navigation with fade out
   const handleCourseNavigate = (slug: string) => {
     setIsRedirecting(true);
-    // Show redirecting message after fade-out completes (200ms)
-    setTimeout(() => {
-      setShowRedirectingMessage(true);
-    }, 200);
-    setTimeout(() => {
-      router.push(`/main/course/${slug}`);
-    }, 10);
+    setShowRedirectingMessage(true);
+    router.push(`/main/course/${slug}`);
   };
 
   // Get empty state message based on active filters

@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);

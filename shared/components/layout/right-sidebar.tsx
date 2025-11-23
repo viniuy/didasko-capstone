@@ -14,6 +14,7 @@ import CourseAnalytics from "@/features/right-sidebar/components/course-analytic
 export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
   const [isLargeScreen, setIsLargeScreen] = useState(false);
+  const [key, setKey] = useState(0); // Force rerender on route change
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -24,6 +25,19 @@ export default function Rightsidebar() {
     window.addEventListener("resize", checkScreenSize);
     return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
+
+  // Listen for route changes to trigger rerender
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setKey((prev) => prev + 1); // Force rerender
+    };
+
+    window.addEventListener("routeChangeStart", handleRouteChange);
+    return () => {
+      window.removeEventListener("routeChangeStart", handleRouteChange);
+    };
+  }, []);
+
   const pathname = usePathname();
   const params = useParams();
   const { data: session } = useSession();
@@ -40,7 +54,7 @@ export default function Rightsidebar() {
   const isCourseDashboard = pathname.startsWith("/main/course/") && courseSlug;
 
   return (
-    <>
+    <div key={key}>
       {!open && !isLargeScreen && (
         <Button
           variant="outline"
@@ -125,6 +139,6 @@ export default function Rightsidebar() {
           onClick={() => setOpen(false)}
         />
       )}
-    </>
+    </div>
   );
 }

@@ -2,9 +2,13 @@ import { Loader2 } from "lucide-react";
 
 interface EmptyStateProps {
   isLoading: boolean;
+  isRecitationCriteria?: boolean;
 }
 
-export function EmptyState({ isLoading }: EmptyStateProps) {
+export function EmptyState({
+  isLoading,
+  isRecitationCriteria = false,
+}: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       {isLoading ? (
@@ -15,10 +19,14 @@ export function EmptyState({ isLoading }: EmptyStateProps) {
       ) : (
         <>
           <div className="text-2xl font-semibold text-[#124A69] mb-2">
-            No Report Selected
+            {isRecitationCriteria
+              ? "No Recitation Selected"
+              : "No Report Selected"}
           </div>
           <p className="text-gray-500">
-            Please select a date and create or choose a grading report to begin.
+            {isRecitationCriteria
+              ? "Please select a date and create or choose a recitation to begin."
+              : "Please select a date and create or choose a grading report to begin."}
           </p>
         </>
       )}

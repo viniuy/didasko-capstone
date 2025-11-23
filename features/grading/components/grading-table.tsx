@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import {
   Dialog,
@@ -492,11 +492,12 @@ export function GradingTable({
   );
 
   // Fetch dates where grades exist for the current criteria
-  const { data: gradeDatesData } = useGradeDates(courseSlug, {
-    criteriaId: activeReport?.id,
-    courseCode,
-    courseSection,
-  });
+  const { data: gradeDatesData, isLoading: isLoadingGradeDates } =
+    useGradeDates(courseSlug, {
+      criteriaId: activeReport?.id,
+      courseCode,
+      courseSection,
+    });
   const gradeDates = gradeDatesData?.dates || [];
 
   // Determine which students to use - memoize to prevent infinite loops
@@ -655,14 +656,19 @@ export function GradingTable({
 
   // Check for existing criteria when date is selected or on mount
   useEffect(() => {
-    if (!selectedDate) {
-      setActiveReport(null);
+    // Don't reset if we're waiting for auto-select (activeReport exists but no date yet)
+    if (!selectedDate && !activeReport) {
       setRubricDetails([]);
       setSelectedReport("");
       setShowCriteriaDialog(false);
       setSavedReports([]);
       setInitialLoading(false);
       setHasSelectedCriteria(false);
+      return;
+    }
+
+    // If no date and we have an active report, we're waiting for auto-select
+    if (!selectedDate && activeReport) {
       return;
     }
 
@@ -747,28 +753,106 @@ export function GradingTable({
     isLoadingRecitation,
   ]);
 
-  // Reset scores and criteria selection when date changes
+  // Track the last criteria ID we auto-selected a date for to prevent re-selecting
+  const lastAutoSelectedCriteriaIdRef = useRef<string | null>(null);
+
+  // Auto-select date when criteria with grades is selected
+  useEffect(() => {
+    // Wait for gradeDates to be loaded and ensure we have an active report
+    if (activeReport?.id) {
+      // Only auto-select once per criteria selection
+      if (lastAutoSelectedCriteriaIdRef.current === activeReport.id) {
+        return;
+      }
+
+      // If gradeDates are loaded and we have dates, use the first one
+      if (!isLoadingGradeDates && gradeDates.length > 0) {
+        // Parse the first date that has grades and set it as selectedDate
+        // Parse as local time (Philippines time) to avoid timezone issues
+        const firstDateStr = gradeDates[0];
+        if (firstDateStr) {
+          const [year, month, day] = firstDateStr.split("-").map(Number);
+          // Create date in local timezone (Philippines) to avoid UTC conversion issues
+          const date = new Date(year, month - 1, day, 12, 0, 0, 0); // Use noon to avoid timezone edge cases
+
+          console.log("Auto-selecting date from gradeDates:", {
+            firstDateStr,
+            date,
+            gradeDates,
+            criteriaId: activeReport.id,
+          });
+
+          lastAutoSelectedCriteriaIdRef.current = activeReport.id;
+          onDateSelect?.(date);
+          return;
+        }
+      }
+      // If no gradeDates yet but criteria has a date property, use that as fallback
+      else if (
+        !isLoadingGradeDates &&
+        gradeDates.length === 0 &&
+        activeReport.date
+      ) {
+        // Use the criteria's date property as fallback
+        const criteriaDate = new Date(activeReport.date);
+        // Ensure it's in local timezone
+        const date = new Date(
+          criteriaDate.getFullYear(),
+          criteriaDate.getMonth(),
+          criteriaDate.getDate(),
+          12,
+          0,
+          0,
+          0
+        );
+
+        console.log("Auto-selecting date from criteria.date:", {
+          criteriaDate,
+          date,
+          criteriaId: activeReport.id,
+        });
+
+        lastAutoSelectedCriteriaIdRef.current = activeReport.id;
+        onDateSelect?.(date);
+      }
+    } else {
+      // Reset when no active report
+      lastAutoSelectedCriteriaIdRef.current = null;
+    }
+  }, [
+    activeReport?.id,
+    activeReport?.date,
+    gradeDates,
+    onDateSelect,
+    isLoadingGradeDates,
+  ]);
+
+  // Reset scores when date changes (but keep activeReport if it exists - date was auto-selected)
   useEffect(() => {
     setScores({});
-    setHasSelectedCriteria(false); // Reset when date changes
-    setActiveReport(null); // Reset active report when date changes
-  }, [selectedDate]);
-
-  // Update originalScores when scores are first loaded
-  useEffect(() => {
-    if (
-      Object.keys(scores).length > 0 &&
-      Object.keys(originalScores).length === 0
-    ) {
-      // Only set originalScores on initial load
-      setOriginalScores(JSON.parse(JSON.stringify(scores)));
+    // Only reset criteria selection if we don't have an active report
+    // This prevents resetting when date is auto-selected after criteria selection
+    if (!activeReport) {
+      setHasSelectedCriteria(false);
     }
-  }, [activeReport, selectedDate, scores]);
+  }, [selectedDate, activeReport]);
 
   // Reset originalScores when changing report or date
   useEffect(() => {
     setOriginalScores({});
-  }, [activeReport, selectedDate]);
+  }, [activeReport?.id, selectedDate]);
+
+  // Update originalScores when scores are first loaded after criteria/date change
+  useEffect(() => {
+    if (
+      Object.keys(scores).length > 0 &&
+      Object.keys(originalScores).length === 0 &&
+      activeReport
+    ) {
+      // Only set originalScores on initial load after criteria is selected
+      setOriginalScores(JSON.parse(JSON.stringify(scores)));
+    }
+  }, [scores, originalScores, activeReport]);
 
   // Check if there are any changes
   const hasChanges = () => {
@@ -876,6 +960,7 @@ export function GradingTable({
         setActiveReport(selected);
         setRubricDetails(selected.rubrics);
         setHasSelectedCriteria(true); // Mark criteria as selected
+        // The date will be auto-selected by the useEffect when gradeDates loads
       }
       setShowCriteriaDialog(false);
     }
@@ -1113,8 +1198,18 @@ export function GradingTable({
   useEffect(() => {
     if (isGroupView && showCriteriaDialog) {
       // Initialize with 2 rubrics by default for group view
-      handleRubricCountChange("2");
+      // Only initialize if rubricDetails is empty to avoid overwriting user input
+      if (
+        newReport.rubricDetails.length === 0 ||
+        (newReport.rubricDetails.length === 2 &&
+          newReport.rubricDetails.every(
+            (r) => r.name === "" && r.weight === 50
+          ))
+      ) {
+        handleRubricCountChange("2");
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGroupView, showCriteriaDialog]);
 
   // Update the updateRubricDetail function to handle Participation rubric
@@ -1253,15 +1348,18 @@ export function GradingTable({
       console.log("No session user ID");
       return;
     }
-    const loadingToast = toast.loading("Creating report...", {
-      position: "top-center",
-      duration: Infinity,
-      style: {
-        background: "#fff",
-        color: "#124A69",
-        border: "1px solid #e5e7eb",
-      },
-    });
+    const loadingToast = toast.loading(
+      isRecitationCriteria ? "Creating recitation..." : "Creating report...",
+      {
+        position: "top-center",
+        duration: Infinity,
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+        },
+      }
+    );
     try {
       setIsLoading(true);
       const rubrics = newReport.rubricDetails.map((r, idx, arr) => ({
@@ -1277,12 +1375,9 @@ export function GradingTable({
         participationRubric.isGroupRubric = false;
       }
 
-      let endpoint = `/courses/${courseSlug}/criteria`;
-      if (isRecitationCriteria) {
-        endpoint = `/courses/${courseSlug}/recitation-criteria`;
-      }
       // Note: Group criteria is for the whole section, so we use the general criteria endpoint
       // and filter by isGroupCriteria on the client side
+      // The mutation will automatically use the correct endpoint based on isRecitationCriteria
       const dateToSend = selectedDate ? new Date(selectedDate) : undefined;
       if (dateToSend) {
         dateToSend.setHours(0, 0, 0, 0);
@@ -1323,25 +1418,35 @@ export function GradingTable({
       });
       setValidationErrors({});
       toast.dismiss(loadingToast);
-      toast.success("Report created successfully", {
-        duration: 3000,
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-        },
-      });
+      toast.success(
+        isRecitationCriteria
+          ? "Recitation created successfully"
+          : "Report created successfully",
+        {
+          duration: 3000,
+          style: {
+            background: "#fff",
+            color: "#124A69",
+            border: "1px solid #e5e7eb",
+          },
+        }
+      );
     } catch (error) {
       console.error("Error creating report:", error);
       toast.dismiss(loadingToast);
-      toast.error("Failed to create report", {
-        duration: 3000,
-        style: {
-          background: "#fff",
-          color: "#dc2626",
-          border: "1px solid #e5e7eb",
-        },
-      });
+      toast.error(
+        isRecitationCriteria
+          ? "Failed to create recitation"
+          : "Failed to create report",
+        {
+          duration: 3000,
+          style: {
+            background: "#fff",
+            color: "#dc2626",
+            border: "1px solid #e5e7eb",
+          },
+        }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -1359,14 +1464,23 @@ export function GradingTable({
         : allCriteriaData || [];
 
       // Filter by view type only (not by date)
-      const reports = isGroupView
-        ? (allReportsData as GradingReport[]).filter(
-            (r: any) => r.isGroupCriteria === true
-          )
-        : (allReportsData as GradingReport[]).filter(
-            (r: any) =>
-              r.isGroupCriteria === false && r.isRecitationCriteria === false
-          );
+      let reports: GradingReport[] = [];
+      if (isGroupView) {
+        reports = (allReportsData as GradingReport[]).filter(
+          (r: any) => r.isGroupCriteria === true
+        );
+      } else if (isRecitationCriteria) {
+        // For recitation view, show only recitation criteria
+        reports = (allReportsData as GradingReport[]).filter(
+          (r: any) => r.isRecitationCriteria === true
+        );
+      } else {
+        // For regular grading view, show only non-group, non-recitation criteria
+        reports = (allReportsData as GradingReport[]).filter(
+          (r: any) =>
+            r.isGroupCriteria === false && r.isRecitationCriteria === false
+        );
+      }
       setSavedReports(reports);
     } catch (error) {
       console.error("Error loading reports:", error);
@@ -2368,9 +2482,10 @@ export function GradingTable({
           onFilterClick={() => setIsFilterOpen(true)}
           onDateSelect={(date) => onDateSelect?.(date)}
           onManageReport={() => {
-            // Criteria is one-time use - cannot reopen once selected
+            setShowCriteriaDialog(true);
           }}
           hasActiveReport={!!activeReport}
+          isRecitationCriteria={isRecitationCriteria}
           filterCount={
             Number(gradeFilter.passed) +
             Number(gradeFilter.failed) +
@@ -2657,7 +2772,10 @@ export function GradingTable({
         )}
 
         {!showCriteriaDialog && !activeReport && (
-          <EmptyState isLoading={criteriaLoading} />
+          <EmptyState
+            isLoading={criteriaLoading}
+            isRecitationCriteria={isRecitationCriteria}
+          />
         )}
 
         <BottomActionBar
@@ -2707,19 +2825,17 @@ export function GradingTable({
 
       {/* Keep all the dialogs here */}
       {/* ... existing dialogs ... */}
-      <Dialog
-        open={showCriteriaDialog && !activeReport}
-        onOpenChange={(open) => {
-          // Prevent opening if criteria is already selected (one-time use)
-          if (!activeReport) {
-            setShowCriteriaDialog(open);
-          }
-        }}
-      >
+      <Dialog open={showCriteriaDialog} onOpenChange={setShowCriteriaDialog}>
         <DialogContent className="sm:max-w-[450px] p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-[#124A69]">
-              {isEditingCriteria ? "Edit Report" : "Create New Report"}
+              {isEditingCriteria
+                ? isRecitationCriteria
+                  ? "Edit Recitation"
+                  : "Edit Report"
+                : isRecitationCriteria
+                ? "Create New Recitation"
+                : "Create New Report"}
             </DialogTitle>
             <DialogDescription>
               {isEditingCriteria
@@ -2790,38 +2906,42 @@ export function GradingTable({
                           />
                         </SelectTrigger>
                         <SelectContent>
-                          {savedReports.map((report) => {
-                            // Count students without grades for this report on the selected date
-                            const ungradedCount = students.filter((student) => {
-                              const studentScore = scores[student.id];
-                              return (
-                                !studentScore ||
-                                studentScore.scores.length === 0 ||
-                                studentScore.scores.every(
-                                  (score) => score === 0
-                                )
-                              );
-                            }).length;
+                          {[...savedReports]
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((report) => {
+                              // Count students without grades for this report on the selected date
+                              const ungradedCount = students.filter(
+                                (student) => {
+                                  const studentScore = scores[student.id];
+                                  return (
+                                    !studentScore ||
+                                    studentScore.scores.length === 0 ||
+                                    studentScore.scores.every(
+                                      (score) => score === 0
+                                    )
+                                  );
+                                }
+                              ).length;
 
-                            return (
-                              <SelectItem key={report.id} value={report.id}>
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium text-[#124A69]">
-                                    {report.name}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    Created:{" "}
-                                    {format(new Date(report.date), "PPP")} |{" "}
-                                    {report.rubrics.length} Criteria | Passing
-                                    Score: {report.passingScore}% | Using on:{" "}
-                                    {selectedDate
-                                      ? format(selectedDate, "PPP")
-                                      : "N/A"}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
+                              return (
+                                <SelectItem key={report.id} value={report.id}>
+                                  <div className="flex flex-col items-start">
+                                    <span className="font-medium text-[#124A69]">
+                                      {report.name}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      Created:{" "}
+                                      {format(new Date(report.date), "PPP")} |{" "}
+                                      {report.rubrics.length} Criteria | Passing
+                                      Score: {report.passingScore}% | Using on:{" "}
+                                      {selectedDate
+                                        ? format(selectedDate, "PPP")
+                                        : "N/A"}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                         </SelectContent>
                       </Select>
                     </div>

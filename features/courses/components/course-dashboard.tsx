@@ -273,10 +273,7 @@ export function CourseDashboard({
 
   const handleBackNavigation = () => {
     setIsRedirecting(true);
-    // Use router.push with a slight delay to show loading state
-    setTimeout(() => {
-      router.push(backUrl);
-    }, 50);
+    router.push(backUrl);
   };
 
   // Show loading spinner when redirecting or when initial data is loading

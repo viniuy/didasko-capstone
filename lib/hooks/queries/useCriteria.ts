@@ -110,10 +110,12 @@ export function useCreateCriteria() {
         rubrics?: Array<{ name: string; percentage: number }>;
       };
     }) => {
-      const { data } = await axios.post(
-        `/courses/${courseSlug}/criteria`,
-        criteriaData
-      );
+      // Use the correct endpoint based on whether it's recitation criteria
+      const endpoint = criteriaData.isRecitationCriteria
+        ? `/courses/${courseSlug}/recitation-criteria`
+        : `/courses/${courseSlug}/criteria`;
+
+      const { data } = await axios.post(endpoint, criteriaData);
       return data;
     },
     onSuccess: (_, variables) => {

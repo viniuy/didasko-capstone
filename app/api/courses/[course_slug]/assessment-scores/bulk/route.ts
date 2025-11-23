@@ -4,6 +4,11 @@ import { authOptions } from "@/lib/auth-options";
 import { saveAssessmentScoresBulk } from "@/lib/services";
 
 // POST - Save multiple assessment scores at once
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ course_slug: string }> }

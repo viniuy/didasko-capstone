@@ -174,7 +174,7 @@ export default function WeeklySchedule({
                       <div className="backface-hidden">
                         <div className="bg-[#FAEDCB] rounded-lg p-1.5 sm:p-2 text-[#124A69] shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
                           <div className="font-bold text-[10px] sm:text-xs md:text-sm">
-                            {schedule.course.title}
+                            {schedule.course.code}
                           </div>
                           <div className="text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
                             {formatTime(schedule.fromTime)} -{" "}

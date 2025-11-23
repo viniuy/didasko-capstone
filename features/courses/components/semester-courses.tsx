@@ -69,10 +69,8 @@ const CourseCard = ({
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     onNavigate();
-    setTimeout(() => {
-      setIsLoading(true);
-      router.push(href);
-    }, 200);
+    setIsLoading(true);
+    router.push(href);
   };
 
   return (

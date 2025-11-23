@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/shared/components/theme-provider";
 import { AuthProvider } from "@/shared/components/auth-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "react-hot-toast";
+import { Loading } from "@/shared/components/layout/Loading";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -76,7 +77,10 @@ export default function RootLayout({
           />
 
           <QueryProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <Loading />
+              {children}
+            </AuthProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

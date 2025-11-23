@@ -76,6 +76,11 @@ function generateSlug(code: string, section: string): string {
   return `${code.toLowerCase()}-${section.toLowerCase()}-${timestamp}`;
 }
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function POST(request: NextRequest) {
   const batchId = generateBatchId();
   let body: any = {};

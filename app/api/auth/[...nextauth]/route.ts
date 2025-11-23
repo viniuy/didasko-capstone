@@ -261,4 +261,9 @@ const handler = NextAuth({
   debug: process.env.NODE_ENV === "development",
 });
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export { handler as GET, handler as POST };

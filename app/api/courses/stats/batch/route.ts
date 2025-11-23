@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 
+// Route segment config to pre-compile and optimize
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30; // Maximum execution time
+
 type TermConfigWithGrades = {
   courseId: string;
   termGrades: Array<{
@@ -162,7 +167,15 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ stats });
+    const response = NextResponse.json({ stats });
+
+    // Add caching headers for better performance
+    response.headers.set(
+      "Cache-Control",
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
+    return response;
   } catch (error) {
     console.error("Error fetching batch course stats:", error);
     return NextResponse.json(

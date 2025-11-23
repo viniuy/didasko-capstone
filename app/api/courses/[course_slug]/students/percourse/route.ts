@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
 
 // GET - Fetch all students or filter by query params
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

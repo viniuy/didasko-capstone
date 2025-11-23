@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 
 // Get all unique dates where grades exist for a criteria
 //@ts-ignore
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(request: Request, { params }: { params }) {
   try {
     const session = await getServerSession(authOptions);

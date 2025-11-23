@@ -8,6 +8,11 @@ import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
 import { logAction } from "@/lib/audit";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export const POST = withLogging(
   { action: "AUDIT_LOGS_EXPORT", module: "Audit Logs" },
   async (req: NextRequest) => {

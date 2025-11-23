@@ -3,6 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getAttendance, createAttendanceBatch } from "@/lib/services";
 import { AttendanceResponse } from "@/shared/types/attendance";
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 //@ts-ignore
 export async function GET(request: Request, context: { params }) {
   try {

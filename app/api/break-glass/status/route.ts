@@ -5,6 +5,11 @@ import { getBreakGlassSession, isBreakGlassActive } from "@/lib/breakGlass";
 import { requireAdmin, handleAuthError } from "@/lib/authz";
 import { withLogging } from "@/lib/withLogging";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export const GET = withLogging(
   { action: "BREAK_GLASS_STATUS", module: "Security" },
   async (req: NextRequest) => {

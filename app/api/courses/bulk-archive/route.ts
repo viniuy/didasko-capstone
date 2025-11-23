@@ -5,6 +5,11 @@ import { CourseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
 
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function PATCH(request: NextRequest) {
   let body: { courseIds?: string[]; status?: string } = {};
   try {

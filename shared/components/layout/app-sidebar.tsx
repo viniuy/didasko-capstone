@@ -47,12 +47,13 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -130,10 +131,23 @@ function SidebarSkeleton() {
 
 export function AppSidebar() {
   const [isGradingOpen, setIsGradingOpen] = useState(false);
+  const [key, setKey] = useState(0); // Force rerender on route change
   const { open, setOpen, openMobile, setOpenMobile, isMobile } = useSidebar();
   const { data: session, status, update } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+
+  // Listen for route changes to trigger rerender
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setKey((prev) => prev + 1); // Force rerender
+    };
+
+    window.addEventListener("routeChangeStart", handleRouteChange);
+    return () => {
+      window.removeEventListener("routeChangeStart", handleRouteChange);
+    };
+  }, []);
 
   // Define allowed paths for each role
   const allowedPaths = {
@@ -330,7 +344,7 @@ export function AppSidebar() {
     image: userImage || null,
   };
   return (
-    <>
+    <div key={key}>
       {/* Mobile Background Override */}
       <style
         dangerouslySetInnerHTML={{
@@ -430,8 +444,12 @@ export function AppSidebar() {
               <SidebarMenu>
                 {items.map((item) => (
                   <SidebarMenuItem key={item.title}>
-                    <a
+                    <Link
                       href={item.url}
+                      prefetch={true}
+                      onMouseEnter={() => {
+                        router.prefetch(item.url);
+                      }}
                       className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
                         pathname?.startsWith(item.url) ? "bg-gray-800" : ""
                       }`}
@@ -446,7 +464,7 @@ export function AppSidebar() {
                       >
                         {open && item.title}
                       </span>
-                    </a>
+                    </Link>
                   </SidebarMenuItem>
                 ))}
 
@@ -490,8 +508,12 @@ export function AppSidebar() {
                             <SidebarMenu>
                               {gradingSubItems.map((item) => (
                                 <SidebarMenuItem key={item.title}>
-                                  <a
+                                  <Link
                                     href={item.url}
+                                    prefetch={true}
+                                    onMouseEnter={() => {
+                                      router.prefetch(item.url);
+                                    }}
                                     className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-56 min-h-[44px] sm:min-h-[40px] ml-2 sm:ml-4 ${
                                       pathname?.startsWith(item.url)
                                         ? "bg-gray-800"
@@ -508,7 +530,7 @@ export function AppSidebar() {
                                     >
                                       {item.title}
                                     </span>
-                                  </a>
+                                  </Link>
                                 </SidebarMenuItem>
                               ))}
                             </SidebarMenu>
@@ -596,6 +618,6 @@ export function AppSidebar() {
           user={user}
         />
       </Sidebar>
-    </>
+    </div>
   );
 }

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { ArrowLeft, User, Users, Loader2 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useState, startTransition } from "react";
 
 interface Course {
   id: string;
@@ -50,8 +50,10 @@ export function ReportingTypePageClient({
                   </Link>
                 </Button>
                 <div>
-                  <h1 className="text-2xl font-semibold">{course.title}</h1>
-                  <p className="text-sm text-muted-foreground">
+                  <h1 className="text-2xl font-semibold text-[#124A69]">
+                    {course.title}
+                  </h1>
+                  <p className="text-sm text-muted-foreground text-[#124A69]">
                     {course.section}
                   </p>
                 </div>
@@ -85,7 +87,11 @@ export function ReportingTypePageClient({
                       >
                         <Link
                           href={`/main/grading/reporting/${courseSlug}/individual`}
-                          onClick={() => setIsIndividualRedirecting(true)}
+                          onClick={() => {
+                            startTransition(() => {
+                              setIsIndividualRedirecting(true);
+                            });
+                          }}
                         >
                           {isIndividualRedirecting ? (
                             <span className="flex items-center gap-2">
@@ -127,7 +133,11 @@ export function ReportingTypePageClient({
                       >
                         <Link
                           href={`/main/grading/reporting/${courseSlug}/group/`}
-                          onClick={() => setIsGroupRedirecting(true)}
+                          onClick={() => {
+                            startTransition(() => {
+                              setIsGroupRedirecting(true);
+                            });
+                          }}
                         >
                           {isGroupRedirecting ? (
                             <span className="flex items-center gap-2">

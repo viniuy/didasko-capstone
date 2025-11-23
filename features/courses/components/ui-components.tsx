@@ -6,7 +6,7 @@ import { Student, AttendanceRecord } from "../types/types";
 import { getInitials } from "../utils/initials";
 
 export function LoadingSpinner({
-  mainMessage = "Loading Course Data...",
+  mainMessage = "Loading Course Data",
   secondaryMessage = "Please sit tight while we are getting things ready for you...",
 }: {
   mainMessage?: string;

@@ -4,6 +4,11 @@ import { authOptions } from "@/lib/auth-options";
 import { getTermConfigs, saveTermConfigs } from "@/lib/services";
 
 // ✅ GET ROUTE
+
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ course_slug: string }> }

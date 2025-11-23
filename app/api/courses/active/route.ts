@@ -4,6 +4,11 @@ import { authOptions } from "@/lib/auth-options";
 import { getCourses } from "@/lib/services";
 import { CourseResponse } from "@/shared/types/course";
 
+// Route segment config for pre-compilation and performance
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);

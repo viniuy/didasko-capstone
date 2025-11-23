@@ -23,6 +23,7 @@ interface HeaderSectionProps {
   onBackClick: () => void;
   gradeDates?: string[]; // Dates where grades exist (for highlighting)
   hasActiveReport?: boolean; // Whether criteria is already selected
+  isRecitationCriteria?: boolean; // Whether this is recitation criteria
 }
 
 export function HeaderSection({
@@ -38,6 +39,7 @@ export function HeaderSection({
   onBackClick,
   gradeDates = [],
   hasActiveReport = false,
+  isRecitationCriteria = false,
 }: HeaderSectionProps) {
   return (
     <div className="bg-white rounded-lg shadow-md">
@@ -106,6 +108,7 @@ export function HeaderSection({
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
+                disabled
                 className={cn(
                   "w-[230px] justify-start text-left font-normal",
                   !selectedDate && "text-muted-foreground"
@@ -124,9 +127,10 @@ export function HeaderSection({
                 }}
                 modifiers={{
                   hasGrades: gradeDates.map((dateStr) => {
-                    // Parse YYYY-MM-DD as local time (not UTC)
+                    // Parse YYYY-MM-DD as local time (Philippines time, not UTC)
+                    // Use noon to avoid timezone edge cases when converting
                     const [year, month, day] = dateStr.split("-").map(Number);
-                    const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+                    const date = new Date(year, month - 1, day, 12, 0, 0, 0);
                     return date;
                   }),
                 }}
@@ -151,10 +155,9 @@ export function HeaderSection({
           </Popover>
           <Button
             onClick={onManageReport}
-            disabled={hasActiveReport}
-            className="ml-2 h-9 px-4 bg-[#124A69] text-white rounded shadow flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+            className="ml-2 h-9 px-4 bg-[#124A69] text-white rounded shadow flex items-center"
           >
-            Manage Report
+            {isRecitationCriteria ? "Manage Criteria" : "Manage Report"}
           </Button>
         </div>
       </div>
