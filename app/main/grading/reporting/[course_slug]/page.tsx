@@ -38,7 +38,7 @@ export default async function ReportingTypePage({
         id: course.id,
         code: course.code,
         title: course.title,
-        description: course.description,
+        description: null, // Course model doesn't have description field
         section: course.section,
         slug: course.slug,
         academicYear: course.academicYear,

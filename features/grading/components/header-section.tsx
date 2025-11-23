@@ -22,6 +22,7 @@ interface HeaderSectionProps {
   filterCount: number;
   onBackClick: () => void;
   gradeDates?: string[]; // Dates where grades exist (for highlighting)
+  hasActiveReport?: boolean; // Whether criteria is already selected
 }
 
 export function HeaderSection({
@@ -36,6 +37,7 @@ export function HeaderSection({
   filterCount,
   onBackClick,
   gradeDates = [],
+  hasActiveReport = false,
 }: HeaderSectionProps) {
   return (
     <div className="bg-white rounded-lg shadow-md">
@@ -149,7 +151,8 @@ export function HeaderSection({
           </Popover>
           <Button
             onClick={onManageReport}
-            className="ml-2 h-9 px-4 bg-[#124A69] text-white rounded shadow flex items-center"
+            disabled={hasActiveReport}
+            className="ml-2 h-9 px-4 bg-[#124A69] text-white rounded shadow flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Manage Report
           </Button>

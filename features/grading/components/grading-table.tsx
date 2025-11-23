@@ -2368,9 +2368,9 @@ export function GradingTable({
           onFilterClick={() => setIsFilterOpen(true)}
           onDateSelect={(date) => onDateSelect?.(date)}
           onManageReport={() => {
-            setShowCriteriaDialog(true);
-            // Allow reopening dialog when manually triggered
+            // Criteria is one-time use - cannot reopen once selected
           }}
+          hasActiveReport={!!activeReport}
           filterCount={
             Number(gradeFilter.passed) +
             Number(gradeFilter.failed) +
@@ -2707,7 +2707,15 @@ export function GradingTable({
 
       {/* Keep all the dialogs here */}
       {/* ... existing dialogs ... */}
-      <Dialog open={showCriteriaDialog} onOpenChange={setShowCriteriaDialog}>
+      <Dialog
+        open={showCriteriaDialog && !activeReport}
+        onOpenChange={(open) => {
+          // Prevent opening if criteria is already selected (one-time use)
+          if (!activeReport) {
+            setShowCriteriaDialog(open);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[450px] p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-[#124A69]">

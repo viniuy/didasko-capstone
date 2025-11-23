@@ -1,4 +1,3 @@
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
@@ -7,6 +6,7 @@ import { getCourses } from "@/lib/services";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 export default async function RecitationGrading() {
   const session = await getServerSession(authOptions);
@@ -22,7 +22,7 @@ export default async function RecitationGrading() {
   });
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="relative h-screen w-screen overflow-hidden">
         <Header />
         <AppSidebar />

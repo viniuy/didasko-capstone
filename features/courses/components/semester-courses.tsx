@@ -34,6 +34,7 @@ interface Course {
     totalLate: number;
     totalPresent: number;
     totalStudents: number;
+    lastAttendanceAbsents?: number; // Absents count for most recent attendance date
   };
 }
 
@@ -84,7 +85,10 @@ const CourseCard = ({
         <CardContent>
           <p className="text-sm">Section {course.section}</p>
           <p className="text-sm font-semibold">
-            Total Number of Absents: {course.attendanceStats?.totalAbsents ?? 0}
+            Total Number of Absents:{" "}
+            {course.attendanceStats?.lastAttendanceAbsents ??
+              course.attendanceStats?.totalAbsents ??
+              0}
           </p>
           <p className="text-xs text-gray-400">
             {course.attendanceStats?.lastAttendanceDate
@@ -154,7 +158,7 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
     refetchOnWindowFocus: false,
   });
   // Transform courses to match local Course interface (convert Date to string for lastAttendanceDate)
-  const courses: Course[] = (coursesData?.courses || []).map((course) => ({
+  const courses: Course[] = (coursesData?.courses || []).map((course: any) => ({
     id: course.id,
     title: course.title,
     code: course.code,
@@ -175,6 +179,8 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
           totalLate: course.attendanceStats.totalLate,
           totalPresent: course.attendanceStats.totalPresent,
           totalStudents: course.attendanceStats.totalStudents,
+          lastAttendanceAbsents:
+            course.attendanceStats.lastAttendanceAbsents ?? undefined,
         }
       : undefined,
   }));

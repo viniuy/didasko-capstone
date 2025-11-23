@@ -153,12 +153,55 @@ export async function getCourses(filters: {
         lastAttendanceDates.map((a) => [a.courseId, a.date])
       );
 
+      // Get absents count for the most recent attendance date for each course
+      // Build date ranges for each course's last attendance date
+      const dateRanges: Array<{
+        courseId: string;
+        startDate: Date;
+        endDate: Date;
+      }> = [];
+      for (const [courseId, lastDate] of lastDateMap.entries()) {
+        if (lastDate) {
+          const startDate = new Date(lastDate);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(lastDate);
+          endDate.setHours(23, 59, 59, 999);
+          dateRanges.push({ courseId, startDate, endDate });
+        }
+      }
+
+      // Fetch all absents for last attendance dates in parallel
+      const lastAttendanceAbsentsPromises = dateRanges.map(
+        async ({ courseId, startDate, endDate }) => {
+          const count = await prisma.attendance.count({
+            where: {
+              courseId,
+              date: {
+                gte: startDate,
+                lte: endDate,
+              },
+              status: "ABSENT",
+            },
+          });
+          return [courseId, count] as [string, number];
+        }
+      );
+
+      const lastAttendanceAbsentsResults = await Promise.all(
+        lastAttendanceAbsentsPromises
+      );
+      const lastAttendanceAbsentsMap = new Map(lastAttendanceAbsentsResults);
+
       return courses.map((course) => {
         const totalStudents = course.students.length;
         const totalPresent = presentCountMap.get(course.id) || 0;
         const totalAbsents = absentCountMap.get(course.id) || 0;
         const totalLate = lateCountMap.get(course.id) || 0;
         const lastAttendanceDate = lastDateMap.get(course.id) || null;
+        const lastAttendanceAbsents =
+          lastAttendanceDate && lastAttendanceAbsentsMap.has(course.id)
+            ? lastAttendanceAbsentsMap.get(course.id)!
+            : 0;
 
         return {
           ...course,
@@ -172,6 +215,7 @@ export async function getCourses(filters: {
             totalAbsents,
             totalLate,
             lastAttendanceDate,
+            lastAttendanceAbsents, // Add absents count for most recent attendance
             attendanceRate:
               totalStudents > 0 ? totalPresent / totalStudents : 0,
           },

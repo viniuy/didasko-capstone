@@ -71,6 +71,7 @@ import {
 import {
   useStudentsByCourse,
   useAttendanceByCourse,
+  useAllAttendanceByCourse,
   useAttendanceStats,
   useAttendanceDates,
   useRecordAttendance,
@@ -221,6 +222,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     [key: number]: boolean;
   }>({});
   const [isDateLoading, setIsDateLoading] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [attendanceStats, setAttendanceStats] = useState<{
     totalAbsents: number;
     lastAttendanceDate: string | null;
@@ -372,14 +374,60 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   // React Query hooks for data fetching
   const queryClient = useQueryClient();
+
+  // Helper function to refetch all attendance data (used after mutations)
+  const refetchAllAttendance = useCallback(() => {
+    queryClient.refetchQueries({
+      queryKey: [...queryKeys.attendance.byCourse(courseSlug), "all"],
+    });
+    queryClient.refetchQueries({
+      queryKey: queryKeys.attendance.dates(courseSlug),
+    });
+    queryClient.refetchQueries({
+      queryKey: queryKeys.attendance.stats(courseSlug),
+    });
+  }, [courseSlug, queryClient]);
+
   const { data: studentsData, isLoading: isLoadingStudents } =
     useStudentsByCourse(courseSlug, selectedDate || undefined);
-  // Ensure we always have a valid date string for the attendance query
-  const attendanceDateStr = selectedDateStr || format(new Date(), "yyyy-MM-dd");
-  const { data: attendanceData, isLoading: isLoadingAttendance } =
-    useAttendanceByCourse(courseSlug, attendanceDateStr, { limit: 1000 });
+  // Fetch all attendance data once, then filter client-side
+  const { data: allAttendanceData, isLoading: isLoadingAllAttendance } =
+    useAllAttendanceByCourse(courseSlug);
   const { data: attendanceStatsData } = useAttendanceStats(courseSlug);
   const { data: attendanceDatesData } = useAttendanceDates(courseSlug);
+
+  // Filter attendance data by selected date (client-side)
+  const attendanceData = useMemo(() => {
+    if (!allAttendanceData?.attendance || !selectedDateStr) {
+      return { attendance: [] };
+    }
+
+    const filtered = allAttendanceData.attendance.filter((record: any) => {
+      // Handle different date formats from API
+      let recordDate: string | null = null;
+      if (record.date) {
+        try {
+          // If it's already a string in YYYY-MM-DD format
+          if (
+            typeof record.date === "string" &&
+            record.date.match(/^\d{4}-\d{2}-\d{2}/)
+          ) {
+            recordDate = record.date.split("T")[0]; // Get date part only
+          } else {
+            // If it's a Date object or ISO string
+            recordDate = format(new Date(record.date), "yyyy-MM-dd");
+          }
+        } catch (e) {
+          console.error("Error parsing date:", record.date, e);
+        }
+      }
+      return recordDate === selectedDateStr;
+    });
+
+    return { attendance: filtered };
+  }, [allAttendanceData, selectedDateStr]);
+
+  const isLoadingAttendance = isLoadingAllAttendance;
 
   // React Query mutations
   const recordAttendanceMutation = useRecordAttendance();
@@ -588,36 +636,25 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   }, [attendanceDatesData]);
 
   useEffect(() => {
-    setIsLoading(isLoadingStudents || isLoadingAttendance);
-    setIsDateLoading(isLoadingAttendance);
-  }, [isLoadingStudents, isLoadingAttendance]);
-
-  // Refetch attendance data when date changes for real-time updates
-  // Only refetch if date actually changed (not on initial mount)
-  const prevDateRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (selectedDateStr && courseSlug) {
-      // Only refetch if this is a date change, not initial load
-      if (
-        prevDateRef.current !== null &&
-        prevDateRef.current !== selectedDateStr
-      ) {
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.byCourse(courseSlug),
-        });
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.dates(courseSlug),
-        });
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.stats(courseSlug),
-        });
-        queryClient.refetchQueries({
-          queryKey: queryKeys.students.byCourse(courseSlug),
-        });
-      }
-      prevDateRef.current = selectedDateStr;
+    // Only set loading to true if it's the initial load
+    // After initial load, we don't want to show the full loading spinner
+    if (isInitialLoad) {
+      setIsLoading(isLoadingStudents || isLoadingAttendance);
+    } else {
+      // After initial load, only set date loading for individual button states
+      setIsLoading(false);
     }
-  }, [selectedDateStr, courseSlug, queryClient]);
+    setIsDateLoading(isLoadingAttendance);
+
+    // Track initial load - once data is loaded, we're past initial load
+    // Only set to false once, never reset it back to true
+    if (!isLoadingStudents && !isLoadingAttendance && isInitialLoad) {
+      setIsInitialLoad(false);
+    }
+  }, [isLoadingStudents, isLoadingAttendance, isInitialLoad]);
+
+  // No need to refetch when date changes - we filter client-side now
+  // Only refetch all attendance data when new attendance is recorded (handled in mutations)
 
   // Data fetching is now handled by React Query hooks above
 
@@ -870,11 +907,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         })
       );
 
-      // Immediately refetch all attendance-related data for real-time updates
+      // Immediately refetch only the specific date's attendance data (not all dates)
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
       await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.byCourse(courseSlug),
-        }),
+        refetchAllAttendance(),
         queryClient.refetchQueries({
           queryKey: queryKeys.attendance.dates(courseSlug),
         }),
@@ -1053,11 +1089,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         setPendingUpdates({});
         latestUpdateRef.current = null;
 
-        // Immediately refetch all attendance-related data for real-time updates
+        // Immediately refetch only the specific date's attendance data (not all dates)
+        const dateStr = format(selectedDate, "yyyy-MM-dd");
         await Promise.all([
-          queryClient.refetchQueries({
-            queryKey: queryKeys.attendance.byCourse(courseSlug),
-          }),
+          refetchAllAttendance(),
           queryClient.refetchQueries({
             queryKey: queryKeys.attendance.dates(courseSlug),
           }),
@@ -1731,6 +1766,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   };
 
   const handleAttendanceTimeout = async () => {
+    // This is called when the actual timeout expires - end the session
+    await endAttendanceSession();
+  };
+
+  const handleDoneClick = async () => {
+    // End the attendance session - this will:
+    // 1. Mark all NOT_SET students as ABSENT
+    // 2. Save all pending RFID attendance updates (scanned students)
+    // 3. Save all absent students
+    // 4. Close the modal and end the session
     await endAttendanceSession();
   };
 
@@ -1904,16 +1949,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         setRfidInput("");
         setIsScanning(false);
 
-        if (batchSaveTimeoutRef.current) {
-          clearTimeout(batchSaveTimeoutRef.current);
-        }
-
-        batchSaveTimeoutRef.current = setTimeout(() => {
-          const updates = pendingUpdatesRef.current;
-          if (Object.keys(updates).length > 0) {
-            batchUpdateAttendance();
-          }
-        }, 2000);
+        // Removed automatic batch update - will only update when DONE is clicked
+        // This optimizes performance by batching all updates at once
       } catch (error) {
         console.error("RFID processing error:", error);
         toast.error("Failed to process RFID", { duration: 2000 });
@@ -2079,11 +2116,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       await updatePromise;
 
-      // Immediately refetch all attendance-related data for real-time updates
+      // Immediately refetch only the specific date's attendance data (not all dates)
       await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.byCourse(courseSlug),
-        }),
+        refetchAllAttendance(),
         queryClient.refetchQueries({
           queryKey: queryKeys.attendance.dates(courseSlug),
         }),
@@ -2322,11 +2357,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       await promise;
 
-      // Immediately refetch all attendance-related data for real-time updates
+      // Immediately refetch only the specific date's attendance data (not all dates)
       await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.byCourse(courseSlug),
-        }),
+        refetchAllAttendance(),
         queryClient.refetchQueries({
           queryKey: queryKeys.attendance.dates(courseSlug),
         }),
@@ -2374,6 +2407,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           isSelecting={isSelecting}
           disableStatusChange={isSelecting}
           isSavingRfidAttendance={isSavingRfidAttendance}
+          isLoading={isDateLoading && !isInitialLoad}
         />
       </div>
     ));
@@ -2383,6 +2417,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     selectedStudents,
     isSelecting,
     isSavingRfidAttendance,
+    isDateLoading,
+    isInitialLoad,
   ]);
 
   if (isLoading) {
@@ -2805,7 +2841,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           </div>
         ) : (
           <div className={gridColsClass}>
-            {isDateLoading ? (
+            {isDateLoading && isInitialLoad ? (
+              // Only show skeleton cards on initial load
               Array.from({ length: itemsPerPage }).map((_, index) => (
                 <div
                   key={index}
@@ -2819,6 +2856,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </div>
               ))
             ) : currentStudents.length > 0 ? (
+              // Show student cards with individual loading states when backtracking
               renderStudentCards
             ) : (
               <div className="col-span-full flex flex-col items-center justify-center py-12">
@@ -3391,8 +3429,34 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       <Dialog
         open={showTimeoutModal}
         onOpenChange={(open) => {
-          setShowTimeoutModal(open);
+          // Prevent closing if attendanceStartTime is null (session not started properly)
+          if (!open && !attendanceStartTime) {
+            // If trying to close but session isn't started, show time setup modal instead
+            setShowTimeoutModal(false);
+            setShowTimeSetupModal(true);
+            return;
+          }
+          // Only allow closing if session is properly started or explicitly closed via DONE button
+          if (!open && attendanceStartTime) {
+            // User is closing the modal - don't end the session, just close the modal
+            setIsScanning(false);
+            setRfidPreviewStudent(null);
+            // Clear input when closing
+            if (rfidInputRef.current) {
+              rfidInputRef.current.value = "";
+            }
+            setRfidInput("");
+            setShowTimeoutModal(false);
+            return;
+          }
+          // Opening the modal
           if (open) {
+            // Ensure session is started before opening
+            if (!attendanceStartTime) {
+              setShowTimeoutModal(false);
+              setShowTimeSetupModal(true);
+              return;
+            }
             setIsScanning(true);
             setRfidInput("");
             setRfidPreviewStudent({
@@ -3412,14 +3476,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             setTimeout(focusInput, 50);
             setTimeout(focusInput, 100);
             setTimeout(focusInput, 200);
-          } else {
-            setIsScanning(false);
-            setRfidPreviewStudent(null);
-            // Clear input when closing
-            if (rfidInputRef.current) {
-              rfidInputRef.current.value = "";
-            }
-            setRfidInput("");
           }
         }}
       >
@@ -3604,7 +3660,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </Button>
                 <Button
                   className="flex-1 h-11 bg-[#124A69] hover:bg-[#0a2f42] text-white"
-                  onClick={handleAttendanceTimeout}
+                  onClick={handleDoneClick}
                   disabled={isSavingRfidAttendance}
                 >
                   Done

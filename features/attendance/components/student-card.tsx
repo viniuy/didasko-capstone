@@ -32,6 +32,7 @@ interface StudentCardProps {
   isSelecting?: boolean;
   disableStatusChange?: boolean;
   isSavingRfidAttendance?: boolean;
+  isLoading?: boolean;
 }
 
 interface AttendanceRecord {
@@ -60,6 +61,7 @@ export function StudentCard({
   onSelect,
   disableStatusChange = false,
   isSavingRfidAttendance = false,
+  isLoading = false,
 }: StudentCardProps) {
   const excusedReason =
     student.attendanceRecord.find((r) => r.status === "EXCUSED")?.reason ||
@@ -109,75 +111,97 @@ export function StudentCard({
           {student.name}
         </h3>
         <div className="w-full">
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
-                      statusStyles[student.status]
-                    } ${
-                      isInCooldown ||
-                      disableStatusChange ||
-                      isSavingRfidAttendance
-                        ? "opacity-50 cursor-not-allowed"
-                        : ""
-                    }`}
-                    disabled={
-                      isInCooldown ||
-                      disableStatusChange ||
-                      isSavingRfidAttendance
-                    }
-                  >
-                    {student.status === "NOT_SET"
-                      ? "Select status"
-                      : student.status}
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              {student.status === "EXCUSED" && (
-                <TooltipContent>
-                  <p>{excusedReason}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-            <DropdownMenuContent align="center">
-              <DropdownMenuItem
-                onClick={() => onStatusChange(index, "PRESENT")}
-                disabled={
-                  isInCooldown || disableStatusChange || isSavingRfidAttendance
-                }
-              >
-                Present
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onStatusChange(index, "LATE")}
-                disabled={
-                  isInCooldown || disableStatusChange || isSavingRfidAttendance
-                }
-              >
-                Late
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onStatusChange(index, "ABSENT")}
-                disabled={
-                  isInCooldown || disableStatusChange || isSavingRfidAttendance
-                }
-              >
-                Absent
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onStatusChange(index, "EXCUSED")}
-                disabled={
-                  isInCooldown || disableStatusChange || isSavingRfidAttendance
-                }
-              >
-                Excused
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {isLoading ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full rounded-full px-4 py-1.5 text-sm font-medium border bg-white text-gray-500 border-gray-200"
+              disabled
+            >
+              <div className="flex items-center justify-center gap-2">
+                <div className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent"></div>
+                <span>Loading...</span>
+              </div>
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
+                        statusStyles[student.status]
+                      } ${
+                        isInCooldown ||
+                        disableStatusChange ||
+                        isSavingRfidAttendance
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }`}
+                      disabled={
+                        isInCooldown ||
+                        disableStatusChange ||
+                        isSavingRfidAttendance
+                      }
+                    >
+                      {student.status === "NOT_SET"
+                        ? "Select status"
+                        : student.status}
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                {student.status === "EXCUSED" && (
+                  <TooltipContent>
+                    <p>{excusedReason}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+              <DropdownMenuContent align="center">
+                <DropdownMenuItem
+                  onClick={() => onStatusChange(index, "PRESENT")}
+                  disabled={
+                    isInCooldown ||
+                    disableStatusChange ||
+                    isSavingRfidAttendance
+                  }
+                >
+                  Present
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onStatusChange(index, "LATE")}
+                  disabled={
+                    isInCooldown ||
+                    disableStatusChange ||
+                    isSavingRfidAttendance
+                  }
+                >
+                  Late
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onStatusChange(index, "ABSENT")}
+                  disabled={
+                    isInCooldown ||
+                    disableStatusChange ||
+                    isSavingRfidAttendance
+                  }
+                >
+                  Absent
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onStatusChange(index, "EXCUSED")}
+                  disabled={
+                    isInCooldown ||
+                    disableStatusChange ||
+                    isSavingRfidAttendance
+                  }
+                >
+                  Excused
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     </div>

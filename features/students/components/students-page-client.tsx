@@ -407,7 +407,7 @@ export function StudentsPageClient({
     if (value.length >= 10) {
       // Check if RFID is already assigned
       const existingStudent = students.find(
-        (s) => s.rfid_id && String(s.rfid_id) === value
+        (s: Student) => s.rfid_id && String(s.rfid_id) === value
       );
 
       if (existingStudent) {
@@ -1063,7 +1063,7 @@ export function StudentsPageClient({
                         Loading...
                       </p>
                     ) : students.length > 0 ? (
-                      students.map((student) => (
+                      students.map((student: Student) => (
                         <div
                           key={student.id}
                           className={`p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${

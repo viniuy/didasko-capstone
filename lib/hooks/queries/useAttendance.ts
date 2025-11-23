@@ -31,6 +31,60 @@ export function useAttendanceByCourse(
   });
 }
 
+// Query: Get all attendance for a course (fetches all dates at once)
+export function useAllAttendanceByCourse(courseSlug: string) {
+  const { data: datesData, isLoading: isLoadingDates } =
+    useAttendanceDates(courseSlug);
+
+  return useQuery({
+    queryKey: [
+      ...queryKeys.attendance.byCourse(courseSlug),
+      "all",
+      datesData?.dates,
+    ],
+    queryFn: async () => {
+      if (!datesData?.dates || datesData.dates.length === 0) {
+        return { attendance: [] };
+      }
+
+      // Fetch attendance for all dates in parallel
+      const attendancePromises = datesData.dates.map(
+        async (dateStr: string) => {
+          // Extract date part from ISO string (YYYY-MM-DD)
+          const dateOnly = dateStr.split("T")[0];
+          const { data } = await axios.get(
+            `/courses/${courseSlug}/attendance?date=${dateOnly}&limit=1000`
+          );
+          return {
+            date: dateOnly, // Store as YYYY-MM-DD format
+            attendance: (data?.attendance || []).map((record: any) => ({
+              ...record,
+              date: dateOnly, // Ensure all records have the date in YYYY-MM-DD format
+            })),
+          };
+        }
+      );
+
+      const results = await Promise.all(attendancePromises);
+
+      // Flatten all attendance records
+      const allAttendance = results.flatMap((result) => result.attendance);
+
+      return { attendance: allAttendance };
+    },
+    enabled:
+      !!courseSlug &&
+      !!datesData?.dates &&
+      datesData.dates.length > 0 &&
+      !isLoadingDates,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    // Keep previous data while refetching to prevent loading states
+    placeholderData: (previousData) => previousData,
+  });
+}
+
 // Query: Get attendance dates for a course
 export function useAttendanceDates(courseSlug: string) {
   return useQuery({
@@ -42,9 +96,9 @@ export function useAttendanceDates(courseSlug: string) {
       return data;
     },
     enabled: !!courseSlug,
-    staleTime: 0, // Always consider data stale for real-time updates
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: 30 * 1000, // Cache for 30 seconds to prevent unnecessary refetches
+    refetchOnMount: false, // Don't refetch on mount if we have cached data
+    refetchOnWindowFocus: false, // Don't refetch on window focus
   });
 }
 

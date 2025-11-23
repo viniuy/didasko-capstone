@@ -22,7 +22,7 @@ export default async function GradingPage() {
   });
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="relative h-screen w-screen overflow-hidden">
         <Header />
         <AppSidebar />
