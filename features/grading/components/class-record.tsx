@@ -1151,49 +1151,6 @@ export function ClassRecordTable({
     };
   };
 
-  // Calculate rankings for each term
-  const termRankings = useMemo(() => {
-    const rankings: Record<
-      "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS",
-      Map<string, number>
-    > = {
-      PRELIM: new Map(),
-      MIDTERM: new Map(),
-      PREFINALS: new Map(),
-      FINALS: new Map(),
-    };
-
-    (["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const).forEach((term) => {
-      // Get all students with valid grades for this term
-      const studentGrades = students
-        .map((student) => {
-          const grade = computeTermGrade(student.id, term);
-          if (!grade || grade.numericGrade === "(error)") return null;
-          const numericValue = parseFloat(grade.numericGrade);
-          if (isNaN(numericValue)) return null;
-          return {
-            studentId: student.id,
-            grade: numericValue,
-          };
-        })
-        .filter((g): g is { studentId: string; grade: number } => g !== null);
-
-      // Sort by grade (ascending - lower is better)
-      studentGrades.sort((a, b) => a.grade - b.grade);
-
-      // Assign rankings (handle ties)
-      let currentRank = 1;
-      for (let i = 0; i < studentGrades.length; i++) {
-        if (i > 0 && studentGrades[i].grade !== studentGrades[i - 1].grade) {
-          currentRank = i + 1;
-        }
-        rankings[term].set(studentGrades[i].studentId, currentRank);
-      }
-    });
-
-    return rankings;
-  }, [students, termConfigs, scores]);
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let result = students;
@@ -1770,32 +1727,6 @@ export function ClassRecordTable({
                         >
                           {studentName(student)}
                         </span>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {(
-                            [
-                              "PRELIM",
-                              "MIDTERM",
-                              "PREFINALS",
-                              "FINALS",
-                            ] as const
-                          ).map((term) => {
-                            const rank = termRankings[term].get(student.id);
-                            if (!rank) return null;
-                            return (
-                              <span
-                                key={term}
-                                className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                  selectedStudentId === student.id
-                                    ? "bg-white/20 text-white"
-                                    : "bg-gray-100 text-gray-600"
-                                }`}
-                                title={`${term} Rank: ${rank}`}
-                              >
-                                {term.charAt(0)}#{rank}
-                              </span>
-                            );
-                          })}
-                        </div>
                       </div>
                     </td>
                     {(
@@ -2433,35 +2364,6 @@ export function ClassRecordTable({
                         >
                           {studentName(student)}
                         </span>
-                        {(() => {
-                          const validTerms: (
-                            | "PRELIM"
-                            | "MIDTERM"
-                            | "PREFINALS"
-                            | "FINALS"
-                          )[] = ["PRELIM", "MIDTERM", "PREFINALS", "FINALS"];
-                          if (!validTerms.includes(activeTerm as any))
-                            return null;
-                          const term = activeTerm as
-                            | "PRELIM"
-                            | "MIDTERM"
-                            | "PREFINALS"
-                            | "FINALS";
-                          const rank = termRankings[term].get(student.id);
-                          if (!rank) return null;
-                          return (
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded flex-shrink-0 ${
-                                selectedStudentId === student.id
-                                  ? "bg-white/20 text-white"
-                                  : "bg-gray-100 text-gray-600"
-                              }`}
-                              title={`${activeTerm} Rank: ${rank}`}
-                            >
-                              #{rank}
-                            </span>
-                          );
-                        })()}
                       </div>
                     </td>
                     {pts.map((pt) => {

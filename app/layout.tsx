@@ -1,5 +1,4 @@
 import type React from "react";
-import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/shared/components/theme-provider";
 import { AuthProvider } from "@/shared/components/auth-provider";
@@ -81,9 +80,7 @@ export default function RootLayout({
           <QueryProvider>
             <AuthProvider>
               <Loading />
-              <Suspense fallback={null}>
-                <NProgressProvider />
-              </Suspense>
+              <NProgressProvider />
               {children}
             </AuthProvider>
           </QueryProvider>

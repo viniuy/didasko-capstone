@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { getStudents } from "@/lib/services";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
@@ -40,12 +39,10 @@ export default async function StudentsPage({
   }));
 
   return (
-    <Suspense fallback={<div>Loading students...</div>}>
-      <StudentsPageClient
-        initialStudents={initialStudents}
-        initialPagination={studentsResult.pagination}
-        initialSearch={search}
-      />
-    </Suspense>
+    <StudentsPageClient
+      initialStudents={initialStudents}
+      initialPagination={studentsResult.pagination}
+      initialSearch={search}
+    />
   );
 }
