@@ -5,6 +5,7 @@ import { AuthProvider } from "@/shared/components/auth-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "react-hot-toast";
 import { Loading } from "@/shared/components/layout/Loading";
+import { NProgressProvider } from "@/shared/components/layout/NProgress";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -79,6 +80,7 @@ export default function RootLayout({
           <QueryProvider>
             <AuthProvider>
               <Loading />
+              <NProgressProvider />
               {children}
             </AuthProvider>
           </QueryProvider>

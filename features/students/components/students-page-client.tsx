@@ -105,6 +105,7 @@ export function StudentsPageClient({
   const rfidInputRef = React.useRef<HTMLInputElement>(null);
   const scanTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const rfidScanContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Use TanStack Query with server-side pagination
   const { data: studentsData, isLoading } = useStudents({
@@ -155,6 +156,30 @@ export function StudentsPageClient({
 
   // Debounce search navigation
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Handle click outside RFID scan area
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isScanning &&
+        rfidScanContainerRef.current &&
+        !rfidScanContainerRef.current.contains(event.target as Node) &&
+        !rfidInputRef.current?.contains(event.target as Node)
+      ) {
+        setIsScanning(false);
+        if (rfidInputRef.current) {
+          rfidInputRef.current.value = "";
+        }
+      }
+    };
+
+    if (isScanning) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }
+  }, [isScanning]);
 
   // Handle search with debounce and navigation
   const handleSearch = React.useCallback(
@@ -244,6 +269,10 @@ export function StudentsPageClient({
     });
     setScannedRfid("");
     setIsScanning(false);
+    // Focus on hidden RFID input if user wants to scan
+    if (rfidInputRef.current) {
+      rfidInputRef.current.value = "";
+    }
   };
 
   // Handle "Search via RFID" button
@@ -395,7 +424,7 @@ export function StudentsPageClient({
 
   // Handle RFID input
   const handleRfidInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = e.target.value.replace(/\D/g, ""); // Only numbers
 
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
@@ -424,15 +453,17 @@ export function StudentsPageClient({
           return;
         }
 
-        // If we're assigning RFID, show error
-        toast.error(
-          `RFID "${value}" is already assigned to ${existingStudent.firstName} ${existingStudent.lastName}`,
-          { duration: 3000 }
-        );
-        setScannedRfid("");
-        setIsScanning(false);
-        if (rfidInputRef.current) rfidInputRef.current.value = "";
-        return;
+        // If we're assigning RFID or creating, show error
+        if (viewMode === "assigning-rfid" || viewMode === "creating") {
+          toast.error(
+            `RFID "${value}" is already assigned to ${existingStudent.firstName} ${existingStudent.lastName}`,
+            { duration: 3000 }
+          );
+          setScannedRfid("");
+          setIsScanning(false);
+          if (rfidInputRef.current) rfidInputRef.current.value = "";
+          return;
+        }
       }
 
       // If searching and no student found
@@ -446,20 +477,26 @@ export function StudentsPageClient({
         return;
       }
 
-      // Valid RFID scanned for assignment
-      toast.success(`RFID "${value}" scanned successfully!`);
-      setIsScanning(false);
+      // Valid RFID scanned for assignment or creation
+      if (viewMode === "assigning-rfid" || viewMode === "creating") {
+        toast.success(`RFID "${value}" scanned successfully!`);
+        setIsScanning(false);
+        // Update scannedRfid state for the visible input
+        setScannedRfid(value);
+      }
     } else {
-      // Reset timeout if input stops
-      scanTimeoutRef.current = setTimeout(() => {
-        if (value.length > 0 && value.length < 10) {
-          toast.error("Incomplete RFID scan. Please try again.");
-        }
-        setScannedRfid("");
-        if (rfidInputRef.current) {
-          rfidInputRef.current.value = "";
-        }
-      }, 1000);
+      // Reset timeout if input stops (only for scanning modes, not manual input)
+      if (viewMode === "assigning-rfid" || viewMode === "searching-rfid") {
+        scanTimeoutRef.current = setTimeout(() => {
+          if (value.length > 0 && value.length < 10) {
+            toast.error("Incomplete RFID scan. Please try again.");
+          }
+          setScannedRfid("");
+          if (rfidInputRef.current) {
+            rfidInputRef.current.value = "";
+          }
+        }, 1000);
+      }
     }
   };
 
@@ -519,7 +556,11 @@ export function StudentsPageClient({
         middleInitial: formData.middleInitial || undefined,
         image: imageUrl,
         studentId: formData.studentId,
-        rfid_id: scannedRfid || selectedStudent?.rfid_id || undefined,
+        rfid_id: scannedRfid
+          ? parseInt(scannedRfid, 10)
+          : selectedStudent?.rfid_id
+          ? parseInt(String(selectedStudent.rfid_id), 10)
+          : undefined,
       };
 
       let response;
@@ -725,8 +766,17 @@ export function StudentsPageClient({
                 <Input
                   id="studentId"
                   name="studentId"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.studentId}
-                  onChange={handleFormChange}
+                  onChange={(e) => {
+                    // Only allow numbers
+                    const value = e.target.value.replace(/\D/g, "");
+                    setFormData((prev) => ({
+                      ...prev,
+                      studentId: value,
+                    }));
+                  }}
                   required
                   maxLength={20}
                 />
@@ -770,6 +820,76 @@ export function StudentsPageClient({
                   maxLength={1}
                 />
               </div>
+
+              {viewMode === "creating" && (
+                <div className="space-y-2" ref={rfidScanContainerRef}>
+                  <Label htmlFor="rfid">
+                    RFID{" "}
+                    <span className="text-xs text-muted-foreground">
+                      (Optional)
+                    </span>
+                  </Label>
+                  <div className="flex gap-2">
+                    {scannedRfid ? (
+                      <div className="flex-1 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <p className="text-sm text-green-800">
+                          ✓ RFID scanned:{" "}
+                          <span className="font-mono font-semibold">
+                            {scannedRfid}
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex-1 p-3 bg-muted/50 border border-dashed rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground">
+                          No RFID scanned
+                        </p>
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        setIsScanning(true);
+                        if (rfidInputRef.current) {
+                          rfidInputRef.current.focus();
+                        }
+                      }}
+                      className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+                    >
+                      <Scan className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {isScanning && (
+                    <div className="text-xs text-blue-600 flex items-center gap-1">
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                      Waiting for RFID scan...
+                    </div>
+                  )}
+                  {scannedRfid && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setScannedRfid("");
+                        setIsScanning(false);
+                        if (rfidInputRef.current) {
+                          rfidInputRef.current.value = "";
+                        }
+                      }}
+                      className="w-full text-red-600 border-red-200 hover:bg-red-50"
+                    >
+                      Clear RFID
+                    </Button>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Click the scan button to scan RFID card. Leave empty if RFID
+                    is not available.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="studentImage">Student Image</Label>

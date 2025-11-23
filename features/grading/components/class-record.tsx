@@ -1201,17 +1201,14 @@ export function ClassRecordTable({
 
   const handleSaveSettings = async (configs: Record<string, TermConfig>) => {
     try {
-      toast.loading("Saving term configurations...");
       const payload = { termConfigs: configs };
       await gradingService.saveTermConfigs(courseSlug, payload.termConfigs);
-      toast.dismiss();
       setTermConfigs(configs);
       setHasTermConfigs(true);
-      toast.success("Settings saved successfully!");
+      // No success toast - only loading toast is shown
     } catch (error: any) {
-      toast.dismiss();
       console.error("Failed to save settings:", error.response?.data || error);
-      toast.error("Failed to save settings");
+      throw error; // Re-throw to let SettingsModal handle the error
     }
   };
 

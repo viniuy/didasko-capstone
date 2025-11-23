@@ -72,7 +72,7 @@ export interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   termConfigs: Record<string, TermConfig>;
-  onSave: (configs: Record<string, TermConfig>) => void;
+  onSave: (configs: Record<string, TermConfig>) => Promise<void>;
   availableCriteria: CriteriaOption[];
 }
 

@@ -35,7 +35,7 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   termConfigs: Record<string, TermConfig>;
-  onSave: (configs: Record<string, TermConfig>) => void;
+  onSave: (configs: Record<string, TermConfig>) => Promise<void>;
   availableCriteria: CriteriaOption[];
 }
 
@@ -274,6 +274,7 @@ export function SettingsModal({
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingTerm, setPendingTerm] = useState<Term | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const initialConfigsRef = useRef(initialConfigs);
 
   useEffect(() => {
@@ -589,7 +590,7 @@ export function SettingsModal({
     return errors;
   };
 
-  const handleSaveTerm = (term: Term) => {
+  const handleSaveTerm = async (term: Term) => {
     const errors = validateTerm(term);
 
     if (errors.length > 0) {
@@ -607,16 +608,32 @@ export function SettingsModal({
     // Remove errors for this term
     setValidationErrors((prev) => prev.filter((e) => !e.startsWith(term)));
 
-    // Save only this term's config
-    const updatedConfigs = {
-      ...termConfigs,
-      [term]: termConfigs[term],
-    };
-    onSave(updatedConfigs);
+    setIsSaving(true);
+    const loadingToast = toast.loading(`Saving ${term} configuration...`);
 
-    // Mark as saved
-    setSavedTerms((prev) => new Set(prev).add(term));
-    toast.success(`${term} configuration saved successfully!`);
+    try {
+      // Save only this term's config
+      const updatedConfigs = {
+        ...termConfigs,
+        [term]: termConfigs[term],
+      };
+      await onSave(updatedConfigs);
+
+      // Mark as saved
+      setSavedTerms((prev) => new Set(prev).add(term));
+      toast.dismiss(loadingToast);
+
+      // Close modal after successful save
+      setTimeout(() => {
+        onClose();
+      }, 100);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error(`Failed to save ${term} configuration`);
+      console.error("Error saving term config:", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleNextTutorialStep = () => {
@@ -647,7 +664,19 @@ export function SettingsModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] sm:max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] sm:max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col relative">
+        {/* Blocking Spinner Overlay */}
+        {isSaving && (
+          <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-[100] flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69]"></div>
+              <p className="text-sm text-gray-600 font-medium">
+                Saving configuration...
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Tutorial Overlay */}
         <Tutorial
           isActive={showTutorial}
@@ -1407,7 +1436,8 @@ export function SettingsModal({
             <button
               onClick={() => handleSaveTerm(activeTerm)}
               data-tutorial="term-save-button"
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] text-xs sm:text-sm transition-colors"
+              disabled={isSaving}
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] text-xs sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Save {activeTerm}</span>
