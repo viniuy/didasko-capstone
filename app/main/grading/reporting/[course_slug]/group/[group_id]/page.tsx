@@ -11,6 +11,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect, notFound } from "next/navigation";
 import { GroupReportingPageClient } from "@/features/grading/components/group-reporting-page-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function GroupGradingPage({
   params,
 }: {

@@ -8,6 +8,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect, notFound } from "next/navigation";
 import { GroupManagementPageClient } from "@/features/groups/components/group-management-page-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function GroupGradingPage({
   params,
 }: {

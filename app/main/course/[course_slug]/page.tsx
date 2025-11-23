@@ -26,6 +26,8 @@ async function CourseDashboardContent({ courseSlug }: { courseSlug: string }) {
   );
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function CourseDashboardPage({
   params,
 }: {

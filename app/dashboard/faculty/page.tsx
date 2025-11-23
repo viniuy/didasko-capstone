@@ -17,6 +17,8 @@ import {
   FacultyDashboardSkeleton,
 } from "@/shared/components/skeletons/course-skeletons";
 
+export const dynamic = "force-dynamic";
+
 // Separate async component for stats
 async function StatsContent({
   userId,

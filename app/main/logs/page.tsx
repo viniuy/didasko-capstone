@@ -25,6 +25,8 @@ interface PageProps {
   }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function LogsPage({ searchParams }: PageProps) {
   const session = await getServerSession(authOptions);
 

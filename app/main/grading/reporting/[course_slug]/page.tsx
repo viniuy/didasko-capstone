@@ -12,6 +12,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect, notFound } from "next/navigation";
 import { ReportingTypePageClient } from "@/features/grading/components/reporting-type-page-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReportingTypePage({
   params,
 }: {

@@ -8,6 +8,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
+export const dynamic = "force-dynamic";
+
 export default async function RecitationGrading() {
   const session = await getServerSession(authOptions);
 

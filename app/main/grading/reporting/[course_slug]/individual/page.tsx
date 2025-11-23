@@ -11,6 +11,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect, notFound } from "next/navigation";
 import { IndividualReportingPageClient } from "@/features/grading/components/individual-reporting-page-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function IndividualGradingPage({
   params,
 }: {

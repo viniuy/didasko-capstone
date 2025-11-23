@@ -11,6 +11,8 @@ import { redirect, notFound } from "next/navigation";
 import { format } from "date-fns";
 import { RecitationPageClient } from "@/features/grading/components/recitation-page-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function IndividualRecitationPage({
   params,
 }: {

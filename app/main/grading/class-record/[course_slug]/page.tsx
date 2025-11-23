@@ -35,6 +35,8 @@ async function ClassRecordContent({ courseSlug }: { courseSlug: string }) {
   );
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function GradebookCoursePage({
   params,
 }: {

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import { StudentsPageClient } from "@/features/students/components/students-page-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function StudentsPage({
   searchParams,
 }: {
