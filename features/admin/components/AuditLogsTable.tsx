@@ -75,9 +75,7 @@ interface AuditLog {
 }
 
 interface AuditLogsTableProps {
-  logs: AuditLog[];
-  currentPage: number;
-  totalPages: number;
+  initialLogs: AuditLog[];
   userRole: Role;
   isLoading?: boolean;
   initialFaculty?: any[];
@@ -112,10 +110,8 @@ function LoadingSpinner() {
   );
 }
 
-export default function AuditLogsTable({
-  logs: initialLogs,
-  currentPage: initialPage,
-  totalPages: initialTotalPages,
+function AuditLogsTableComponent({
+  initialLogs,
   userRole,
   isLoading = false,
   initialFaculty = [],
@@ -124,14 +120,11 @@ export default function AuditLogsTable({
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 9;
   const isAcademicHead = userRole === "ACADEMIC_HEAD";
-  const [searchAction, setSearchAction] = useState(
-    searchParams.get("action") || ""
-  );
-  const [selectedModule, setSelectedModule] = useState(
-    searchParams.get("module") || "all"
-  );
+  const [searchAction, setSearchAction] = useState("");
+  const [selectedModule, setSelectedModule] = useState("all");
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -147,7 +140,7 @@ export default function AuditLogsTable({
     return { start: today, end: endOfToday };
   }, []);
 
-  // Initialize filters in state only (not in URL)
+  // Initialize filters in state
   const [filters, setFilters] = useState<{
     actions: string[];
     faculty: string[];
@@ -178,67 +171,6 @@ export default function AuditLogsTable({
       to: filters.endDate,
     });
   }, [filters.startDate, filters.endDate]);
-
-  // Track if filters have been applied (to know when to stop using initialData)
-  const [hasAppliedFilters, setHasAppliedFilters] = useState(false);
-
-  // Build filters from state (not URL) - use state currentPage
-  const auditLogsFilters = useMemo(() => {
-    const filterParams: any = {
-      page: currentPage,
-      pageSize: 9,
-    };
-
-    // Use filters from state
-    if (filters.actions.length > 0) {
-      filterParams.actions = filters.actions;
-    }
-    if (filters.faculty.length > 0) {
-      filterParams.faculty = filters.faculty;
-    }
-    if (filters.modules.length > 0) {
-      filterParams.modules = filters.modules;
-    }
-    if (filters.startDate) {
-      filterParams.startDate = filters.startDate.toISOString();
-    }
-    if (filters.endDate) {
-      filterParams.endDate = filters.endDate.toISOString();
-    }
-
-    return filterParams;
-  }, [filters, currentPage]);
-
-  // Determine if we should use initialData (only on first load with no filters)
-  const shouldUseInitialData = useMemo(() => {
-    if (hasAppliedFilters) return false;
-
-    // Check if any filters are active (excluding default date range which is always set)
-    const hasActiveFilters =
-      filters.actions.length > 0 ||
-      filters.faculty.length > 0 ||
-      filters.modules.length > 0 ||
-      currentPage !== initialPage;
-
-    return !hasActiveFilters;
-  }, [hasAppliedFilters, filters, currentPage, initialPage]);
-
-  const {
-    data: auditLogsData,
-    isLoading: isLoadingLogs,
-    isRefetching: isRefetchingLogs,
-  } = useAuditLogs({
-    filters: auditLogsFilters,
-    initialData: shouldUseInitialData
-      ? {
-          logs: initialLogs,
-          totalPages: initialTotalPages,
-          currentPage: initialPage,
-        }
-      : undefined,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-  });
 
   const { data: facultyData, isLoading: isLoadingFaculty } = useFaculty({
     initialData: initialFaculty,
@@ -280,9 +212,122 @@ export default function AuditLogsTable({
     return Math.max(400, Math.min(availableHeight, windowHeight * 0.8));
   }, [windowHeight]);
 
-  // Use query data directly - no need to sync to local state (makes it dynamic)
-  const logs = auditLogsData?.logs || initialLogs;
-  const totalPages = auditLogsData?.totalPages || initialTotalPages;
+  // Refetch logs when date range changes
+  const shouldRefetch = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    // Check if date range is different from today (default)
+    if (!filters.startDate || !filters.endDate) return false;
+
+    const startChanged = filters.startDate.getTime() !== today.getTime();
+    const endChanged = filters.endDate.getTime() !== endOfToday.getTime();
+
+    return startChanged || endChanged;
+  }, [filters.startDate, filters.endDate]);
+
+  // Fetch logs when date range changes
+  const { data: fetchedLogsData, isLoading: isLoadingLogs } = useAuditLogs({
+    filters: shouldRefetch
+      ? {
+          startDate: filters.startDate?.toISOString(),
+          endDate: filters.endDate?.toISOString(),
+        }
+      : undefined,
+    enabled: shouldRefetch,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  // Allowed modules for ACADEMIC_HEAD
+  const academicHeadAllowedModules = useMemo(
+    () => [
+      "Course Management",
+      "Course",
+      "Courses",
+      "Class Management",
+      "Faculty",
+      "Attendance",
+      "Enrollment",
+    ],
+    []
+  );
+
+  // Use fetched logs if date range changed, otherwise use initial logs
+  const allLogs = useMemo(() => {
+    if (shouldRefetch && fetchedLogsData?.logs) {
+      return fetchedLogsData.logs;
+    }
+    return initialLogs;
+  }, [shouldRefetch, fetchedLogsData, initialLogs]);
+
+  // Client-side filtering, sorting, and pagination
+  const filteredAndSortedLogs = useMemo(() => {
+    let result = [...allLogs];
+
+    // For ACADEMIC_HEAD: Filter out logs from modules they're not allowed to see
+    // This ensures they never see unauthorized logs, even if they somehow get through
+    if (isAcademicHead) {
+      result = result.filter((log) =>
+        academicHeadAllowedModules.includes(log.module)
+      );
+    }
+
+    // Filter by actions
+    if (filters.actions.length > 0) {
+      result = result.filter((log) => filters.actions.includes(log.action));
+    }
+
+    // Filter by modules (intersect with allowed modules for ACADEMIC_HEAD)
+    if (filters.modules.length > 0) {
+      result = result.filter((log) => filters.modules.includes(log.module));
+      // For ACADEMIC_HEAD, ensure filtered modules are also in allowed list
+      if (isAcademicHead) {
+        const allowedFilterModules = filters.modules.filter((m) =>
+          academicHeadAllowedModules.includes(m)
+        );
+        result = result.filter((log) =>
+          allowedFilterModules.includes(log.module)
+        );
+      }
+    }
+
+    // Filter by faculty
+    if (filters.faculty.length > 0) {
+      result = result.filter(
+        (log) => log.userId && filters.faculty.includes(log.userId)
+      );
+    }
+
+    // Sort by createdAt descending (newest first)
+    result.sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return result;
+  }, [
+    allLogs,
+    isAcademicHead,
+    academicHeadAllowedModules,
+    filters.actions,
+    filters.modules,
+    filters.faculty,
+  ]);
+
+  // Paginate the filtered results
+  const paginatedLogs = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredAndSortedLogs.slice(startIndex, endIndex);
+  }, [filteredAndSortedLogs, currentPage, pageSize]);
+
+  // Calculate total pages
+  const totalPages = Math.ceil(filteredAndSortedLogs.length / pageSize);
+
+  // Use paginated logs for display
+  const logs = paginatedLogs;
 
   // All possible actions based on audit logging requirements
   const allPossibleActions = [
@@ -303,13 +348,36 @@ export default function AuditLogsTable({
     "Student RFID Reassigned",
   ];
 
-  // All possible modules
-  const allPossibleModules = ["Security", "Course", "User", "Student"];
+  // All possible modules - filter for ACADEMIC_HEAD
+  const allPossibleModules = useMemo(() => {
+    const allModules = ["Security", "Course", "User", "Student"];
+    if (isAcademicHead) {
+      // ACADEMIC_HEAD can only see these modules
+      return allModules.filter((m) =>
+        academicHeadAllowedModules.some(
+          (allowed) =>
+            m.toLowerCase().includes(allowed.toLowerCase()) ||
+            allowed.toLowerCase().includes(m.toLowerCase())
+        )
+      );
+    }
+    return allModules;
+  }, [isAcademicHead, academicHeadAllowedModules]);
 
   // Get unique modules and actions from logs (for display)
-  const uniqueModules = Array.from(
-    new Set(logs.map((log: AuditLog) => log.module))
-  ).sort();
+  // Filter modules for ACADEMIC_HEAD
+  const uniqueModules = useMemo(() => {
+    const modules = Array.from(
+      new Set(logs.map((log: AuditLog) => log.module))
+    );
+    if (isAcademicHead) {
+      return modules
+        .filter((m) => academicHeadAllowedModules.includes(m))
+        .sort();
+    }
+    return modules.sort();
+  }, [logs, isAcademicHead, academicHeadAllowedModules]);
+
   const uniqueActions = Array.from(
     new Set(logs.map((log: AuditLog) => log.action))
   ).sort();
@@ -317,6 +385,11 @@ export default function AuditLogsTable({
   // Count active filters (excluding date range - date is not considered a filter)
   const activeFilterCount =
     filters.actions.length + filters.faculty.length + filters.modules.length;
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.actions, filters.faculty, filters.modules]);
 
   const toggleRow = (logId: string) => {
     const newExpanded = new Set(expandedRows);
@@ -332,7 +405,7 @@ export default function AuditLogsTable({
   const currentPath = pathname || "/main/logs";
 
   const handleSearch = () => {
-    // Update filters state instead of URL
+    // Update filters state
     if (searchAction) {
       setFilters((prev) => ({
         ...prev,
@@ -340,7 +413,6 @@ export default function AuditLogsTable({
           ? prev.actions
           : [...prev.actions, searchAction],
       }));
-      setHasAppliedFilters(true);
     }
     // Reset to page 1 when searching
     setCurrentPage(1);
@@ -348,14 +420,9 @@ export default function AuditLogsTable({
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    if (page !== initialPage) {
-      setHasAppliedFilters(true);
-    }
   };
 
   const handleApplyFilters = () => {
-    // Mark that filters have been applied
-    setHasAppliedFilters(true);
     // Filters are already in state, just reset to page 1 and close sheet
     setCurrentPage(1);
     setFilterSheetOpen(false);
@@ -532,8 +599,8 @@ export default function AuditLogsTable({
     }
   };
 
-  // Show loading spinner if loading (only for initial load, not refetching)
-  if (isLoading || (isLoadingLogs && !auditLogsData)) {
+  // Show loading spinner if loading (initial load or refetching for date range)
+  if (isLoading || (shouldRefetch && isLoadingLogs)) {
     return <LoadingSpinner />;
   }
 
@@ -874,19 +941,13 @@ export default function AuditLogsTable({
               <div className="flex flex-col sm:flex-row justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
                 <div className="flex justify-start gap-2 sm:gap-4 w-full sm:w-auto">
                   <span className="w-[300px] text-xs sm:text-sm text-gray-600">
-                    Showing {(currentPage - 1) * 9 + 1}-
-                    {(currentPage - 1) * 9 + logs.length} of{" "}
-                    {currentPage === totalPages
-                      ? (totalPages - 1) * 9 + logs.length
-                      : totalPages * 9}{" "}
-                    log
-                    {currentPage === totalPages
-                      ? (totalPages - 1) * 9 + logs.length !== 1
-                        ? "s"
-                        : ""
-                      : totalPages * 9 !== 1
-                      ? "s"
-                      : ""}
+                    Showing {(currentPage - 1) * pageSize + 1}-
+                    {Math.min(
+                      currentPage * pageSize,
+                      filteredAndSortedLogs.length
+                    )}{" "}
+                    of {filteredAndSortedLogs.length} log
+                    {filteredAndSortedLogs.length !== 1 ? "s" : ""}
                   </span>
                 </div>
                 <Pagination className="flex justify-end sm:justify-end w-full sm:w-auto">
@@ -1011,7 +1072,7 @@ export default function AuditLogsTable({
       <ExportModal
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
-        logs={logs}
+        logs={filteredAndSortedLogs}
         onExport={handleExport}
         availableActions={allPossibleActions}
         availableModules={allPossibleModules}
@@ -1034,3 +1095,5 @@ export default function AuditLogsTable({
     </>
   );
 }
+
+export default AuditLogsTableComponent;

@@ -72,7 +72,6 @@ const academicHeadItems = [
   { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
-  { title: "Audit Logs", url: "/main/logs", icon: Activity },
 ];
 
 const facultyItems = [
@@ -538,6 +537,35 @@ export function AppSidebar() {
                         </CollapsibleContent>
                       </Collapsible>
                     </SidebarMenuItem>
+
+                    {/* Audit Logs - Only for ACADEMIC_HEAD and ADMIN */}
+                    {(isAcademicHead || isAdmin) && (
+                      <SidebarMenuItem>
+                        <Link
+                          href="/main/logs"
+                          prefetch={true}
+                          onMouseEnter={() => {
+                            router.prefetch("/main/logs");
+                          }}
+                          className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded hover:bg-gray-800 w-full min-h-[44px] sm:min-h-0 ${
+                            pathname?.startsWith("/main/logs")
+                              ? "bg-gray-800"
+                              : ""
+                          }`}
+                        >
+                          <Activity className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+                          <span
+                            className={`text-sm sm:text-base whitespace-nowrap transition-all duration-300 ${
+                              open
+                                ? "opacity-100 translate-x-0 delay-200"
+                                : "opacity-0 translate-x-[-10px] delay-0"
+                            }`}
+                          >
+                            {open && "Audit Logs"}
+                          </span>
+                        </Link>
+                      </SidebarMenuItem>
+                    )}
                   </>
                 )}
               </SidebarMenu>

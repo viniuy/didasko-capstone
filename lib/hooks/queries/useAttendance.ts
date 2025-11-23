@@ -13,14 +13,15 @@ export function useAttendanceByCourse(
 ) {
   return useQuery({
     queryKey: [...queryKeys.attendance.byCourse(courseSlug), date, options],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       params.append("date", date);
       if (options?.page) params.append("page", options.page.toString());
       if (options?.limit) params.append("limit", options.limit.toString());
 
       const { data } = await axios.get(
-        `/courses/${courseSlug}/attendance?${params.toString()}`
+        `/courses/${courseSlug}/attendance?${params.toString()}`,
+        { signal }
       );
       return data;
     },
@@ -42,7 +43,7 @@ export function useAllAttendanceByCourse(courseSlug: string) {
       "all",
       datesData?.dates,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!datesData?.dates || datesData.dates.length === 0) {
         return { attendance: [] };
       }
@@ -53,7 +54,8 @@ export function useAllAttendanceByCourse(courseSlug: string) {
           // Extract date part from ISO string (YYYY-MM-DD)
           const dateOnly = dateStr.split("T")[0];
           const { data } = await axios.get(
-            `/courses/${courseSlug}/attendance?date=${dateOnly}&limit=1000`
+            `/courses/${courseSlug}/attendance?date=${dateOnly}&limit=1000`,
+            { signal }
           );
           return {
             date: dateOnly, // Store as YYYY-MM-DD format
@@ -89,9 +91,10 @@ export function useAllAttendanceByCourse(courseSlug: string) {
 export function useAttendanceDates(courseSlug: string) {
   return useQuery({
     queryKey: queryKeys.attendance.dates(courseSlug),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data } = await axios.get(
-        `/courses/${courseSlug}/attendance/dates`
+        `/courses/${courseSlug}/attendance/dates`,
+        { signal }
       );
       return data;
     },

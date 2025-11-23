@@ -29,7 +29,7 @@ export function useCourses(filters?: {
 }) {
   return useQuery({
     queryKey: queryKeys.courses.list(filters),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (filters?.facultyId) params.append("facultyId", filters.facultyId);
       if (filters?.search) params.append("search", filters.search);
@@ -40,7 +40,8 @@ export function useCourses(filters?: {
       if (filters?.status) params.append("status", filters.status);
 
       const { data } = await axios.get<CourseResponse>(
-        `/courses?${params.toString()}`
+        `/courses?${params.toString()}`,
+        { signal }
       );
       return data;
     },
@@ -68,7 +69,7 @@ export function useActiveCourses(options?: {
 
   return useQuery({
     queryKey: queryKeys.courses.active(filters),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (filters?.facultyId) params.append("facultyId", filters.facultyId);
       if (filters?.search) params.append("search", filters.search);
@@ -76,7 +77,8 @@ export function useActiveCourses(options?: {
       if (filters?.semester) params.append("semester", filters.semester);
 
       const { data } = await axios.get<CourseResponse>(
-        `/courses/active?${params.toString()}`
+        `/courses/active?${params.toString()}`,
+        { signal }
       );
       return data;
     },
@@ -127,12 +129,13 @@ export function useCourse(slug: string) {
 export function useCourseStudents(courseSlug: string, date?: Date) {
   return useQuery({
     queryKey: [...queryKeys.courses.students(courseSlug), date?.toISOString()],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (date) params.append("date", date.toISOString());
 
       const { data } = await axios.get(
-        `/courses/${courseSlug}/students?${params.toString()}`
+        `/courses/${courseSlug}/students?${params.toString()}`,
+        { signal }
       );
       return data;
     },

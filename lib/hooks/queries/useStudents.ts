@@ -27,14 +27,16 @@ export function useStudents(options?: {
 
   return useQuery({
     queryKey: queryKeys.students.list(filters),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (filters?.page) params.append("page", filters.page.toString());
       if (filters?.limit) params.append("limit", filters.limit.toString());
       if (filters?.search) params.append("search", filters.search);
       if (filters?.courseId) params.append("courseId", filters.courseId);
 
-      const { data } = await axios.get(`/students?${params.toString()}`);
+      const { data } = await axios.get(`/students?${params.toString()}`, {
+        signal,
+      });
       return data;
     },
     initialData,
@@ -87,12 +89,13 @@ export function useStudentsByCourse(
 
   return useQuery({
     queryKey: [...queryKeys.students.byCourse(courseSlug), date?.toISOString()],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (date) params.append("date", date.toISOString());
 
       const { data } = await axios.get(
-        `/courses/${courseSlug}/students?${params.toString()}`
+        `/courses/${courseSlug}/students?${params.toString()}`,
+        { signal }
       );
       return data;
     },

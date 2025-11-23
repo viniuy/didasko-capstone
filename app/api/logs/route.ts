@@ -98,9 +98,39 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch logs
-    const [logs, totalCount] = await Promise.all([
-      prisma.auditLog.findMany({
+    // Fetch logs - if no pagination params, return all logs
+    const shouldPaginate = searchParams.has("p") || searchParams.has("page");
+
+    let logs;
+    let totalCount;
+    let totalPages = 0;
+
+    if (shouldPaginate) {
+      [logs, totalCount] = await Promise.all([
+        prisma.auditLog.findMany({
+          where,
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+          skip,
+          take: pageSize,
+        }),
+        prisma.auditLog.count({ where }),
+      ]);
+
+      totalPages = Math.ceil(totalCount / pageSize);
+    } else {
+      // Return all logs without pagination
+      logs = await prisma.auditLog.findMany({
         where,
         include: {
           user: {
@@ -114,18 +144,14 @@ export async function GET(request: NextRequest) {
         orderBy: {
           createdAt: "desc",
         },
-        skip,
-        take: pageSize,
-      }),
-      prisma.auditLog.count({ where }),
-    ]);
-
-    const totalPages = Math.ceil(totalCount / pageSize);
+      });
+      totalCount = logs.length;
+    }
 
     return NextResponse.json({
       logs,
-      currentPage: page,
-      totalPages,
+      currentPage: shouldPaginate ? page : 1,
+      totalPages: shouldPaginate ? totalPages : 1,
       totalCount,
     });
   } catch (error: any) {

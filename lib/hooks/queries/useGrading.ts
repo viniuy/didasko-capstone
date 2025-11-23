@@ -9,8 +9,10 @@ import toast from "react-hot-toast";
 export function useClassRecord(courseSlug: string) {
   return useQuery({
     queryKey: queryKeys.grading.classRecord(courseSlug),
-    queryFn: async () => {
-      const { data } = await axios.get(`/courses/${courseSlug}/grades`);
+    queryFn: async ({ signal }) => {
+      const { data } = await axios.get(`/courses/${courseSlug}/grades`, {
+        signal,
+      });
       return data;
     },
     enabled: !!courseSlug,
@@ -21,8 +23,10 @@ export function useClassRecord(courseSlug: string) {
 export function useTermConfigs(courseSlug: string) {
   return useQuery({
     queryKey: queryKeys.grading.termConfigs(courseSlug),
-    queryFn: async () => {
-      const { data } = await axios.get(`/courses/${courseSlug}/term-configs`);
+    queryFn: async ({ signal }) => {
+      const { data } = await axios.get(`/courses/${courseSlug}/term-configs`, {
+        signal,
+      });
       return data;
     },
     enabled: !!courseSlug,
@@ -33,9 +37,10 @@ export function useTermConfigs(courseSlug: string) {
 export function useAssessmentScores(courseSlug: string) {
   return useQuery({
     queryKey: queryKeys.grading.assessmentScores(courseSlug),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data } = await axios.get(
-        `/courses/${courseSlug}/assessment-scores`
+        `/courses/${courseSlug}/assessment-scores`,
+        { signal }
       );
       return data;
     },
@@ -56,7 +61,7 @@ export function useGrades(
 ) {
   return useQuery({
     queryKey: [...queryKeys.grading.grades(courseSlug), filters],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (filters?.date) params.append("date", filters.date);
       if (filters?.criteriaId) params.append("criteriaId", filters.criteriaId);
@@ -66,7 +71,8 @@ export function useGrades(
       if (filters?.groupId) params.append("groupId", filters.groupId);
 
       const { data } = await axios.get(
-        `/courses/${courseSlug}/grades?${params.toString()}`
+        `/courses/${courseSlug}/grades?${params.toString()}`,
+        { signal }
       );
       return data;
     },
@@ -89,7 +95,7 @@ export function useGradeDates(
 ) {
   return useQuery({
     queryKey: [...queryKeys.grading.grades(courseSlug), "dates", filters],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (filters?.criteriaId) params.append("criteriaId", filters.criteriaId);
       if (filters?.courseCode) params.append("courseCode", filters.courseCode);
@@ -97,7 +103,8 @@ export function useGradeDates(
         params.append("courseSection", filters.courseSection);
 
       const { data } = await axios.get(
-        `/courses/${courseSlug}/grades/dates?${params.toString()}`
+        `/courses/${courseSlug}/grades/dates?${params.toString()}`,
+        { signal }
       );
       return data;
     },
@@ -110,8 +117,10 @@ export function useGradeDates(
 export function useRecitationScores(courseSlug: string) {
   return useQuery({
     queryKey: queryKeys.grading.recitation(courseSlug),
-    queryFn: async () => {
-      const { data } = await axios.get(`/courses/${courseSlug}/grades`);
+    queryFn: async ({ signal }) => {
+      const { data } = await axios.get(`/courses/${courseSlug}/grades`, {
+        signal,
+      });
       return data;
     },
     enabled: !!courseSlug,
@@ -171,13 +180,16 @@ export function useBulkUpdateAssessmentScores() {
     mutationFn: async ({
       courseSlug,
       scores,
+      signal,
     }: {
       courseSlug: string;
       scores: any[];
+      signal?: AbortSignal;
     }) => {
       const { data } = await axios.post(
         `/courses/${courseSlug}/assessment-scores/bulk`,
-        { scores }
+        { scores },
+        { signal }
       );
       return data;
     },
@@ -215,13 +227,17 @@ export function useSaveTermConfig() {
     mutationFn: async ({
       courseSlug,
       termConfigs,
+      signal,
     }: {
       courseSlug: string;
       termConfigs: any;
+      signal?: AbortSignal;
     }) => {
-      const { data } = await axios.post(`/courses/${courseSlug}/term-configs`, {
-        termConfigs,
-      });
+      const { data } = await axios.post(
+        `/courses/${courseSlug}/term-configs`,
+        { termConfigs },
+        { signal }
+      );
       return data;
     },
     onSuccess: (_, variables) => {
@@ -255,6 +271,7 @@ export function useSaveGrades() {
     mutationFn: async ({
       courseSlug,
       gradeData,
+      signal,
     }: {
       courseSlug: string;
       gradeData: {
@@ -271,10 +288,12 @@ export function useSaveGrades() {
         }>;
         isRecitationCriteria?: boolean;
       };
+      signal?: AbortSignal;
     }) => {
       const { data } = await axios.post(
         `/courses/${courseSlug}/grades`,
-        gradeData
+        gradeData,
+        { signal }
       );
       return data;
     },

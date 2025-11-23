@@ -48,12 +48,7 @@ export default async function LogsPage({ searchParams }: PageProps) {
   // Await searchParams (Next.js 15 requirement)
   const params = await searchParams;
 
-  // Parse search params - use 'p' instead of 'page'
-  const page = parseInt(params.p || params.page || "1", 10);
-  const pageSize = 9;
-  const skip = (page - 1) * pageSize;
-
-  // Build where clause
+  // Build where clause - only for date range and role restrictions
   const where: any = {};
 
   // Apply module filter for ACADEMIC_HEAD
@@ -72,86 +67,58 @@ export default async function LogsPage({ searchParams }: PageProps) {
     };
   }
 
-  // Apply new filter parameters (preferred over old single filters)
-  if (params.actions) {
-    const actionList = params.actions.split(",");
-    where.action = {
-      in: actionList,
-    };
-  } else if (params.action) {
-    // Fallback to old single action filter for backward compatibility
-    where.action = {
-      contains: params.action,
-      mode: "insensitive",
-    };
-  }
+  // Default to today's date range if no date specified
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(today);
+  endOfToday.setHours(23, 59, 59, 999);
 
-  if (params.faculty) {
-    const facultyList = params.faculty.split(",");
-    where.userId = {
-      in: facultyList,
-    };
-  } else if (params.userId) {
-    // Fallback to old single userId filter for backward compatibility
-    where.userId = params.userId;
-  }
-
-  if (params.modules) {
-    const moduleList = params.modules.split(",");
-    where.module = {
-      in: moduleList,
-    };
-  } else if (params.module) {
-    // Fallback to old single module filter for backward compatibility
-    where.module = {
-      contains: params.module,
-      mode: "insensitive",
-    };
-  }
-
-  // Apply date range filter
+  // Apply date range filter - default to today
   if (params.startDate || params.endDate) {
     where.createdAt = {};
     if (params.startDate) {
       where.createdAt.gte = new Date(params.startDate);
+    } else {
+      where.createdAt.gte = today;
     }
     if (params.endDate) {
       // Set end date to end of day
       const endDate = new Date(params.endDate);
       endDate.setHours(23, 59, 59, 999);
       where.createdAt.lte = endDate;
+    } else {
+      where.createdAt.lte = endOfToday;
     }
+  } else {
+    // Default to today if no date range specified
+    where.createdAt = {
+      gte: today,
+      lte: endOfToday,
+    };
   }
 
-  // Fetch logs
+  // Fetch ALL logs for the date range (no pagination, no filters)
+  // Client-side will handle filtering, pagination, and sorting
   let logs: any[] = [];
-  let totalCount = 0;
-  let totalPages = 0;
   let isLoading = false;
 
   try {
-    [logs, totalCount] = await Promise.all([
-      prisma.auditLog.findMany({
-        where,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
+    logs = await prisma.auditLog.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
           },
         },
-        orderBy: {
-          createdAt: "desc",
-        },
-        skip,
-        take: pageSize,
-      }),
-      prisma.auditLog.count({ where }),
-    ]);
-
-    totalPages = Math.ceil(totalCount / pageSize);
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      // No skip/take - fetch all logs for the date range
+    });
   } catch (error: any) {
     // Handle case where tables don't exist yet (migration not run)
     if (
@@ -188,9 +155,7 @@ export default async function LogsPage({ searchParams }: PageProps) {
 
               <div className="grid gap-4 md:gap-6 lg:gap-8">
                 <AuditLogsTable
-                  logs={logs}
-                  currentPage={page}
-                  totalPages={totalPages}
+                  initialLogs={logs}
                   userRole={userRole!}
                   isLoading={isLoading}
                 />

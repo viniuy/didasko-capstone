@@ -787,15 +787,25 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         return true;
       })
       .sort((a, b) => {
-        if (!sortDate) return 0;
-        const aAttendance = getAttendanceForDate(a, selectedDate);
-        const bAttendance = getAttendanceForDate(b, selectedDate);
-        if (sortDate === "newest") {
-          return (bAttendance?.date || "").localeCompare(
-            aAttendance?.date || ""
+        // Primary sort: Alphabetical by name
+        const nameComparison = a.name.localeCompare(b.name);
+        if (nameComparison !== 0) return nameComparison;
+
+        // Secondary sort: By date (if sortDate is set)
+        if (sortDate) {
+          const aAttendance = getAttendanceForDate(a, selectedDate);
+          const bAttendance = getAttendanceForDate(b, selectedDate);
+          if (sortDate === "newest") {
+            return (bAttendance?.date || "").localeCompare(
+              aAttendance?.date || ""
+            );
+          }
+          return (aAttendance?.date || "").localeCompare(
+            bAttendance?.date || ""
           );
         }
-        return (aAttendance?.date || "").localeCompare(bAttendance?.date || "");
+
+        return 0;
       });
   }, [studentList, searchQuery, selectedDate, filters.status, sortDate]);
 

@@ -22,17 +22,19 @@ export function useAuditLogs(options?: {
   initialData?: any;
   refetchOnMount?: boolean;
   refetchOnWindowFocus?: boolean;
+  enabled?: boolean;
 }) {
   const {
     filters,
     initialData,
     refetchOnMount = true,
     refetchOnWindowFocus = true,
+    enabled = true,
   } = options || {};
 
   return useQuery({
     queryKey: queryKeys.auditLogs.lists(filters),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams();
       if (filters?.page) params.append("p", filters.page.toString());
       if (filters?.pageSize)
@@ -52,12 +54,15 @@ export function useAuditLogs(options?: {
       if (filters?.startDate) params.append("startDate", filters.startDate);
       if (filters?.endDate) params.append("endDate", filters.endDate);
 
-      const { data } = await axios.get(`/logs?${params.toString()}`);
+      const { data } = await axios.get(`/logs?${params.toString()}`, {
+        signal,
+      });
       return data;
     },
     initialData,
     refetchOnMount,
     refetchOnWindowFocus,
+    enabled,
     refetchInterval: false, // Disable auto-refetch to prevent pagination lag
     staleTime: 0, // Always refetch when query key changes (filters change)
   });
