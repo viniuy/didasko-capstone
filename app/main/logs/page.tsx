@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
@@ -154,11 +155,13 @@ export default async function LogsPage({ searchParams }: PageProps) {
               </div>
 
               <div className="grid gap-4 md:gap-6 lg:gap-8">
-                <AuditLogsTable
-                  initialLogs={logs}
-                  userRole={userRole!}
-                  isLoading={isLoading}
-                />
+                <Suspense fallback={<div>Loading logs...</div>}>
+                  <AuditLogsTable
+                    initialLogs={logs}
+                    userRole={userRole!}
+                    isLoading={isLoading}
+                  />
+                </Suspense>
               </div>
             </div>
           </div>
