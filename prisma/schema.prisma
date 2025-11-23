@@ -15,17 +15,17 @@ model User {
   department        String
   workType          WorkType           @map("work_type")
   role              Role
-  status            UserStatus         @default(ACTIVE)
   image             String?
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
+  status            UserStatus         @default(ACTIVE)
   accounts          Account[]
   sessions          Session[]
+  auditLogs         AuditLog[]
+  breakGlassSession BreakGlassSession?
   coursesTeaching   Course[]           @relation("FacultyCourses")
   criteria          Criteria[]
   notes             Note[]
-  auditLogs         AuditLog[]
-  breakGlassSession BreakGlassSession?
 
   @@map("users")
 }
@@ -371,7 +371,7 @@ model TermConfiguration {
   quizWeight  Float        @default(20)
   examWeight  Float        @default(50)
   createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
   assessments Assessment[]
   course      Course       @relation("CourseTermConfigs", fields: [courseId], references: [id], onDelete: Cascade)
   termGrades  TermGrade[]
@@ -382,21 +382,21 @@ model TermConfiguration {
 }
 
 model Assessment {
-  id               String            @id @default(uuid())
-  termConfigId     String
-  type             AssessmentType
-  name             String
-  maxScore         Float
-  date             DateTime?
-  enabled          Boolean           @default(true)
-  order            Int               @default(0)
-  transmutationBase Float            @default(0) @map("transmutation_base")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
-  linkedCriteriaId String?
-  scores           AssessmentScore[]
-  linkedCriteria   Criteria?         @relation("LinkedCriteria", fields: [linkedCriteriaId], references: [id])
-  termConfig       TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
+  id                String            @id @default(uuid())
+  termConfigId      String
+  type              AssessmentType
+  name              String
+  maxScore          Float
+  date              DateTime?
+  enabled           Boolean           @default(true)
+  order             Int               @default(0)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  linkedCriteriaId  String?
+  transmutationBase Float             @default(0) @map("transmutation_base")
+  scores            AssessmentScore[]
+  linkedCriteria    Criteria?         @relation("LinkedCriteria", fields: [linkedCriteriaId], references: [id])
+  termConfig        TermConfiguration @relation(fields: [termConfigId], references: [id], onDelete: Cascade)
 
   @@index([termConfigId])
   @@index([type])
@@ -441,6 +441,49 @@ model TermGrade {
   @@map("term_grades")
 }
 
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?  @map("user_id")
+  action       String   @db.VarChar(100)
+  module       String   @db.VarChar(100)
+  before       Json?
+  after        Json?
+  reason       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  batchId      String?  @map("batch_id") @db.VarChar(100)
+  errorMessage String?  @map("error_message")
+  metadata     Json?
+  status       String?  @db.VarChar(20)
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+  @@index([module, createdAt])
+  @@index([userId, createdAt])
+  @@index([batchId])
+  @@index([status])
+  @@map("audit_logs")
+}
+
+model BreakGlassSession {
+  id                 String    @id @default(uuid())
+  userId             String    @unique @map("user_id")
+  reason             String
+  activatedAt        DateTime  @default(now()) @map("activated_at")
+  expiresAt          DateTime? @map("expires_at")
+  activatedBy        String?   @map("activated_by")
+  originalRole       Role      @map("original_role")
+  promotionCode      String    @map("promotion_code")
+  secretCode         String    @map("secret_code")
+  promotionCodePlain String?   @map("promotion_code_plain") @db.VarChar(50)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("break_glass_sessions")
+}
+
 enum Role {
   ADMIN
   FACULTY
@@ -475,47 +518,4 @@ enum AssessmentType {
   PT
   QUIZ
   EXAM
-}
-
-model AuditLog {
-  id           String   @id @default(uuid())
-  userId       String?  @map("user_id")
-  action       String   @db.VarChar(100)
-  module       String   @db.VarChar(100)
-  before       Json?
-  after        Json?
-  reason       String?  @db.Text
-  batchId      String?  @map("batch_id") @db.VarChar(100)
-  status       String?  @db.VarChar(20) // SUCCESS, FAILED, PENDING
-  errorMessage String?  @map("error_message") @db.Text
-  metadata     Json?    // Additional context: file name, size, filters, etc.
-  createdAt    DateTime @default(now()) @map("created_at")
-  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([module])
-  @@index([action])
-  @@index([createdAt])
-  @@index([module, createdAt])
-  @@index([userId, createdAt])
-  @@index([batchId])
-  @@index([status])
-  @@map("audit_logs")
-}
-
-model BreakGlassSession {
-  id                String   @id @default(uuid())
-  userId            String   @unique @map("user_id")
-  reason            String   @db.Text
-  activatedAt       DateTime @default(now()) @map("activated_at")
-  expiresAt         DateTime? @map("expires_at")
-  activatedBy       String?  @map("activated_by")
-  originalRole      Role     @map("original_role")
-  secretCode        String   @map("secret_code") @db.Text // Encrypted secret code for activation
-  promotionCode     String   @map("promotion_code") @db.Text // Encrypted code for permanent promotion
-  promotionCodePlain String?  @map("promotion_code_plain") @db.VarChar(50) // Plain code for display (only visible to Academic Head)
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([expiresAt])
-  @@map("break_glass_sessions")
 }
