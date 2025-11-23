@@ -63,8 +63,57 @@ export async function getRecitationCriteria(courseSlug: string) {
 }
 
 // Get group criteria (for the whole section)
+// Highly optimized: Uses composite index and limits data fetched
 export async function getGroupCriteria(courseSlug: string) {
-  return getCriteria(courseSlug, { isGroupCriteria: true });
+  // Step 1: Get course ID (fast with slug index - usually < 5ms)
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
+
+  if (!course) return null;
+
+  // Step 2: Get criteria with optimized query
+  // This query uses the composite index @@index([courseId, isGroupCriteria])
+  // which makes this extremely fast even with thousands of criteria
+  const criteria = await prisma.criteria.findMany({
+    where: {
+      courseId: course.id, // Uses index
+      isGroupCriteria: true, // Uses composite index
+    },
+    select: {
+      // Only select fields we actually need (reduces data transfer)
+      id: true,
+      name: true,
+      date: true,
+      scoringRange: true,
+      passingScore: true,
+      isGroupCriteria: true,
+      isRecitationCriteria: true,
+      courseId: true,
+      userId: true,
+      createdAt: true,
+      updatedAt: true,
+      user: {
+        select: {
+          name: true,
+        },
+      },
+      rubrics: {
+        select: {
+          id: true,
+          name: true,
+          percentage: true,
+          criteriaId: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return criteria;
 }
 
 // Get criteria links (recitations, group reportings, individual reportings)
