@@ -63,6 +63,34 @@ export function useRecitationCriteria(
   });
 }
 
+// Query: Get group criteria by course (for the whole section)
+export function useGroupCriteriaByCourse(
+  courseSlug: string,
+  options?: {
+    initialData?: any;
+    refetchOnMount?: boolean;
+    refetchOnWindowFocus?: boolean;
+  }
+) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
+  return useQuery({
+    queryKey: queryKeys.criteria.group(courseSlug),
+    queryFn: async () => {
+      const { data } = await axios.get(`/courses/${courseSlug}/group-criteria`);
+      return data;
+    },
+    enabled: !!courseSlug,
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
+  });
+}
+
 // Query: Get criteria detail
 export function useCriteriaDetail(courseSlug: string, criteriaId: string) {
   return useQuery({
@@ -126,6 +154,9 @@ export function useCreateCriteria() {
         queryKey: queryKeys.criteria.recitation(variables.courseSlug),
       });
       queryClient.invalidateQueries({
+        queryKey: queryKeys.criteria.group(variables.courseSlug),
+      });
+      queryClient.invalidateQueries({
         queryKey: queryKeys.grading.all,
       });
       queryClient.invalidateQueries({
@@ -176,6 +207,12 @@ export function useUpdateCriteria() {
         queryKey: queryKeys.criteria.byCourse(variables.courseSlug),
       });
       queryClient.invalidateQueries({
+        queryKey: queryKeys.criteria.recitation(variables.courseSlug),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.criteria.group(variables.courseSlug),
+      });
+      queryClient.invalidateQueries({
         queryKey: queryKeys.grading.all,
       });
       queryClient.invalidateQueries({
@@ -210,6 +247,9 @@ export function useDeleteCriteria() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.criteria.recitation(variables.courseSlug),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.criteria.group(variables.courseSlug),
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.grading.all,

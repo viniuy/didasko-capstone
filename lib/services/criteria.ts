@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-// Get criteria for a course (batched query - fixes N+1)
+// Get criteria for a course (optimized single query with includes)
 // Note: Not cached to ensure fresh data after saves
 export async function getCriteria(
   courseSlug: string,
@@ -9,6 +9,7 @@ export async function getCriteria(
     isRecitationCriteria?: boolean;
   }
 ) {
+  // First, get course ID (this is fast with slug index)
   const course = await prisma.course.findUnique({
     where: { slug: courseSlug },
     select: { id: true },
@@ -36,6 +37,8 @@ export async function getCriteria(
     where.isRecitationCriteria = false;
   }
 
+  // Optimized: Single query with includes (uses database joins, much faster)
+  // This leverages the indexes we added to Criteria model
   const criteria = await prisma.criteria.findMany({
     where,
     include: {
@@ -44,32 +47,14 @@ export async function getCriteria(
           name: true,
         },
       },
+      rubrics: true, // Direct include - Prisma handles the join efficiently
     },
     orderBy: {
       createdAt: "desc",
     },
   });
 
-  // Batch fetch all rubrics at once (fixes N+1)
-  const criteriaIds = criteria.map((c) => c.id);
-  const allRubrics = await prisma.rubric.findMany({
-    where: { criteriaId: { in: criteriaIds } },
-  });
-
-  // Group rubrics by criteriaId
-  const rubricsMap = new Map<string, typeof allRubrics>();
-  for (const rubric of allRubrics) {
-    if (!rubricsMap.has(rubric.criteriaId)) {
-      rubricsMap.set(rubric.criteriaId, []);
-    }
-    rubricsMap.get(rubric.criteriaId)!.push(rubric);
-  }
-
-  // Attach rubrics to criteria
-  return criteria.map((c) => ({
-    ...c,
-    rubrics: rubricsMap.get(c.id) || [],
-  }));
+  return criteria;
 }
 
 // Get recitation criteria

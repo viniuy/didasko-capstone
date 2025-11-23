@@ -1005,13 +1005,16 @@ export function ClassRecordTable({
     let ptPercentages: number[] = [];
     ptAssessments.forEach((pt) => {
       const rawScore = getEffectiveScore(studentId, pt);
+      // For linked assessments, if no score exists, treat as 0 for computation
+      const scoreForComputation =
+        rawScore === null && pt.linkedCriteriaId ? 0 : rawScore;
       // Check if raw score exceeds max score
-      if (rawScore !== null && rawScore > pt.maxScore) {
+      if (scoreForComputation !== null && scoreForComputation > pt.maxScore) {
         hasScoreExceedingMax = true;
       }
       // Apply transmutation using assessment's own transmutationBase
       const transmutedScore = transmuteScore(
-        rawScore,
+        scoreForComputation,
         pt.maxScore,
         pt.transmutationBase ?? 0
       );
@@ -1023,13 +1026,16 @@ export function ClassRecordTable({
     let quizPercentages: number[] = [];
     quizAssessments.forEach((quiz) => {
       const rawScore = getEffectiveScore(studentId, quiz);
+      // For linked assessments, if no score exists, treat as 0 for computation
+      const scoreForComputation =
+        rawScore === null && quiz.linkedCriteriaId ? 0 : rawScore;
       // Check if raw score exceeds max score
-      if (rawScore !== null && rawScore > quiz.maxScore) {
+      if (scoreForComputation !== null && scoreForComputation > quiz.maxScore) {
         hasScoreExceedingMax = true;
       }
       // Apply transmutation using assessment's own transmutationBase
       const transmutedScore = transmuteScore(
-        rawScore,
+        scoreForComputation,
         quiz.maxScore,
         quiz.transmutationBase ?? 0
       );
@@ -1041,13 +1047,21 @@ export function ClassRecordTable({
     let examPercentage: number | null = null;
     if (examAssessment) {
       const rawExamScore = getEffectiveScore(studentId, examAssessment);
+      // For linked assessments, if no score exists, treat as 0 for computation
+      const scoreForComputation =
+        rawExamScore === null && examAssessment.linkedCriteriaId
+          ? 0
+          : rawExamScore;
       // Check if raw score exceeds max score
-      if (rawExamScore !== null && rawExamScore > examAssessment.maxScore) {
+      if (
+        scoreForComputation !== null &&
+        scoreForComputation > examAssessment.maxScore
+      ) {
         hasScoreExceedingMax = true;
       }
       // Apply transmutation using assessment's own transmutationBase
       const transmutedExamScore = transmuteScore(
-        rawExamScore,
+        scoreForComputation,
         examAssessment.maxScore,
         examAssessment.transmutationBase ?? 0
       );
@@ -1617,14 +1631,16 @@ export function ClassRecordTable({
             </div>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+              disabled={true}
             >
               <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
               <span className="hidden xl:inline text-black">Settings</span>
             </button>
             <button
               onClick={() => setIsPasteModalOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
+              disabled={true}
             >
               <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
               <span className="hidden xl:inline text-black">Paste Grades</span>

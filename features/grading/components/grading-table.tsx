@@ -72,6 +72,7 @@ import {
   useDeleteGrades,
   useCriteriaByCourse,
   useRecitationCriteria,
+  useGroupCriteriaByCourse,
   useCreateCriteria,
   useUpdateCriteria,
   useUploadImage,
@@ -397,8 +398,7 @@ export function GradingTable({
   } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const studentsPerPage = 10;
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalStudents, setTotalStudents] = useState(0);
+  // totalPages and totalStudents are now computed via useMemo (see below)
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingGroup, setIsLoadingGroup] = useState(false);
   const [previousScores, setPreviousScores] = useState<Record<
@@ -440,6 +440,12 @@ export function GradingTable({
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Auto-save refs (same pattern as class-record.tsx)
+  const pendingScoresRef = useRef<
+    Map<string, { studentId: string; scores: number[]; total: number }>
+  >(new Map());
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Function to handle dialog close
   const handleDialogClose = () => {
@@ -629,7 +635,10 @@ export function GradingTable({
   const { data: allCriteriaData, isLoading: isLoadingCriteria } =
     useCriteriaByCourse(
       courseSlug,
-      initialCriteria && initialCriteria.length > 0
+      !isGroupView &&
+        !isRecitationCriteria &&
+        initialCriteria &&
+        initialCriteria.length > 0
         ? {
             initialData: initialCriteria,
             refetchOnMount: false,
@@ -640,9 +649,22 @@ export function GradingTable({
   const { data: recitationCriteriaData, isLoading: isLoadingRecitation } =
     useRecitationCriteria(
       courseSlug,
-      initialRecitationCriteria && initialRecitationCriteria.length > 0
+      isRecitationCriteria &&
+        initialRecitationCriteria &&
+        initialRecitationCriteria.length > 0
         ? {
             initialData: initialRecitationCriteria,
+            refetchOnMount: false,
+            refetchOnWindowFocus: false,
+          }
+        : undefined
+    );
+  const { data: groupCriteriaData, isLoading: isLoadingGroupCriteria } =
+    useGroupCriteriaByCourse(
+      courseSlug,
+      isGroupView && initialCriteria && initialCriteria.length > 0
+        ? {
+            initialData: initialCriteria,
             refetchOnMount: false,
             refetchOnWindowFocus: false,
           }
@@ -652,6 +674,8 @@ export function GradingTable({
   // Determine which criteria to use
   const allReports = isRecitationCriteria
     ? recitationCriteriaData || initialRecitationCriteria || []
+    : isGroupView
+    ? groupCriteriaData || initialCriteria || []
     : allCriteriaData || initialCriteria || [];
 
   // Check for existing criteria when date is selected or on mount
@@ -678,12 +702,22 @@ export function GradingTable({
       return;
     }
 
-    setInitialLoading(true);
-    setCriteriaLoading(isLoadingCriteria || isLoadingRecitation);
+    // Update loading states based on query states
+    const isAnyLoading =
+      isLoadingCriteria || isLoadingRecitation || isLoadingGroupCriteria;
+    setCriteriaLoading(isAnyLoading);
 
-    if (isLoadingCriteria || isLoadingRecitation) {
+    // If still loading, don't process yet but don't set initialLoading to true if we already have data
+    if (isAnyLoading) {
+      // Only set initialLoading if we don't have reports yet
+      if (allReports.length === 0) {
+        setInitialLoading(true);
+      }
       return;
     }
+
+    // Data is loaded, set initialLoading to false
+    setInitialLoading(false);
 
     try {
       // Filter reports based on view type only (not by date - criteria can be reused on any date)
@@ -751,6 +785,7 @@ export function GradingTable({
     allReports,
     isLoadingCriteria,
     isLoadingRecitation,
+    isLoadingGroupCriteria,
   ]);
 
   // Track the last criteria ID we auto-selected a date for to prevent re-selecting
@@ -840,7 +875,64 @@ export function GradingTable({
   // Reset originalScores when changing report or date
   useEffect(() => {
     setOriginalScores({});
+    // Clear pending saves when changing report or date
+    pendingScoresRef.current.clear();
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
   }, [activeReport?.id, selectedDate]);
+
+  // Cleanup on unmount to prevent memory leaks and ensure pending saves complete
+  useEffect(() => {
+    return () => {
+      // Clear any pending timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      // Save any remaining pending scores before unmounting
+      if (pendingScoresRef.current.size > 0) {
+        // Use a synchronous approach or save immediately
+        const gradesToSave = Array.from(pendingScoresRef.current.values());
+        // Note: This is a fire-and-forget operation on unmount
+        // In production, you might want to use navigator.sendBeacon or similar
+        if (session?.user?.id && selectedDate && activeReport) {
+          const formattedDate = selectedDate.toISOString().split("T")[0];
+          const gradesToSaveFormatted = gradesToSave.map((grade) => ({
+            studentId: grade.studentId,
+            scores: grade.scores,
+            total: grade.total,
+            reportingScore: isRecitationCriteria ? 0 : grade.total,
+            recitationScore: isRecitationCriteria ? grade.total : 0,
+          }));
+          saveGradesMutation
+            .mutateAsync({
+              courseSlug,
+              gradeData: {
+                date: formattedDate,
+                criteriaId: activeReport.id,
+                courseCode,
+                courseSection,
+                grades: gradesToSaveFormatted,
+                isRecitationCriteria,
+              },
+            })
+            .catch((err) => {
+              console.error("Failed to save pending scores on unmount:", err);
+            });
+        }
+      }
+    };
+  }, [
+    courseSlug,
+    session?.user?.id,
+    selectedDate,
+    activeReport,
+    courseCode,
+    courseSection,
+    isRecitationCriteria,
+  ]);
 
   // Update originalScores when scores are first loaded after criteria/date change
   useEffect(() => {
@@ -850,7 +942,8 @@ export function GradingTable({
       activeReport
     ) {
       // Only set originalScores on initial load after criteria is selected
-      setOriginalScores(JSON.parse(JSON.stringify(scores)));
+      // Use structuredClone for better performance
+      setOriginalScores(structuredClone(scores));
     }
   }, [scores, originalScores, activeReport]);
 
@@ -897,6 +990,17 @@ export function GradingTable({
       return;
     }
 
+    // Clear any pending auto-save timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    // Save any pending scores immediately
+    if (pendingScoresRef.current.size > 0) {
+      await savePendingScores();
+    }
+
     setIsSaving(true);
     try {
       const formattedDate = selectedDate.toISOString().split("T")[0];
@@ -938,7 +1042,8 @@ export function GradingTable({
       });
 
       // Update original scores after successful save
-      setOriginalScores(JSON.parse(JSON.stringify(scores)));
+      // Use structuredClone for better performance (10-100x faster than JSON.parse/stringify)
+      setOriginalScores(structuredClone(scores));
     } catch (error: any) {
       console.error("Error saving grades:", {
         error,
@@ -966,102 +1071,253 @@ export function GradingTable({
     }
   };
 
-  const handleScoreChange = async (
-    studentId: string,
-    rubricIndex: number,
-    value: number | ""
-  ) => {
-    // If value is empty (Select Grade), delete the grades
-    if (value === "") {
-      try {
-        setIsLoading(true);
-        const formattedDate = selectedDate?.toISOString().split("T")[0];
+  // Auto-save functions (same pattern as class-record.tsx)
+  // savePendingScores must be defined before queueScoreForSaving which references it
+  const savePendingScores = useCallback(async () => {
+    if (pendingScoresRef.current.size === 0) return;
+    if (!session?.user?.id || !selectedDate || !activeReport) return;
 
-        // Delete grades for this student (Note: service doesn't support studentId filter yet, so we'll need to handle this differently)
-        // For now, we'll delete all grades for the criteria/date and recreate without this student
-        // This is a limitation - the service should support studentId filter
-        if (activeReport?.id && formattedDate) {
-          await deleteGradesMutation.mutateAsync({
-            courseSlug,
-            criteriaId: activeReport.id,
-            date: formattedDate,
-          });
-        }
+    // Create a copy of pending scores before clearing
+    const gradesToSave = Array.from(pendingScoresRef.current.values());
 
-        // Update local state
-        setScores((prev) => {
-          const newScores = { ...prev };
-          delete newScores[studentId];
-          return newScores;
-        });
+    // Validate grades before sending
+    const validGrades = gradesToSave.filter((g) => {
+      if (!g.studentId) return false;
+      if (!Array.isArray(g.scores)) return false;
+      if (typeof g.total !== "number" || isNaN(g.total)) return false;
+      return true;
+    });
 
-        toast.success("Grades deleted successfully");
-      } catch (error: any) {
-        console.error("Error deleting grades:", error);
-        toast.error(error.response?.data?.message || "Failed to delete grades");
-      } finally {
-        setIsLoading(false);
-      }
+    if (validGrades.length === 0) {
+      // No valid grades to save, just clear pending
+      pendingScoresRef.current.clear();
       return;
     }
 
-    // Otherwise, update the grade as normal
-    setScores((prev) => {
-      const rubricCount = activeReport?.rubrics.length || 0;
-      const studentScores =
-        prev[studentId]?.scores || new Array(rubricCount).fill(0);
-      const newScores = [...studentScores];
-      newScores[rubricIndex] = value;
+    const pendingScoresBackup = new Map(pendingScoresRef.current);
 
-      // Calculate total including all rubrics
-      const total = calculateTotal(newScores);
+    // Clear pending scores optimistically
+    pendingScoresRef.current.clear();
 
-      const updatedScore: GradingScore = {
-        studentId,
-        scores: newScores,
+    try {
+      const formattedDate = selectedDate.toISOString().split("T")[0];
+
+      // Prepare grades in the format expected by the API
+      const gradesToSaveFormatted = validGrades.map((grade) => ({
+        studentId: grade.studentId,
+        scores: grade.scores,
+        total: grade.total,
+        reportingScore: isRecitationCriteria ? 0 : grade.total,
+        recitationScore: isRecitationCriteria ? grade.total : 0,
+      }));
+
+      // Save all grades in a single request (silent auto-save, no toasts)
+      await saveGradesMutation.mutateAsync({
+        courseSlug,
+        gradeData: {
+          date: formattedDate,
+          criteriaId: activeReport.id,
+          courseCode,
+          courseSection,
+          grades: gradesToSaveFormatted,
+          isRecitationCriteria,
+        },
+      });
+
+      // Update original scores after successful save
+      setOriginalScores((prev) => {
+        const updated = { ...prev };
+        validGrades.forEach((grade) => {
+          updated[grade.studentId] = {
+            studentId: grade.studentId,
+            scores: grade.scores,
+            total: grade.total,
+            reportingScore: isRecitationCriteria ? null : grade.total,
+            recitationScore: isRecitationCriteria ? grade.total : null,
+          };
+        });
+        return updated;
+      });
+
+      // Dispatch event to refresh leaderboard seamlessly
+      window.dispatchEvent(
+        new CustomEvent("gradesUpdated", {
+          detail: { courseSlug },
+        })
+      );
+    } catch (error: any) {
+      // Restore pending scores on failure to prevent data loss
+      pendingScoresRef.current = pendingScoresBackup;
+
+      const errorMessage =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to auto-save grades. Changes will be saved when you click Save.";
+
+      // Only show error toast for auto-save failures (silent success)
+      toast.error(errorMessage, {
+        id: "auto-save-grades",
+        duration: 5000,
+      });
+
+      console.error("Error auto-saving grades:", error);
+      console.error("Grades that failed to save:", validGrades);
+
+      // Re-queue the save after a delay
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        savePendingScores();
+      }, 2000);
+    }
+  }, [
+    session?.user?.id,
+    selectedDate,
+    activeReport,
+    courseSlug,
+    courseCode,
+    courseSection,
+    isRecitationCriteria,
+    saveGradesMutation,
+  ]);
+
+  // queueScoreForSaving must be defined after savePendingScores
+  const queueScoreForSaving = useCallback(
+    (studentId: string, scores: number[], total: number) => {
+      // Add to pending scores
+      pendingScoresRef.current.set(studentId, { studentId, scores, total });
+
+      // Clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      // Set new timeout to save after 1 second of no changes
+      saveTimeoutRef.current = setTimeout(() => {
+        savePendingScores();
+      }, 1000);
+    },
+    [savePendingScores] // Add savePendingScores to dependencies
+  );
+
+  // Memoized calculateTotal to prevent recreation on every render
+  // Must be defined before handleScoreChange which uses it
+  const calculateTotal = useCallback(
+    (scores: number[]): number => {
+      if (!rubricDetails.length) return 0;
+
+      // Calculate the maximum possible score based on the scoring range
+      const maxScore = Number(activeReport?.scoringRange) || 5;
+
+      // Ensure we only use scores up to the number of rubrics
+      const validScores = scores.slice(0, rubricDetails.length);
+
+      // Calculate weighted percentage for each rubric
+      const weightedScores = validScores.map((score, index) => {
+        const weight = rubricDetails[index]?.percentage || 0;
+        // Convert score to percentage based on max score, then apply weight
+        return (score / maxScore) * weight;
+      });
+
+      // Sum up all weighted scores and round to 2 decimal places
+      const total = Number(
+        weightedScores.reduce((sum, score) => sum + score, 0).toFixed(2)
+      );
+
+      // Log the calculation for debugging
+      console.log("Score calculation:", {
+        scores: validScores,
+        weights: rubricDetails.map((r) => r.percentage),
+        weightedScores,
         total,
-        reportingScore: isRecitationCriteria ? null : total,
-        recitationScore: isRecitationCriteria ? total : null,
-      };
+      });
 
-      return {
-        ...prev,
-        [studentId]: updatedScore,
-      };
-    });
-  };
+      return total;
+    },
+    [rubricDetails, activeReport?.scoringRange]
+  );
 
-  const calculateTotal = (scores: number[]): number => {
-    if (!rubricDetails.length) return 0;
+  // Memoized handleScoreChange to prevent unnecessary re-renders of child components
+  const handleScoreChange = useCallback(
+    async (studentId: string, rubricIndex: number, value: number | "") => {
+      // If value is empty (Select Grade), delete the grades
+      if (value === "") {
+        try {
+          setIsLoading(true);
+          const formattedDate = selectedDate?.toISOString().split("T")[0];
 
-    // Calculate the maximum possible score based on the scoring range
-    const maxScore = Number(activeReport?.scoringRange) || 5;
+          // Delete grades for this student (Note: service doesn't support studentId filter yet, so we'll need to handle this differently)
+          // For now, we'll delete all grades for the criteria/date and recreate without this student
+          // This is a limitation - the service should support studentId filter
+          if (activeReport?.id && formattedDate) {
+            await deleteGradesMutation.mutateAsync({
+              courseSlug,
+              criteriaId: activeReport.id,
+              date: formattedDate,
+            });
+          }
 
-    // Ensure we only use scores up to the number of rubrics
-    const validScores = scores.slice(0, rubricDetails.length);
+          // Update local state
+          setScores((prev) => {
+            const newScores = { ...prev };
+            delete newScores[studentId];
+            return newScores;
+          });
 
-    // Calculate weighted percentage for each rubric
-    const weightedScores = validScores.map((score, index) => {
-      const weight = rubricDetails[index]?.percentage || 0;
-      // Convert score to percentage based on max score, then apply weight
-      return (score / maxScore) * weight;
-    });
+          toast.success("Grades deleted successfully");
+        } catch (error: any) {
+          console.error("Error deleting grades:", error);
+          toast.error(
+            error.response?.data?.message || "Failed to delete grades"
+          );
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
 
-    // Sum up all weighted scores and round to 2 decimal places
-    const total = Number(
-      weightedScores.reduce((sum, score) => sum + score, 0).toFixed(2)
-    );
+      // Otherwise, update the grade as normal
+      setScores((prev) => {
+        const rubricCount = activeReport?.rubrics.length || 0;
+        const studentScores =
+          prev[studentId]?.scores || new Array(rubricCount).fill(0);
+        const newScores = [...studentScores];
+        newScores[rubricIndex] = value;
 
-    // Log the calculation for debugging
-    console.log("Score calculation:", {
-      scores: validScores,
-      weights: rubricDetails.map((r) => r.percentage),
-      weightedScores,
-      total,
-    });
+        // Calculate total including all rubrics
+        const total = calculateTotal(newScores);
 
-    return total;
-  };
+        const updatedScore: GradingScore = {
+          studentId,
+          scores: newScores,
+          total,
+          reportingScore: isRecitationCriteria ? null : total,
+          recitationScore: isRecitationCriteria ? total : null,
+        };
+
+        // Queue for auto-save
+        queueScoreForSaving(studentId, newScores, total);
+
+        return {
+          ...prev,
+          [studentId]: updatedScore,
+        };
+      });
+    },
+    [
+      activeReport?.id,
+      activeReport?.rubrics.length,
+      selectedDate,
+      courseSlug,
+      isRecitationCriteria,
+      calculateTotal,
+      queueScoreForSaving,
+      deleteGradesMutation,
+    ]
+  );
+
+  // Note: savePendingScores is already defined above (line 1095), duplicate removed
 
   const validateReportName = (name: string) => {
     if (!name.trim()) {
@@ -1461,6 +1717,8 @@ export function GradingTable({
       // Criteria can be reused on any date, grades are linked by criteriaId + date
       const allReportsData = isRecitationCriteria
         ? recitationCriteriaData || []
+        : isGroupView
+        ? groupCriteriaData || []
         : allCriteriaData || [];
 
       // Filter by view type only (not by date)
@@ -1501,6 +1759,8 @@ export function GradingTable({
     isRecitationCriteria,
     allCriteriaData,
     recitationCriteriaData,
+    groupCriteriaData,
+    isLoadingGroupCriteria,
   ]);
 
   const prepareExportData = () => {
@@ -1754,32 +2014,36 @@ export function GradingTable({
     }
   };
 
-  // Function to check if a student matches the current filters
-  const studentMatchesFilter = (student: Student) => {
-    // If no filters are checked, show all students
-    if (!gradeFilter.passed && !gradeFilter.failed && !gradeFilter.noGrades) {
-      return true;
-    }
+  // Memoized studentMatchesFilter to prevent recreation on every render
+  const studentMatchesFilter = useCallback(
+    (student: Student) => {
+      // If no filters are checked, show all students
+      if (!gradeFilter.passed && !gradeFilter.failed && !gradeFilter.noGrades) {
+        return true;
+      }
 
-    const studentScore = scores[student.id];
-    const total = studentScore?.total || 0;
-    const hasGrades = studentScore?.scores.some((score) => score > 0) || false;
+      const studentScore = scores[student.id];
+      const total = studentScore?.total || 0;
+      const hasGrades =
+        studentScore?.scores.some((score) => score > 0) || false;
 
-    if (
-      gradeFilter.passed &&
-      hasGrades &&
-      total >= Number(activeReport?.passingScore)
-    )
-      return true;
-    if (
-      gradeFilter.failed &&
-      hasGrades &&
-      total < Number(activeReport?.passingScore)
-    )
-      return true;
-    if (gradeFilter.noGrades && !hasGrades) return true;
-    return false;
-  };
+      if (
+        gradeFilter.passed &&
+        hasGrades &&
+        total >= Number(activeReport?.passingScore)
+      )
+        return true;
+      if (
+        gradeFilter.failed &&
+        hasGrades &&
+        total < Number(activeReport?.passingScore)
+      )
+        return true;
+      if (gradeFilter.noGrades && !hasGrades) return true;
+      return false;
+    },
+    [gradeFilter, scores, activeReport?.passingScore]
+  );
 
   const handleResetGrades = () => {
     if (hasChanges()) {
@@ -1838,37 +2102,36 @@ export function GradingTable({
     );
   };
 
-  const getPaginatedStudents = (students: Student[]) => {
-    const filteredStudents = students.filter((student) => {
-      const name = `${student.lastName || ""} ${student.firstName || ""} ${
-        student.middleInitial || ""
-      }`.toLowerCase();
-      const nameMatch = name.includes(searchQuery.toLowerCase());
-      return nameMatch && studentMatchesFilter(student);
-    });
+  // Memoized filtered & paginated students - eliminates duplicate filtering
+  const { filteredStudents, paginatedStudents, totalPages, totalStudents } =
+    useMemo(() => {
+      const filtered = students.filter((student) => {
+        const name = `${student.lastName || ""} ${student.firstName || ""} ${
+          student.middleInitial || ""
+        }`.toLowerCase();
+        const nameMatch = name.includes(searchQuery.toLowerCase());
+        return nameMatch && studentMatchesFilter(student);
+      });
 
-    const startIndex = (currentPage - 1) * studentsPerPage;
-    const endIndex = startIndex + studentsPerPage;
-    return {
-      paginatedStudents: filteredStudents.slice(startIndex, endIndex),
-      totalPages: Math.ceil(filteredStudents.length / studentsPerPage),
-      totalStudents: filteredStudents.length,
-    };
-  };
+      const startIndex = (currentPage - 1) * studentsPerPage;
+      const endIndex = startIndex + studentsPerPage;
 
-  // Add useEffect to update pagination state
-  useEffect(() => {
-    const filteredStudents = students.filter((student) => {
-      const name = `${student.lastName || ""} ${student.firstName || ""} ${
-        student.middleInitial || ""
-      }`.toLowerCase();
-      const nameMatch = name.includes(searchQuery.toLowerCase());
-      return nameMatch && studentMatchesFilter(student);
-    });
+      return {
+        filteredStudents: filtered,
+        paginatedStudents: filtered.slice(startIndex, endIndex),
+        totalPages: Math.ceil(filtered.length / studentsPerPage),
+        totalStudents: filtered.length,
+      };
+    }, [
+      students,
+      searchQuery,
+      currentPage,
+      studentsPerPage,
+      studentMatchesFilter,
+    ]);
 
-    setTotalPages(Math.ceil(filteredStudents.length / studentsPerPage));
-    setTotalStudents(filteredStudents.length);
-  }, [students, searchQuery, gradeFilter, studentsPerPage]);
+  // Note: totalPages and totalStudents are now computed via useMemo above
+  // No need for separate state or useEffect
 
   // Add helper to get index of Participation rubric in group view
   const participationIndex = isGroupView
@@ -1881,6 +2144,7 @@ export function GradingTable({
     rubricDetails,
     activeReport,
     handleScoreChange,
+    paginatedStudents,
   }: {
     students: Student[];
     scores: Record<string, GradingScore>;
@@ -1891,9 +2155,8 @@ export function GradingTable({
       rubricIndex: number,
       value: number | ""
     ) => void;
+    paginatedStudents: Student[];
   }) => {
-    const { paginatedStudents } = getPaginatedStudents(students);
-
     if (paginatedStudents.length === 0) {
       return (
         <tr>
@@ -1973,11 +2236,18 @@ export function GradingTable({
                                 new Array(rubricDetails.length).fill(0);
                               // Set the group rubric score for all students
                               studentScores[rubricIdx] = value;
+                              const total = calculateTotal(studentScores);
                               updated[student.id] = {
                                 ...updated[student.id],
                                 scores: studentScores,
-                                total: calculateTotal(studentScores),
+                                total,
                               };
+                              // Queue for auto-save for each student
+                              queueScoreForSaving(
+                                student.id,
+                                studentScores,
+                                total
+                              );
                             });
                             return updated;
                           });
@@ -2611,6 +2881,7 @@ export function GradingTable({
                         rubricDetails={rubricDetails}
                         activeReport={activeReport}
                         handleScoreChange={handleScoreChange}
+                        paginatedStudents={paginatedStudents}
                       />
                     )}
                   </tbody>
@@ -2655,9 +2926,7 @@ export function GradingTable({
                       ))
                     ) : (
                       (() => {
-                        const { paginatedStudents, totalPages, totalStudents } =
-                          getPaginatedStudents(students);
-
+                        // Use memoized paginatedStudents from above (already computed via useMemo)
                         if (paginatedStudents.length === 0) {
                           return (
                             <tr>
@@ -2671,32 +2940,34 @@ export function GradingTable({
                           );
                         }
 
-                        return paginatedStudents.map((student, idx) => {
-                          const studentScore = scores[student.id] || {
-                            studentId: student.id,
-                            scores: new Array(rubricDetails.length).fill(0),
-                            total: 0,
-                          };
-                          return (
-                            <GradingTableRow
-                              key={student.id}
-                              student={student}
-                              rubricDetails={rubricDetails}
-                              activeReport={activeReport}
-                              studentScore={studentScore}
-                              handleScoreChange={handleScoreChange}
-                              idx={idx}
-                              onImageUpload={handleImageUpload}
-                              onSaveImageChanges={handleSaveImageChanges}
-                              onRemoveImage={(index, name) =>
-                                setImageToRemove({ index, name })
-                              }
-                              tempImage={tempImage}
-                              isSaving={isSaving}
-                              showSuccessMessage={showSuccessMessage}
-                            />
-                          );
-                        });
+                        return paginatedStudents.map(
+                          (student: Student, idx: number) => {
+                            const studentScore = scores[student.id] || {
+                              studentId: student.id,
+                              scores: new Array(rubricDetails.length).fill(0),
+                              total: 0,
+                            };
+                            return (
+                              <GradingTableRow
+                                key={student.id}
+                                student={student}
+                                rubricDetails={rubricDetails}
+                                activeReport={activeReport}
+                                studentScore={studentScore}
+                                handleScoreChange={handleScoreChange}
+                                idx={idx}
+                                onImageUpload={handleImageUpload}
+                                onSaveImageChanges={handleSaveImageChanges}
+                                onRemoveImage={(index, name) =>
+                                  setImageToRemove({ index, name })
+                                }
+                                tempImage={tempImage}
+                                isSaving={isSaving}
+                                showSuccessMessage={showSuccessMessage}
+                              />
+                            );
+                          }
+                        );
                       })()
                     )}
                   </tbody>

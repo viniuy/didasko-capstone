@@ -162,6 +162,11 @@ model Criteria {
   grades               Grade[]
   rubrics              Rubric[]
 
+  @@index([courseId])
+  @@index([courseId, isGroupCriteria])
+  @@index([courseId, isRecitationCriteria])
+  @@index([isGroupCriteria])
+  @@index([isRecitationCriteria])
   @@map("criteria")
 }
 

@@ -10,6 +10,7 @@ import CourseShortcut from "@/features/right-sidebar/components/my-subjects";
 import AttendanceLeaderboard from "@/features/right-sidebar/components/student-attendance";
 import GradingLeaderboard from "@/features/right-sidebar/components/grading-leaderboard";
 import CourseAnalytics from "@/features/right-sidebar/components/course-analytics";
+import GroupQuickAccess from "@/features/right-sidebar/components/group-quick-access";
 
 export default function Rightsidebar() {
   const [open, setOpen] = useState(false);
@@ -52,6 +53,10 @@ export default function Rightsidebar() {
   const isGradingList =
     pathname === "/main/grading" || pathname === "/main/grading/class-record";
   const isCourseDashboard = pathname.startsWith("/main/course/") && courseSlug;
+  const isGroupReporting =
+    pathname.startsWith("/main/grading/reporting/") &&
+    pathname.includes("/group/") &&
+    courseSlug;
 
   return (
     <div key={key}>
@@ -118,6 +123,15 @@ export default function Rightsidebar() {
               </div>
               <div className="h-[calc(50vh-20px)]">
                 <GradingLeaderboard />
+              </div>
+            </>
+          ) : isGroupReporting ? (
+            <>
+              <div className="h-[calc(50vh-25px)]">
+                <GroupQuickAccess />
+              </div>
+              <div className="h-[calc(50vh-25px)]">
+                <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
             </>
           ) : (

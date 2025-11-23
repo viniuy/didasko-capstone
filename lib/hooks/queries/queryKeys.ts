@@ -128,6 +128,8 @@ export const queryKeys = {
       [...queryKeys.criteria.all, "detail", courseSlug, criteriaId] as const,
     recitation: (courseSlug: string) =>
       [...queryKeys.criteria.all, "recitation", courseSlug] as const,
+    group: (courseSlug: string) =>
+      [...queryKeys.criteria.all, "group", courseSlug] as const,
     linked: (courseSlug: string) =>
       [...queryKeys.criteria.all, "linked", courseSlug] as const,
   },
