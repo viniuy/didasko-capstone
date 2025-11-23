@@ -1947,7 +1947,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         });
 
         setRfidInput("");
-        setIsScanning(false);
+        // Don't set isScanning to false here - keep it true if input is still focused
+        // Only set to false on blur
 
         // Removed automatic batch update - will only update when DONE is clicked
         // This optimizes performance by batching all updates at once
@@ -2017,12 +2018,18 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         await processRfidAttendance(currentValue);
       }
 
-      // Reset scanning state
-      setIsScanning(false);
+      // Clear input but keep scanning state if input is still focused
       setRfidInput("");
       if (rfidInputRef.current) {
         rfidInputRef.current.value = "";
+        // Check if input is still focused - if so, keep scanning state
+        if (document.activeElement === rfidInputRef.current) {
+          // Input is still focused, keep scanning state
+          return;
+        }
       }
+      // Only set to false if input is not focused
+      setIsScanning(false);
     }, 500); // Increased timeout to 500ms to ensure full RFID is captured (for 10+ digit RFIDs)
   };
 
@@ -3512,7 +3519,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                         processRfidAttendance(value);
                         rfidInputRef.current.value = "";
                         setRfidInput("");
-                        setIsScanning(false);
+                        // Keep scanning state if input is still focused
+                        if (document.activeElement !== rfidInputRef.current) {
+                          setIsScanning(false);
+                        }
                       }
                     }
                   }}
@@ -3538,11 +3548,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                         if (currentValue && currentValue.length > 0) {
                           await processRfidAttendance(currentValue);
                         }
-                        setIsScanning(false);
                         setRfidInput("");
                         if (rfidInputRef.current) {
                           rfidInputRef.current.value = "";
+                          // Check if input is still focused - if so, keep scanning state
+                          if (document.activeElement === rfidInputRef.current) {
+                            // Input is still focused, keep scanning state
+                            return;
+                          }
                         }
+                        // Only set to false if input is not focused
+                        setIsScanning(false);
                       }, 500); // Increased to 500ms to match onChange handler
                     }
                   }}
@@ -3556,6 +3572,19 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                         rfidInputRef.current.value = "";
                       }
                       setRfidInput("");
+                    }
+                  }}
+                  onFocus={() => {
+                    // Start scanning when input receives focus
+                    setIsScanning(true);
+                  }}
+                  onBlur={() => {
+                    // Stop scanning when input loses focus
+                    setIsScanning(false);
+                    // Clear any pending timeout
+                    if (scanTimeoutRef.current) {
+                      clearTimeout(scanTimeoutRef.current);
+                      scanTimeoutRef.current = null;
                     }
                   }}
                   style={{
@@ -3572,13 +3601,26 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <div className="flex justify-center">
                   <div className="flex gap-3">
                     <Button
-                      disabled
+                      disabled={isScanning}
+                      onClick={() => {
+                        // Refocus the input when button is clicked
+                        if (rfidInputRef.current) {
+                          rfidInputRef.current.focus();
+                          setIsScanning(true);
+                        }
+                      }}
                       size="lg"
-                      className="min-w-[200px] h-16 text-lg bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                      className="min-w-[200px] h-16 text-lg bg-[#124A69] hover:bg-[#0a2f42] text-white disabled:opacity-50"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                        Please Scan Student RFID
+                        {isScanning ? (
+                          <>
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                            Please Scan Student RFID
+                          </>
+                        ) : (
+                          "Click to Scan Student RFID"
+                        )}
                       </div>
                     </Button>
                   </div>

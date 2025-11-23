@@ -131,14 +131,16 @@ export default function CourseShortcuts({
   // React Query hook
   const { data: coursesData, isLoading } = useActiveCourses(
     status === "authenticated" && session?.user?.id
-      ? { facultyId: session.user.id }
+      ? { filters: { facultyId: session.user.id } }
       : undefined
   );
 
   // Transform and filter courses to match local Course interface
   const courses: Course[] = (coursesData?.courses || [])
-    .filter((course) => !excludeCourseSlug || course.slug !== excludeCourseSlug)
-    .map((course) => ({
+    .filter(
+      (course: any) => !excludeCourseSlug || course.slug !== excludeCourseSlug
+    )
+    .map((course: any) => ({
       id: course.id,
       title: course.title,
       code: course.code,

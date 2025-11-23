@@ -207,7 +207,7 @@ export default function AttendanceLeaderboard({
   const { data: activeCoursesData, isLoading: isLoadingCourses } =
     useActiveCourses(
       status === "authenticated" && !isSingleCourse && session?.user?.id
-        ? { facultyId: session.user.id }
+        ? { filters: { facultyId: session.user.id } }
         : undefined
     );
   const { data: leaderboardData, isLoading: isLoadingLeaderboard } =
@@ -283,7 +283,7 @@ export default function AttendanceLeaderboard({
               </p>
             </div>
           ) : (
-            courses.map((course) => (
+            courses.map((course: Course) => (
               <CourseAttendanceCard
                 key={course.id}
                 course={course}

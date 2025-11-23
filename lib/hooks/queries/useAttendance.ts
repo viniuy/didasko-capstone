@@ -235,6 +235,8 @@ export function useRecordAttendance() {
           context.previousAttendance
         );
       }
+      // Dismiss any loading toasts first
+      toast.dismiss();
       toast.error("Failed to record attendance");
     },
     onSuccess: (_, variables) => {
@@ -273,6 +275,8 @@ export function useRecordAttendance() {
       queryClient.refetchQueries({
         queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
+      // Dismiss any loading toasts first
+      toast.dismiss();
       toast.success("Attendance recorded successfully");
     },
   });
@@ -341,9 +345,13 @@ export function useBatchAttendance() {
       queryClient.refetchQueries({
         queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
+      // Dismiss any loading toasts first
+      toast.dismiss();
       toast.success("Attendance batch recorded successfully");
     },
     onError: (error: any) => {
+      // Dismiss any loading toasts first
+      toast.dismiss();
       toast.error(
         error?.response?.data?.error || "Failed to record batch attendance"
       );
@@ -392,6 +400,8 @@ export function useClearAttendance() {
       // Note: Don't show toast here - let the component handle it to avoid duplicates
     },
     onError: (error: any) => {
+      // Dismiss any loading toasts first
+      toast.dismiss();
       toast.error(error?.response?.data?.error || "Failed to clear attendance");
     },
   });
