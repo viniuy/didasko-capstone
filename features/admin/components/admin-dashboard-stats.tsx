@@ -24,18 +24,28 @@ interface User {
   [key: string]: string | WorkType | Role | UserStatus;
 }
 
-export function AdminDashboardStats() {
-  // Fetch users once - stats will be calculated from this data
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+interface AdminDashboardStatsProps {
+  initialUsers: User[];
+}
+
+export function AdminDashboardStats({
+  initialUsers,
+}: AdminDashboardStatsProps) {
+  // Use TanStack Query with initialData for client-side updates
+  const { data: usersData } = useUsers({
+    initialData: initialUsers,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
   // Extract users array from response
   const users = useMemo(() => {
-    if (!usersData) return [];
+    if (!usersData) return initialUsers;
     if (Array.isArray(usersData)) return usersData;
     if (usersData.users && Array.isArray(usersData.users))
       return usersData.users;
-    return [];
-  }, [usersData]);
+    return initialUsers;
+  }, [usersData, initialUsers]);
 
   // Calculate stats from users data
   const stats = useMemo(() => {
@@ -74,9 +84,7 @@ export function AdminDashboardStats() {
             <UserIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingUsers ? "..." : stats.fullTimeCount}
-            </div>
+            <div className="text-2xl font-bold">{stats.fullTimeCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -87,9 +95,7 @@ export function AdminDashboardStats() {
             <Library className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingUsers ? "..." : stats.partTimeCount}
-            </div>
+            <div className="text-2xl font-bold">{stats.partTimeCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -98,9 +104,7 @@ export function AdminDashboardStats() {
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingUsers ? "..." : stats.activeCount}
-            </div>
+            <div className="text-2xl font-bold">{stats.activeCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -111,9 +115,7 @@ export function AdminDashboardStats() {
             <UserX className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingUsers ? "..." : stats.archivedCount}
-            </div>
+            <div className="text-2xl font-bold">{stats.archivedCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -122,9 +124,7 @@ export function AdminDashboardStats() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingUsers ? "..." : stats.totalUsers}
-            </div>
+            <div className="text-2xl font-bold">{stats.totalUsers}</div>
           </CardContent>
         </Card>
       </div>

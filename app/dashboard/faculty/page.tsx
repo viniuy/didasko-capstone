@@ -1,4 +1,3 @@
-"use client";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Stats from "@/features/dashboard/components/stats";
@@ -7,15 +6,31 @@ import AllCourses from "@/features/courses/components/all-courses";
 import WeeklySchedule from "@/features/dashboard/components/weekly-schedule";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
-import React from "react";
-import { useSession } from "next-auth/react";
+import { getCourses } from "@/lib/services";
+import { getFacultyStats, getFacultyCount } from "@/lib/services/stats";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { redirect } from "next/navigation";
 
-export default function FacultyDashboard() {
-  const [open, setOpen] = React.useState(false);
-  const { data: session } = useSession();
+export default async function FacultyDashboard() {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    redirect("/");
+  }
+
+  // Fetch data on the server
+  const [coursesResult, facultyStats, facultyCount] = await Promise.all([
+    getCourses({
+      facultyId: session.user.id,
+      status: "ACTIVE",
+    }),
+    getFacultyStats(session.user.id),
+    getFacultyCount(),
+  ]);
 
   return (
-    <SidebarProvider open={open} onOpenChange={setOpen}>
+    <SidebarProvider>
       <div className="relative h-screen w-screen overflow-hidden">
         <Header />
         <AppSidebar />
@@ -25,16 +40,23 @@ export default function FacultyDashboard() {
             <div className="flex flex-col flex-grow">
               <div className="px-2 sm:px-4">
                 <Greet />
-                <Stats />
+                <Stats
+                  initialFacultyStats={facultyStats}
+                  initialFacultyCount={facultyCount}
+                  userRole={session.user.role}
+                />
                 <div className="space-y-3 sm:space-y-4">
                   <h2 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
                     My Courses
                   </h2>
-                  <AllCourses type="attendance" />
+                  <AllCourses
+                    type="attendance"
+                    initialCourses={coursesResult}
+                  />
                 </div>
               </div>
 
-              {session?.user?.id && (
+              {session.user.id && (
                 <WeeklySchedule
                   teacherInfo={{
                     id: session.user.id,

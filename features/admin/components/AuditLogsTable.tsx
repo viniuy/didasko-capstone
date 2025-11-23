@@ -80,6 +80,7 @@ interface AuditLogsTableProps {
   totalPages: number;
   userRole: Role;
   isLoading?: boolean;
+  initialFaculty?: any[];
 }
 
 function LoadingSpinner() {
@@ -117,12 +118,13 @@ export default function AuditLogsTable({
   totalPages: initialTotalPages,
   userRole,
   isLoading = false,
+  initialFaculty = [],
 }: AuditLogsTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(initialPage);
   const isAcademicHead = userRole === "ACADEMIC_HEAD";
   const [searchAction, setSearchAction] = useState(
     searchParams.get("action") || ""
@@ -132,6 +134,7 @@ export default function AuditLogsTable({
   );
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [windowHeight, setWindowHeight] = useState(800);
   const [windowWidth, setWindowWidth] = useState(1024);
 
@@ -176,6 +179,9 @@ export default function AuditLogsTable({
     });
   }, [filters.startDate, filters.endDate]);
 
+  // Track if filters have been applied (to know when to stop using initialData)
+  const [hasAppliedFilters, setHasAppliedFilters] = useState(false);
+
   // Build filters from state (not URL) - use state currentPage
   const auditLogsFilters = useMemo(() => {
     const filterParams: any = {
@@ -203,13 +209,42 @@ export default function AuditLogsTable({
     return filterParams;
   }, [filters, currentPage]);
 
+  // Determine if we should use initialData (only on first load with no filters)
+  const shouldUseInitialData = useMemo(() => {
+    if (hasAppliedFilters) return false;
+
+    // Check if any filters are active (excluding default date range which is always set)
+    const hasActiveFilters =
+      filters.actions.length > 0 ||
+      filters.faculty.length > 0 ||
+      filters.modules.length > 0 ||
+      currentPage !== initialPage;
+
+    return !hasActiveFilters;
+  }, [hasAppliedFilters, filters, currentPage, initialPage]);
+
   const {
     data: auditLogsData,
     isLoading: isLoadingLogs,
     isRefetching: isRefetchingLogs,
-  } = useAuditLogs(auditLogsFilters);
+  } = useAuditLogs({
+    filters: auditLogsFilters,
+    initialData: shouldUseInitialData
+      ? {
+          logs: initialLogs,
+          totalPages: initialTotalPages,
+          currentPage: initialPage,
+        }
+      : undefined,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
-  const { data: facultyData, isLoading: isLoadingFaculty } = useFaculty();
+  const { data: facultyData, isLoading: isLoadingFaculty } = useFaculty({
+    initialData: initialFaculty,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
   const exportLogsMutation = useExportLogs();
 
   // Extract faculty from React Query
@@ -279,13 +314,9 @@ export default function AuditLogsTable({
     new Set(logs.map((log: AuditLog) => log.action))
   ).sort();
 
-  // Count active filters
+  // Count active filters (excluding date range - date is not considered a filter)
   const activeFilterCount =
-    filters.actions.length +
-    filters.faculty.length +
-    filters.modules.length +
-    (filters.startDate ? 1 : 0) +
-    (filters.endDate ? 1 : 0);
+    filters.actions.length + filters.faculty.length + filters.modules.length;
 
   const toggleRow = (logId: string) => {
     const newExpanded = new Set(expandedRows);
@@ -309,6 +340,7 @@ export default function AuditLogsTable({
           ? prev.actions
           : [...prev.actions, searchAction],
       }));
+      setHasAppliedFilters(true);
     }
     // Reset to page 1 when searching
     setCurrentPage(1);
@@ -316,9 +348,14 @@ export default function AuditLogsTable({
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    if (page !== initialPage) {
+      setHasAppliedFilters(true);
+    }
   };
 
   const handleApplyFilters = () => {
+    // Mark that filters have been applied
+    setHasAppliedFilters(true);
     // Filters are already in state, just reset to page 1 and close sheet
     setCurrentPage(1);
     setFilterSheetOpen(false);
@@ -520,7 +557,7 @@ export default function AuditLogsTable({
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Popover>
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -570,6 +607,7 @@ export default function AuditLogsTable({
                         from: filters.startDate,
                         to: filters.endDate,
                       });
+                      setCalendarOpen(false);
                     }}
                   >
                     Cancel
@@ -583,7 +621,9 @@ export default function AuditLogsTable({
                         startDate: localDateRange.from,
                         endDate: localDateRange.to,
                       });
+                      // Don't set hasAppliedFilters for date changes - date is not considered a filter
                       setCurrentPage(1);
+                      setCalendarOpen(false);
                     }}
                   >
                     Apply

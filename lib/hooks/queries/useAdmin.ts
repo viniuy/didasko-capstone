@@ -7,11 +7,23 @@ import { UserCreateInput } from "@/shared/types/user";
 import toast from "react-hot-toast";
 
 // Query: Get all users
-export function useUsers(filters?: {
-  search?: string;
-  role?: string;
-  department?: string;
+export function useUsers(options?: {
+  filters?: {
+    search?: string;
+    role?: string;
+    department?: string;
+  };
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
 }) {
+  const {
+    filters,
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.admin.users(filters),
     queryFn: async () => {
@@ -23,11 +35,26 @@ export function useUsers(filters?: {
       const { data } = await axios.get(`/users?${params.toString()}`);
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 
 // Query: Get faculty users
-export function useFaculty(filters?: { department?: string; search?: string }) {
+export function useFaculty(options?: {
+  filters?: { department?: string; search?: string };
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
+}) {
+  const {
+    filters,
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.admin.faculty(filters),
     queryFn: async () => {
@@ -38,6 +65,9 @@ export function useFaculty(filters?: { department?: string; search?: string }) {
       const { data } = await axios.get(`/users/faculty?${params.toString()}`);
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 

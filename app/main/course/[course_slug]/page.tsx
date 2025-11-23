@@ -1,15 +1,33 @@
-"use client";
-
 import React from "react";
 import { CourseDashboard } from "@/features/courses/components/course-dashboard";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
-import { useParams, useRouter } from "next/navigation";
+import { getCourseAnalyticsData } from "@/lib/services/course-analytics";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
-export default function CourseDashboardPage() {
-  const params = useParams();
-  const router = useRouter();
+export default async function CourseDashboardPage({
+  params,
+}: {
+  params: Promise<{ course_slug: string }>;
+}) {
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    redirect("/");
+  }
+
+  const { course_slug } = await params;
+
+  // Fetch course analytics data on the server
+  const analyticsData = await getCourseAnalyticsData(course_slug);
+
+  if (!analyticsData) {
+    notFound();
+  }
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
@@ -20,7 +38,10 @@ export default function CourseDashboardPage() {
         <div className="flex flex-col flex-grow px-4">
           {/* Course Dashboard Component */}
           <div className="mb-4 overflow-y-auto">
-            <CourseDashboard courseSlug={params.course_slug as string} />
+            <CourseDashboard
+              courseSlug={course_slug}
+              initialAnalyticsData={analyticsData}
+            />
           </div>
         </div>
         {/* Right Sidebar */}

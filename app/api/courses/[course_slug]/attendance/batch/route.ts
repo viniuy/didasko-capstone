@@ -13,14 +13,23 @@ export async function POST(request: Request, { params }) {
     const { course_slug } = params;
 
     const body = await request.json();
-    const { date, updates } = body as {
+    // Support both 'attendance' (from hook) and 'updates' (legacy) for backward compatibility
+    const { date, attendance, updates } = body as {
       date: string;
-      updates: Array<{
+      attendance?: Array<{
+        studentId: string;
+        status: string;
+        reason?: string;
+      }>;
+      updates?: Array<{
         studentId: string;
         status: string;
         timestamp?: string | Date;
       }>;
     };
+
+    // Use attendance if provided, otherwise fall back to updates
+    const recordsToProcess = attendance || updates || [];
 
     const utcDate = new Date(date);
     utcDate.setUTCHours(0, 0, 0, 0);
@@ -33,7 +42,7 @@ export async function POST(request: Request, { params }) {
     }
 
     await prisma.$transaction(async (tx) => {
-      for (const u of updates) {
+      for (const u of recordsToProcess) {
         const existing = await tx.attendance.findFirst({
           where: {
             studentId: u.studentId,

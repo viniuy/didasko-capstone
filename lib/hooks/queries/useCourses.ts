@@ -48,12 +48,24 @@ export function useCourses(filters?: {
 }
 
 // Query: Get active courses
-export function useActiveCourses(filters?: {
-  facultyId?: string;
-  search?: string;
-  department?: string;
-  semester?: string;
+export function useActiveCourses(options?: {
+  filters?: {
+    facultyId?: string;
+    search?: string;
+    department?: string;
+    semester?: string;
+  };
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
 }) {
+  const {
+    filters,
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.courses.active(filters),
     queryFn: async () => {
@@ -68,6 +80,9 @@ export function useActiveCourses(filters?: {
       );
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 
@@ -164,7 +179,20 @@ export function useFacultySchedules(
 }
 
 // Query: Get course analytics
-export function useCourseAnalytics(courseSlug: string) {
+export function useCourseAnalytics(
+  courseSlug: string,
+  options?: {
+    initialData?: any;
+    refetchOnMount?: boolean;
+    refetchOnWindowFocus?: boolean;
+  }
+) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.courses.analytics(courseSlug),
     queryFn: async () => {
@@ -173,6 +201,9 @@ export function useCourseAnalytics(courseSlug: string) {
       );
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 

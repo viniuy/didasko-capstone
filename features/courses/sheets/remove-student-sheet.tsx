@@ -56,15 +56,28 @@ export const RemoveStudentSheet = ({
     [students, selectedStudents]
   );
 
-  const filteredStudents = useMemo(
-    () =>
-      students.filter((student) =>
-        `${student.lastName} ${student.firstName} ${student.studentId}`
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase())
-      ),
-    [students, searchQuery]
-  );
+  const filteredStudents = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return students;
+    }
+
+    const searchValue = searchQuery.toLowerCase();
+    return students.filter((student) => {
+      const lastName = (student.lastName || "").toLowerCase();
+      const firstName = (student.firstName || "").toLowerCase();
+      const middleInitial = (student.middleInitial || "").toLowerCase();
+      const studentId = (student.studentId || "").toLowerCase();
+
+      return (
+        lastName.includes(searchValue) ||
+        firstName.includes(searchValue) ||
+        middleInitial.includes(searchValue) ||
+        studentId.includes(searchValue) ||
+        `${firstName} ${lastName}`.includes(searchValue) ||
+        `${lastName}, ${firstName}`.includes(searchValue)
+      );
+    });
+  }, [students, searchQuery]);
 
   const allFilteredSelected = useMemo(
     () =>
@@ -115,11 +128,7 @@ export const RemoveStudentSheet = ({
         studentIds: selectedStudents,
       });
 
-      toast.success(
-        `Successfully removed ${selectedStudents.length} student${
-          selectedStudents.length > 1 ? "s" : ""
-        }`
-      );
+      // Success toast is handled by the mutation
       resetSheet();
       onRemoveSuccess();
     } catch (error: any) {

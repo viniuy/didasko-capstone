@@ -39,6 +39,7 @@ interface Course {
 
 interface CoursesProps {
   type: "attendance" | "recitation" | "quiz" | "class-record" | "reporting";
+  initialCourses?: any;
 }
 
 const CourseCard = ({
@@ -137,7 +138,7 @@ const LoadingSkeleton = ({ index }: { index: number }) => (
   </Card>
 );
 
-export default function ActiveCourses({ type }: CoursesProps) {
+export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [currentPage, setCurrentPage] = useState(1);
@@ -145,10 +146,13 @@ export default function ActiveCourses({ type }: CoursesProps) {
   const [showRedirectSpinner, setShowRedirectSpinner] = useState(false);
   const itemsPerPage = 3;
 
-  // React Query hook
-  const { data: coursesData, isLoading } = useActiveCourses(
-    session?.user?.id ? { facultyId: session.user.id } : undefined
-  );
+  // React Query hook with initialData
+  const { data: coursesData, isLoading } = useActiveCourses({
+    filters: session?.user?.id ? { facultyId: session.user.id } : undefined,
+    initialData: initialCourses ? { courses: initialCourses } : undefined,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
   // Transform courses to match local Course interface (convert Date to string for lastAttendanceDate)
   const courses: Course[] = (coursesData?.courses || []).map((course) => ({
     id: course.id,

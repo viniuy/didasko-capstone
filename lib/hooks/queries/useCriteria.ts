@@ -6,7 +6,20 @@ import { queryKeys } from "./queryKeys";
 import toast from "react-hot-toast";
 
 // Query: Get criteria by course
-export function useCriteriaByCourse(courseSlug: string) {
+export function useCriteriaByCourse(
+  courseSlug: string,
+  options?: {
+    initialData?: any;
+    refetchOnMount?: boolean;
+    refetchOnWindowFocus?: boolean;
+  }
+) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.criteria.byCourse(courseSlug),
     queryFn: async () => {
@@ -14,11 +27,27 @@ export function useCriteriaByCourse(courseSlug: string) {
       return data;
     },
     enabled: !!courseSlug,
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 
 // Query: Get recitation criteria
-export function useRecitationCriteria(courseSlug: string) {
+export function useRecitationCriteria(
+  courseSlug: string,
+  options?: {
+    initialData?: any;
+    refetchOnMount?: boolean;
+    refetchOnWindowFocus?: boolean;
+  }
+) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.criteria.recitation(courseSlug),
     queryFn: async () => {
@@ -28,6 +57,9 @@ export function useRecitationCriteria(courseSlug: string) {
       return data;
     },
     enabled: !!courseSlug,
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 

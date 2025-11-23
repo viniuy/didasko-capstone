@@ -100,12 +100,24 @@ export async function getCriteriaLinks(courseSlug: string) {
           courseId: course.id,
           isRecitationCriteria: true,
         },
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          scoringRange: true,
+        },
         orderBy: { createdAt: "desc" },
       }),
       prisma.criteria.findMany({
         where: {
           courseId: course.id,
           isGroupCriteria: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          scoringRange: true,
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -115,14 +127,37 @@ export async function getCriteriaLinks(courseSlug: string) {
           isRecitationCriteria: false,
           isGroupCriteria: false,
         },
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          scoringRange: true,
+        },
         orderBy: { createdAt: "desc" },
       }),
     ]);
 
+  // Transform data to match expected interface
+  const transformCriteria = (
+    criteria: Array<{
+      id: string;
+      name: string;
+      date: Date | null;
+      scoringRange: string;
+    }>
+  ) => {
+    return criteria.map((c) => ({
+      id: c.id,
+      name: c.name,
+      date: c.date ? c.date.toISOString().split("T")[0] : null,
+      maxScore: parseFloat(c.scoringRange) || 0,
+    }));
+  };
+
   return {
-    recitations,
-    groupReportings,
-    individualReportings,
+    recitations: transformCriteria(recitations),
+    groupReportings: transformCriteria(groupReportings),
+    individualReportings: transformCriteria(individualReportings),
   };
 }
 

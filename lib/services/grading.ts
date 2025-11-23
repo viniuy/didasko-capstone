@@ -302,30 +302,41 @@ export async function saveAssessmentScoresBulk(
     throw new Error("Course not found");
   }
 
-  // Validate all scores and get assessment max scores
-  const assessmentIds = [...new Set(scores.map((s) => s.assessmentId))];
-  const assessments = await prisma.assessment.findMany({
-    where: {
-      id: { in: assessmentIds },
-      termConfig: { courseId: course.id },
-    },
-    select: { id: true, maxScore: true },
-  });
+  // Filter out null scores for validation (they're valid for deletion)
+  const scoresToValidate = scores.filter((s) => s.score !== null);
 
-  const assessmentMaxScores = new Map(
-    assessments.map((a) => [a.id, a.maxScore])
-  );
+  if (scoresToValidate.length === 0 && scores.length > 0) {
+    // All scores are null (deletions only), skip validation but still process
+  } else if (scoresToValidate.length > 0) {
+    // Validate all scores and get assessment max scores
+    const assessmentIds = [
+      ...new Set(scoresToValidate.map((s) => s.assessmentId)),
+    ];
+    const assessments = await prisma.assessment.findMany({
+      where: {
+        id: { in: assessmentIds },
+        termConfig: { courseId: course.id },
+      },
+      select: { id: true, maxScore: true },
+    });
 
-  // Validate each score
-  for (const scoreData of scores) {
-    const maxScore = assessmentMaxScores.get(scoreData.assessmentId);
-    if (!maxScore) {
-      throw new Error(`Invalid assessment ID: ${scoreData.assessmentId}`);
-    }
-    if (scoreData.score !== null && scoreData.score > maxScore) {
-      throw new Error(
-        `Score ${scoreData.score} exceeds max score ${maxScore} for assessment ${scoreData.assessmentId}`
-      );
+    const assessmentMaxScores = new Map(
+      assessments.map((a) => [a.id, a.maxScore])
+    );
+
+    // Validate each score
+    for (const scoreData of scoresToValidate) {
+      const maxScore = assessmentMaxScores.get(scoreData.assessmentId);
+      if (!maxScore) {
+        throw new Error(
+          `Invalid assessment ID: ${scoreData.assessmentId}. Assessment may not exist or may not belong to this course.`
+        );
+      }
+      if (scoreData.score !== null && scoreData.score > maxScore) {
+        throw new Error(
+          `Score ${scoreData.score} exceeds max score ${maxScore} for assessment ${scoreData.assessmentId}`
+        );
+      }
     }
   }
 
@@ -459,7 +470,7 @@ export async function getClassRecordData(courseSlug: string) {
   if (!course) return null;
 
   // Batch all queries in parallel
-  const [students, termConfigs, assessmentScores, criteriaLinks] =
+  const [students, termConfigs, assessmentScoresResult, criteriaLinks] =
     await Promise.all([
       // Students
       prisma.student.findMany({
@@ -488,6 +499,9 @@ export async function getClassRecordData(courseSlug: string) {
       // Criteria links (not cached for fresh data)
       getCriteriaLinks(courseSlug),
     ]);
+
+  // Ensure assessmentScores is never null
+  const assessmentScores: Record<string, any> = assessmentScoresResult ?? {};
 
   return {
     students,

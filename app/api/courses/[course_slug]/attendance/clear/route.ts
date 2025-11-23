@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 //@ts-ignore
-export async function POST(request: Request, { params }: { params }) {
+export async function POST(request: Request, { params }) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { date, recordsToDelete } = await request.json();
+    const { course_slug } = await params;
+    const { date } = await request.json();
 
-    if (!date || !recordsToDelete || !Array.isArray(recordsToDelete)) {
-      return NextResponse.json(
-        { error: "Missing or invalid fields" },
-        { status: 400 }
-      );
+    if (!date) {
+      return NextResponse.json({ error: "Date is required" }, { status: 400 });
     }
 
     const course = await prisma.course.findUnique({
-      where: { slug: params.course_slug },
+      where: { slug: course_slug },
       select: { id: true },
     });
 
@@ -27,10 +26,20 @@ export async function POST(request: Request, { params }: { params }) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
+    // Parse the date and create date range for the entire day
+    const utcDate = new Date(date);
+    utcDate.setUTCHours(0, 0, 0, 0);
+    const nextDay = new Date(utcDate);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+    // Delete all attendance records for this course on this date
     const deleted = await prisma.attendance.deleteMany({
       where: {
-        id: { in: recordsToDelete },
         courseId: course.id,
+        date: {
+          gte: utcDate,
+          lt: nextDay,
+        },
       },
     });
 

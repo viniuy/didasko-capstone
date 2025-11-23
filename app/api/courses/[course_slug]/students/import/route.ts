@@ -24,29 +24,135 @@ interface ImportResult {
   }>;
 }
 
-// Helper function to parse full name
-function parseFullName(fullName: string) {
-  // Expected format: "Dela Cruz, Juan A." or "Santos, Maria B."
-  const parts = fullName.split(",").map((p) => p.trim());
+// Helper function to find student by ID, handling leading zeros
+// Excel often strips leading zeros, so we try both exact match and normalized match
+async function findStudentByFlexibleId(studentId: string) {
+  // Try exact match first
+  let student = await prisma.student.findUnique({
+    where: { studentId: studentId },
+    select: {
+      id: true,
+      studentId: true,
+      rfid_id: true,
+      firstName: true,
+      lastName: true,
+      middleInitial: true,
+    },
+  });
 
-  if (parts.length < 2) {
+  if (student) {
+    return student;
+  }
+
+  // If not found, try removing leading zeros from the search ID
+  const normalizedSearchId = studentId.replace(/^0+/, "");
+  if (normalizedSearchId !== studentId) {
+    student = await prisma.student.findUnique({
+      where: { studentId: normalizedSearchId },
+      select: {
+        id: true,
+        studentId: true,
+        rfid_id: true,
+        firstName: true,
+        lastName: true,
+        middleInitial: true,
+      },
+    });
+    if (student) {
+      return student;
+    }
+  }
+
+  // If still not found, try adding leading zeros to match common patterns
+  // Common student ID lengths: 11 digits (e.g., 02000284909)
+  const targetLength = 11;
+  if (studentId.length < targetLength && /^\d+$/.test(studentId)) {
+    const paddedId = studentId.padStart(targetLength, "0");
+    student = await prisma.student.findUnique({
+      where: { studentId: paddedId },
+      select: {
+        id: true,
+        studentId: true,
+        rfid_id: true,
+        firstName: true,
+        lastName: true,
+        middleInitial: true,
+      },
+    });
+    if (student) {
+      return student;
+    }
+  }
+
+  // Try finding by removing leading zeros from database IDs
+  // This is a fallback - search all students and compare normalized IDs
+  // Note: This is less efficient, so we only do it if other methods fail
+  const allStudents = await prisma.student.findMany({
+    where: {
+      studentId: {
+        startsWith: normalizedSearchId,
+      },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      rfid_id: true,
+      firstName: true,
+      lastName: true,
+      middleInitial: true,
+    },
+  });
+
+  // Find student where normalized IDs match
+  for (const s of allStudents) {
+    const normalizedDbId = s.studentId.replace(/^0+/, "");
+    if (normalizedDbId === normalizedSearchId || normalizedDbId === studentId) {
+      return s;
+    }
+  }
+
+  return null;
+}
+
+// Helper function to parse full name
+// Expected format: "First Name M." or "First Name" (last name comes from database)
+function parseFullName(fullName: string) {
+  if (!fullName || !fullName.trim()) {
     return null;
   }
 
-  const lastName = parts[0];
-  const firstAndMiddle = parts[1].split(" ");
+  const trimmed = fullName.trim();
+  const parts = trimmed.split(" ");
 
-  const firstName = firstAndMiddle[0];
-  const middleInitial =
-    firstAndMiddle.length > 1
-      ? firstAndMiddle[firstAndMiddle.length - 1].replace(".", "")
-      : "";
+  // If only one part, it's just the first name
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      middleInitial: undefined,
+    };
+  }
 
-  return {
-    lastName,
-    firstName,
-    middleInitial: middleInitial || undefined,
-  };
+  // If multiple parts, last part is likely the middle initial
+  // Handle cases like "Juan A." or "Maria B" or "John Michael"
+  const firstName = parts.slice(0, -1).join(" "); // All parts except the last
+  const lastPart = parts[parts.length - 1];
+
+  // Check if last part looks like a middle initial (single letter, possibly with period)
+  const middleInitialMatch = lastPart.replace(".", "").trim();
+  const isMiddleInitial = middleInitialMatch.length === 1;
+
+  if (isMiddleInitial) {
+    return {
+      firstName: firstName,
+      middleInitial: middleInitialMatch,
+    };
+  } else {
+    // Last part is part of the first name (e.g., "John Michael")
+    return {
+      firstName: trimmed,
+      middleInitial: undefined,
+    };
+  }
 }
 
 export async function POST(
@@ -123,26 +229,39 @@ export async function POST(
         continue;
       }
 
-      // Parse the full name
+      // Parse the full name (first name and optional middle initial)
       const parsedName = parseFullName(fullName);
       if (!parsedName) {
         result.errors.push({
           studentNumber,
-          message: "Invalid name format. Expected: 'Last Name, First Name M.'",
+          message:
+            "Invalid name format. Expected: 'First Name' or 'First Name M.'",
         });
         result.detailedFeedback.push({
           row: rowNumber,
           studentNumber,
           fullName,
           status: "error",
-          message: "Invalid name format. Use: 'Last Name, First Name M.'",
+          message: "Invalid name format. Use: 'First Name' or 'First Name M.'",
         });
         continue;
       }
 
       try {
         // Check if student already enrolled in this course
-        if (enrolledStudentIds.has(studentNumber)) {
+        // Use flexible matching to handle leading zeros
+        const normalizedStudentNumber = studentNumber.replace(/^0+/, "");
+        const isEnrolled = Array.from(enrolledStudentIds).some((enrolledId) => {
+          const normalizedEnrolledId = enrolledId.replace(/^0+/, "");
+          return (
+            enrolledId === studentNumber ||
+            normalizedEnrolledId === normalizedStudentNumber ||
+            normalizedEnrolledId === studentNumber ||
+            enrolledId === normalizedStudentNumber
+          );
+        });
+
+        if (isEnrolled) {
           result.skipped++;
           result.detailedFeedback.push({
             row: rowNumber,
@@ -155,16 +274,9 @@ export async function POST(
         }
 
         // Find student in database and check for RFID
-        const existingStudent = await prisma.student.findUnique({
-          where: { studentId: studentNumber },
-          select: {
-            id: true,
-            studentId: true,
-            rfid_id: true,
-            firstName: true,
-            lastName: true,
-          },
-        });
+        // Last name comes from the database record
+        // Use flexible ID matching to handle leading zeros from Excel
+        const existingStudent = await findStudentByFlexibleId(studentNumber);
 
         if (!existingStudent) {
           // Student doesn't exist in database
@@ -177,6 +289,24 @@ export async function POST(
             message: "Student not found in database",
           });
           continue;
+        }
+
+        // Optional: Verify that the first name matches (case-insensitive)
+        // This helps catch data entry errors
+        const dbFirstName = existingStudent.firstName?.toLowerCase().trim();
+        const importFirstName = parsedName.firstName.toLowerCase().trim();
+        if (dbFirstName && dbFirstName !== importFirstName) {
+          // Names don't match, but we'll still proceed with a warning
+          // You can uncomment the continue below to skip mismatched names
+          // result.skipped++;
+          // result.detailedFeedback.push({
+          //   row: rowNumber,
+          //   studentNumber,
+          //   fullName,
+          //   status: "skipped",
+          //   message: `Name mismatch: Database has "${existingStudent.firstName}" but import has "${parsedName.firstName}"`,
+          // });
+          // continue;
         }
 
         if (!existingStudent.rfid_id) {

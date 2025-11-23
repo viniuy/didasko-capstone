@@ -37,6 +37,7 @@ interface Course {
 
 interface AllCoursesProps {
   type: "attendance" | "grading";
+  initialCourses?: any;
 }
 
 const CourseCard = ({
@@ -137,15 +138,18 @@ const useItemsPerPage = () => {
   return itemsPerPage;
 };
 
-export default function AllCourses({ type }: AllCoursesProps) {
+export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = useItemsPerPage();
 
-  // React Query hook
+  // React Query hook with initialData
   const { data: coursesData, isLoading: isLoadingCourses } = useActiveCourses({
-    facultyId: session?.user?.id,
+    filters: { facultyId: session?.user?.id },
+    initialData: initialCourses ? { courses: initialCourses } : undefined,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const coursesList = coursesData?.courses || [];

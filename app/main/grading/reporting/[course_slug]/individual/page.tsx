@@ -1,120 +1,90 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { GradingTable } from "@/features/grading/components/grading-table";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
-import { coursesService } from "@/lib/services/client";
+import { getCourseBySlug, getCourseStudents } from "@/lib/services";
+import { getCriteria } from "@/lib/services/criteria";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth-options";
+import { redirect, notFound } from "next/navigation";
+import { IndividualReportingPageClient } from "@/features/grading/components/individual-reporting-page-client";
 
-interface Course {
-  id: string;
-  code: string;
-  title: string;
-  section: string;
-  slug: string;
-}
-
-// Client Component
-function IndividualGradingContent({ course_slug }: { course_slug: string }) {
-  const [open, setOpen] = React.useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    new Date()
-  );
-  const [course, setCourse] = useState<Course | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchCourse = async () => {
-      try {
-        const course = await coursesService.getBySlug(course_slug);
-        setCourse(course);
-      } catch (error) {
-        console.error("Error fetching course:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (course_slug) {
-      fetchCourse();
-    }
-  }, [course_slug]);
-
-  return (
-    <SidebarProvider open={open} onOpenChange={setOpen}>
-      <div className="relative h-screen w-screen overflow-hidden">
-        <Header />
-        <AppSidebar />
-        <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
-          <div className="flex flex-col flex-grow px-4">
-            <div className="flex items-center justify-between mb-8">
-              <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
-                {loading ? "Individual Reporting" : "Individual Reporting"}
-              </h1>
-              <h1 className="text-2xl font-bold tracking-tight text-[#A0A0A0]">
-                {format(new Date(), "EEEE, MMMM d")}
-              </h1>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pb-6">
-              {loading ? (
-                <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px]">
-                  <div className="flex flex-col items-center gap-4 mt-40">
-                    <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
-                      Loading Individual Reporting Data...
-                    </h2>
-                    <p
-                      className="text-lg text-gray-600 animate-pulse"
-                      style={{ animationDelay: "150ms" }}
-                    >
-                      Please sit tight while we are getting things ready for
-                      you...
-                    </p>
-                    <div className="flex gap-2 mt-4">
-                      {[0, 150, 300].map((delay, i) => (
-                        <div
-                          key={i}
-                          className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
-                          style={{ animationDelay: `${delay}ms` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : !course ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-muted-foreground">Course not found</p>
-                </div>
-              ) : (
-                <GradingTable
-                  courseId={course.id}
-                  courseCode={course.code}
-                  courseSection={course.section}
-                  courseSlug={course.slug}
-                  selectedDate={selectedDate}
-                  onDateSelect={setSelectedDate}
-                />
-              )}
-            </div>
-          </div>
-
-          <Rightsidebar />
-        </main>
-      </div>
-    </SidebarProvider>
-  );
-}
-
-// Server Component
-export default function IndividualGradingPage({
+export default async function IndividualGradingPage({
   params,
 }: {
   params: Promise<{ course_slug: string }>;
 }) {
-  const { course_slug } = React.use(params);
-  return <IndividualGradingContent course_slug={course_slug} />;
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user) {
+    redirect("/");
+  }
+
+  const { course_slug } = await params;
+
+  // Fetch course, students, and criteria on the server
+  const [course, studentsData, criteria] = await Promise.all([
+    getCourseBySlug(course_slug),
+    getCourseStudents(course_slug),
+    getCriteria(course_slug), // Get non-recitation, non-group criteria
+  ]);
+
+  if (!course || !studentsData) {
+    notFound();
+  }
+
+  // Map students to match client component interface
+  const mappedStudents = studentsData.students.map((s) => ({
+    id: s.id,
+    studentId: s.studentId,
+    firstName: s.firstName,
+    lastName: s.lastName,
+    middleInitial: s.middleInitial ?? undefined,
+    image: s.image ?? undefined,
+  }));
+
+  // Map criteria to match client component interface
+  const mappedCriteria = (criteria || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    date: c.date instanceof Date ? c.date.toISOString() : c.date,
+    courseId: c.courseId,
+    userId: c.userId,
+    scoringRange:
+      typeof c.scoringRange === "string"
+        ? parseFloat(c.scoringRange)
+        : c.scoringRange,
+    passingScore:
+      typeof c.passingScore === "string"
+        ? parseFloat(c.passingScore)
+        : c.passingScore,
+    isGroupCriteria: c.isGroupCriteria,
+    isRecitationCriteria: c.isRecitationCriteria,
+    rubrics: (c.rubrics || []).map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      percentage:
+        typeof r.percentage === "string"
+          ? parseFloat(r.percentage)
+          : r.percentage,
+      criteriaId: r.criteriaId,
+    })),
+    user: c.user ? { name: c.user.name } : undefined,
+  }));
+
+  return (
+    <IndividualReportingPageClient
+      course={{
+        id: course.id,
+        code: course.code,
+        title: course.title,
+        section: course.section,
+        slug: course.slug,
+      }}
+      initialStudents={mappedStudents}
+      initialCriteria={mappedCriteria}
+    />
+  );
 }

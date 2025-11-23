@@ -70,11 +70,13 @@ import {
 interface CourseDashboardProps {
   courseSlug: string;
   backUrl?: string;
+  initialAnalyticsData?: any;
 }
 
 export function CourseDashboard({
   courseSlug,
   backUrl = "/main/course",
+  initialAnalyticsData,
 }: CourseDashboardProps) {
   const router = useRouter();
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
@@ -118,9 +120,13 @@ export function CourseDashboard({
     return () => window.removeEventListener("resize", checkWidth);
   }, []);
 
-  // React Query hooks
+  // React Query hooks with initialData
   const { data: analyticsData, isLoading: isLoadingAnalytics } =
-    useCourseAnalytics(courseSlug);
+    useCourseAnalytics(courseSlug, {
+      initialData: initialAnalyticsData,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    });
   const importStudentsMutation = useImportStudentsToCourse();
 
   // Update local state when React Query data changes
@@ -198,8 +204,32 @@ export function CourseDashboard({
     []
   );
 
+  // Filter table data based on global search query
+  const filteredTableData = useMemo(() => {
+    if (!globalSearchQuery.trim()) {
+      return tableData;
+    }
+
+    const searchValue = globalSearchQuery.toLowerCase();
+    return tableData.filter((student) => {
+      const studentId = (student.studentId || "").toLowerCase();
+      const firstName = (student.firstName || "").toLowerCase();
+      const lastName = (student.lastName || "").toLowerCase();
+      const middleInitial = (student.middleInitial || "").toLowerCase();
+
+      return (
+        studentId.includes(searchValue) ||
+        firstName.includes(searchValue) ||
+        lastName.includes(searchValue) ||
+        middleInitial.includes(searchValue) ||
+        `${firstName} ${lastName}`.includes(searchValue) ||
+        `${lastName}, ${firstName}`.includes(searchValue)
+      );
+    });
+  }, [tableData, globalSearchQuery]);
+
   const table = useReactTable({
-    data: tableData,
+    data: filteredTableData,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -228,14 +258,13 @@ export function CourseDashboard({
           },
         ],
       });
-      // Data will be refetched automatically by React Query
+      // Data will be refetched automatically by React Query (analytics query is invalidated)
       // Dispatch custom event to refresh sidebar components
       window.dispatchEvent(
         new CustomEvent("courseStudentsUpdated", {
           detail: { courseSlug },
         })
       );
-      toast.success("Student added successfully!");
       setShowAddSheet(false);
     } catch (error: any) {
       throw new Error(error?.response?.data?.error || "Failed to add student");
@@ -244,18 +273,27 @@ export function CourseDashboard({
 
   const handleBackNavigation = () => {
     setIsRedirecting(true);
+    // Use router.push with a slight delay to show loading state
     setTimeout(() => {
       router.push(backUrl);
-    }, 10);
+    }, 50);
   };
 
-  if (isLoading)
+  // Show loading spinner when redirecting or when initial data is loading
+  if (isLoading || isRedirecting) {
     return (
       <LoadingSpinner
-        mainMessage="Loading Course Details"
-        secondaryMessage="Please sit tight while we are getting things ready for you..."
+        mainMessage={
+          isRedirecting ? "Loading Courses..." : "Loading Course Details"
+        }
+        secondaryMessage={
+          isRedirecting
+            ? "Please wait while we redirect you back to the courses page..."
+            : "Please sit tight while we are getting things ready for you..."
+        }
       />
     );
+  }
 
   if (!courseInfo || !stats) {
     return (
@@ -314,7 +352,6 @@ export function CourseDashboard({
                 value={globalSearchQuery}
                 onChange={(e) => {
                   setGlobalSearchQuery(e.target.value);
-                  table.getColumn("lastName")?.setFilterValue(e.target.value);
                 }}
                 className="pl-9"
               />

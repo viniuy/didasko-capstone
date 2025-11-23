@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { gradingService } from "@/lib/services/client";
@@ -328,12 +330,46 @@ interface Student {
   image?: string | null;
 }
 
+interface ClassRecordData {
+  students: Array<{
+    id: string;
+    studentId: string;
+    firstName: string;
+    lastName: string;
+    middleInitial: string | null;
+    image: string | null;
+  }>;
+  termConfigs: Record<string, TermConfig> | null;
+  assessmentScores: Record<string, any>;
+  criteriaLinks: {
+    recitations?: Array<{
+      id: string;
+      name: string;
+      date: string | null;
+      maxScore: number;
+    }>;
+    groupReportings?: Array<{
+      id: string;
+      name: string;
+      date: string | null;
+      maxScore: number;
+    }>;
+    individualReportings?: Array<{
+      id: string;
+      name: string;
+      date: string | null;
+      maxScore: number;
+    }>;
+  } | null;
+}
+
 interface ClassRecordTableProps {
   courseSlug: string;
   courseCode: string;
   courseSection: string;
   courseTitle: string;
-  courseNumber: Int16Array;
+  courseNumber: number;
+  initialData?: ClassRecordData;
 }
 
 const TERM_WEIGHTS = {
@@ -408,6 +444,7 @@ export function ClassRecordTable({
   courseSection,
   courseTitle,
   courseNumber,
+  initialData,
 }: ClassRecordTableProps) {
   const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
@@ -592,85 +629,95 @@ export function ClassRecordTable({
     toast.error(message, { id: `toast:${message}` });
   };
 
+  // Initialize data from props or fetch on mount
   useEffect(() => {
-    const load = async () => {
-      if (!courseSlug) return;
-      setLoading(true);
-      try {
-        const classRecordData = await gradingService.getClassRecordData(
-          courseSlug
-        );
-        const studentList = classRecordData.students || [];
-        setStudents(studentList);
-        if (
-          classRecordData.termConfigs &&
-          Object.keys(classRecordData.termConfigs).length > 0
-        ) {
-          setTermConfigs(classRecordData.termConfigs);
-          setHasTermConfigs(true);
-        } else {
-          setHasTermConfigs(false);
-        }
-        // Convert assessment scores object to Map format
-        const assessmentScoresMap = new Map<string, StudentScore>();
-        const assessmentScoresData = classRecordData.assessmentScores || {};
-        Object.entries(assessmentScoresData).forEach(
-          ([key, value]: [string, any]) => {
-            assessmentScoresMap.set(key, {
-              studentId: value.studentId,
-              assessmentId: value.assessmentId,
-              score: value.score,
-            });
-          }
-        );
-        setScores(assessmentScoresMap);
-        const {
-          recitations = [],
-          groupReportings = [],
-          individualReportings = [],
-        } = classRecordData.criteriaLinks || {};
-        const recitationList = recitations.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          date: item.date,
-          maxScore: item.maxScore,
-          type: "RECITATION" as const,
-        }));
-        const groupList = groupReportings.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          date: item.date,
-          maxScore: item.maxScore,
-          type: "GROUP_REPORTING" as const,
-        }));
-        const individualList = individualReportings.map((item: any) => ({
-          id: item.id,
-          name: item.name,
-          date: item.date,
-          maxScore: item.maxScore,
-          type: "INDIVIDUAL_REPORTING" as const,
-        }));
-        setAvailableCriteria([
-          ...recitationList,
-          ...groupList,
-          ...individualList,
-        ]);
-        const scoresMap = new Map(
-          Object.entries(classRecordData.assessmentScores || {}).map(
-            ([key, value]: [string, any]) => [key, value]
-          )
-        );
-        setScores(scoresMap);
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      } catch (err) {
-        console.error("Error loading data:", err);
-        toast.error("Failed to load class records");
-      } finally {
-        setLoading(false);
+    const initializeData = (classRecordData: ClassRecordData) => {
+      const studentList = classRecordData.students || [];
+      setStudents(studentList);
+      if (
+        classRecordData.termConfigs &&
+        Object.keys(classRecordData.termConfigs).length > 0
+      ) {
+        setTermConfigs(classRecordData.termConfigs);
+        setHasTermConfigs(true);
+      } else {
+        setHasTermConfigs(false);
       }
+      // Convert assessment scores object to Map format
+      const assessmentScoresMap = new Map<string, StudentScore>();
+      const assessmentScoresData = classRecordData.assessmentScores || {};
+      Object.entries(assessmentScoresData).forEach(
+        ([key, value]: [string, any]) => {
+          assessmentScoresMap.set(key, {
+            studentId: value.studentId,
+            assessmentId: value.assessmentId,
+            score: value.score,
+          });
+        }
+      );
+      setScores(assessmentScoresMap);
+      const {
+        recitations = [],
+        groupReportings = [],
+        individualReportings = [],
+      } = classRecordData.criteriaLinks || {};
+      const recitationList = recitations.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        date: item.date,
+        maxScore: item.maxScore,
+        type: "RECITATION" as const,
+      }));
+      const groupList = groupReportings.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        date: item.date,
+        maxScore: item.maxScore,
+        type: "GROUP_REPORTING" as const,
+      }));
+      const individualList = individualReportings.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        date: item.date,
+        maxScore: item.maxScore,
+        type: "INDIVIDUAL_REPORTING" as const,
+      }));
+      setAvailableCriteria([
+        ...recitationList,
+        ...groupList,
+        ...individualList,
+      ]);
     };
-    load();
-  }, [courseSlug]);
+
+    // Use initialData if provided, otherwise fetch
+    if (initialData) {
+      setLoading(true);
+      initializeData(initialData);
+      // Small delay for smooth transition
+      setTimeout(() => setLoading(false), 300);
+    } else {
+      // Fallback: fetch data if initialData not provided (for backward compatibility)
+      const load = async () => {
+        if (!courseSlug) return;
+        setLoading(true);
+        try {
+          const classRecordData = await gradingService.getClassRecordData(
+            courseSlug
+          );
+          if (classRecordData) {
+            initializeData(classRecordData);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        } catch (err) {
+          console.error("Error loading data:", err);
+          toast.error("Failed to load class records");
+        } finally {
+          setLoading(false);
+        }
+      };
+      load();
+    }
+  }, [courseSlug, initialData]);
 
   useEffect(() => {
     const hasSeenTutorial = localStorage.getItem(
@@ -725,6 +772,22 @@ export function ClassRecordTable({
 
     // Create a copy of pending scores before clearing
     const gradesToSave = Array.from(pendingScoresRef.current.values());
+
+    // Validate grades before sending
+    const validGrades = gradesToSave.filter((g) => {
+      if (g.score === null) return true; // null is valid (delete)
+      if (typeof g.score !== "number" || isNaN(g.score)) return false;
+      if (g.score < 0) return false;
+      if (!g.studentId || !g.assessmentId) return false;
+      return true;
+    });
+
+    if (validGrades.length === 0) {
+      // No valid grades to save, just clear pending
+      pendingScoresRef.current.clear();
+      return;
+    }
+
     const pendingScoresBackup = new Map(pendingScoresRef.current);
 
     // Clear pending scores optimistically
@@ -732,7 +795,7 @@ export function ClassRecordTable({
 
     try {
       toast.loading("Saving grades...", { id: "save-grades" });
-      await gradingService.saveAssessmentScoresBulk(courseSlug, gradesToSave);
+      await gradingService.saveAssessmentScoresBulk(courseSlug, validGrades);
       toast.success("Grades saved successfully", { id: "save-grades" });
 
       // Dispatch event to refresh leaderboard seamlessly
@@ -741,13 +804,20 @@ export function ClassRecordTable({
           detail: { courseSlug },
         })
       );
-    } catch (error) {
+    } catch (error: any) {
       // Restore pending scores on failure to prevent data loss
       pendingScoresRef.current = pendingScoresBackup;
-      toast.error("Failed to save grades. Please try again.", {
+
+      const errorMessage =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to save grades. Please try again.";
+
+      toast.error(errorMessage, {
         id: "save-grades",
       });
       console.error("Error saving grades:", error);
+      console.error("Grades that failed to save:", validGrades);
 
       // Re-queue the save after a delay
       if (saveTimeoutRef.current) {
@@ -1026,19 +1096,32 @@ export function ClassRecordTable({
         ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
         : null;
 
-    // Calculate weighted scores using percentages (already transmuted)
-    // Only calculate if we have valid averages (not null)
-    const ptWeighted = ptAvg !== null ? (ptAvg / 100) * config.ptWeight : null;
+    // Calculate weighted scores independently:
+    // PT weighted is calculated if ALL PT assessments have scores
+    // Quiz weighted is calculated if ALL Quiz assessments have scores
+    // Exam weighted is calculated if Exam has a score
+    const hasAllPTScores =
+      ptAssessments.length === 0 ||
+      (ptPercentages.length === ptAssessments.length && ptAvg !== null);
+    const hasAllQuizScores =
+      quizAssessments.length === 0 ||
+      (quizPercentages.length === quizAssessments.length && quizAvg !== null);
+    const hasExamScore = !examAssessment || examPercentage !== null;
+
+    const ptWeighted =
+      hasAllPTScores && ptAvg !== null ? (ptAvg / 100) * config.ptWeight : null;
     const quizWeighted =
-      quizAvg !== null ? (quizAvg / 100) * config.quizWeight : null;
+      hasAllQuizScores && quizAvg !== null
+        ? (quizAvg / 100) * config.quizWeight
+        : null;
     const examWeighted =
-      examPercentage !== null
+      hasExamScore && examPercentage !== null
         ? (examPercentage / 100) * config.examWeight
         : null;
 
     // Only calculate total if we have all required scores
-    // If PT assessments exist, we need PT scores
-    // If Quiz assessments exist, we need Quiz scores
+    // If PT assessments exist, we need ALL PT scores
+    // If Quiz assessments exist, we need ALL Quiz scores
     // If Exam assessment exists, we need Exam score
     const hasRequiredPTScores =
       ptAssessments.length === 0 || ptWeighted !== null;
@@ -1046,21 +1129,20 @@ export function ClassRecordTable({
       quizAssessments.length === 0 || quizWeighted !== null;
     const hasRequiredExamScore = !examAssessment || examWeighted !== null;
 
-    if (
-      !hasRequiredPTScores ||
-      !hasRequiredQuizScores ||
-      !hasRequiredExamScore
-    ) {
-      return null;
-    }
-
+    // Calculate total only if all required components are present
     const totalPercent =
-      (ptWeighted ?? 0) + (quizWeighted ?? 0) + (examWeighted ?? 0);
+      hasRequiredPTScores && hasRequiredQuizScores && hasRequiredExamScore
+        ? (ptWeighted ?? 0) + (quizWeighted ?? 0) + (examWeighted ?? 0)
+        : null;
+
     return {
-      totalPercent: totalPercent.toFixed(2),
-      numericGrade: hasScoreExceedingMax
-        ? "(error)"
-        : getNumericGrade(totalPercent),
+      totalPercent: totalPercent !== null ? totalPercent.toFixed(2) : "-",
+      numericGrade:
+        totalPercent !== null
+          ? hasScoreExceedingMax
+            ? "(error)"
+            : getNumericGrade(totalPercent)
+          : "-",
       ptWeighted: ptWeighted !== null ? ptWeighted.toFixed(2) : "-",
       quizWeighted: quizWeighted !== null ? quizWeighted.toFixed(2) : "-",
       examWeighted: examWeighted !== null ? examWeighted.toFixed(2) : "-",

@@ -126,7 +126,16 @@ export async function getCourseStudentsWithAttendance(
   // Get course ID first
   const course = await prisma.course.findUnique({
     where: { slug: courseSlug },
-    select: { id: true, code: true, section: true },
+    select: {
+      id: true,
+      code: true,
+      section: true,
+      title: true,
+      semester: true,
+      academicYear: true,
+      status: true,
+      slug: true,
+    },
   });
 
   if (!course) return null;
@@ -143,6 +152,7 @@ export async function getCourseStudentsWithAttendance(
           lastName: true,
           middleInitial: true,
           image: true,
+          rfid_id: true,
           attendance: {
             where: {
               courseId: course.id,
@@ -200,6 +210,7 @@ export async function getCourseStudentsWithAttendance(
       lastName: student.lastName,
       middleInitial: student.middleInitial,
       image: student.image || undefined,
+      rfid_id: student.rfid_id ?? null, // Include rfid_id in the response
       status: student.attendance[0]?.status || "NOT_SET",
       attendanceRecords: student.attendance,
       reportingScore: latestGradeScore?.reportingScore ?? 0,
@@ -213,9 +224,47 @@ export async function getCourseStudentsWithAttendance(
 
   return {
     course: {
+      id: courseWithData.id,
       code: courseWithData.code,
       section: courseWithData.section,
+      title: courseWithData.title,
+      semester: courseWithData.semester,
+      academicYear: courseWithData.academicYear,
+      status: courseWithData.status,
+      slug: courseSlug,
     },
+    students,
+  };
+}
+
+// Get course students (simple version - just students, no attendance/gradeScores)
+// Note: Not cached to ensure fresh data after saves
+export async function getCourseStudents(courseSlug: string, date?: Date) {
+  const course = await prisma.course.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
+
+  if (!course) return null;
+
+  const students = await prisma.student.findMany({
+    where: {
+      coursesEnrolled: {
+        some: { id: course.id },
+      },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      firstName: true,
+      lastName: true,
+      middleInitial: true,
+      image: true,
+    },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  });
+
+  return {
     students,
   };
 }

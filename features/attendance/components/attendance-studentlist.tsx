@@ -79,6 +79,8 @@ import {
   useCreateStudent,
   useImportStudentsToCourse,
 } from "@/lib/hooks/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/queries/queryKeys";
 
 // Add interface for Excel data
 interface ExcelRow {
@@ -326,17 +328,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return selectedDateStr ? attendanceDateSet.has(selectedDateStr) : false;
   }, [selectedDateStr, attendanceDateSet]);
 
-  const studentByRfidMap = useMemo(() => {
-    const map = new Map<string, Student>();
-    studentList.forEach((student) => {
-      if (student.rfid) {
-        const normalized = student.rfid.replace(/\s+/g, "").toUpperCase();
-        map.set(normalized, student);
-      }
-    });
-    return map;
-  }, [studentList]);
-
   const attendanceTimeout = useMemo(() => {
     if (!timeIn || !timeOut || !attendanceStartTime) return 0;
 
@@ -380,10 +371,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   };
 
   // React Query hooks for data fetching
+  const queryClient = useQueryClient();
   const { data: studentsData, isLoading: isLoadingStudents } =
     useStudentsByCourse(courseSlug, selectedDate || undefined);
+  // Ensure we always have a valid date string for the attendance query
+  const attendanceDateStr = selectedDateStr || format(new Date(), "yyyy-MM-dd");
   const { data: attendanceData, isLoading: isLoadingAttendance } =
-    useAttendanceByCourse(courseSlug, selectedDateStr || "", { limit: 1000 });
+    useAttendanceByCourse(courseSlug, attendanceDateStr, { limit: 1000 });
   const { data: attendanceStatsData } = useAttendanceStats(courseSlug);
   const { data: attendanceDatesData } = useAttendanceDates(courseSlug);
 
@@ -397,14 +391,90 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   // Update local state when React Query data changes
   useEffect(() => {
     if (studentsData?.students) {
-      const students = studentsData.students.map((student: any) => ({
-        ...student,
-        name: `${student.lastName}, ${student.firstName}${
-          student.middleInitial ? ` ${student.middleInitial}.` : ""
-        }`,
-        status: "NOT_SET" as AttendanceStatusWithNotSet,
-        attendanceRecords: [],
-      }));
+      // Initialize attendance map from attendanceData if available
+      const attendanceMap = new Map<string, AttendanceRecord>();
+      if (
+        attendanceData?.attendance &&
+        Array.isArray(attendanceData.attendance) &&
+        selectedDateStr
+      ) {
+        attendanceData.attendance.forEach((record: any) => {
+          attendanceMap.set(record.studentId, record);
+        });
+      }
+
+      const students = studentsData.students.map((student: any) => {
+        const record = attendanceMap.get(student.id);
+
+        // Convert rfid_id (Int? - nullable integer) to rfid (string) for RFID scanner compatibility
+        // Schema: rfid_id is Int? (nullable integer) in the database
+        let rfid: string | undefined = undefined;
+
+        // Check if rfid_id exists and is a valid number
+        if (student.rfid_id != null) {
+          // rfid_id is Int? so it should be a number when not null
+          // Convert to string for RFID scanner (scanners typically send strings)
+          const rfidValue =
+            typeof student.rfid_id === "number"
+              ? student.rfid_id
+              : typeof student.rfid_id === "string"
+              ? parseInt(student.rfid_id, 10)
+              : null;
+
+          // Only set rfid if we have a valid number
+          if (rfidValue != null && !isNaN(rfidValue)) {
+            rfid = String(rfidValue);
+          }
+        }
+
+        // Debug: Log rfid_id to see what we're getting (only in development)
+        if (process.env.NODE_ENV === "development") {
+          console.log("Student RFID mapping:", {
+            studentId: student.studentId,
+            name: `${student.lastName}, ${student.firstName}`,
+            rfid_id_raw: student.rfid_id,
+            rfid_id_type: typeof student.rfid_id,
+            rfid_id_is_null: student.rfid_id === null,
+            rfid_id_is_undefined: student.rfid_id === undefined,
+            rfid_final: rfid,
+            has_rfid: !!rfid,
+          });
+        }
+
+        return {
+          ...student,
+          name: `${student.lastName}, ${student.firstName}${
+            student.middleInitial ? ` ${student.middleInitial}.` : ""
+          }`,
+          rfid: rfid,
+          status: (record?.status || "NOT_SET") as AttendanceStatusWithNotSet,
+          attendanceRecords: record
+            ? [
+                {
+                  id: record.id,
+                  studentId: student.id,
+                  courseId: studentsData.course?.id || "",
+                  status: record.status,
+                  date: selectedDateStr || "",
+                  reason: record.reason,
+                },
+              ]
+            : [],
+        };
+      });
+
+      // Debug: Log final student list to verify rfid is set
+      if (process.env.NODE_ENV === "development") {
+        console.log(
+          "Final student list with RFID:",
+          students.map((s: Student) => ({
+            name: s.name,
+            rfid: s.rfid,
+            hasRfid: !!s.rfid,
+          }))
+        );
+      }
+
       setStudentList(students);
       if (studentsData.course) {
         setCourseInfo({
@@ -420,16 +490,58 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         });
       }
     }
-  }, [studentsData]);
+  }, [studentsData, attendanceData, selectedDateStr]);
+
+  // Create RFID map after studentsData is available
+  const studentByRfidMap = useMemo(() => {
+    const map = new Map<string, Student>();
+    studentList.forEach((student) => {
+      // Use rfid from student (which is mapped from rfid_id)
+      if (student.rfid) {
+        const normalized = student.rfid.replace(/\s+/g, "").toUpperCase();
+        // Store both the normalized version and the numeric version (without leading zeros)
+        // to handle different RFID scanner formats
+        map.set(normalized, student);
+        const numeric = normalized.replace(/^0+/, "") || normalized;
+        if (numeric !== normalized) {
+          map.set(numeric, student);
+        }
+      }
+      // Also check raw rfid_id from studentsData if available (fallback)
+      if (studentsData?.students) {
+        const rawStudent = studentsData.students.find(
+          (s: any) => s.id === student.id
+        );
+        if (rawStudent?.rfid_id && !student.rfid) {
+          // If student.rfid is missing but rfid_id exists, use it
+          const rfidStr = String(rawStudent.rfid_id);
+          const normalized = rfidStr.replace(/\s+/g, "").toUpperCase();
+          map.set(normalized, student);
+          const numeric = normalized.replace(/^0+/, "") || normalized;
+          if (numeric !== normalized) {
+            map.set(numeric, student);
+          }
+        }
+      }
+    });
+    return map;
+  }, [studentList, studentsData]);
 
   useEffect(() => {
-    if (attendanceData?.attendance && selectedDateStr) {
-      const attendanceMap = new Map<string, AttendanceRecord>(
-        attendanceData.attendance.map((record: any) => [
-          record.studentId,
-          record,
-        ])
-      );
+    // Always update student list when attendance data changes, even if empty
+    // This ensures attendance status is properly set on first load
+    if (selectedDateStr && studentList.length > 0) {
+      const attendanceMap = new Map<string, AttendanceRecord>();
+
+      // Only create map if attendance data exists
+      if (
+        attendanceData?.attendance &&
+        Array.isArray(attendanceData.attendance)
+      ) {
+        attendanceData.attendance.forEach((record: any) => {
+          attendanceMap.set(record.studentId, record);
+        });
+      }
 
       setStudentList((prevStudents) =>
         prevStudents.map((student) => {
@@ -454,7 +566,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
       setUnsavedChanges({});
     }
-  }, [attendanceData, selectedDateStr, courseInfo?.id]);
+  }, [attendanceData, selectedDateStr, courseInfo?.id, studentList.length]);
 
   useEffect(() => {
     if (attendanceStatsData) {
@@ -479,6 +591,33 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     setIsLoading(isLoadingStudents || isLoadingAttendance);
     setIsDateLoading(isLoadingAttendance);
   }, [isLoadingStudents, isLoadingAttendance]);
+
+  // Refetch attendance data when date changes for real-time updates
+  // Only refetch if date actually changed (not on initial mount)
+  const prevDateRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedDateStr && courseSlug) {
+      // Only refetch if this is a date change, not initial load
+      if (
+        prevDateRef.current !== null &&
+        prevDateRef.current !== selectedDateStr
+      ) {
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.byCourse(courseSlug),
+        });
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.dates(courseSlug),
+        });
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.stats(courseSlug),
+        });
+        queryClient.refetchQueries({
+          queryKey: queryKeys.students.byCourse(courseSlug),
+        });
+      }
+      prevDateRef.current = selectedDateStr;
+    }
+  }, [selectedDateStr, courseSlug, queryClient]);
 
   // Data fetching is now handled by React Query hooks above
 
@@ -731,6 +870,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         })
       );
 
+      // Immediately refetch all attendance-related data for real-time updates
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.byCourse(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.dates(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.stats(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.students.byCourse(courseSlug),
+        }),
+      ]);
+
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
 
@@ -897,6 +1052,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
         setPendingUpdates({});
         latestUpdateRef.current = null;
+
+        // Immediately refetch all attendance-related data for real-time updates
+        await Promise.all([
+          queryClient.refetchQueries({
+            queryKey: queryKeys.attendance.byCourse(courseSlug),
+          }),
+          queryClient.refetchQueries({
+            queryKey: queryKeys.attendance.dates(courseSlug),
+          }),
+          queryClient.refetchQueries({
+            queryKey: queryKeys.attendance.stats(courseSlug),
+          }),
+          queryClient.refetchQueries({
+            queryKey: queryKeys.students.byCourse(courseSlug),
+          }),
+        ]);
 
         // Dispatch event to update right sidebar
         dispatchAttendanceUpdate();
@@ -1334,18 +1505,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       return;
     }
 
-    const promise = clearAttendanceMutation.mutateAsync({
-      courseSlug,
-      date: dateStr,
-    });
-
-    toast.promise(promise, {
-      loading: "Clearing attendance...",
-      success: "Attendance cleared successfully",
-      error: "Failed to clear attendance",
-    });
-
     try {
+      // Optimistically update UI first
       setStudentList((prev) =>
         prev.map((student) => ({
           ...student,
@@ -1356,9 +1517,34 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }))
       );
 
-      await promise;
+      // Clear attendance via mutation
+      await clearAttendanceMutation.mutateAsync({
+        courseSlug,
+        date: dateStr,
+      });
+
       setShowClearConfirm(false);
       setClearConfirmText("");
+
+      // Show success toast
+      toast.success("Attendance cleared successfully");
+
+      // Immediately refetch all attendance-related data for real-time updates
+      // Use the specific date in the query key to ensure correct refetch
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: [...queryKeys.attendance.byCourse(courseSlug), dateStr],
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.dates(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.stats(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.students.byCourse(courseSlug),
+        }),
+      ]);
 
       setAttendanceDates((prev) =>
         prev.filter((d) => format(d, "yyyy-MM-dd") !== dateStr)
@@ -1573,21 +1759,78 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     async (rfid: string) => {
       if (!attendanceStartTime || !selectedDate || isProcessingRfid) return;
 
+      // Debug: Log the RFID value received
+      if (process.env.NODE_ENV === "development") {
+        console.log("processRfidAttendance called with:", {
+          rfid,
+          length: rfid.length,
+          type: typeof rfid,
+        });
+      }
+
       setIsProcessingRfid(true);
 
       try {
+        // Normalize scanned RFID: remove spaces, convert to uppercase, and handle numeric strings
         const normalized = rfid.replace(/\s+/g, "").toUpperCase();
-        let student = studentByRfidMap.get(normalized); // O(1) lookup
+
+        // Debug: Log normalized value
+        if (process.env.NODE_ENV === "development") {
+          console.log("Normalized RFID:", {
+            original: rfid,
+            normalized,
+            length: normalized.length,
+          });
+        }
+        // Also try numeric comparison (remove leading zeros for comparison)
+        const numericScanned = normalized.replace(/^0+/, "") || normalized;
+
+        // First, try to find in the map (fastest lookup)
+        let student = studentByRfidMap.get(normalized);
 
         // If not found in map, search through studentList directly
-        // This handles cases where RFID might not be set initially
+        // This handles cases where RFID might not be set initially or format differences
         if (!student) {
           student = studentList.find((s) => {
-            if (!s.rfid) return false;
-            const studentRfidNormalized = s.rfid
+            // Check both rfid (mapped from rfid_id) and also check studentsData for raw rfid_id
+            const studentRfid = s.rfid;
+            if (!studentRfid) return false;
+
+            const studentRfidNormalized = studentRfid
               .replace(/\s+/g, "")
               .toUpperCase();
-            return studentRfidNormalized === normalized;
+            const numericStudent =
+              studentRfidNormalized.replace(/^0+/, "") || studentRfidNormalized;
+
+            // Try both exact match and numeric match (handles leading zeros)
+            const matches =
+              studentRfidNormalized === normalized ||
+              numericStudent === numericScanned ||
+              studentRfidNormalized === numericScanned ||
+              numericStudent === normalized;
+
+            // Also check raw rfid_id from studentsData if available
+            if (!matches && studentsData?.students) {
+              const rawStudent = studentsData.students.find(
+                (st: any) => st.id === s.id
+              );
+              if (rawStudent?.rfid_id) {
+                const rawRfidStr = String(rawStudent.rfid_id);
+                const rawRfidNormalized = rawRfidStr
+                  .replace(/\s+/g, "")
+                  .toUpperCase();
+                const rawNumeric =
+                  rawRfidNormalized.replace(/^0+/, "") || rawRfidNormalized;
+                return (
+                  rawRfidNormalized === normalized ||
+                  rawNumeric === numericScanned ||
+                  rawRfidNormalized === numericScanned ||
+                  rawNumeric === normalized
+                );
+              }
+            }
+
+            return matches;
           });
 
           // If found, update the student's RFID in the list to ensure consistency
@@ -1599,6 +1842,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }
 
         if (!student) {
+          // Log for debugging
+          console.log("RFID scan failed:", {
+            scannedRfid: rfid,
+            normalized,
+            numericScanned,
+            studentListRfids: studentList.map((s) => ({
+              id: s.id,
+              name: s.name,
+              rfid: s.rfid,
+            })),
+            studentsDataRfids: studentsData?.students?.map((s: any) => ({
+              id: s.id,
+              name: `${s.lastName}, ${s.firstName}`,
+              rfid_id: s.rfid_id,
+            })),
+          });
           toast.error("Student not found in this course for this RFID", {
             duration: 2000,
           });
@@ -1669,43 +1928,65 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       studentByRfidMap,
       isInGracePeriod,
       studentList,
+      studentsData,
     ]
   );
 
   const handleRfidInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
 
+    // Debug: Log what we're receiving
+    if (process.env.NODE_ENV === "development") {
+      console.log("RFID input received:", {
+        value,
+        length: value.length,
+        isScanning,
+        currentInputRef: rfidInputRef.current?.value,
+      });
+    }
+
+    // Clear any existing timeout
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
     }
 
+    // Update the input value immediately
+    setRfidInput(value);
+
+    // If this is the first character, start scanning mode
     if (value.length === 1 && !isScanning) {
-      setRfidInput(value);
       setIsScanning(true);
-      return;
     }
 
-    if (isScanning) {
-      setRfidInput(value);
+    // RFID scanners typically send data very quickly (all at once)
+    // Wait for a short period after the last character to ensure we have the complete scan
+    // Use a longer timeout to ensure we capture the full RFID value (10+ digits)
+    scanTimeoutRef.current = setTimeout(async () => {
+      // Get the current value from the input ref to ensure we have the latest
+      // This is important because the value might have changed between the event and now
+      const currentValue = rfidInputRef.current?.value || value;
 
-      if (value.length >= 10) {
-        await processRfidAttendance(value);
-        setIsScanning(false);
-
-        if (rfidInputRef.current) {
-          rfidInputRef.current.value = "";
-        }
-        setRfidInput("");
-      } else {
-        scanTimeoutRef.current = setTimeout(() => {
-          setIsScanning(false);
-          setRfidInput("");
-          if (rfidInputRef.current) {
-            rfidInputRef.current.value = "";
-          }
-        }, 500);
+      // Debug: Log what we're processing
+      if (process.env.NODE_ENV === "development") {
+        console.log("Processing RFID:", {
+          originalValue: value,
+          currentValue,
+          currentValueLength: currentValue.length,
+        });
       }
-    }
+
+      if (currentValue && currentValue.length > 0) {
+        // Process the complete RFID value
+        await processRfidAttendance(currentValue);
+      }
+
+      // Reset scanning state
+      setIsScanning(false);
+      setRfidInput("");
+      if (rfidInputRef.current) {
+        rfidInputRef.current.value = "";
+      }
+    }, 500); // Increased timeout to 500ms to ensure full RFID is captured (for 10+ digit RFIDs)
   };
 
   const batchUpdateAttendance = async (overrideUpdates?: {
@@ -1797,6 +2078,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       });
 
       await updatePromise;
+
+      // Immediately refetch all attendance-related data for real-time updates
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.byCourse(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.dates(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.stats(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.students.byCourse(courseSlug),
+        }),
+      ]);
 
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
@@ -1936,6 +2233,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       await promise;
       setShowMarkAllConfirm(false);
 
+      // Immediately refetch all attendance-related data for real-time updates
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.byCourse(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.dates(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.stats(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.students.byCourse(courseSlug),
+        }),
+      ]);
+
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
     } catch (error) {
@@ -2008,6 +2321,22 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
 
       await promise;
+
+      // Immediately refetch all attendance-related data for real-time updates
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.byCourse(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.dates(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.attendance.stats(courseSlug),
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.students.byCourse(courseSlug),
+        }),
+      ]);
 
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
@@ -3071,14 +3400,26 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               image: undefined,
               studentId: "",
             });
-            setTimeout(() => {
+            // Focus the input with multiple attempts to ensure it works
+            const focusInput = () => {
               if (rfidInputRef.current) {
                 rfidInputRef.current.focus();
+                rfidInputRef.current.select();
               }
-            }, 0);
+            };
+            // Try focusing immediately and after a short delay
+            focusInput();
+            setTimeout(focusInput, 50);
+            setTimeout(focusInput, 100);
+            setTimeout(focusInput, 200);
           } else {
             setIsScanning(false);
             setRfidPreviewStudent(null);
+            // Clear input when closing
+            if (rfidInputRef.current) {
+              rfidInputRef.current.value = "";
+            }
+            setRfidInput("");
           }
         }}
       >
@@ -3099,19 +3440,76 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <input
                   ref={rfidInputRef}
                   type="text"
+                  autoFocus
                   value={rfidInput}
                   onChange={handleRfidInput}
                   onKeyDown={(e) => {
+                    // Handle Enter key to process RFID immediately
                     if (e.key === "Enter" && rfidInputRef.current) {
+                      e.preventDefault();
                       const value = rfidInputRef.current.value.trim();
                       if (value) {
+                        // Clear any pending timeout
+                        if (scanTimeoutRef.current) {
+                          clearTimeout(scanTimeoutRef.current);
+                        }
                         processRfidAttendance(value);
                         rfidInputRef.current.value = "";
                         setRfidInput("");
+                        setIsScanning(false);
                       }
                     }
                   }}
-                  className="absolute -left-[9999px]"
+                  onInput={(e) => {
+                    // Handle input events (some scanners use this instead of onChange)
+                    const target = e.target as HTMLInputElement;
+                    if (target.value) {
+                      // Debug: Log input event
+                      if (process.env.NODE_ENV === "development") {
+                        console.log("RFID onInput event:", {
+                          value: target.value,
+                          length: target.value.length,
+                        });
+                      }
+                      setRfidInput(target.value);
+                      // Clear and reset timeout
+                      if (scanTimeoutRef.current) {
+                        clearTimeout(scanTimeoutRef.current);
+                      }
+                      scanTimeoutRef.current = setTimeout(async () => {
+                        const currentValue =
+                          rfidInputRef.current?.value || target.value;
+                        if (currentValue && currentValue.length > 0) {
+                          await processRfidAttendance(currentValue);
+                        }
+                        setIsScanning(false);
+                        setRfidInput("");
+                        if (rfidInputRef.current) {
+                          rfidInputRef.current.value = "";
+                        }
+                      }, 500); // Increased to 500ms to match onChange handler
+                    }
+                  }}
+                  onPaste={(e) => {
+                    // Handle paste events (some scanners use paste)
+                    e.preventDefault();
+                    const pastedValue = e.clipboardData.getData("text").trim();
+                    if (pastedValue) {
+                      processRfidAttendance(pastedValue);
+                      if (rfidInputRef.current) {
+                        rfidInputRef.current.value = "";
+                      }
+                      setRfidInput("");
+                    }
+                  }}
+                  style={{
+                    position: "absolute",
+                    left: "-9999px",
+                    width: "1px",
+                    height: "1px",
+                    opacity: 0,
+                    pointerEvents: "auto",
+                  }}
                   placeholder="RFID input"
                 />
 

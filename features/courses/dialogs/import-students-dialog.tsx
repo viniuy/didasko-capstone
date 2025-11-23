@@ -470,7 +470,7 @@ export function StudentImportDialog({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <h3 className="text-sm font-medium text-green-800">
-                    Successfully Added
+                    Imported
                   </h3>
                   <p className="text-2xl font-semibold text-green-600">
                     {importStatus.imported}
@@ -478,7 +478,7 @@ export function StudentImportDialog({
                 </div>
                 <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
                   <h3 className="text-sm font-medium text-amber-800">
-                    Skipped (No RFID)
+                    Skipped
                   </h3>
                   <p className="text-2xl font-semibold text-amber-600">
                     {importStatus.skipped}

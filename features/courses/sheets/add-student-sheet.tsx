@@ -30,15 +30,18 @@ export const AddStudentSheet = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // React Query hook with debounced search
-  const { data: studentsData, isLoading: isSearching } = useStudents(
-    searchQuery.trim()
+  // React Query hook with search
+  // Only fetch when there's a search query (to avoid loading all students)
+  const { data: studentsData, isLoading: isSearching } = useStudents({
+    filters: searchQuery.trim()
       ? {
           search: searchQuery.trim(),
           limit: 50,
         }
-      : undefined
-  );
+      : undefined,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
   // Filter students with RFID and not already enrolled
   const searchResults = useMemo(() => {

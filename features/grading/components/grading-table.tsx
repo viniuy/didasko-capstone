@@ -99,6 +99,9 @@ interface GradingTableProps {
   isGroupView?: boolean;
   isRecitationCriteria?: boolean;
   refreshKey?: number; // Add refresh key to trigger refetch when groups change
+  initialStudents?: Student[];
+  initialRecitationCriteria?: any[];
+  initialCriteria?: any[];
 }
 
 interface GradingReport {
@@ -342,6 +345,9 @@ export function GradingTable({
   isGroupView = false,
   isRecitationCriteria = false,
   refreshKey = 0,
+  initialStudents = [],
+  initialRecitationCriteria = [],
+  initialCriteria = [],
 }: GradingTableProps) {
   const { data: session } = useSession();
   const [students, setStudents] = useState<Student[]>([]);
@@ -450,9 +456,26 @@ export function GradingTable({
   // React Query hooks for data fetching
   const formattedDate = selectedDate?.toISOString().split("T")[0];
 
+  // Determine if we should use initial data (only for initial load, no date selected yet, or date matches today)
+  const shouldUseInitialStudents =
+    initialStudents.length > 0 &&
+    (!selectedDate ||
+      selectedDate.toISOString().split("T")[0] ===
+        new Date().toISOString().split("T")[0]);
+
   // Fetch students
   const { data: studentsData, isLoading: isLoadingStudentsQuery } =
-    useStudentsByCourse(courseSlug, selectedDate || undefined);
+    useStudentsByCourse(
+      courseSlug,
+      selectedDate || undefined,
+      shouldUseInitialStudents
+        ? {
+            initialData: { students: initialStudents },
+            refetchOnMount: false,
+            refetchOnWindowFocus: false,
+          }
+        : undefined
+    );
   const { data: groupStudentsData, isLoading: isLoadingGroupQuery } =
     useGroupStudents(courseSlug, groupId || "");
 
@@ -478,14 +501,28 @@ export function GradingTable({
 
   // Determine which students to use - memoize to prevent infinite loops
   const currentStudents = useMemo(() => {
-    return isGroupView && groupId
-      ? groupStudentsData?.students || []
-      : studentsData?.students || [];
+    if (isGroupView && groupId) {
+      return groupStudentsData?.students || [];
+    }
+    // Use initial students if available and no date selected or date is today
+    if (
+      shouldUseInitialStudents &&
+      initialStudents.length > 0 &&
+      (!selectedDate ||
+        selectedDate.toISOString().split("T")[0] ===
+          new Date().toISOString().split("T")[0])
+    ) {
+      return initialStudents;
+    }
+    return studentsData?.students || [];
   }, [
     isGroupView,
     groupId,
     groupStudentsData?.students,
     studentsData?.students,
+    initialStudents,
+    shouldUseInitialStudents,
+    selectedDate,
   ]);
 
   // Memoize student IDs for stable comparison
@@ -589,14 +626,32 @@ export function GradingTable({
 
   // React Query hooks for criteria fetching
   const { data: allCriteriaData, isLoading: isLoadingCriteria } =
-    useCriteriaByCourse(courseSlug);
+    useCriteriaByCourse(
+      courseSlug,
+      initialCriteria && initialCriteria.length > 0
+        ? {
+            initialData: initialCriteria,
+            refetchOnMount: false,
+            refetchOnWindowFocus: false,
+          }
+        : undefined
+    );
   const { data: recitationCriteriaData, isLoading: isLoadingRecitation } =
-    useRecitationCriteria(courseSlug);
+    useRecitationCriteria(
+      courseSlug,
+      initialRecitationCriteria && initialRecitationCriteria.length > 0
+        ? {
+            initialData: initialRecitationCriteria,
+            refetchOnMount: false,
+            refetchOnWindowFocus: false,
+          }
+        : undefined
+    );
 
   // Determine which criteria to use
   const allReports = isRecitationCriteria
-    ? recitationCriteriaData || []
-    : allCriteriaData || [];
+    ? recitationCriteriaData || initialRecitationCriteria || []
+    : allCriteriaData || initialCriteria || [];
 
   // Check for existing criteria when date is selected or on mount
   useEffect(() => {

@@ -52,6 +52,15 @@ export function AuditLogsFilterSheet({
   // Use faculty from props
   const faculty = availableFaculty;
 
+  // Get today's date range for default
+  const getTodayDateRange = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
+    return { start: today, end: endOfToday };
+  };
+
   // Local state for temporary filter changes (not applied until "Apply" is clicked)
   const [localFilters, setLocalFilters] =
     useState<AuditLogsFilterState>(filters);
@@ -91,12 +100,13 @@ export function AuditLogsFilterSheet({
   };
 
   const handleClearAll = () => {
+    const todayRange = getTodayDateRange();
     setLocalFilters({
       actions: [],
       faculty: [],
       modules: [],
-      startDate: undefined,
-      endDate: undefined,
+      startDate: todayRange.start,
+      endDate: todayRange.end,
     });
   };
 
@@ -106,12 +116,11 @@ export function AuditLogsFilterSheet({
     onApplyFilters();
   };
 
+  // Date range is not considered a filter
   const hasActiveFilters =
     localFilters.actions.length > 0 ||
     localFilters.faculty.length > 0 ||
-    localFilters.modules.length > 0 ||
-    localFilters.startDate !== undefined ||
-    localFilters.endDate !== undefined;
+    localFilters.modules.length > 0;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>

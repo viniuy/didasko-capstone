@@ -52,6 +52,8 @@ import {
   useFaculty,
   useBulkArchiveCourses,
 } from "@/lib/hooks/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/queries/queryKeys";
 import {
   Sheet,
   SheetContent,
@@ -659,14 +661,17 @@ export function CourseDataTable({
   const itemsPerPage = useItemsPerPage();
 
   // React Query hooks
+  const queryClient = useQueryClient();
   const { data: coursesData, isLoading: isLoadingCourses } = useCourses();
   const { data: facultyData } = useFaculty();
   const bulkArchiveMutation = useBulkArchiveCourses();
 
   // Get course slugs for batch stats
+  // Use coursesData from React Query if available, otherwise fall back to initialCourses
+  const coursesForStats = coursesData?.courses || initialCourses;
   const courseSlugs = useMemo(
-    () => initialCourses.map((c) => c.slug),
-    [initialCourses]
+    () => coursesForStats.map((c) => c.slug),
+    [coursesForStats]
   );
   const { data: statsData, isLoading: isLoadingStats } =
     useCoursesStatsBatch(courseSlugs);
@@ -756,8 +761,12 @@ export function CourseDataTable({
   }, [facultyData]);
 
   // Sync courses with stats from React Query
+  // Prefer coursesData from React Query (after mutations) over initialCourses (from SSR)
   useEffect(() => {
-    if (initialCourses.length === 0) {
+    // Use coursesData from React Query if available, otherwise fall back to initialCourses
+    const coursesToUse = coursesData?.courses || initialCourses;
+
+    if (coursesToUse.length === 0) {
       setTableData([]);
       return;
     }
@@ -780,7 +789,7 @@ export function CourseDataTable({
       }
     });
 
-    const coursesWithStats: Course[] = initialCourses.map((course) => {
+    const coursesWithStats: Course[] = coursesToUse.map((course) => {
       const stats: CourseStats = statsMap.get(course.slug) || defaultStats;
 
       return {
@@ -791,7 +800,7 @@ export function CourseDataTable({
 
     setTableData(coursesWithStats);
     setHasLoadedOnce(true);
-  }, [initialCourses, statsData]);
+  }, [coursesData, initialCourses, statsData]);
 
   // Update loading state based on query
   useEffect(() => {
@@ -799,23 +808,33 @@ export function CourseDataTable({
     setIsLoading(isLoadingStats);
   }, [isLoadingStats, hasLoadedOnce]);
 
-  const refreshTableData = useCallback(async (skipStats = false) => {
-    try {
-      setIsRefreshing(true);
-      // React Query will handle the refetch automatically
-      // We just need to invalidate queries if needed
-      // Stats will be refetched automatically via useCoursesStatsBatch
-      if (!skipStats) {
-        // Stats will be refetched via React Query automatically
-        // No manual fetching needed
+  const refreshTableData = useCallback(
+    async (skipStats = false) => {
+      try {
+        setIsRefreshing(true);
+        // Invalidate and refetch courses query to get latest data
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.lists(),
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.all,
+        });
+
+        // Refetch courses query
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.courses.lists(),
+        });
+
+        // Stats will be refetched automatically via useCoursesStatsBatch when courseSlugs change
+      } catch (error: any) {
+        console.error("Error refreshing table data:", error);
+        toast.error("Failed to refresh course data");
+      } finally {
+        setIsRefreshing(false);
       }
-    } catch (error: any) {
-      console.error("Error refreshing table data:", error);
-      toast.error("Failed to refresh course data");
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, []);
+    },
+    [queryClient]
+  );
 
   // Handle tab visibility - refresh data when tab becomes visible again
   useEffect(() => {
@@ -1937,12 +1956,8 @@ export function CourseDataTable({
 
         // Clear pre-import errors
         setPreImportValidationErrors([]);
-      } else {
-        // For create/edit modes, show simple success message
-        if (scheduleDialogMode === "create") {
-          toast.success("Course created successfully!");
-        }
       }
+      // Note: Success toast for create mode is handled by the mutation itself
 
       // Show loading state
       setIsRefreshing(true);

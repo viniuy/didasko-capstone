@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { canViewLog } from "@/lib/roles";
 import AuditLogsTable from "@/features/admin/components/AuditLogsTable";
+import { getUsers } from "@/lib/services";
 
 interface PageProps {
   searchParams: Promise<{
@@ -105,7 +106,7 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
     };
   }
 
-  // Apply date range filter
+  // Apply date range filter - default to today if no date params provided
   if (params.startDate || params.endDate) {
     where.createdAt = {};
     if (params.startDate) {
@@ -117,6 +118,16 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
       endDate.setHours(23, 59, 59, 999);
       where.createdAt.lte = endDate;
     }
+  } else {
+    // Default to today's date range if no date params provided
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(today);
+    endOfToday.setHours(23, 59, 59, 999);
+    where.createdAt = {
+      gte: today,
+      lte: endOfToday,
+    };
   }
 
   // Fetch logs
@@ -165,6 +176,11 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
     }
   }
 
+  // Fetch faculty users for filter dropdown
+  const facultyUsers = await getUsers({
+    role: "FACULTY",
+  });
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-6">
@@ -181,6 +197,7 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
         currentPage={page}
         totalPages={totalPages}
         userRole={userRole!}
+        initialFaculty={facultyUsers}
       />
     </div>
   );

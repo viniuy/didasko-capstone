@@ -12,7 +12,7 @@ function CourseDashboardLayoutContent({
   const [open, setOpen] = useState(false);
 
   return (
-    <SidebarProvider open={open} onOpenChange={setOpen}>
+    <SidebarProvider open={open} onOpenChange={setOpen} defaultOpen={false}>
       {children}
     </SidebarProvider>
   );

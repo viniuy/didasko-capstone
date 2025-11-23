@@ -45,6 +45,7 @@ export async function getGroupById(groupId: string) {
       students: {
         select: {
           id: true,
+          studentId: true,
           firstName: true,
           lastName: true,
           middleInitial: true,

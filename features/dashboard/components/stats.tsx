@@ -2,7 +2,6 @@
 
 import { User, BookOpen, GraduationCap, Users } from "lucide-react";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
-import { useSession } from "next-auth/react";
 import { useFacultyStats, useFacultyCount } from "@/lib/hooks/queries";
 
 interface StatCardProps {
@@ -36,29 +35,60 @@ const StatCard = ({ icon, count, label, isLoading = false }: StatCardProps) => {
   );
 };
 
-export default function Dashboard() {
-  const { data: session } = useSession();
+interface StatsProps {
+  initialFacultyStats?: {
+    totalStudents: number;
+    totalCourses: number;
+    totalClasses: number;
+  };
+  initialFacultyCount?: {
+    fullTime: number;
+    partTime: number;
+  };
+  userRole?: string;
+}
 
-  // React Query hooks
-  const { data: facultyStats, isLoading: isLoadingStats } = useFacultyStats();
-  const { data: facultyCount, isLoading: isLoadingCount } = useFacultyCount();
-
-  const isLoading =
-    session?.user?.role === "ACADEMIC_HEAD" ? isLoadingCount : isLoadingStats;
+export default function Dashboard({
+  initialFacultyStats,
+  initialFacultyCount,
+  userRole,
+}: StatsProps) {
+  // React Query hooks with initialData
+  const { data: facultyStats } = useFacultyStats({
+    initialData: initialFacultyStats,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+  const { data: facultyCount } = useFacultyCount({
+    initialData: initialFacultyCount,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
   const stats =
-    session?.user?.role === "ACADEMIC_HEAD"
+    userRole === "ACADEMIC_HEAD"
       ? {
-          fullTime: facultyCount?.fullTime || 0,
-          partTime: facultyCount?.partTime || 0,
+          fullTime:
+            facultyCount?.fullTime || initialFacultyCount?.fullTime || 0,
+          partTime:
+            facultyCount?.partTime || initialFacultyCount?.partTime || 0,
         }
       : {
-          totalStudents: facultyStats?.totalStudents || 0,
-          totalCourses: facultyStats?.totalCourses || 0,
-          totalClasses: facultyStats?.totalClasses || 0,
+          totalStudents:
+            facultyStats?.totalStudents ||
+            initialFacultyStats?.totalStudents ||
+            0,
+          totalCourses:
+            facultyStats?.totalCourses ||
+            initialFacultyStats?.totalCourses ||
+            0,
+          totalClasses:
+            facultyStats?.totalClasses ||
+            initialFacultyStats?.totalClasses ||
+            0,
         };
 
-  if (session?.user?.role === "ACADEMIC_HEAD") {
+  if (userRole === "ACADEMIC_HEAD") {
     return (
       <div className="pt-2 px-2 sm:px-3 md:px-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
@@ -66,13 +96,13 @@ export default function Dashboard() {
             icon={<Users className="w-full h-full" />}
             count={stats.fullTime}
             label="FACULTY FULL-TIME"
-            isLoading={isLoading}
+            isLoading={false}
           />
           <StatCard
             icon={<Users className="w-full h-full" />}
             count={stats.partTime}
             label="FACULTY PART-TIME"
-            isLoading={isLoading}
+            isLoading={false}
           />
         </div>
       </div>
@@ -86,19 +116,19 @@ export default function Dashboard() {
           icon={<User className="w-full h-full" />}
           count={stats.totalStudents}
           label="TOTAL STUDENTS"
-          isLoading={isLoading}
+          isLoading={false}
         />
         <StatCard
           icon={<BookOpen className="w-full h-full" />}
           count={stats.totalCourses}
           label="TOTAL SUBJECTS"
-          isLoading={isLoading}
+          isLoading={false}
         />
         <StatCard
           icon={<GraduationCap className="w-full h-full" />}
           count={stats.totalClasses}
           label="TOTAL SECTIONS"
-          isLoading={isLoading}
+          isLoading={false}
         />
       </div>
     </div>

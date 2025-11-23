@@ -7,12 +7,24 @@ import { Student, StudentCreateInput } from "@/shared/types/student";
 import toast from "react-hot-toast";
 
 // Query: Get all students
-export function useStudents(filters?: {
-  page?: number;
-  limit?: number;
-  search?: string;
-  courseId?: string;
+export function useStudents(options?: {
+  filters?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    courseId?: string;
+  };
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
 }) {
+  const {
+    filters,
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.students.list(filters),
     queryFn: async () => {
@@ -25,6 +37,9 @@ export function useStudents(filters?: {
       const { data } = await axios.get(`/students?${params.toString()}`);
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 
@@ -55,7 +70,21 @@ export function useStudentImage(id: string) {
 }
 
 // Query: Get students by course
-export function useStudentsByCourse(courseSlug: string, date?: Date) {
+export function useStudentsByCourse(
+  courseSlug: string,
+  date?: Date,
+  options?: {
+    initialData?: any;
+    refetchOnMount?: boolean;
+    refetchOnWindowFocus?: boolean;
+  }
+) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: [...queryKeys.students.byCourse(courseSlug), date?.toISOString()],
     queryFn: async () => {
@@ -68,6 +97,10 @@ export function useStudentsByCourse(courseSlug: string, date?: Date) {
       return data;
     },
     enabled: !!courseSlug,
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
+    staleTime: 0, // Always consider data stale for real-time updates when used with attendance
   });
 }
 
@@ -193,8 +226,18 @@ export function useImportStudentsToCourse() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.courses.detail(variables.courseSlug),
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.courses.analytics(variables.courseSlug),
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.students.lists() });
-      toast.success("Students imported successfully");
+
+      // Show appropriate message based on number of students
+      const studentCount = variables.students?.length || 0;
+      if (studentCount === 1) {
+        toast.success("Student added successfully");
+      } else {
+        toast.success("Students imported successfully");
+      }
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to import students");
@@ -267,7 +310,14 @@ export function useRemoveStudentsFromCourse() {
         queryKey: queryKeys.courses.analytics(variables.courseSlug),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.students.lists() });
-      toast.success("Students removed successfully");
+
+      // Show appropriate message based on number of students
+      const studentCount = variables.studentIds?.length || 0;
+      if (studentCount === 1) {
+        toast.success("Student removed successfully");
+      } else {
+        toast.success(`Successfully removed ${studentCount} students`);
+      }
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to remove students");

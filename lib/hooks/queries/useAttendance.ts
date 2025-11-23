@@ -25,6 +25,9 @@ export function useAttendanceByCourse(
       return data;
     },
     enabled: !!courseSlug && !!date,
+    staleTime: 0, // Always consider data stale for real-time updates
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -39,6 +42,9 @@ export function useAttendanceDates(courseSlug: string) {
       return data;
     },
     enabled: !!courseSlug,
+    staleTime: 0, // Always consider data stale for real-time updates
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -53,6 +59,9 @@ export function useAttendanceStats(courseSlug: string) {
       return data;
     },
     enabled: !!courseSlug,
+    staleTime: 0, // Always consider data stale for real-time updates
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -175,6 +184,7 @@ export function useRecordAttendance() {
       toast.error("Failed to record attendance");
     },
     onSuccess: (_, variables) => {
+      // Invalidate and immediately refetch for real-time updates
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
       });
@@ -195,6 +205,19 @@ export function useRecordAttendance() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.stats.attendanceRanking(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.students.byCourse(variables.courseSlug),
+      });
+      // Immediately refetch attendance data
+      queryClient.refetchQueries({
+        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
+      });
+      queryClient.refetchQueries({
+        queryKey: queryKeys.attendance.dates(variables.courseSlug),
+      });
+      queryClient.refetchQueries({
+        queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
       toast.success("Attendance recorded successfully");
     },
@@ -229,6 +252,7 @@ export function useBatchAttendance() {
       return data;
     },
     onSuccess: (_, variables) => {
+      // Invalidate and immediately refetch for real-time updates
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
       });
@@ -249,6 +273,19 @@ export function useBatchAttendance() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.stats.attendanceRanking(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.students.byCourse(variables.courseSlug),
+      });
+      // Immediately refetch attendance data
+      queryClient.refetchQueries({
+        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
+      });
+      queryClient.refetchQueries({
+        queryKey: queryKeys.attendance.dates(variables.courseSlug),
+      });
+      queryClient.refetchQueries({
+        queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
       toast.success("Attendance batch recorded successfully");
     },
@@ -279,6 +316,7 @@ export function useClearAttendance() {
       return data;
     },
     onSuccess: (_, variables) => {
+      // Invalidate all attendance queries for this course
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
       });
@@ -294,7 +332,10 @@ export function useClearAttendance() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.courses.analytics(variables.courseSlug),
       });
-      toast.success("Attendance cleared successfully");
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.students.byCourse(variables.courseSlug),
+      });
+      // Note: Don't show toast here - let the component handle it to avoid duplicates
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to clear attendance");

@@ -6,18 +6,30 @@ import { queryKeys } from "./queryKeys";
 import toast from "react-hot-toast";
 
 // Query: Get audit logs with optional filters
-export function useAuditLogs(filters?: {
-  page?: number;
-  pageSize?: number;
-  action?: string;
-  actions?: string[];
-  userId?: string;
-  faculty?: string[];
-  module?: string;
-  modules?: string[];
-  startDate?: string;
-  endDate?: string;
+export function useAuditLogs(options?: {
+  filters?: {
+    page?: number;
+    pageSize?: number;
+    action?: string;
+    actions?: string[];
+    userId?: string;
+    faculty?: string[];
+    module?: string;
+    modules?: string[];
+    startDate?: string;
+    endDate?: string;
+  };
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
 }) {
+  const {
+    filters,
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.auditLogs.lists(filters),
     queryFn: async () => {
@@ -43,8 +55,11 @@ export function useAuditLogs(filters?: {
       const { data } = await axios.get(`/logs?${params.toString()}`);
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
     refetchInterval: false, // Disable auto-refetch to prevent pagination lag
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 0, // Always refetch when query key changes (filters change)
   });
 }
 

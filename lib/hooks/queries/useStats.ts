@@ -5,24 +5,50 @@ import axios from "@/lib/axios";
 import { queryKeys } from "./queryKeys";
 
 // Query: Get faculty count
-export function useFacultyCount() {
+export function useFacultyCount(options?: {
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
+}) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.stats.facultyCount(),
     queryFn: async () => {
       const { data } = await axios.get("/stats/faculty-count");
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 
 // Query: Get faculty stats
-export function useFacultyStats() {
+export function useFacultyStats(options?: {
+  initialData?: any;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
+}) {
+  const {
+    initialData,
+    refetchOnMount = true,
+    refetchOnWindowFocus = true,
+  } = options || {};
+
   return useQuery({
     queryKey: queryKeys.stats.facultyStats(),
     queryFn: async () => {
       const { data } = await axios.get("/stats/faculty-stats");
       return data;
     },
+    initialData,
+    refetchOnMount,
+    refetchOnWindowFocus,
   });
 }
 
