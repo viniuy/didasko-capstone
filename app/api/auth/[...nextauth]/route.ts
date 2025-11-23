@@ -4,20 +4,31 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { logAction } from "@/lib/audit";
 
-const requiredEnv = [
-  "AZURE_AD_CLIENT_ID",
-  "AZURE_AD_CLIENT_SECRET",
-  "NEXTAUTH_SECRET",
-];
-
-for (const key of requiredEnv) {
-  if (!process.env[key]) {
-    throw new Error(`Missing environment variable: ${key}`);
+// Lazy initialization: only validate and create provider at runtime, not during build
+// This prevents Next.js from trying to fetch OpenID config during build
+const getProviders = () => {
+  // During build phase, return empty array to prevent provider initialization
+  // Next.js sets NEXT_PHASE during build, or we can check if env vars are missing
+  if (
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    !process.env.AZURE_AD_CLIENT_ID
+  ) {
+    return [];
   }
-}
 
-const handler = NextAuth({
-  providers: [
+  const requiredEnv = [
+    "AZURE_AD_CLIENT_ID",
+    "AZURE_AD_CLIENT_SECRET",
+    "NEXTAUTH_SECRET",
+  ];
+
+  for (const key of requiredEnv) {
+    if (!process.env[key]) {
+      throw new Error(`Missing environment variable: ${key}`);
+    }
+  }
+
+  return [
     AzureADProvider({
       clientId: process.env.AZURE_AD_CLIENT_ID!,
       clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
@@ -29,7 +40,11 @@ const handler = NextAuth({
         },
       },
     }),
-  ],
+  ];
+};
+
+const handler = NextAuth({
+  providers: getProviders(),
 
   callbacks: {
     /** Validate sign-in */
@@ -260,7 +275,6 @@ const handler = NextAuth({
 
   debug: process.env.NODE_ENV === "development",
 });
-
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
