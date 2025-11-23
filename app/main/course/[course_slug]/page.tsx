@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { CourseDashboard } from "@/features/courses/components/course-dashboard";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
@@ -8,6 +8,23 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
+import { CourseTableSkeleton } from "@/shared/components/skeletons/course-skeletons";
+
+// Separate async component for course dashboard content
+async function CourseDashboardContent({ courseSlug }: { courseSlug: string }) {
+  const analyticsData = await getCourseAnalyticsData(courseSlug);
+
+  if (!analyticsData) {
+    notFound();
+  }
+
+  return (
+    <CourseDashboard
+      courseSlug={courseSlug}
+      initialAnalyticsData={analyticsData}
+    />
+  );
+}
 
 export default async function CourseDashboardPage({
   params,
@@ -22,13 +39,6 @@ export default async function CourseDashboardPage({
 
   const { course_slug } = await params;
 
-  // Fetch course analytics data on the server
-  const analyticsData = await getCourseAnalyticsData(course_slug);
-
-  if (!analyticsData) {
-    notFound();
-  }
-
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <Header />
@@ -36,12 +46,11 @@ export default async function CourseDashboardPage({
 
       <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex flex-col flex-grow px-4">
-          {/* Course Dashboard Component */}
+          {/* Course Dashboard Component with Suspense */}
           <div className="mb-4 overflow-y-auto">
-            <CourseDashboard
-              courseSlug={course_slug}
-              initialAnalyticsData={analyticsData}
-            />
+            <Suspense fallback={<CourseTableSkeleton />}>
+              <CourseDashboardContent courseSlug={course_slug} />
+            </Suspense>
           </div>
         </div>
         {/* Right Sidebar */}

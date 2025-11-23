@@ -44,11 +44,16 @@ const calculateAttendanceStats = (attendanceRecords: any[]) => {
  * Map term name to object key
  */
 const getTermKey = (term: string): string => {
-  return term.toLowerCase().replace("-", "") as
-    | "prelims"
-    | "midterm"
-    | "prefinals"
-    | "finals";
+  const normalized = term.toLowerCase().replace(/-/g, ""); // Replace all hyphens
+
+  // Map to correct term keys
+  if (normalized === "prelim") return "prelims";
+  if (normalized === "prefinals") return "prefinals";
+  if (normalized === "midterm") return "midterm";
+  if (normalized === "finals") return "finals";
+
+  // Fallback: return normalized value
+  return normalized;
 };
 
 /**

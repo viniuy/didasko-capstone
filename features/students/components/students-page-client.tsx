@@ -23,6 +23,7 @@ import { studentsService } from "@/lib/services/client";
 import { useStudents } from "@/lib/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/queries/queryKeys";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Student {
   id: string;
@@ -51,12 +52,27 @@ type ViewMode =
 
 interface StudentsPageClientProps {
   initialStudents: Student[];
+  initialPagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  initialSearch?: string;
 }
 
-export function StudentsPageClient({ initialStudents }: StudentsPageClientProps) {
+export function StudentsPageClient({
+  initialStudents,
+  initialPagination,
+  initialSearch,
+}: StudentsPageClientProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // State management
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [filteredStudents, setFilteredStudents] = React.useState<Student[]>([]);
+  const [searchQuery, setSearchQuery] = React.useState(initialSearch || "");
+  const currentPage = Number(searchParams.get("page")) || 1;
+  const limit = 50;
 
   // Current view state
   const [viewMode, setViewMode] = React.useState<ViewMode>("idle");
@@ -90,17 +106,32 @@ export function StudentsPageClient({ initialStudents }: StudentsPageClientProps)
   const scanTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Use TanStack Query with initialData for client-side updates
-  const { data: studentsData } = useStudents({
-    initialData: { students: initialStudents, pagination: { total: initialStudents.length, page: 1, limit: initialStudents.length, totalPages: 1 } },
-    refetchOnMount: false,
+  // Use TanStack Query with server-side pagination
+  const { data: studentsData, isLoading } = useStudents({
+    filters: {
+      page: currentPage,
+      limit,
+      search: searchQuery || undefined,
+    },
+    initialData: {
+      students: initialStudents,
+      pagination: initialPagination || {
+        total: initialStudents.length,
+        page: 1,
+        limit,
+        totalPages: 1,
+      },
+    },
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
 
-  // Extract students from query data
+  // Extract students and pagination from query data
   const students = React.useMemo(() => {
     if (!studentsData) return initialStudents;
-    const studentList = Array.isArray(studentsData) ? studentsData : studentsData.students || [];
+    const studentList = Array.isArray(studentsData)
+      ? studentsData
+      : studentsData.students || [];
     return studentList.map((s: any) => ({
       id: s.id,
       rfid_id: s.rfid_id ? String(s.rfid_id) : null,
@@ -112,22 +143,44 @@ export function StudentsPageClient({ initialStudents }: StudentsPageClientProps)
     }));
   }, [studentsData, initialStudents]);
 
-  // Filter students based on search
-  React.useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredStudents(students);
-    } else {
-      const query = searchQuery.toLowerCase();
-      const filtered = students.filter(
-        (s) =>
-          s.firstName.toLowerCase().includes(query) ||
-          s.lastName.toLowerCase().includes(query) ||
-          s.studentId.toLowerCase().includes(query) ||
-          `${s.firstName} ${s.lastName}`.toLowerCase().includes(query)
-      );
-      setFilteredStudents(filtered);
-    }
-  }, [searchQuery, students]);
+  const pagination =
+    studentsData && !Array.isArray(studentsData)
+      ? studentsData.pagination
+      : initialPagination || {
+          total: initialStudents.length,
+          page: 1,
+          limit,
+          totalPages: 1,
+        };
+
+  // Debounce search navigation
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Handle search with debounce and navigation
+  const handleSearch = React.useCallback(
+    (value: string) => {
+      // Navigate to page 1 with new search
+      const params = new URLSearchParams(searchParams.toString());
+      if (value.trim()) {
+        params.set("search", value);
+      } else {
+        params.delete("search");
+      }
+      params.set("page", "1");
+      router.push(`/main/students?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
+
+  // Handle page navigation
+  const handlePageChange = React.useCallback(
+    (newPage: number) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", newPage.toString());
+      router.push(`/main/students?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
 
   const queryClient = useQueryClient();
 
@@ -829,7 +882,26 @@ export function StudentsPageClient({ initialStudents }: StudentsPageClientProps)
                       id="search"
                       placeholder="Search by name or student ID..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchQuery(value);
+                        // Clear existing timeout
+                        if (searchTimeoutRef.current) {
+                          clearTimeout(searchTimeoutRef.current);
+                        }
+                        // Debounce search navigation
+                        searchTimeoutRef.current = setTimeout(() => {
+                          handleSearch(value);
+                        }, 500);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (searchTimeoutRef.current) {
+                            clearTimeout(searchTimeoutRef.current);
+                          }
+                          handleSearch(searchQuery);
+                        }
+                      }}
                       maxLength={100}
                     />
                   </div>
@@ -986,8 +1058,12 @@ export function StudentsPageClient({ initialStudents }: StudentsPageClientProps)
                   </Dialog>
 
                   <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((student) => (
+                    {isLoading ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Loading...
+                      </p>
+                    ) : students.length > 0 ? (
+                      students.map((student) => (
                         <div
                           key={student.id}
                           className={`p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
@@ -1026,6 +1102,37 @@ export function StudentsPageClient({ initialStudents }: StudentsPageClientProps)
                       </p>
                     )}
                   </div>
+
+                  {/* Pagination Controls */}
+                  {pagination && pagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Page {pagination.page} of {pagination.totalPages} (
+                        {pagination.total} total)
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(pagination.page - 1)}
+                          disabled={pagination.page <= 1 || isLoading}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(pagination.page + 1)}
+                          disabled={
+                            pagination.page >= pagination.totalPages ||
+                            isLoading
+                          }
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1103,4 +1210,3 @@ export function StudentsPageClient({ initialStudents }: StudentsPageClientProps)
     </div>
   );
 }
-

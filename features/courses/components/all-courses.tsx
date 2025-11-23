@@ -156,8 +156,8 @@ export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
 
   // Prepare attendance queries for courses with last attendance date
   const attendanceQueries = coursesList
-    .filter((course) => course.attendanceStats?.lastAttendanceDate)
-    .map((course) => {
+    .filter((course: Course) => course.attendanceStats?.lastAttendanceDate)
+    .map((course: Course) => {
       const dateStr = new Date(course.attendanceStats!.lastAttendanceDate!)
         .toISOString()
         .split("T")[0];
@@ -168,24 +168,26 @@ export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
   // Note: We can't directly use useAttendanceByCourse in useQueries, so we use the queryFn pattern
   // but with the same structure as the hook for consistency
   const attendanceResults = useQueries({
-    queries: attendanceQueries.map(({ courseSlug, date }) => ({
-      queryKey: ["attendance", "byCourse", courseSlug, date, { limit: 1000 }],
-      queryFn: async () => {
-        const params = new URLSearchParams();
-        params.append("date", date);
-        params.append("limit", "1000");
-        const { data } = await axios.get(
-          `/courses/${courseSlug}/attendance?${params.toString()}`
-        );
-        return { courseSlug, data };
-      },
-      enabled: !!courseSlug && !!date,
-      staleTime: 5 * 60 * 1000, // 5 minutes
-    })),
+    queries: attendanceQueries.map(
+      ({ courseSlug, date }: { courseSlug: string; date: string }) => ({
+        queryKey: ["attendance", "byCourse", courseSlug, date, { limit: 1000 }],
+        queryFn: async () => {
+          const params = new URLSearchParams();
+          params.append("date", date);
+          params.append("limit", "1000");
+          const { data } = await axios.get(
+            `/courses/${courseSlug}/attendance?${params.toString()}`
+          );
+          return { courseSlug, data };
+        },
+        enabled: !!courseSlug && !!date,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+      })
+    ),
   });
 
   // Map attendance results to courses
-  const courses = coursesList.map((course) => {
+  const courses = coursesList.map((course: Course) => {
     if (!course.attendanceStats?.lastAttendanceDate) {
       return { ...course, latestAbsents: 0 };
     }
@@ -195,15 +197,27 @@ export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
       .split("T")[0];
 
     const attendanceResult = attendanceResults.find(
-      (result) => result.data?.courseSlug === course.slug
+      (result) =>
+        (
+          result.data as {
+            courseSlug?: string;
+            data?: { attendance?: Array<{ status: string }> };
+          }
+        )?.courseSlug === course.slug
     );
 
-    if (attendanceResult?.data?.data) {
-      const attendanceRecords = attendanceResult.data.data.attendance || [];
-      const absentsCount = attendanceRecords.filter(
-        (record: any) => record.status === "ABSENT"
-      ).length;
-      return { ...course, latestAbsents: absentsCount };
+    if (attendanceResult?.data) {
+      const resultData = attendanceResult.data as {
+        courseSlug?: string;
+        data?: { attendance?: Array<{ status: string }> };
+      };
+      if (resultData.data?.attendance) {
+        const attendanceRecords = resultData.data.attendance;
+        const absentsCount = attendanceRecords.filter(
+          (record) => record.status === "ABSENT"
+        ).length;
+        return { ...course, latestAbsents: absentsCount };
+      }
     }
 
     return { ...course, latestAbsents: 0 };
@@ -270,7 +284,7 @@ export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
       <div
         className={`grid ${getGridClass()} gap-4 max-h-[600px] overflow-hidden`}
       >
-        {currentCourses.map((course) => (
+        {currentCourses.map((course: Course) => (
           <CourseCard key={course.id} course={course} type={type} />
         ))}
       </div>

@@ -4,17 +4,27 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import { StudentsPageClient } from "@/features/students/components/students-page-client";
 
-export default async function StudentsPage() {
+export default async function StudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; search?: string }>;
+}) {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
     redirect("/");
   }
 
-  // Fetch students data on the server
+  const params = await searchParams;
+  const page = Number(params.page) || 1;
+  const search = params.search || undefined;
+  const limit = 50; // Reduced from 1000 for faster initial load
+
+  // Fetch students data on the server with pagination
   const studentsResult = await getStudents({
-    page: 1,
-    limit: 1000, // Get all students for initial load
+    page,
+    limit,
+    search,
   });
 
   // Map students to match the client component interface
@@ -28,5 +38,11 @@ export default async function StudentsPage() {
     studentId: s.studentId,
   }));
 
-  return <StudentsPageClient initialStudents={initialStudents} />;
+  return (
+    <StudentsPageClient
+      initialStudents={initialStudents}
+      initialPagination={studentsResult.pagination}
+      initialSearch={search}
+    />
+  );
 }

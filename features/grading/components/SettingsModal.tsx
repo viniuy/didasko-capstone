@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "react-hot-toast";
 import {
   Popover,
@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   X,
   Calendar,
@@ -81,10 +89,10 @@ const tutorialSteps: TutorialStep[] = [
     highlightPadding: 8,
   },
   {
-    target: "[data-tutorial='save-button']",
+    target: "[data-tutorial='term-save-button']",
     title: "Step 6: Save Your Changes",
     content:
-      "Once everything looks good, click here to save. Don't worry - we'll validate everything first!",
+      "Click here to save this term's configuration. Remember to save before switching to another term!",
     position: "top",
     highlightPadding: 8,
   },
@@ -262,11 +270,18 @@ export function SettingsModal({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [savedTerms, setSavedTerms] = useState<Set<Term>>(new Set());
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingTerm, setPendingTerm] = useState<Term | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+  const initialConfigsRef = useRef(initialConfigs);
 
   useEffect(() => {
     if (isOpen) {
       setTermConfigs(initialConfigs);
       setValidationErrors([]);
+      setSavedTerms(new Set());
+      initialConfigsRef.current = initialConfigs;
 
       // Check if user has seen tutorial
       const hasSeenTutorial = localStorage.getItem("didasko-settings-tutorial");
@@ -275,6 +290,91 @@ export function SettingsModal({
       }
     }
   }, [isOpen, initialConfigs]);
+
+  // Check if current term has unsaved changes
+  const hasUnsavedChanges = (term: Term): boolean => {
+    if (savedTerms.has(term)) return false;
+
+    const currentConfig = termConfigs[term];
+    const initialConfig = initialConfigsRef.current[term];
+
+    if (!currentConfig || !initialConfig) return false;
+
+    // Deep comparison of configs
+    return JSON.stringify(currentConfig) !== JSON.stringify(initialConfig);
+  };
+
+  // Handle term tab change with unsaved changes check
+  const handleTermChange = (newTerm: Term) => {
+    if (activeTerm === newTerm) return;
+
+    // Check if current term has unsaved changes
+    if (hasUnsavedChanges(activeTerm)) {
+      setPendingTerm(newTerm);
+      setShowUnsavedDialog(true);
+    } else {
+      setActiveTerm(newTerm);
+    }
+  };
+
+  // Handle unsaved changes dialog actions
+  const handleUnsavedDialogSave = () => {
+    handleSaveTerm(activeTerm);
+    if (isClosing) {
+      setValidationErrors([]);
+      onClose();
+      setIsClosing(false);
+    } else if (pendingTerm) {
+      setActiveTerm(pendingTerm);
+      setPendingTerm(null);
+    }
+    setShowUnsavedDialog(false);
+  };
+
+  const handleUnsavedDialogDiscard = () => {
+    // Revert to initial config for current term
+    setTermConfigs((prev) => ({
+      ...prev,
+      [activeTerm]: initialConfigsRef.current[activeTerm],
+    }));
+    setSavedTerms((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(activeTerm);
+      return newSet;
+    });
+
+    if (isClosing) {
+      setValidationErrors([]);
+      onClose();
+      setIsClosing(false);
+    } else if (pendingTerm) {
+      setActiveTerm(pendingTerm);
+      setPendingTerm(null);
+    }
+    setShowUnsavedDialog(false);
+  };
+
+  const handleUnsavedDialogCancel = () => {
+    setPendingTerm(null);
+    setIsClosing(false);
+    setShowUnsavedDialog(false);
+  };
+
+  // Handle close button click
+  const handleClose = () => {
+    // Check if there are unsaved changes in any term
+    const hasAnyUnsaved = (
+      ["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const
+    ).some((term) => hasUnsavedChanges(term));
+
+    if (hasAnyUnsaved) {
+      setIsClosing(true);
+      setShowUnsavedDialog(true);
+    } else {
+      setValidationErrors([]);
+      onClose();
+    }
+  };
 
   const config = termConfigs[activeTerm];
 
@@ -287,6 +387,12 @@ export function SettingsModal({
       ...prev,
       [activeTerm]: { ...prev[activeTerm], ...updates },
     }));
+    // Clear saved status when term is modified
+    setSavedTerms((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(activeTerm);
+      return newSet;
+    });
   };
 
   const updateAssessment = (
@@ -358,136 +464,159 @@ export function SettingsModal({
   const totalWeight = getTotalWeight();
   const isValidWeight = totalWeight === 100;
 
-  const validateConfigs = (): string[] => {
+  const validateTerm = (term: Term): string[] => {
     const errors: string[] = [];
+    const cfg = termConfigs[term];
+    const total = cfg.ptWeight + cfg.quizWeight + cfg.examWeight;
+    if (total !== 100) {
+      errors.push(
+        `${term}: Total weight must equal 100% (currently ${total}%)`
+      );
+    }
 
-    Object.entries(termConfigs).forEach(([term, cfg]) => {
-      const total = cfg.ptWeight + cfg.quizWeight + cfg.examWeight;
-      if (total !== 100) {
+    if (cfg.ptWeight < 0 || cfg.ptWeight > 100) {
+      errors.push(`${term}: PT/Lab weight must be between 0-100%`);
+    }
+    if (cfg.quizWeight < 0 || cfg.quizWeight > 100) {
+      errors.push(`${term}: Quiz weight must be between 0-100%`);
+    }
+    if (cfg.examWeight < 0 || cfg.examWeight > 100) {
+      errors.push(`${term}: Exam weight must be between 0-100%`);
+    }
+
+    const enabledPTs = cfg.assessments.filter(
+      (a) => a.type === "PT" && a.enabled
+    );
+    if (enabledPTs.length === 0) {
+      errors.push(`${term}: At least one PT/Lab assessment must be enabled`);
+    }
+
+    enabledPTs.forEach((pt) => {
+      if (!pt.name.trim()) {
+        errors.push(`${term}: PT/Lab assessment name cannot be empty`);
+      }
+      if (pt.maxScore <= 0) {
+        errors.push(`${term}: ${pt.name} max score must be greater than 0`);
+      }
+      if (pt.maxScore > 200) {
+        errors.push(`${term}: ${pt.name} max score cannot exceed 200`);
+      }
+      const transmutationBase = pt.transmutationBase ?? 0;
+      if (transmutationBase < 0 || transmutationBase > 75) {
         errors.push(
-          `${term}: Total weight must equal 100% (currently ${total}%)`
+          `${term}: ${pt.name} transmutation base must be between 0-75`
         );
       }
+    });
 
-      if (cfg.ptWeight < 0 || cfg.ptWeight > 100) {
-        errors.push(`${term}: PT/Lab weight must be between 0-100%`);
+    const enabledQuizzes = cfg.assessments.filter(
+      (a) => a.type === "QUIZ" && a.enabled
+    );
+    if (enabledQuizzes.length === 0) {
+      errors.push(`${term}: At least one Quiz assessment must be enabled`);
+    }
+
+    enabledQuizzes.forEach((quiz) => {
+      if (!quiz.name.trim()) {
+        errors.push(`${term}: Quiz assessment name cannot be empty`);
       }
-      if (cfg.quizWeight < 0 || cfg.quizWeight > 100) {
-        errors.push(`${term}: Quiz weight must be between 0-100%`);
+      if (quiz.maxScore <= 0) {
+        errors.push(`${term}: ${quiz.name} max score must be greater than 0`);
       }
-      if (cfg.examWeight < 0 || cfg.examWeight > 100) {
-        errors.push(`${term}: Exam weight must be between 0-100%`);
+      if (quiz.maxScore > 200) {
+        errors.push(`${term}: ${quiz.name} max score cannot exceed 200`);
       }
-
-      const enabledPTs = cfg.assessments.filter(
-        (a) => a.type === "PT" && a.enabled
-      );
-      if (enabledPTs.length === 0) {
-        errors.push(`${term}: At least one PT/Lab assessment must be enabled`);
+      const transmutationBase = quiz.transmutationBase ?? 0;
+      if (transmutationBase < 0 || transmutationBase > 75) {
+        errors.push(
+          `${term}: ${quiz.name} transmutation base must be between 0-75`
+        );
       }
+    });
 
-      enabledPTs.forEach((pt) => {
-        if (!pt.name.trim()) {
-          errors.push(`${term}: PT/Lab assessment name cannot be empty`);
-        }
-        if (pt.maxScore <= 0) {
-          errors.push(`${term}: ${pt.name} max score must be greater than 0`);
-        }
-        if (pt.maxScore > 200) {
-          errors.push(`${term}: ${pt.name} max score cannot exceed 200`);
-        }
-        const transmutationBase = pt.transmutationBase ?? 0;
-        if (transmutationBase < 0 || transmutationBase > 75) {
-          errors.push(
-            `${term}: ${pt.name} transmutation base must be between 0-75`
-          );
-        }
-      });
-
-      const enabledQuizzes = cfg.assessments.filter(
-        (a) => a.type === "QUIZ" && a.enabled
-      );
-      if (enabledQuizzes.length === 0) {
-        errors.push(`${term}: At least one Quiz assessment must be enabled`);
+    const exam = cfg.assessments.find((a) => a.type === "EXAM");
+    if (!exam) {
+      errors.push(`${term}: Exam assessment is missing`);
+    } else {
+      if (!exam.enabled) {
+        errors.push(`${term}: Exam must be enabled`);
       }
-
-      enabledQuizzes.forEach((quiz) => {
-        if (!quiz.name.trim()) {
-          errors.push(`${term}: Quiz assessment name cannot be empty`);
-        }
-        if (quiz.maxScore <= 0) {
-          errors.push(`${term}: ${quiz.name} max score must be greater than 0`);
-        }
-        if (quiz.maxScore > 200) {
-          errors.push(`${term}: ${quiz.name} max score cannot exceed 200`);
-        }
-        const transmutationBase = quiz.transmutationBase ?? 0;
-        if (transmutationBase < 0 || transmutationBase > 75) {
-          errors.push(
-            `${term}: ${quiz.name} transmutation base must be between 0-75`
-          );
-        }
-      });
-
-      const exam = cfg.assessments.find((a) => a.type === "EXAM");
-      if (!exam) {
-        errors.push(`${term}: Exam assessment is missing`);
-      } else {
-        if (!exam.enabled) {
-          errors.push(`${term}: Exam must be enabled`);
-        }
-        if (!exam.name.trim()) {
-          errors.push(`${term}: Exam name cannot be empty`);
-        }
-        if (exam.maxScore <= 0) {
-          errors.push(`${term}: Exam max score must be greater than 0`);
-        }
-        if (exam.maxScore > 200) {
-          errors.push(`${term}: Exam max score cannot exceed 200`);
-        }
-        const transmutationBase = exam.transmutationBase ?? 0;
-        if (transmutationBase < 0 || transmutationBase > 75) {
-          errors.push(`${term}: Exam transmutation base must be between 0-75`);
-        }
+      if (!exam.name.trim()) {
+        errors.push(`${term}: Exam name cannot be empty`);
       }
+      if (exam.maxScore <= 0) {
+        errors.push(`${term}: Exam max score must be greater than 0`);
+      }
+      if (exam.maxScore > 200) {
+        errors.push(`${term}: Exam max score cannot exceed 200`);
+      }
+      const transmutationBase = exam.transmutationBase ?? 0;
+      if (transmutationBase < 0 || transmutationBase > 75) {
+        errors.push(`${term}: Exam transmutation base must be between 0-75`);
+      }
+    }
 
-      const ptNames = new Set<string>();
-      const quizNames = new Set<string>();
+    const ptNames = new Set<string>();
+    const quizNames = new Set<string>();
 
-      cfg.assessments.forEach((a) => {
-        if (a.type === "PT" && a.enabled) {
-          const name = a.name.trim().toLowerCase();
-          if (ptNames.has(name)) {
-            errors.push(`${term}: Duplicate PT/Lab name "${a.name}"`);
-          }
-          ptNames.add(name);
-        } else if (a.type === "QUIZ" && a.enabled) {
-          const name = a.name.trim().toLowerCase();
-          if (quizNames.has(name)) {
-            errors.push(`${term}: Duplicate Quiz name "${a.name}"`);
-          }
-          quizNames.add(name);
+    cfg.assessments.forEach((a) => {
+      if (a.type === "PT" && a.enabled) {
+        const name = a.name.trim().toLowerCase();
+        if (ptNames.has(name)) {
+          errors.push(`${term}: Duplicate PT/Lab name "${a.name}"`);
         }
-      });
+        ptNames.add(name);
+      } else if (a.type === "QUIZ" && a.enabled) {
+        const name = a.name.trim().toLowerCase();
+        if (quizNames.has(name)) {
+          errors.push(`${term}: Duplicate Quiz name "${a.name}"`);
+        }
+        quizNames.add(name);
+      }
     });
 
     return errors;
   };
 
-  const handleSave = () => {
-    const errors = validateConfigs();
+  const validateConfigs = (): string[] => {
+    const errors: string[] = [];
+
+    Object.entries(termConfigs).forEach(([term, cfg]) => {
+      const termErrors = validateTerm(term as Term);
+      errors.push(...termErrors);
+    });
+
+    return errors;
+  };
+
+  const handleSaveTerm = (term: Term) => {
+    const errors = validateTerm(term);
 
     if (errors.length > 0) {
-      setValidationErrors(errors);
+      // Filter to show only errors for this term
+      const allErrors = validationErrors.filter((e) => !e.startsWith(term));
+      setValidationErrors([...allErrors, ...errors]);
       toast.error(
-        `Found ${errors.length} validation error${errors.length > 1 ? "s" : ""}`
+        `Found ${errors.length} validation error${
+          errors.length > 1 ? "s" : ""
+        } for ${term}`
       );
       return;
     }
 
-    setValidationErrors([]);
-    onSave(termConfigs);
-    onClose();
+    // Remove errors for this term
+    setValidationErrors((prev) => prev.filter((e) => !e.startsWith(term)));
+
+    // Save only this term's config
+    const updatedConfigs = {
+      ...termConfigs,
+      [term]: termConfigs[term],
+    };
+    onSave(updatedConfigs);
+
+    // Mark as saved
+    setSavedTerms((prev) => new Set(prev).add(term));
+    toast.success(`${term} configuration saved successfully!`);
   };
 
   const handleNextTutorialStep = () => {
@@ -550,7 +679,7 @@ export function SettingsModal({
               <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <X className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -590,10 +719,11 @@ export function SettingsModal({
               const termErrors = validationErrors.filter((e) =>
                 e.startsWith(term)
               );
+              const isSaved = savedTerms.has(term);
               return (
                 <button
                   key={term}
-                  onClick={() => setActiveTerm(term)}
+                  onClick={() => handleTermChange(term)}
                   className={`relative px-3 sm:px-4 md:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium whitespace-nowrap ${
                     term === activeTerm
                       ? "text-[#124A69] border-b-2 border-[#124A69]"
@@ -604,6 +734,14 @@ export function SettingsModal({
                   {termErrors.length > 0 && (
                     <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                   )}
+                  {isSaved && !termErrors.length && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full"></span>
+                  )}
+                  {hasUnsavedChanges(term) &&
+                    !isSaved &&
+                    !termErrors.length && (
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-yellow-500 rounded-full"></span>
+                    )}
                 </button>
               );
             }
@@ -1250,29 +1388,73 @@ export function SettingsModal({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 px-4 sm:px-6 py-3 sm:py-4 border-t bg-gray-50">
           <div className="text-xs sm:text-sm text-gray-600">
             <AlertCircle className="inline w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-            All enabled assessments must have valid names and max scores
+            {savedTerms.has(activeTerm) ? (
+              <span className="flex items-center gap-2 text-green-600">
+                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                {activeTerm} saved
+              </span>
+            ) : (
+              "Save each term individually before switching tabs"
+            )}
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <button
-              onClick={() => {
-                setValidationErrors([]);
-                onClose();
-              }}
+              onClick={handleClose}
               className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
             >
-              Cancel
+              Close
             </button>
             <button
-              onClick={handleSave}
-              data-tutorial="save-button"
+              onClick={() => handleSaveTerm(activeTerm)}
+              data-tutorial="term-save-button"
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] text-xs sm:text-sm transition-colors"
             >
               <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Save Configuration</span>
+              <span className="hidden sm:inline">Save {activeTerm}</span>
               <span className="sm:hidden">Save</span>
             </button>
           </div>
         </div>
+
+        {/* Unsaved Changes Dialog */}
+        <Dialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+          <DialogContent className="">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500" />
+                Unsaved Changes
+              </DialogTitle>
+              <DialogDescription>
+                {isClosing
+                  ? "You have unsaved changes. What would you like to do?"
+                  : `You have unsaved changes in ${activeTerm}. What would you like to do?`}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={handleUnsavedDialogCancel}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleUnsavedDialogDiscard}
+                className="w-full sm:w-auto"
+              >
+                Discard Changes
+              </Button>
+              <Button
+                onClick={handleUnsavedDialogSave}
+                className="w-full sm:w-auto bg-[#124A69] hover:bg-[#0D3A54]"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isClosing ? "Save & Close" : "Save & Continue"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

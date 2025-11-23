@@ -13,18 +13,33 @@ interface TermGradeData {
 // ==================== Helper Functions ====================
 
 /**
- * Calculate attendance statistics for a student
+ * Calculate attendance statistics for a student (optimized with single pass)
  */
 const calculateAttendanceStats = (attendanceRecords: any[]) => {
-  const totalRecords = attendanceRecords.length;
-  const present = attendanceRecords.filter(
-    (a) => a.status === "PRESENT"
-  ).length;
-  const absent = attendanceRecords.filter((a) => a.status === "ABSENT").length;
-  const late = attendanceRecords.filter((a) => a.status === "LATE").length;
-  const excused = attendanceRecords.filter(
-    (a) => a.status === "EXCUSED"
-  ).length;
+  let totalRecords = 0;
+  let present = 0;
+  let absent = 0;
+  let late = 0;
+  let excused = 0;
+
+  // Single pass instead of multiple filters
+  for (const record of attendanceRecords) {
+    totalRecords++;
+    switch (record.status) {
+      case "PRESENT":
+        present++;
+        break;
+      case "ABSENT":
+        absent++;
+        break;
+      case "LATE":
+        late++;
+        break;
+      case "EXCUSED":
+        excused++;
+        break;
+    }
+  }
 
   const rate = totalRecords > 0 ? (present / totalRecords) * 100 : 0;
 
@@ -49,38 +64,48 @@ const getTermKey = (term: string): string => {
 };
 
 /**
- * Build assessment scores for a term
+ * Build assessment scores for a term (optimized with Map-based lookup)
  */
 const buildAssessmentScores = (
   assessments: any[],
   studentId: string,
-  type: string
+  type: string,
+  scoresByAssessment: Map<string, Map<string, number>>
 ) => {
   if (!assessments || !Array.isArray(assessments)) return [];
-  return assessments
+
+  // Filter and sort assessments
+  const filteredAssessments = assessments
     .filter((a) => a.type === type && a.enabled)
-    .sort((a, b) => (a.order || 0) - (b.order || 0))
-    .map((assessment) => {
-      const score = assessment.scores?.find(
-        (s: any) => s.student?.id === studentId
-      );
-      return {
-        id: assessment.id,
-        name: assessment.name,
-        score: score?.score ?? null,
-        maxScore: assessment.maxScore,
-        percentage:
-          score && assessment.maxScore > 0
-            ? (score.score / assessment.maxScore) * 100
-            : undefined,
-      };
-    });
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  return filteredAssessments.map((assessment) => {
+    // Use Map lookup instead of array.find() - O(1) instead of O(n)
+    const assessmentScores = scoresByAssessment.get(assessment.id);
+    const score = assessmentScores?.get(studentId);
+
+    return {
+      id: assessment.id,
+      name: assessment.name,
+      score: score ?? null,
+      maxScore: assessment.maxScore,
+      percentage:
+        score !== undefined && assessment.maxScore > 0
+          ? (score / assessment.maxScore) * 100
+          : undefined,
+    };
+  });
 };
 
 /**
- * Build term grades structure for a student
+ * Build term grades structure for a student (optimized with Map-based lookups)
  */
-const buildTermGrades = (termConfigs: any[], studentId: string) => {
+const buildTermGrades = (
+  termConfigs: any[],
+  studentId: string,
+  termGradesByConfig: Map<string, Map<string, any>>,
+  scoresByAssessment: Map<string, Map<string, number>>
+) => {
   const termGrades: Record<string, TermGradeData | undefined> = {
     prelims: undefined,
     midterm: undefined,
@@ -91,46 +116,43 @@ const buildTermGrades = (termConfigs: any[], studentId: string) => {
   termConfigs.forEach((termConfig) => {
     const termKey = getTermKey(termConfig.term);
 
-    // Get student's computed term grade
-    const studentTermGrade = termConfig.termGrades?.find(
-      (tg: any) => tg.student.id === studentId
-    );
+    // Get student's computed term grade using Map lookup - O(1) instead of O(n)
+    const configTermGrades = termGradesByConfig.get(termConfig.id);
+    const studentTermGrade = configTermGrades?.get(studentId);
 
     // Build assessment scores
     const ptScores = buildAssessmentScores(
       termConfig.assessments,
       studentId,
-      "PT"
+      "PT",
+      scoresByAssessment
     );
     const quizScores = buildAssessmentScores(
       termConfig.assessments,
       studentId,
-      "QUIZ"
+      "QUIZ",
+      scoresByAssessment
     );
 
-    // Build exam score
+    // Build exam score using Map lookup
     const examAssessment = termConfig.assessments?.find(
       (a: any) => a.type === "EXAM" && a.enabled
     );
     const examScore = examAssessment
-      ? {
-          id: examAssessment.id,
-          name: examAssessment.name,
-          score:
-            examAssessment.scores?.find((s: any) => s.student?.id === studentId)
-              ?.score ?? null,
-          maxScore: examAssessment.maxScore,
-          percentage:
-            examAssessment.scores?.find(
-              (s: any) => s.student?.id === studentId
-            ) && examAssessment.maxScore > 0
-              ? (examAssessment.scores.find(
-                  (s: any) => s.student?.id === studentId
-                )!.score /
-                  examAssessment.maxScore) *
-                100
-              : undefined,
-        }
+      ? (() => {
+          const examScores = scoresByAssessment.get(examAssessment.id);
+          const score = examScores?.get(studentId);
+          return {
+            id: examAssessment.id,
+            name: examAssessment.name,
+            score: score ?? null,
+            maxScore: examAssessment.maxScore,
+            percentage:
+              score !== undefined && examAssessment.maxScore > 0
+                ? (score / examAssessment.maxScore) * 100
+                : undefined,
+          };
+        })()
       : undefined;
 
     // Only add term data if there are assessments or grades
@@ -206,42 +228,63 @@ const calculateAverageGrade = (
 };
 
 /**
- * Calculate course-wide statistics
+ * Calculate course-wide statistics (optimized with single pass)
  */
 const calculateCourseStats = (attendance: any[], studentAnalytics: any[]) => {
-  const totalAttendanceRecords = attendance.length;
-  const totalPresent = attendance.filter((a) => a.status === "PRESENT").length;
-  const totalAbsents = attendance.filter((a) => a.status === "ABSENT").length;
-  const totalLate = attendance.filter((a) => a.status === "LATE").length;
-  const totalExcused = attendance.filter((a) => a.status === "EXCUSED").length;
+  // Single pass through attendance records
+  let totalAttendanceRecords = 0;
+  let totalPresent = 0;
+  let totalAbsents = 0;
+  let totalLate = 0;
+  let totalExcused = 0;
+
+  for (const record of attendance) {
+    totalAttendanceRecords++;
+    switch (record.status) {
+      case "PRESENT":
+        totalPresent++;
+        break;
+      case "ABSENT":
+        totalAbsents++;
+        break;
+      case "LATE":
+        totalLate++;
+        break;
+      case "EXCUSED":
+        totalExcused++;
+        break;
+    }
+  }
 
   const overallAttendanceRate =
     totalAttendanceRecords > 0
       ? (totalPresent / totalAttendanceRecords) * 100
       : 0;
 
-  // Calculate average grade across all students
-  const allGrades = studentAnalytics
-    .map((s) => s.averageGrade)
-    .filter((grade) => grade > 0);
+  // Calculate average grade across all students (single pass)
+  let gradeSum = 0;
+  let gradeCount = 0;
+  let passingStudents = 0;
 
-  const courseAverageGrade =
-    allGrades.length > 0
-      ? allGrades.reduce((sum, grade) => sum + grade, 0) / allGrades.length
-      : 0;
+  for (const student of studentAnalytics) {
+    const grade = student.averageGrade;
+    if (grade > 0) {
+      gradeSum += grade;
+      gradeCount++;
 
-  // Calculate passing rate (assuming 75 is passing for percentage, 3.0 or less for numeric)
-  const passingStudents = allGrades.filter((grade) => {
-    // If grade is less than 5, assume it's numeric grading (1.0-5.0)
-    if (grade <= 5) {
-      return grade <= 3.0;
+      // Check if passing (assuming 75 is passing for percentage, 3.0 or less for numeric)
+      if (grade <= 5) {
+        // Numeric grading (1.0-5.0)
+        if (grade <= 3.0) passingStudents++;
+      } else {
+        // Percentage (0-100)
+        if (grade >= 75) passingStudents++;
+      }
     }
-    // Otherwise it's percentage (0-100)
-    return grade >= 75;
-  }).length;
+  }
 
-  const passingRate =
-    allGrades.length > 0 ? (passingStudents / allGrades.length) * 100 : 0;
+  const courseAverageGrade = gradeCount > 0 ? gradeSum / gradeCount : 0;
+  const passingRate = gradeCount > 0 ? (passingStudents / gradeCount) * 100 : 0;
 
   return {
     attendanceRate: Math.round(overallAttendanceRate * 10) / 10,
@@ -254,7 +297,7 @@ const calculateCourseStats = (attendance: any[], studentAnalytics: any[]) => {
 };
 
 /**
- * Get course analytics with all calculations (server-side)
+ * Get course analytics with all calculations (server-side, optimized)
  */
 export async function getCourseAnalyticsData(courseSlug: string) {
   // Fetch course with all related data using service
@@ -264,18 +307,58 @@ export async function getCourseAnalyticsData(courseSlug: string) {
     return null;
   }
 
-  // Calculate student analytics
+  // Build Maps for O(1) lookups instead of O(n²) filters
+  // Map: studentId -> attendance records
+  const attendanceByStudent = new Map<string, any[]>();
+  for (const record of course.attendance || []) {
+    const studentId = record.student.id;
+    if (!attendanceByStudent.has(studentId)) {
+      attendanceByStudent.set(studentId, []);
+    }
+    attendanceByStudent.get(studentId)!.push(record);
+  }
+
+  // Map: termConfigId -> (studentId -> termGrade)
+  const termGradesByConfig = new Map<string, Map<string, any>>();
+  for (const termConfig of course.termConfigs || []) {
+    const configMap = new Map<string, any>();
+    for (const termGrade of termConfig.termGrades || []) {
+      // Use studentId directly (from optimized query structure)
+      const studentId = termGrade.student?.id || termGrade.studentId;
+      configMap.set(studentId, termGrade);
+    }
+    termGradesByConfig.set(termConfig.id, configMap);
+  }
+
+  // Map: assessmentId -> (studentId -> score)
+  const scoresByAssessment = new Map<string, Map<string, number>>();
+  for (const termConfig of course.termConfigs || []) {
+    for (const assessment of termConfig.assessments || []) {
+      const assessmentMap = new Map<string, number>();
+      for (const score of assessment.scores || []) {
+        // Use studentId directly (from optimized query structure)
+        const studentId = score.student?.id || score.studentId;
+        assessmentMap.set(studentId, score.score);
+      }
+      scoresByAssessment.set(assessment.id, assessmentMap);
+    }
+  }
+
+  // Calculate student analytics using Map lookups - O(n) instead of O(n²)
   const studentAnalytics = course.students.map((student) => {
-    // Filter attendance for this student
-    const studentAttendance = (course.attendance || []).filter(
-      (a) => a.student.id === student.id
-    );
+    // Get attendance using Map lookup - O(1) instead of O(n) filter
+    const studentAttendance = attendanceByStudent.get(student.id) || [];
 
     // Calculate attendance stats
     const attendanceStats = calculateAttendanceStats(studentAttendance);
 
-    // Build term grades structure
-    const termGrades = buildTermGrades(course.termConfigs || [], student.id);
+    // Build term grades structure using Map lookups
+    const termGrades = buildTermGrades(
+      course.termConfigs || [],
+      student.id,
+      termGradesByConfig,
+      scoresByAssessment
+    );
 
     // Calculate average grade
     const gradeStats = calculateAverageGrade(termGrades);

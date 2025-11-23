@@ -19,6 +19,7 @@ export interface TermGrades {
   prelims?: TermGradeData;
   midterm?: TermGradeData;
   preFinals?: TermGradeData;
+  prefinals?: TermGradeData; // API returns lowercase
   finals?: TermGradeData;
 }
 

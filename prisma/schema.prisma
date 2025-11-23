@@ -266,6 +266,7 @@ model Course {
   termConfigs  TermConfiguration[]  @relation("CourseTermConfigs")
   students     Student[]            @relation("StudentCourses")
 
+  @@index([facultyId, status])
   @@map("courses")
 }
 
@@ -297,6 +298,8 @@ model Attendance {
   @@index([studentId])
   @@index([courseId])
   @@index([date])
+  @@index([courseId, date])
+  @@index([studentId, status])
   @@map("attendance")
 }
 
@@ -429,6 +432,7 @@ model TermGrade {
   @@unique([termConfigId, studentId])
   @@index([termConfigId])
   @@index([studentId])
+  @@index([termConfigId, studentId])
   @@map("term_grades")
 }
 

@@ -9,8 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
+// Dynamic imports for heavy libraries (code-split)
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { StudentWithGrades, CourseInfo } from "../types/types";
@@ -109,7 +108,17 @@ export const ExportDialog = ({
   const handleExport = async () => {
     if (!courseInfo) return;
     try {
-      const workbook = new ExcelJS.Workbook();
+      toast.loading("Preparing export...");
+
+      // Dynamically import heavy libraries
+      const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+        import("exceljs"),
+        import("file-saver"),
+      ]);
+
+      toast.loading("Generating Excel file...");
+
+      const workbook = new (ExcelJS as any).Workbook();
       const worksheet = workbook.addWorksheet("Student Grades");
 
       // Larger, more readable fonts throughout
@@ -168,7 +177,7 @@ export const ExportDialog = ({
 
       // Track current column
       let currentCol = 1;
-      const headerCells: ExcelJS.Cell[] = [];
+      const headerCells: any[] = [];
       const columnInfo: Array<{ col: number; width: number; type: string }> =
         [];
 

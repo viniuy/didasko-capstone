@@ -789,12 +789,18 @@ export function CourseDataTable({
       }
     });
 
-    const coursesWithStats: Course[] = coursesToUse.map((course) => {
+    const coursesWithStats: Course[] = coursesToUse.map((course: any) => {
       const stats: CourseStats = statsMap.get(course.slug) || defaultStats;
 
       return {
         ...course,
         stats,
+        // Ensure _count is preserved if it exists, otherwise calculate from available data
+        _count: course._count || {
+          students:
+            course.attendanceStats?.totalStudents ||
+            (Array.isArray(course.students) ? course.students.length : 0),
+        },
       };
     });
 
@@ -2359,7 +2365,7 @@ export function CourseDataTable({
                     </button>
                   </div>
 
-                  {isLoading || isRefreshing ? (
+                  {isInitialLoading ? (
                     <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
                         {Array.from({ length: itemsPerPage }).map(

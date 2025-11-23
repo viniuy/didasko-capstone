@@ -462,43 +462,122 @@ function computeTermGradeFromScores(
 // Batched: Get class record data (students, term-configs, assessment-scores, criteria-links)
 // Note: Not cached to ensure fresh data after grade saves
 export async function getClassRecordData(courseSlug: string) {
+  // Single query to get course with all needed relations
   const course = await prisma.course.findUnique({
     where: { slug: courseSlug },
-    select: { id: true },
+    select: {
+      id: true,
+      termConfigs: {
+        include: {
+          assessments: {
+            orderBy: [{ type: "asc" }, { order: "asc" }],
+          },
+        },
+        orderBy: { term: "asc" },
+      },
+    },
   });
 
   if (!course) return null;
 
-  // Batch all queries in parallel
-  const [students, termConfigs, assessmentScoresResult, criteriaLinks] =
-    await Promise.all([
-      // Students
-      prisma.student.findMany({
-        where: {
-          coursesEnrolled: {
-            some: { id: course.id },
+  // Batch remaining queries in parallel (students, assessment scores, criteria links)
+  const [students, assessmentScoresResult, criteriaLinks] = await Promise.all([
+    // Students
+    prisma.student.findMany({
+      where: {
+        coursesEnrolled: {
+          some: { id: course.id },
+        },
+      },
+      select: {
+        id: true,
+        studentId: true,
+        firstName: true,
+        lastName: true,
+        middleInitial: true,
+        image: true,
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    }),
+
+    // Assessment scores - combined query
+    (async () => {
+      const [assessmentScores, criteriaScores] = await Promise.all([
+        prisma.assessmentScore.findMany({
+          where: {
+            assessment: {
+              termConfig: {
+                courseId: course.id,
+              },
+            },
           },
-        },
-        select: {
-          id: true,
-          studentId: true,
-          firstName: true,
-          lastName: true,
-          middleInitial: true,
-          image: true,
-        },
-        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-      }),
+          select: {
+            studentId: true,
+            assessmentId: true,
+            score: true,
+          },
+        }),
+        prisma.grade.findMany({
+          where: {
+            courseId: course.id,
+          },
+          select: {
+            studentId: true,
+            criteriaId: true,
+            value: true,
+          },
+        }),
+      ]);
 
-      // Term configs (not cached for fresh data)
-      getTermConfigs(courseSlug),
+      const scoresMap: Record<string, any> = {};
 
-      // Assessment scores (not cached for fresh data)
-      getAssessmentScores(courseSlug),
+      assessmentScores.forEach((score) => {
+        const key = `${score.studentId}:${score.assessmentId}`;
+        scoresMap[key] = {
+          studentId: score.studentId,
+          assessmentId: score.assessmentId,
+          score: score.score,
+        };
+      });
 
-      // Criteria links (not cached for fresh data)
-      getCriteriaLinks(courseSlug),
-    ]);
+      criteriaScores.forEach((grade) => {
+        const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
+        scoresMap[key] = {
+          studentId: grade.studentId,
+          assessmentId: `criteria:${grade.criteriaId}`,
+          score: grade.value,
+        };
+      });
+
+      return scoresMap;
+    })(),
+
+    // Criteria links
+    getCriteriaLinks(courseSlug),
+  ]);
+
+  // Transform term configs to match getTermConfigs format
+  const termConfigs: Record<string, any> = {};
+  course.termConfigs.forEach((config) => {
+    termConfigs[config.term] = {
+      id: config.id,
+      term: config.term,
+      ptWeight: config.ptWeight,
+      quizWeight: config.quizWeight,
+      examWeight: config.examWeight,
+      assessments: config.assessments.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type,
+        maxScore: a.maxScore,
+        date: a.date ? a.date.toISOString().split("T")[0] : null,
+        enabled: a.enabled,
+        order: a.order,
+        linkedCriteriaId: a.linkedCriteriaId ?? null,
+        transmutationBase: a.transmutationBase ?? 0,
+      })),
+    };
+  });
 
   // Ensure assessmentScores is never null
   const assessmentScores: Record<string, any> = assessmentScoresResult ?? {};

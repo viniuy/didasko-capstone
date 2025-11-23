@@ -23,8 +23,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { SettingsModal } from "./SettingsModal";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
+// Dynamic imports for heavy libraries (code-split)
 import PasteGradesModal from "./paste-grades";
 import {
   Dialog,
@@ -1221,12 +1220,20 @@ export function ClassRecordTable({
     exportType: "summary" | "details"
   ) => {
     try {
+      toast.loading("Preparing export...");
+
+      // Dynamically import heavy libraries
+      const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+        import("exceljs"),
+        import("file-saver"),
+      ]);
+
       toast.loading("Generating Excel file...");
 
       if (exportType === "summary") {
-        await exportSummary(term);
+        await exportSummary(term, ExcelJS, saveAs);
       } else {
-        await exportDetails(term);
+        await exportDetails(term, ExcelJS, saveAs);
       }
 
       toast.dismiss();
@@ -1239,7 +1246,11 @@ export function ClassRecordTable({
     }
   };
 
-  const exportSummary = async (term: Term | "SUMMARY") => {
+  const exportSummary = async (
+    term: Term | "SUMMARY",
+    ExcelJS: any,
+    saveAs: any
+  ) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Class Record");
 
@@ -1261,7 +1272,7 @@ export function ClassRecordTable({
     ]);
 
     headerRow.height = 25;
-    headerRow.eachCell((cell, col) => {
+    headerRow.eachCell((cell: any, col: number) => {
       cell.border = {
         top: { style: "thin" },
         bottom: { style: "thin" },
@@ -1314,7 +1325,7 @@ export function ClassRecordTable({
         finals,
       ]);
 
-      row.eachCell((cell, col) => {
+      row.eachCell((cell: any, col: number) => {
         cell.border = {
           top: { style: "thin" },
           bottom: { style: "thin" },
@@ -1350,7 +1361,11 @@ export function ClassRecordTable({
     saveAs(new Blob([buffer]), fileName);
   };
 
-  const exportDetails = async (term: Term | "SUMMARY") => {
+  const exportDetails = async (
+    term: Term | "SUMMARY",
+    ExcelJS: any,
+    saveAs: any
+  ) => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Class Record");
 
@@ -1430,7 +1445,7 @@ export function ClassRecordTable({
     headerRow.alignment = { vertical: "middle", horizontal: "center" };
     headerRow.height = 25;
 
-    headerRow.eachCell((cell) => {
+    headerRow.eachCell((cell: any) => {
       cell.border = {
         top: { style: "thin" },
         left: { style: "thin" },
@@ -1532,7 +1547,7 @@ export function ClassRecordTable({
 
       const row = ws.addRow(rowData);
 
-      row.eachCell((cell) => {
+      row.eachCell((cell: any) => {
         cell.border = {
           top: { style: "thin", color: { argb: "FFD3D3D3" } },
           left: { style: "thin", color: { argb: "FFD3D3D3" } },

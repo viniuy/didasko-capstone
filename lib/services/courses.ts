@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { unstable_cache, revalidateTag } from "next/cache";
 
 // Helper function to generate slug
 export function generateSlug(code: string, section: string): string {
@@ -8,30 +9,37 @@ export function generateSlug(code: string, section: string): string {
     .replace(/\s+/g, "-")}`;
 }
 
-// Get course by slug with basic info
-// Note: Not cached to ensure fresh data after saves
+// Get course by slug with basic info (cached)
 export async function getCourseBySlug(slug: string) {
-  return prisma.course.findUnique({
-    where: { slug },
-    include: {
-      faculty: {
-        select: { id: true, name: true, email: true, department: true },
-      },
-      students: {
-        select: {
-          id: true,
-          lastName: true,
-          firstName: true,
-          middleInitial: true,
+  return unstable_cache(
+    async (courseSlug: string) => {
+      return prisma.course.findUnique({
+        where: { slug: courseSlug },
+        include: {
+          faculty: {
+            select: { id: true, name: true, email: true, department: true },
+          },
+          students: {
+            select: {
+              id: true,
+              lastName: true,
+              firstName: true,
+              middleInitial: true,
+            },
+          },
+          schedules: true,
         },
-      },
-      schedules: true,
+      });
     },
-  });
+    [`course-by-slug-${slug}`],
+    {
+      tags: [`course-${slug}`, "courses"],
+      revalidate: 60, // Revalidate every 60 seconds
+    }
+  )(slug);
 }
 
-// Get courses with filters (merged /courses and /courses/active)
-// Note: Not cached to ensure fresh data after saves
+// Get courses with filters (merged /courses and /courses/active) (cached)
 export async function getCourses(filters: {
   facultyId?: string;
   search?: string;
@@ -41,75 +49,147 @@ export async function getCourses(filters: {
   section?: string;
   status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
 }) {
-  const where: Prisma.CourseWhereInput = {};
+  // Create cache key from filters
+  const cacheKey = `courses-${JSON.stringify(filters)}`;
 
-  if (filters.status) where.status = filters.status;
-  if (filters.facultyId) where.facultyId = filters.facultyId;
-  if (filters.department) where.faculty = { department: filters.department };
-  if (filters.semester) where.semester = filters.semester;
-  if (filters.code) where.code = filters.code;
-  if (filters.section) where.section = filters.section;
-  if (filters.search) {
-    where.OR = [
-      { title: { contains: filters.search, mode: "insensitive" } },
-      { code: { contains: filters.search, mode: "insensitive" } },
-      { room: { contains: filters.search, mode: "insensitive" } },
-    ];
-  }
+  return unstable_cache(
+    async () => {
+      const where: Prisma.CourseWhereInput = {};
 
-  const courses = await prisma.course.findMany({
-    where,
-    include: {
-      faculty: {
-        select: { id: true, name: true, email: true, department: true },
-      },
-      students: {
-        select: {
-          id: true,
-          lastName: true,
-          firstName: true,
-          middleInitial: true,
+      if (filters.status) where.status = filters.status;
+      if (filters.facultyId) where.facultyId = filters.facultyId;
+      if (filters.department)
+        where.faculty = { department: filters.department };
+      if (filters.semester) where.semester = filters.semester;
+      if (filters.code) where.code = filters.code;
+      if (filters.section) where.section = filters.section;
+      if (filters.search) {
+        where.OR = [
+          { title: { contains: filters.search, mode: "insensitive" } },
+          { code: { contains: filters.search, mode: "insensitive" } },
+          { room: { contains: filters.search, mode: "insensitive" } },
+        ];
+      }
+
+      const courses = await prisma.course.findMany({
+        where,
+        include: {
+          faculty: {
+            select: { id: true, name: true, email: true, department: true },
+          },
+          students: {
+            select: {
+              id: true,
+              lastName: true,
+              firstName: true,
+              middleInitial: true,
+            },
+          },
+          schedules: true,
+          _count: {
+            select: {
+              attendance: true,
+              students: true,
+            },
+          },
         },
-      },
-      schedules: true,
-      attendance: true,
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+
+      // Fetch aggregated attendance stats in parallel for all courses
+      const courseIds = courses.map((c) => c.id);
+      const [presentCounts, absentCounts, lateCounts, lastAttendanceDates] =
+        await Promise.all([
+          // Count PRESENT attendance
+          prisma.attendance.groupBy({
+            by: ["courseId"],
+            where: {
+              courseId: { in: courseIds },
+              status: "PRESENT",
+            },
+            _count: { id: true },
+          }),
+          // Count ABSENT attendance
+          prisma.attendance.groupBy({
+            by: ["courseId"],
+            where: {
+              courseId: { in: courseIds },
+              status: "ABSENT",
+            },
+            _count: { id: true },
+          }),
+          // Count LATE attendance
+          prisma.attendance.groupBy({
+            by: ["courseId"],
+            where: {
+              courseId: { in: courseIds },
+              status: "LATE",
+            },
+            _count: { id: true },
+          }),
+          // Get last attendance date for each course
+          prisma.attendance.findMany({
+            where: { courseId: { in: courseIds } },
+            select: {
+              courseId: true,
+              date: true,
+            },
+            orderBy: { date: "desc" },
+            distinct: ["courseId"],
+          }),
+        ]);
+
+      // Build Maps for O(1) lookups
+      const presentCountMap = new Map(
+        presentCounts.map((c) => [c.courseId, c._count.id])
+      );
+      const absentCountMap = new Map(
+        absentCounts.map((c) => [c.courseId, c._count.id])
+      );
+      const lateCountMap = new Map(
+        lateCounts.map((c) => [c.courseId, c._count.id])
+      );
+      const lastDateMap = new Map(
+        lastAttendanceDates.map((a) => [a.courseId, a.date])
+      );
+
+      return courses.map((course) => {
+        const totalStudents = course.students.length;
+        const totalPresent = presentCountMap.get(course.id) || 0;
+        const totalAbsents = absentCountMap.get(course.id) || 0;
+        const totalLate = lateCountMap.get(course.id) || 0;
+        const lastAttendanceDate = lastDateMap.get(course.id) || null;
+
+        return {
+          ...course,
+          _count: {
+            students: course._count.students,
+            attendance: course._count.attendance,
+          },
+          attendanceStats: {
+            totalStudents,
+            totalPresent,
+            totalAbsents,
+            totalLate,
+            lastAttendanceDate,
+            attendanceRate:
+              totalStudents > 0 ? totalPresent / totalStudents : 0,
+          },
+          students: course.students.map((s) => ({
+            ...s,
+            middleInitial: s.middleInitial || undefined,
+          })),
+          schedules: course.schedules,
+          attendance: undefined,
+        };
+      });
     },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-  });
-
-  return courses.map((course) => {
-    const totalStudents = course.students.length;
-    const totalPresent = course.attendance.filter(
-      (a) => a.status === "PRESENT"
-    ).length;
-    const totalAbsents = course.attendance.filter(
-      (a) => a.status === "ABSENT"
-    ).length;
-    const totalLate = course.attendance.filter(
-      (a) => a.status === "LATE"
-    ).length;
-    const lastAttendanceDate = course.attendance.length
-      ? course.attendance[course.attendance.length - 1].date
-      : null;
-
-    return {
-      ...course,
-      attendanceStats: {
-        totalStudents,
-        totalPresent,
-        totalAbsents,
-        totalLate,
-        lastAttendanceDate,
-        attendanceRate: totalStudents > 0 ? totalPresent / totalStudents : 0,
-      },
-      students: course.students.map((s) => ({
-        ...s,
-        middleInitial: s.middleInitial || undefined,
-      })),
-      schedules: course.schedules,
-      attendance: undefined,
-    };
-  });
+    [cacheKey],
+    {
+      tags: ["courses"],
+      revalidate: 60, // Revalidate every 60 seconds
+    }
+  )();
 }
 
 // Get course with students and today's attendance (batched query)
@@ -269,12 +349,22 @@ export async function getCourseStudents(courseSlug: string, date?: Date) {
   };
 }
 
-// Get course analytics (heavy query - all related data)
-// Note: Not cached to ensure fresh data after saves
+// Get course analytics (optimized - split into 3 parallel queries)
+// Cached with tags for invalidation
 export async function getCourseAnalytics(courseSlug: string) {
-  const course = await prisma.course.findUnique({
+  // Query 1: Basic course info + students list only (no nested data)
+  const coursePromise = prisma.course.findUnique({
     where: { slug: courseSlug },
-    include: {
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      section: true,
+      room: true,
+      semester: true,
+      academicYear: true,
+      slug: true,
+      status: true,
       faculty: {
         select: {
           id: true,
@@ -295,143 +385,205 @@ export async function getCourseAnalytics(courseSlug: string) {
         },
       },
       schedules: true,
-      attendance: {
-        include: {
-          student: {
-            select: {
-              id: true,
-              studentId: true,
-            },
-          },
-        },
-      },
-      termConfigs: {
-        include: {
-          termGrades: {
-            include: {
-              student: {
-                select: {
-                  id: true,
-                  studentId: true,
-                },
-              },
-            },
-          },
-          assessments: {
-            include: {
-              scores: {
-                include: {
-                  student: {
-                    select: {
-                      id: true,
-                      studentId: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      grades: {
-        include: {
-          student: {
-            select: {
-              id: true,
-              studentId: true,
-            },
-          },
-        },
-      },
     },
   });
 
-  if (!course) return null;
-
-  // Import calculation functions (these are pure functions, can be extracted)
-  // For now, we'll return the raw data and let the API route handle calculations
-  // Or we can move the calculation logic here
-  return course;
-}
-
-// Get course stats (passing rate, attendance rate)
-// Note: Not cached to ensure fresh data after saves
-export async function getCourseStats(courseSlug: string) {
-  const course = await prisma.course.findUnique({
+  // Query 2: Get course ID first, then fetch attendance and term configs in parallel
+  const courseForData = await prisma.course.findUnique({
     where: { slug: courseSlug },
-    include: { students: true },
+    select: { id: true },
   });
 
-  if (!course) return null;
+  if (!courseForData) return null;
 
-  const totalStudents = course.students.length;
+  // Query 2: Attendance records (minimal fields only)
+  const attendancePromise = prisma.attendance.findMany({
+    where: { courseId: courseForData.id },
+    select: {
+      id: true,
+      studentId: true,
+      date: true,
+      status: true,
+    },
+    orderBy: { date: "desc" },
+  });
 
-  if (totalStudents === 0) {
-    return {
-      passingRate: 0,
-      attendanceRate: 0,
-      totalStudents: 0,
-    };
-  }
-
-  // Batch query: Get term configs and attendance in parallel
-  const [termConfigs, attendanceRecords] = await Promise.all([
-    prisma.termConfiguration.findMany({
-      where: { courseId: course.id },
-      include: {
-        termGrades: {
-          where: {
-            studentId: {
-              in: course.students.map((s) => s.id),
+  // Query 3: Term configs with assessments and scores (optimized structure)
+  const termConfigsPromise = prisma.termConfiguration.findMany({
+    where: { courseId: courseForData.id },
+    select: {
+      id: true,
+      term: true,
+      ptWeight: true,
+      quizWeight: true,
+      examWeight: true,
+      termGrades: {
+        select: {
+          studentId: true,
+          totalPercentage: true,
+          numericGrade: true,
+          remarks: true,
+        },
+      },
+      assessments: {
+        where: { enabled: true },
+        select: {
+          id: true,
+          type: true,
+          name: true,
+          maxScore: true,
+          order: true,
+          scores: {
+            select: {
+              studentId: true,
+              score: true,
             },
           },
         },
+        orderBy: { order: "asc" },
       },
-    }),
-    prisma.attendance.findMany({
-      where: { courseId: course.id },
-    }),
-  ]);
-
-  const studentsWithGrades = new Set<string>();
-  const passingStudents = new Set<string>();
-
-  termConfigs.forEach((config) => {
-    config.termGrades.forEach((grade) => {
-      studentsWithGrades.add(grade.studentId);
-      if (grade.remarks === "PASSED") {
-        passingStudents.add(grade.studentId);
-      }
-    });
+    },
+    orderBy: { term: "asc" },
   });
 
-  const passingRate =
-    studentsWithGrades.size > 0
-      ? Math.round((passingStudents.size / studentsWithGrades.size) * 100)
-      : 0;
+  // Execute queries in parallel
+  const [course, attendance, termConfigs] = await Promise.all([
+    coursePromise,
+    attendancePromise,
+    termConfigsPromise,
+  ]);
 
-  const attendanceRate =
-    attendanceRecords.length === 0
-      ? 0
-      : Math.round(
-          (attendanceRecords.filter(
-            (record) => record.status === "PRESENT" || record.status === "LATE"
-          ).length /
-            attendanceRecords.length) *
-            100
-        );
+  if (!course) return null;
+
+  // Build student Map for O(1) lookups
+  const studentsMap = new Map(course.students.map((s) => [s.id, s]));
+
+  // Transform attendance to include student reference (for compatibility)
+  const attendanceWithStudent = attendance.map((a) => ({
+    ...a,
+    student: {
+      id: a.studentId,
+      studentId: studentsMap.get(a.studentId)?.studentId || "",
+    },
+  }));
+
+  // Transform term configs to include student references (for compatibility)
+  const termConfigsWithStudents = termConfigs.map((tc) => ({
+    ...tc,
+    termGrades: tc.termGrades.map((tg) => ({
+      ...tg,
+      student: {
+        id: tg.studentId,
+        studentId: studentsMap.get(tg.studentId)?.studentId || "",
+      },
+    })),
+    assessments: tc.assessments.map((a) => ({
+      ...a,
+      scores: a.scores.map((s) => ({
+        ...s,
+        student: {
+          id: s.studentId,
+          studentId: studentsMap.get(s.studentId)?.studentId || "",
+        },
+      })),
+    })),
+  }));
 
   return {
-    passingRate,
-    attendanceRate,
-    totalStudents,
-    studentsWithGrades: studentsWithGrades.size,
-    passingStudents: passingStudents.size,
-    totalAttendanceRecords: attendanceRecords.length,
-    presentCount: attendanceRecords.filter(
-      (r) => r.status === "PRESENT" || r.status === "LATE"
-    ).length,
+    ...course,
+    attendance: attendanceWithStudent,
+    termConfigs: termConfigsWithStudents,
+    grades: [], // Not used in analytics
   };
+}
+
+// Get course stats (passing rate, attendance rate) (cached)
+export async function getCourseStats(courseSlug: string) {
+  return unstable_cache(
+    async (slug: string) => {
+      const course = await prisma.course.findUnique({
+        where: { slug },
+        include: { students: true },
+      });
+
+      if (!course) return null;
+
+      const totalStudents = course.students.length;
+
+      if (totalStudents === 0) {
+        return {
+          passingRate: 0,
+          attendanceRate: 0,
+          totalStudents: 0,
+        };
+      }
+
+      // Batch query: Get term configs and attendance in parallel
+      const [termConfigs, attendanceRecords] = await Promise.all([
+        prisma.termConfiguration.findMany({
+          where: { courseId: course.id },
+          include: {
+            termGrades: {
+              where: {
+                studentId: {
+                  in: course.students.map((s) => s.id),
+                },
+              },
+            },
+          },
+        }),
+        prisma.attendance.findMany({
+          where: { courseId: course.id },
+        }),
+      ]);
+
+      const studentsWithGrades = new Set<string>();
+      const passingStudents = new Set<string>();
+
+      termConfigs.forEach((config) => {
+        config.termGrades.forEach((grade) => {
+          studentsWithGrades.add(grade.studentId);
+          if (grade.remarks === "PASSED") {
+            passingStudents.add(grade.studentId);
+          }
+        });
+      });
+
+      const passingRate =
+        studentsWithGrades.size > 0
+          ? Math.round((passingStudents.size / studentsWithGrades.size) * 100)
+          : 0;
+
+      const attendanceRate =
+        attendanceRecords.length === 0
+          ? 0
+          : Math.round(
+              (attendanceRecords.filter(
+                (record) =>
+                  record.status === "PRESENT" || record.status === "LATE"
+              ).length /
+                attendanceRecords.length) *
+                100
+            );
+
+      return {
+        passingRate,
+        attendanceRate,
+        totalStudents,
+        studentsWithGrades: studentsWithGrades.size,
+        passingStudents: passingStudents.size,
+        totalAttendanceRecords: attendanceRecords.length,
+        presentCount: attendanceRecords.filter(
+          (r) => r.status === "PRESENT" || r.status === "LATE"
+        ).length,
+      };
+    },
+    [`course-stats-${courseSlug}`],
+    {
+      tags: [`course-${courseSlug}`, "courses"],
+      revalidate: 60, // Revalidate every 60 seconds
+    }
+  )(courseSlug);
 }
 
 // Batch: Get stats for multiple courses
@@ -439,7 +591,7 @@ export async function getCoursesStatsBatch(courseSlugs: string[]) {
   return Promise.all(courseSlugs.map((slug) => getCourseStats(slug)));
 }
 
-// Create course
+// Create course (invalidates cache)
 export async function createCourse(data: {
   code: string;
   title: string;
@@ -485,7 +637,7 @@ export async function createCourse(data: {
     throw new Error("classNumber must be a valid number");
   }
 
-  return prisma.course.create({
+  const result = await prisma.course.create({
     data: {
       code: data.code,
       title: data.title,
@@ -514,9 +666,17 @@ export async function createCourse(data: {
       },
     },
   });
+
+  // Invalidate cache
+  revalidateTag("courses");
+  if (data.facultyId) {
+    revalidateTag(`course-${slug}`);
+  }
+
+  return result;
 }
 
-// Update course
+// Update course (invalidates cache)
 export async function updateCourse(
   courseSlug: string,
   data: {
@@ -549,7 +709,7 @@ export async function updateCourse(
     }
   }
 
-  return prisma.course.update({
+  const result = await prisma.course.update({
     where: { slug: courseSlug },
     data: {
       ...data,
@@ -575,11 +735,26 @@ export async function updateCourse(
       schedules: true,
     },
   });
+
+  // Invalidate cache
+  revalidateTag("courses");
+  revalidateTag(`course-${courseSlug}`);
+  if (newSlug) {
+    revalidateTag(`course-${newSlug}`);
+  }
+
+  return result;
 }
 
-// Delete course
+// Delete course (invalidates cache)
 export async function deleteCourse(courseSlug: string) {
-  return prisma.course.delete({
+  const result = await prisma.course.delete({
     where: { slug: courseSlug },
   });
+
+  // Invalidate cache
+  revalidateTag("courses");
+  revalidateTag(`course-${courseSlug}`);
+
+  return result;
 }

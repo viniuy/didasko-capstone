@@ -11,9 +11,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Search, Download, TrendingUp } from "lucide-react";
-import * as XLSX from "xlsx";
+// XLSX removed - not used in this component
 import toast from "react-hot-toast";
-import { StudentWithGrades } from "../types/types";
+import { StudentWithGrades, TermGradeData } from "../types/types";
 import { StudentAvatar } from "./ui-components";
 
 interface TermGradesTabProps {
@@ -37,7 +37,13 @@ export const TermGradesTab = ({
     setSearchQuery(globalSearchQuery);
   }, [globalSearchQuery]);
 
-  const hasData = students.some((s) => s.termGrades[termKey]);
+  // Normalize termKey to match API response keys
+  // API returns "prelims", "prefinals", "midterm", "finals"
+  // Frontend uses "prelims", "preFinals", "midterm", "finals"
+  const normalizedTermKey = termKey === "preFinals" ? "prefinals" : termKey;
+  const hasData = students.some(
+    (s) => s.termGrades[normalizedTermKey as keyof typeof s.termGrades]
+  );
 
   if (!hasData) {
     return (
@@ -69,11 +75,13 @@ export const TermGradesTab = ({
         });
     });
 
-  const sampleTerm = students.find((s) => s.termGrades[termKey])?.termGrades[
-    termKey
-  ];
-  const ptColumns = sampleTerm?.ptScores?.map((pt) => pt.name) || [];
-  const quizColumns = sampleTerm?.quizScores?.map((q) => q.name) || [];
+  const sampleTerm = students.find(
+    (s) => s.termGrades[normalizedTermKey as keyof typeof s.termGrades]
+  )?.termGrades[normalizedTermKey as keyof (typeof students)[0]["termGrades"]];
+  const ptColumns =
+    sampleTerm?.ptScores?.map((pt: { name: string }) => pt.name) || [];
+  const quizColumns =
+    sampleTerm?.quizScores?.map((q: { name: string }) => q.name) || [];
   const hasExam = sampleTerm?.examScore !== undefined;
 
   return (
@@ -92,7 +100,7 @@ export const TermGradesTab = ({
               <TableHead className="min-w-[200px] sticky left-0 bg-white z-10 border-r">
                 Student
               </TableHead>
-              {ptColumns.map((pt, idx) => (
+              {ptColumns.map((pt: string, idx: number) => (
                 <TableHead
                   key={`pt-${idx}`}
                   className="text-center min-w-[100px]"
@@ -100,7 +108,7 @@ export const TermGradesTab = ({
                   {pt}
                 </TableHead>
               ))}
-              {quizColumns.map((quiz, idx) => (
+              {quizColumns.map((quiz: string, idx: number) => (
                 <TableHead
                   key={`quiz-${idx}`}
                   className="text-center min-w-[100px]"
@@ -125,7 +133,9 @@ export const TermGradesTab = ({
           <TableBody>
             {filteredStudents.length > 0 ? (
               filteredStudents.map((student) => {
-                const termData = student.termGrades[termKey];
+                const termData = student.termGrades[
+                  normalizedTermKey as keyof typeof student.termGrades
+                ] as TermGradeData | undefined;
                 if (!termData) return null;
 
                 const isSelected = selectedRowId === student.id;
@@ -151,9 +161,9 @@ export const TermGradesTab = ({
                       </div>
                     </TableCell>
 
-                    {ptColumns.map((ptName, idx) => {
+                    {ptColumns.map((ptName: string, idx: number) => {
                       const pt = termData.ptScores?.find(
-                        (p) => p.name === ptName
+                        (p: { name: string }) => p.name === ptName
                       );
                       return (
                         <TableCell
@@ -186,9 +196,9 @@ export const TermGradesTab = ({
                       );
                     })}
 
-                    {quizColumns.map((quizName, idx) => {
+                    {quizColumns.map((quizName: string, idx: number) => {
                       const quiz = termData.quizScores?.find(
-                        (q) => q.name === quizName
+                        (q: { name: string }) => q.name === quizName
                       );
                       return (
                         <TableCell
