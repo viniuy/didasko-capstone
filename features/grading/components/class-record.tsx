@@ -42,35 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-function LoadingSpinner() {
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[770px] max-h-[770px]">
-      <div className="flex flex-col items-center gap-4 mt-40">
-        <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
-          Loading Class Record...
-        </h2>
-        <p
-          className="text-lg text-gray-600 animate-pulse"
-          style={{ animationDelay: "150ms" }}
-        >
-          Please sit tight while we are getting things ready for you...
-        </p>
-        <div className="flex gap-2 mt-4">
-          <div className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"></div>
-          <div
-            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
-            style={{ animationDelay: "150ms" }}
-          ></div>
-          <div
-            className="w-3 h-3 bg-[#124A69] rounded-full animate-bounce"
-            style={{ animationDelay: "300ms" }}
-          ></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 interface TutorialStep {
   target: string;
   title: string;
@@ -1624,8 +1595,6 @@ export function ClassRecordTable({
     saveAs(new Blob([buffer]), fileName);
   };
 
-  if (loading) return <LoadingSpinner />;
-
   if (activeTerm === "SUMMARY") {
     return (
       <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[600px] md:min-h-[770px] max-h-[90vh] flex flex-col">
@@ -1980,31 +1949,45 @@ export function ClassRecordTable({
           isOpen={isPasteModalOpen}
           onClose={() => setIsPasteModalOpen(false)}
           availableColumns={(() => {
-            const ptColumns = pts.map((pt) => ({
-              id: pt.id,
-              name: pt.name,
-              type: "PT" as const,
-              maxScore: pt.maxScore,
-              term: activeTerm,
-            }));
-            const quizColumns = quizzes.map((quiz) => ({
-              id: quiz.id,
-              name: quiz.name,
-              type: "QUIZ" as const,
-              maxScore: quiz.maxScore,
-              term: activeTerm,
-            }));
-            const examColumns = exam
-              ? [
-                  {
-                    id: exam.id,
-                    name: exam.name,
-                    type: "EXAM" as const,
-                    maxScore: exam.maxScore,
-                    term: activeTerm,
-                  },
-                ]
-              : [];
+            if (activeTerm === "SUMMARY") {
+              return [];
+            }
+            const config =
+              termConfigs[
+                activeTerm as "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS"
+              ];
+            if (!config) {
+              return [];
+            }
+            const ptColumns = config.assessments
+              .filter((a) => a.type === "PT" && a.enabled)
+              .sort((a, b) => a.order - b.order)
+              .map((pt) => ({
+                id: pt.id,
+                name: pt.name,
+                type: "PT" as const,
+                maxScore: pt.maxScore,
+                term: activeTerm,
+              }));
+            const quizColumns = config.assessments
+              .filter((a) => a.type === "QUIZ" && a.enabled)
+              .sort((a, b) => a.order - b.order)
+              .map((quiz) => ({
+                id: quiz.id,
+                name: quiz.name,
+                type: "QUIZ" as const,
+                maxScore: quiz.maxScore,
+                term: activeTerm,
+              }));
+            const examColumns = config.assessments
+              .filter((a) => a.type === "EXAM" && a.enabled)
+              .map((exam) => ({
+                id: exam.id,
+                name: exam.name,
+                type: "EXAM" as const,
+                maxScore: exam.maxScore,
+                term: activeTerm,
+              }));
             return [...ptColumns, ...quizColumns, ...examColumns];
           })()}
           students={filtered.map((s) => ({
@@ -2135,9 +2118,6 @@ export function ClassRecordTable({
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span className="hidden xl:inline">Export</span>
           </button>
-          {loading && (
-            <Loader2 className="h-4 w-4 animate-spin text-[#124A69]" />
-          )}
         </div>
       </div>
 
@@ -2951,31 +2931,45 @@ export function ClassRecordTable({
         isOpen={isPasteModalOpen}
         onClose={() => setIsPasteModalOpen(false)}
         availableColumns={(() => {
-          const ptColumns = pts.map((pt) => ({
-            id: pt.id,
-            name: pt.name,
-            type: "PT" as const,
-            maxScore: pt.maxScore,
-            term: activeTerm,
-          }));
-          const quizColumns = quizzes.map((quiz) => ({
-            id: quiz.id,
-            name: quiz.name,
-            type: "QUIZ" as const,
-            maxScore: quiz.maxScore,
-            term: activeTerm,
-          }));
-          const examColumns = exam
-            ? [
-                {
-                  id: exam.id,
-                  name: exam.name,
-                  type: "EXAM" as const,
-                  maxScore: exam.maxScore,
-                  term: activeTerm,
-                },
-              ]
-            : [];
+          if (activeTerm === "SUMMARY") {
+            return [];
+          }
+          const config =
+            termConfigs[
+              activeTerm as "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS"
+            ];
+          if (!config) {
+            return [];
+          }
+          const ptColumns = config.assessments
+            .filter((a) => a.type === "PT" && a.enabled)
+            .sort((a, b) => a.order - b.order)
+            .map((pt) => ({
+              id: pt.id,
+              name: pt.name,
+              type: "PT" as const,
+              maxScore: pt.maxScore,
+              term: activeTerm,
+            }));
+          const quizColumns = config.assessments
+            .filter((a) => a.type === "QUIZ" && a.enabled)
+            .sort((a, b) => a.order - b.order)
+            .map((quiz) => ({
+              id: quiz.id,
+              name: quiz.name,
+              type: "QUIZ" as const,
+              maxScore: quiz.maxScore,
+              term: activeTerm,
+            }));
+          const examColumns = config.assessments
+            .filter((a) => a.type === "EXAM" && a.enabled)
+            .map((exam) => ({
+              id: exam.id,
+              name: exam.name,
+              type: "EXAM" as const,
+              maxScore: exam.maxScore,
+              term: activeTerm,
+            }));
           return [...ptColumns, ...quizColumns, ...examColumns];
         })()}
         students={filtered.map((s) => ({

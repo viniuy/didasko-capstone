@@ -609,7 +609,6 @@ export function SettingsModal({
     setValidationErrors((prev) => prev.filter((e) => !e.startsWith(term)));
 
     setIsSaving(true);
-    const loadingToast = toast.loading(`Saving ${term} configuration...`);
 
     try {
       // Save only this term's config
@@ -621,14 +620,13 @@ export function SettingsModal({
 
       // Mark as saved
       setSavedTerms((prev) => new Set(prev).add(term));
-      toast.dismiss(loadingToast);
+      toast.success(`${term} configuration saved successfully!`);
 
       // Close modal after successful save
       setTimeout(() => {
         onClose();
       }, 100);
     } catch (error) {
-      toast.dismiss(loadingToast);
       toast.error(`Failed to save ${term} configuration`);
       console.error("Error saving term config:", error);
     } finally {
@@ -1436,7 +1434,7 @@ export function SettingsModal({
             <button
               onClick={() => handleSaveTerm(activeTerm)}
               data-tutorial="term-save-button"
-              disabled={isSaving}
+              disabled={isSaving || !hasUnsavedChanges(activeTerm)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] text-xs sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
