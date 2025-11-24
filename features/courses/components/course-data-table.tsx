@@ -2205,7 +2205,7 @@ export function CourseDataTable({
               ></div>
             </div>
             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69] text-center">
-              Redirecting...
+              Redirecting
             </h2>
             <p className="text-sm sm:text-base md:text-lg text-gray-600 text-center">
               Please wait while we take you to the course

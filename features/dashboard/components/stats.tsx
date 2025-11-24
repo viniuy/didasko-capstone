@@ -8,10 +8,9 @@ interface StatCardProps {
   icon: React.ReactNode;
   count: number;
   label: string;
-  isLoading?: boolean;
 }
 
-const StatCard = ({ icon, count, label, isLoading = false }: StatCardProps) => {
+const StatCard = ({ icon, count, label }: StatCardProps) => {
   return (
     <Card className="w-full">
       <CardContent className="flex items-center -mt-2 -mb-2 justify-between">
@@ -19,13 +18,9 @@ const StatCard = ({ icon, count, label, isLoading = false }: StatCardProps) => {
           <CardDescription className="text-xs sm:text-sm font-semibold">
             {label}
           </CardDescription>
-          {isLoading ? (
-            <div className="h-7 sm:h-8 md:h-9 w-12 sm:w-14 md:w-16 bg-gray-200 animate-pulse rounded"></div>
-          ) : (
-            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69]">
-              {count}
-            </p>
-          )}
+          <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69]">
+            {count}
+          </p>
         </div>
         <div className="bg-[#124A69] p-2 sm:p-2.5 md:p-3 rounded-lg text-white">
           <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-6 md:h-6">{icon}</div>
@@ -96,13 +91,11 @@ export default function Dashboard({
             icon={<Users className="w-full h-full" />}
             count={stats.fullTime}
             label="FACULTY FULL-TIME"
-            isLoading={false}
           />
           <StatCard
             icon={<Users className="w-full h-full" />}
             count={stats.partTime}
             label="FACULTY PART-TIME"
-            isLoading={false}
           />
         </div>
       </div>
@@ -116,19 +109,16 @@ export default function Dashboard({
           icon={<User className="w-full h-full" />}
           count={stats.totalStudents}
           label="TOTAL STUDENTS"
-          isLoading={false}
         />
         <StatCard
           icon={<BookOpen className="w-full h-full" />}
           count={stats.totalCourses}
           label="TOTAL SUBJECTS"
-          isLoading={false}
         />
         <StatCard
           icon={<GraduationCap className="w-full h-full" />}
           count={stats.totalClasses}
           label="TOTAL SECTIONS"
-          isLoading={false}
         />
       </div>
     </div>

@@ -15,7 +15,6 @@ import {
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveCourses } from "@/lib/hooks/queries";
 import { useQueries } from "@tanstack/react-query";
 import axios from "@/lib/axios";
@@ -88,25 +87,6 @@ const CourseCard = ({
     </Card>
   );
 };
-
-const LoadingSkeleton = ({ index }: { index: number }) => (
-  <Card className="bg-white text-[#124A69] rounded-lg shadow-md w-full max-w-[320px] sm:max-w-[360px] md:max-w-[320px] lg:max-w-[380px] xl:max-w-[440px] flex flex-col justify-between h-45">
-    <div>
-      <div className="-mt-7 p-4 flex justify-between items-center">
-        <Skeleton className="h-7 w-3/4 bg-gray-200" />
-        <Skeleton className="h-[50px] w-[50px] rounded-full bg-gray-200" />
-      </div>
-      <div className="p-4 -mt-8 space-y-2">
-        <Skeleton className="h-4 w-1/4 bg-gray-200" />
-        <Skeleton className="h-4 w-2/5 bg-gray-200" />
-        <Skeleton className="h-3 w-1/2 bg-gray-200" />
-      </div>
-    </div>
-    <div className="flex justify-end -mt-9 p-2">
-      <Skeleton className="h-8 w-28 bg-gray-200 rounded-md" />
-    </div>
-  </Card>
-);
 
 // Hook to get responsive items per page based on screen width
 const useItemsPerPage = () => {
@@ -223,9 +203,6 @@ export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
     return { ...course, latestAbsents: 0 };
   });
 
-  const isLoading =
-    isLoadingCourses || attendanceResults.some((q) => q.isLoading);
-
   // Reset to page 1 when itemsPerPage changes
   useEffect(() => {
     setCurrentPage(1);
@@ -252,18 +229,6 @@ export default function AllCourses({ type, initialCourses }: AllCoursesProps) {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-
-  if (status === "loading" || isLoading) {
-    return (
-      <Card className="p-4 shadow-md rounded-lg">
-        <div className={`grid ${getGridClass()} gap-4`}>
-          {[...Array(itemsPerPage)].map((_, index) => (
-            <LoadingSkeleton key={index} index={index} />
-          ))}
-        </div>
-      </Card>
-    );
-  }
 
   if (courses.length === 0) {
     return (
