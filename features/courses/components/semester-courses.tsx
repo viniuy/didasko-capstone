@@ -295,7 +295,7 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
 
         {courses.length > itemsPerPage && (
           <div className="flex justify-between items-center px-2 -mt-4">
-            <p className="text-sm text-gray-500 w-40">
+            <p className="text-sm text-gray-500 w-90">
               {currentPage * itemsPerPage - (itemsPerPage - 1)}-
               {Math.min(currentPage * itemsPerPage, courses.length)} out of{" "}
               {courses.length} classes

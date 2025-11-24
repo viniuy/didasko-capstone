@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AttendanceStatus } from "@prisma/client";
 import { useCreateGroup } from "@/lib/hooks/queries";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface AddGroupModalProps {
   courseCode: string;
@@ -298,23 +299,22 @@ export function AddGroupModal({
                   filteredStudents.map((student) => (
                     <label
                       key={student.id}
-                      className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 cursor-pointer"
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={selectedStudents.includes(student.id)}
-                        onChange={() =>
+                        onCheckedChange={(checked) =>
                           setSelectedStudents((prev) =>
-                            prev.includes(student.id)
-                              ? prev.filter((id) => id !== student.id)
-                              : [...prev, student.id]
+                            checked
+                              ? [...prev, student.id]
+                              : prev.filter((id) => id !== student.id)
                           )
                         }
-                        className="mr-2"
+                        className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
                       />
-                      <span>{student.name}</span>
+                      <span className="flex-1">{student.name}</span>
                       <span
-                        className={`ml-3 px-2 py-0.5 rounded text-xs border ${statusColor(
+                        className={`px-2 py-0.5 rounded text-xs border ${statusColor(
                           student.status
                         )}`}
                       >

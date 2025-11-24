@@ -8,7 +8,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
-import { CourseTableSkeleton } from "@/shared/components/skeletons/course-skeletons";
+import { CourseDashboardSkeleton } from "@/shared/components/skeletons/course-skeletons";
 
 // Separate async component for course dashboard content
 async function CourseDashboardContent({ courseSlug }: { courseSlug: string }) {
@@ -50,7 +50,7 @@ export default async function CourseDashboardPage({
         <div className="flex flex-col flex-grow px-4">
           {/* Course Dashboard Component with Suspense */}
           <div className="mb-4 overflow-y-auto">
-            <Suspense fallback={<CourseTableSkeleton />}>
+            <Suspense fallback={<CourseDashboardSkeleton />}>
               <CourseDashboardContent courseSlug={course_slug} />
             </Suspense>
           </div>

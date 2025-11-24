@@ -31,24 +31,24 @@ export function useCourses(filters?: {
     queryKey: queryKeys.courses.list(filters),
     queryFn: async ({ signal }) => {
       try {
-        const params = new URLSearchParams();
-        if (filters?.facultyId) params.append("facultyId", filters.facultyId);
-        if (filters?.search) params.append("search", filters.search);
+      const params = new URLSearchParams();
+      if (filters?.facultyId) params.append("facultyId", filters.facultyId);
+      if (filters?.search) params.append("search", filters.search);
         if (filters?.department)
           params.append("department", filters.department);
-        if (filters?.semester) params.append("semester", filters.semester);
-        if (filters?.code) params.append("code", filters.code);
-        if (filters?.section) params.append("section", filters.section);
-        if (filters?.status) params.append("status", filters.status);
+      if (filters?.semester) params.append("semester", filters.semester);
+      if (filters?.code) params.append("code", filters.code);
+      if (filters?.section) params.append("section", filters.section);
+      if (filters?.status) params.append("status", filters.status);
 
-        const { data } = await axios.get<CourseResponse>(
-          `/courses?${params.toString()}`,
+      const { data } = await axios.get<CourseResponse>(
+        `/courses?${params.toString()}`,
           {
             signal,
             timeout: 30000, // 30 second timeout
           }
-        );
-        return data;
+      );
+      return data;
       } catch (error: any) {
         // Handle Prisma connection errors (P1017)
         if (
@@ -131,21 +131,21 @@ export function useActiveCourses(options?: {
     queryKey: queryKeys.courses.active(filters),
     queryFn: async ({ signal }) => {
       try {
-        const params = new URLSearchParams();
-        if (filters?.facultyId) params.append("facultyId", filters.facultyId);
-        if (filters?.search) params.append("search", filters.search);
+      const params = new URLSearchParams();
+      if (filters?.facultyId) params.append("facultyId", filters.facultyId);
+      if (filters?.search) params.append("search", filters.search);
         if (filters?.department)
           params.append("department", filters.department);
-        if (filters?.semester) params.append("semester", filters.semester);
+      if (filters?.semester) params.append("semester", filters.semester);
 
-        const { data } = await axios.get<CourseResponse>(
-          `/courses/active?${params.toString()}`,
+      const { data } = await axios.get<CourseResponse>(
+        `/courses/active?${params.toString()}`,
           {
             signal,
             timeout: 30000, // 30 second timeout
           }
-        );
-        return data;
+      );
+      return data;
       } catch (error: any) {
         // Handle Prisma connection errors (P1017)
         if (

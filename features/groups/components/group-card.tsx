@@ -62,13 +62,26 @@ export function GroupCard({
     });
   };
 
+  const isDeleting = deleteGroupMutation.isPending;
+
   return (
     <>
       <Card className="w-full sm:w-65 h-72 sm:h-80 p-4 sm:p-6 flex flex-col items-center shadow-lg relative mx-auto max-w-[280px] sm:max-w-none">
+        {isDeleting && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-lg z-10 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="h-8 w-8 animate-spin text-[#124A69]" />
+              <p className="text-sm text-[#124A69] font-medium">
+                Disbanding...
+              </p>
+            </div>
+          </div>
+        )}
         <button
           onClick={() => setShowConfirmDialog(true)}
-          className="absolute top-2 right-2 p-1.5 sm:p-1 rounded-full hover:bg-red-100 transition-colors touch-manipulation"
+          className="absolute top-2 right-2 p-1.5 sm:p-1 rounded-full hover:bg-red-100 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
           title="Disband group"
+          disabled={isDeleting}
         >
           <Trash2 className="h-5 w-5 sm:h-4 sm:w-4 text-red-500" />
         </button>
@@ -104,7 +117,7 @@ export function GroupCard({
         <Button
           className="w-full bg-[#124A69] text-white font-semibold rounded mt-5 sm:mt-7 text-sm sm:text-base py-5 sm:py-auto touch-manipulation"
           onClick={handleViewGroup}
-          disabled={isViewing}
+          disabled={isViewing || isDeleting}
         >
           {isViewing ? (
             <>

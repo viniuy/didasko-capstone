@@ -7,6 +7,7 @@ interface GroupHeaderProps {
   courseSection: string;
   searchQuery: string;
   onSearchChange: (value: string) => void;
+  hasNoSearchResults?: boolean;
 }
 
 export function GroupHeader({
@@ -14,6 +15,7 @@ export function GroupHeader({
   courseSection,
   searchQuery,
   onSearchChange,
+  hasNoSearchResults = false,
 }: GroupHeaderProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b bg-[#F5F6FA] rounded-t-lg">
@@ -51,7 +53,7 @@ export function GroupHeader({
             <path d="m21 21-4.3-4.3" />
           </svg>
           <Input
-            placeholder="Search a group"
+            placeholder="Search group by student name"
             className="w-full pl-9 rounded-full border-gray-200 h-9 bg-[#F5F6FA]"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}

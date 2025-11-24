@@ -46,11 +46,11 @@ import { RemoveStudentSheet } from "../sheets/remove-student-sheet";
 import { TermGradesTab } from "./term-grades";
 import { ExportDialog } from "../dialogs/new-export-dialog";
 import {
-  LoadingSpinner,
   StudentAvatar,
   AttendanceVisualizer,
   AttendanceLegend,
 } from "./ui-components";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -281,19 +281,66 @@ export function CourseDashboard({
     router.push(backUrl);
   };
 
-  // Show loading spinner when redirecting or when initial data is loading
+  // Show loading skeleton when redirecting or when initial data is loading
   if (isLoading || isRedirecting) {
     return (
-      <LoadingSpinner
-        mainMessage={
-          isRedirecting ? "Loading Courses..." : "Loading Course Details"
-        }
-        secondaryMessage={
-          isRedirecting
-            ? "Please wait while we redirect you back to the courses page..."
-            : "Please sit tight while we are getting things ready for you..."
-        }
-      />
+      <div className="bg-white p-6 rounded-lg shadow-sm h-screen flex flex-col overflow-y-auto overflow-x-hidden">
+        <div className="flex flex-col flex-1 min-h-0 space-y-6 pb-6">
+          {/* Header Skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-10 w-10 rounded-md" />
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-96" />
+              </div>
+            </div>
+          </div>
+
+          {/* Search and Action Buttons Skeleton */}
+          <div className="flex gap-2 flex-wrap justify-between">
+            <Skeleton className="h-10 w-full sm:w-[400px]" />
+            <div className="flex gap-2 flex-wrap">
+              <Skeleton className="h-10 w-20 sm:w-24" />
+              <Skeleton className="h-10 w-32 sm:w-40" />
+              <Skeleton className="h-10 w-28 sm:w-36" />
+              <Skeleton className="h-10 w-32 sm:w-40" />
+            </div>
+          </div>
+
+          {/* Tabs Skeleton */}
+          <div className="w-full">
+            <div className="grid w-full grid-cols-5 gap-2 mb-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+
+            {/* Table Skeleton */}
+            <div className="rounded-md border overflow-hidden">
+              <div className="p-4 space-y-3">
+                {/* Table Header Skeleton */}
+                <div className="flex gap-4 pb-2 border-b">
+                  <Skeleton className="h-5 w-24" />
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-5 w-28" />
+                </div>
+                {/* Table Rows Skeleton */}
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                  <div
+                    key={i}
+                    className="flex gap-4 py-3 border-b last:border-0"
+                  >
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-48" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   }
 

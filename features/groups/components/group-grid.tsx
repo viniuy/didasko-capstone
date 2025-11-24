@@ -38,6 +38,7 @@ interface GroupGridProps {
   students: Student[];
   groupMeta: GroupMeta;
   totalStudents: number;
+  hasSearchQuery?: boolean;
 }
 
 export function GroupGrid({
@@ -51,6 +52,7 @@ export function GroupGrid({
   students,
   groupMeta,
   totalStudents,
+  hasSearchQuery = false,
 }: GroupGridProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -64,7 +66,32 @@ export function GroupGrid({
     );
   }
 
+  // Calculate ungrouped students count
+  const ungroupedStudentCount = totalStudents - excludedStudentIds.length;
+
   if (groups.length === 0) {
+    // Don't show add group and randomizer buttons if there's a search query
+    if (hasSearchQuery) {
+      return (
+        <div className="flex items-center justify-center min-h-[300px]">
+          <p className="text-gray-500 text-center">
+            No groups found matching your search
+          </p>
+        </div>
+      );
+    }
+
+    // Don't show add group and randomizer buttons if there are no ungrouped students
+    if (ungroupedStudentCount <= 0) {
+      return (
+        <div className="flex items-center justify-center min-h-[300px]">
+          <p className="text-gray-500 text-center">
+            All students are already in groups
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col sm:flex-row gap-6 sm:gap-12 items-center justify-center mb-8 px-4">
         <AddGroupModal
@@ -103,20 +130,22 @@ export function GroupGrid({
             onGroupDeleted={onGroupAdded}
           />
         ))}
-        {currentPage === totalPages && (
-          <div className="flex flex-col gap-2 sm:ml-9 mt-3">
-            <AddGroupModal
-              courseCode={courseCode}
-              excludedStudentIds={excludedStudentIds}
-              nextGroupNumber={nextGroupNumber}
-              onGroupAdded={onGroupAdded}
-              isValidationNeeded={false}
-              totalStudents={totalStudents}
-              students={students}
-              groupMeta={groupMeta}
-            />
-          </div>
-        )}
+        {currentPage === totalPages &&
+          !hasSearchQuery &&
+          ungroupedStudentCount > 0 && (
+            <div className="flex flex-col gap-2 sm:ml-9 mt-3">
+              <AddGroupModal
+                courseCode={courseCode}
+                excludedStudentIds={excludedStudentIds}
+                nextGroupNumber={nextGroupNumber}
+                onGroupAdded={onGroupAdded}
+                isValidationNeeded={false}
+                totalStudents={totalStudents}
+                students={students}
+                groupMeta={groupMeta}
+              />
+            </div>
+          )}
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end w-full mt-4 -mb-3 gap-4">

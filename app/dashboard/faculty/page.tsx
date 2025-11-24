@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Stats from "@/features/dashboard/components/stats";
@@ -12,10 +11,6 @@ import { getFacultyStats, getFacultyCount } from "@/lib/services/stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
-import {
-  CourseStatsSkeleton,
-  FacultyDashboardSkeleton,
-} from "@/shared/components/skeletons/course-skeletons";
 
 export const dynamic = "force-dynamic";
 
@@ -78,18 +73,14 @@ export default async function FacultyDashboard() {
                 {/* Greeting - shown immediately */}
                 <Greet firstName={session.user.name?.split(" ")[0] || "User"} />
 
-                {/* Stats with Suspense */}
-                <Suspense fallback={<CourseStatsSkeleton />}>
-                  <StatsContent
-                    userId={session.user.id}
-                    userRole={session.user.role}
-                  />
-                </Suspense>
+                {/* Stats */}
+                <StatsContent
+                  userId={session.user.id}
+                  userRole={session.user.role}
+                />
 
-                {/* Courses with Suspense */}
-                <Suspense fallback={<FacultyDashboardSkeleton />}>
-                  <CoursesContent userId={session.user.id} />
-                </Suspense>
+                {/* Courses */}
+                <CoursesContent userId={session.user.id} />
               </div>
 
               {/* Weekly Schedule - shown immediately */}

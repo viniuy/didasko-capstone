@@ -120,6 +120,9 @@ export function GroupManagementPageClient({
                   courseSection={course.section}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
+                  hasNoSearchResults={
+                    searchQuery.length > 0 && filteredGroups.length === 0
+                  }
                 />
 
                 <div className="p-6">
@@ -134,6 +137,7 @@ export function GroupManagementPageClient({
                     students={students}
                     groupMeta={groupMeta}
                     totalStudents={students.length}
+                    hasSearchQuery={searchQuery.length > 0}
                   />
                 </div>
               </div>
