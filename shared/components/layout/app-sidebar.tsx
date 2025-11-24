@@ -538,8 +538,9 @@ export function AppSidebar() {
                       </Collapsible>
                     </SidebarMenuItem>
 
-                    {/* Audit Logs - Only for ACADEMIC_HEAD and ADMIN */}
-                    {(isAcademicHead || isAdmin) && (
+                    {/* Audit Logs - Only for ACADEMIC_HEAD and ADMIN (but not when admin is in faculty view) */}
+                    {(isAcademicHead ||
+                      (isAdmin && selectedRole !== "FACULTY")) && (
                       <SidebarMenuItem>
                         <Link
                           href="/main/logs"
