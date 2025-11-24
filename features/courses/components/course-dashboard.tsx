@@ -40,6 +40,8 @@ import {
   useCourseAnalytics,
   useImportStudentsToCourse,
 } from "@/lib/hooks/queries";
+import { useIsFetching } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/queries/queryKeys";
 import { StudentImportDialog } from "../dialogs/import-students-dialog";
 import { AddStudentSheet } from "../sheets/add-student-sheet";
 import { RemoveStudentSheet } from "../sheets/remove-student-sheet";
@@ -108,6 +110,20 @@ export function CourseDashboard({
   });
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [isTermLoading, setIsTermLoading] = useState(false);
+
+  // Check if any term grades query is fetching
+  const isFetchingTermGrades = useIsFetching({
+    predicate: (query) => {
+      const key = query.queryKey;
+      return (
+        Array.isArray(key) &&
+        key[0] === "grading" &&
+        key[1] === "termGrades" &&
+        key[2] === courseSlug
+      );
+    },
+  });
 
   // Check screen width for button text visibility
   useEffect(() => {
@@ -124,8 +140,8 @@ export function CourseDashboard({
   const { data: analyticsData, isLoading: isLoadingAnalytics } =
     useCourseAnalytics(courseSlug, {
       initialData: initialAnalyticsData,
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
+      refetchOnMount: true, // Enable refetch on mount to get fresh term grades
+      refetchOnWindowFocus: false, // Keep false to avoid excessive refetches
     });
   const importStudentsMutation = useImportStudentsToCourse();
 
@@ -463,11 +479,36 @@ export function CourseDashboard({
           className="w-full flex flex-col flex-1 min-h-0"
         >
           <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="prelims">Prelims</TabsTrigger>
-            <TabsTrigger value="midterm">Midterm</TabsTrigger>
-            <TabsTrigger value="prefinals">Pre-Finals</TabsTrigger>
-            <TabsTrigger value="finals">Finals</TabsTrigger>
+            <TabsTrigger
+              value="overview"
+              disabled={isTermLoading || isFetchingTermGrades > 0}
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="prelims"
+              disabled={isTermLoading || isFetchingTermGrades > 0}
+            >
+              Prelims
+            </TabsTrigger>
+            <TabsTrigger
+              value="midterm"
+              disabled={isTermLoading || isFetchingTermGrades > 0}
+            >
+              Midterm
+            </TabsTrigger>
+            <TabsTrigger
+              value="prefinals"
+              disabled={isTermLoading || isFetchingTermGrades > 0}
+            >
+              Pre-Finals
+            </TabsTrigger>
+            <TabsTrigger
+              value="finals"
+              disabled={isTermLoading || isFetchingTermGrades > 0}
+            >
+              Finals
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -635,9 +676,10 @@ export function CourseDashboard({
             className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
           >
             <TermGradesTab
-              students={tableData}
+              courseSlug={courseSlug}
               termKey="prelims"
               globalSearchQuery={globalSearchQuery}
+              onLoadingChange={setIsTermLoading}
             />
           </TabsContent>
 
@@ -646,9 +688,10 @@ export function CourseDashboard({
             className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
           >
             <TermGradesTab
-              students={tableData}
+              courseSlug={courseSlug}
               termKey="midterm"
               globalSearchQuery={globalSearchQuery}
+              onLoadingChange={setIsTermLoading}
             />
           </TabsContent>
 
@@ -657,9 +700,10 @@ export function CourseDashboard({
             className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
           >
             <TermGradesTab
-              students={tableData}
+              courseSlug={courseSlug}
               termKey="preFinals"
               globalSearchQuery={globalSearchQuery}
+              onLoadingChange={setIsTermLoading}
             />
           </TabsContent>
 
@@ -668,9 +712,10 @@ export function CourseDashboard({
             className="flex flex-col flex-1 min-h-0 space-y-4 mt-4 pb-4"
           >
             <TermGradesTab
-              students={tableData}
+              courseSlug={courseSlug}
               termKey="finals"
               globalSearchQuery={globalSearchQuery}
+              onLoadingChange={setIsTermLoading}
             />
           </TabsContent>
         </Tabs>

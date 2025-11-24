@@ -170,6 +170,7 @@ interface ImportStatus {
 }
 
 const MAX_PREVIEW_ROWS = 100;
+const MAX_ACTIVE_COURSES = 15;
 
 // Hook to get responsive items per page based on screen size
 const useItemsPerPage = () => {
@@ -872,6 +873,15 @@ export function CourseDataTable({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [hasLoadedOnce, refreshTableData]);
+
+  // Count active courses (ACTIVE and INACTIVE)
+  const activeCoursesCount = useMemo(() => {
+    return tableData.filter(
+      (course) => course.status === "ACTIVE" || course.status === "INACTIVE"
+    ).length;
+  }, [tableData]);
+
+  const hasReachedMaxActiveCourses = activeCoursesCount >= MAX_ACTIVE_COURSES;
 
   // Filter courses based on role and faculty (without search/status filters)
   const baseFilteredCourses = useMemo(() => {
@@ -1736,6 +1746,14 @@ export function CourseDataTable({
       return;
     }
 
+    // Check if limit is reached
+    if (hasReachedMaxActiveCourses) {
+      toast.error(
+        `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+      );
+      return;
+    }
+
     // Close import preview dialog immediately
     setShowImportPreview(false);
 
@@ -1858,6 +1876,21 @@ export function CourseDataTable({
       // Store validation errors for later display
       setPreImportValidationErrors(validationErrors);
 
+      // Check if adding valid courses would exceed the limit
+      const currentActiveCount = tableData.filter(
+        (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+      ).length;
+      const remainingSlots = MAX_ACTIVE_COURSES - currentActiveCount;
+
+      if (validCourses.length > remainingSlots) {
+        toast.error(
+          `Cannot import ${validCourses.length} course(s). You can only add ${remainingSlots} more active course(s) (maximum ${MAX_ACTIVE_COURSES} active courses allowed).`
+        );
+        setShowValidatingDialog(false);
+        setShowImportPreview(true);
+        return;
+      }
+
       // If ALL courses have errors or are duplicates, show summary and return
       if (validCourses.length === 0) {
         const status: ImportStatus = {
@@ -1923,7 +1956,13 @@ export function CourseDataTable({
     } finally {
       setIsLoading(false);
     }
-  }, [selectedFile, isValidFile, previewData]);
+  }, [
+    selectedFile,
+    isValidFile,
+    previewData,
+    hasReachedMaxActiveCourses,
+    tableData,
+  ]);
 
   const handleScheduleAssignmentComplete = useCallback(
     async (importResults?: any) => {
@@ -2295,8 +2334,22 @@ export function CourseDataTable({
                         {permissions.canImportCourses && (
                           <Button
                             variant="outline"
-                            onClick={() => setShowImportPreview(true)}
+                            onClick={() => {
+                              if (hasReachedMaxActiveCourses) {
+                                toast.error(
+                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+                                );
+                                return;
+                              }
+                              setShowImportPreview(true);
+                            }}
+                            disabled={hasReachedMaxActiveCourses}
                             className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                            title={
+                              hasReachedMaxActiveCourses
+                                ? `Maximum ${MAX_ACTIVE_COURSES} active courses reached`
+                                : "Import courses"
+                            }
                           >
                             <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
                             <span className="hidden xl:inline">Import</span>
@@ -2306,6 +2359,13 @@ export function CourseDataTable({
                           <CourseSheet
                             mode="add"
                             onSuccess={async (courseData) => {
+                              // Check if limit is reached before proceeding
+                              if (hasReachedMaxActiveCourses) {
+                                toast.error(
+                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
+                                );
+                                return;
+                              }
                               // Store course data and open schedule dialog
                               // Course is NOT created yet - waiting for schedules
                               if (courseData) {
@@ -2318,6 +2378,7 @@ export function CourseDataTable({
                             faculties={faculties}
                             userId={userId}
                             userRole={userRole}
+                            disabled={hasReachedMaxActiveCourses}
                           />
                         )}
                       </div>
@@ -2551,39 +2612,53 @@ export function CourseDataTable({
                       It seems empty here
                     </h3>
                     <p className="text-gray-500 mb-4">
-                      Start by adding courses to get started
+                      {hasReachedMaxActiveCourses
+                        ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
+                        : "Start by adding courses to get started"}
                     </p>
-                    <div className="flex items-center gap-3 justify-center flex-wrap">
-                      {permissions.canCreateCourse && (
-                        <CourseSheet
-                          mode="add"
-                          onSuccess={async (courseData) => {
-                            if (courseData) {
-                              setPendingCourseData(courseData);
-                              setImportedCoursesForSchedule([courseData]);
-                              setScheduleDialogMode("create");
-                              setShowScheduleAssignment(true);
-                            }
-                          }}
-                          faculties={faculties}
-                          userId={userId}
-                          userRole={userRole}
-                        />
-                      )}
-                      {permissions.canImportCourses && (
-                        <>
-                          <span className="text-gray-500">or</span>
-                          <Button
-                            onClick={() => setShowImportPreview(true)}
-                            variant="outline"
-                            className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2"
-                          >
-                            <Upload className="w-4 h-4" />
-                            Import Courses
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                    {!hasReachedMaxActiveCourses && (
+                      <div className="flex items-center gap-3 justify-center flex-wrap">
+                        {permissions.canCreateCourse && (
+                          <CourseSheet
+                            mode="add"
+                            onSuccess={async (courseData) => {
+                              if (courseData) {
+                                setPendingCourseData(courseData);
+                                setImportedCoursesForSchedule([courseData]);
+                                setScheduleDialogMode("create");
+                                setShowScheduleAssignment(true);
+                              }
+                            }}
+                            faculties={faculties}
+                            userId={userId}
+                            userRole={userRole}
+                            disabled={hasReachedMaxActiveCourses}
+                          />
+                        )}
+                        {permissions.canImportCourses && (
+                          <>
+                            <span className="text-gray-500">or</span>
+                            <Button
+                              onClick={() => {
+                                if (hasReachedMaxActiveCourses) {
+                                  toast.error(
+                                    `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+                                  );
+                                  return;
+                                }
+                                setShowImportPreview(true);
+                              }}
+                              variant="outline"
+                              disabled={hasReachedMaxActiveCourses}
+                              className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Upload className="w-4 h-4" />
+                              Import Courses
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {/* Tumbleweed Animation */}
                   <div className="relative w-full flex items-end">
@@ -2685,6 +2760,8 @@ export function CourseDataTable({
                 }
                 onComplete={handleScheduleAssignmentComplete}
                 mode={scheduleDialogMode}
+                maxActiveCourses={MAX_ACTIVE_COURSES}
+                currentActiveCount={activeCoursesCount}
               />
 
               <CourseSettingsDialog

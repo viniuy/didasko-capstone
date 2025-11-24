@@ -48,6 +48,26 @@ export function useAssessmentScores(courseSlug: string) {
   });
 }
 
+// Query: Get term grades for a specific term
+export function useTermGrades(
+  courseSlug: string,
+  term: string,
+  enabled: boolean = true
+) {
+  return useQuery({
+    queryKey: queryKeys.grading.termGrades(courseSlug, term),
+    queryFn: async ({ signal }) => {
+      const { data } = await axios.get(
+        `/courses/${courseSlug}/term-grades/${term}`,
+        { signal }
+      );
+      return data;
+    },
+    enabled: !!courseSlug && !!term && enabled,
+    staleTime: 0, // Always fetch fresh data when tab is switched
+  });
+}
+
 // Query: Get grades
 export function useGrades(
   courseSlug: string,

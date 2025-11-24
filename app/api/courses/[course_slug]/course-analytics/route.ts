@@ -74,8 +74,9 @@ const buildAssessmentScores = (
     .filter((a) => a.type === type && a.enabled)
     .sort((a, b) => (a.order || 0) - (b.order || 0))
     .map((assessment) => {
+      // Check both s.student?.id and s.studentId as fallback for compatibility
       const score = assessment.scores?.find(
-        (s: any) => s.student?.id === studentId
+        (s: any) => s.student?.id === studentId || s.studentId === studentId
       );
       return {
         id: assessment.id,
@@ -105,8 +106,9 @@ const buildTermGrades = (termConfigs: any[], studentId: string) => {
     const termKey = getTermKey(termConfig.term);
 
     // Get student's computed term grade
+    // Check both tg.student.id and tg.studentId as fallback for compatibility
     const studentTermGrade = termConfig.termGrades?.find(
-      (tg: any) => tg.student.id === studentId
+      (tg: any) => tg.student?.id === studentId || tg.studentId === studentId
     );
 
     // Build assessment scores
@@ -126,33 +128,32 @@ const buildTermGrades = (termConfigs: any[], studentId: string) => {
       (a: any) => a.type === "EXAM" && a.enabled
     );
     const examScore = examAssessment
-      ? {
-          id: examAssessment.id,
-          name: examAssessment.name,
-          score:
-            examAssessment.scores?.find((s: any) => s.student?.id === studentId)
-              ?.score ?? null,
-          maxScore: examAssessment.maxScore,
-          percentage:
-            examAssessment.scores?.find(
-              (s: any) => s.student?.id === studentId
-            ) && examAssessment.maxScore > 0
-              ? (examAssessment.scores.find(
-                  (s: any) => s.student?.id === studentId
-                )!.score /
-                  examAssessment.maxScore) *
-                100
-              : undefined,
-        }
+      ? (() => {
+          // Check both s.student?.id and s.studentId as fallback for compatibility
+          const examScoreData = examAssessment.scores?.find(
+            (s: any) => s.student?.id === studentId || s.studentId === studentId
+          );
+          return {
+            id: examAssessment.id,
+            name: examAssessment.name,
+            score: examScoreData?.score ?? null,
+            maxScore: examAssessment.maxScore,
+            percentage:
+              examScoreData && examAssessment.maxScore > 0
+                ? (examScoreData.score / examAssessment.maxScore) * 100
+                : undefined,
+          };
+        })()
       : undefined;
 
-    // Only add term data if there are assessments or grades
-    if (
-      ptScores.length > 0 ||
-      quizScores.length > 0 ||
-      examScore ||
-      studentTermGrade
-    ) {
+    // Always add term data if there are assessments configured OR computed term grades exist
+    // This ensures term grades show up even if scores haven't been entered yet
+    // The TermGradesTab component will handle displaying empty/null scores
+    // Check if there are any assessments configured for this term
+    const hasAssessments =
+      termConfig.assessments && termConfig.assessments.length > 0;
+
+    if (hasAssessments || studentTermGrade) {
       termGrades[termKey] = {
         ptScores,
         quizScores,

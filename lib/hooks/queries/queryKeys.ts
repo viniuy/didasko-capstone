@@ -93,6 +93,8 @@ export const queryKeys = {
       [...queryKeys.grading.all, "termConfigs", courseSlug] as const,
     assessmentScores: (courseSlug: string) =>
       [...queryKeys.grading.all, "assessmentScores", courseSlug] as const,
+    termGrades: (courseSlug: string, term: string) =>
+      [...queryKeys.grading.all, "termGrades", courseSlug, term] as const,
   },
 
   // Groups

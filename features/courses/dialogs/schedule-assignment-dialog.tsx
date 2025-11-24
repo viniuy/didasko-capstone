@@ -58,6 +58,8 @@ interface ScheduleAssignmentDialogProps {
   courses: ImportedCourse[];
   onComplete: (importResults?: any) => void;
   mode: "create" | "edit" | "import";
+  maxActiveCourses?: number;
+  currentActiveCount?: number;
 }
 
 interface Schedule {
@@ -86,6 +88,8 @@ export function ScheduleAssignmentDialog({
   courses,
   onComplete,
   mode,
+  maxActiveCourses = 15,
+  currentActiveCount = 0,
 }: ScheduleAssignmentDialogProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [allSchedules, setAllSchedules] = useState<Record<number, Schedule[]>>(
@@ -325,6 +329,14 @@ export function ScheduleAssignmentDialog({
   const handleComplete = async (schedules: Record<number, Schedule[]>) => {
     try {
       if (mode === "create") {
+        // Check if limit is reached before creating
+        if (currentActiveCount >= maxActiveCourses) {
+          toast.error(
+            `Maximum limit of ${maxActiveCourses} active courses reached. Please archive some courses before adding new ones.`
+          );
+          return;
+        }
+
         // Create mode: Create course WITH schedules in one transaction
         const courseData = currentCourse;
         const schedulesToAdd = schedules[0] || [];
@@ -340,6 +352,18 @@ export function ScheduleAssignmentDialog({
 
         // Success toast is handled by the mutation
       } else if (mode === "import") {
+        // Check if limit is reached before importing
+        const coursesToImport = courses.filter(
+          (c) => c.status === "ACTIVE" || c.status === "INACTIVE" || !c.status
+        );
+        const remainingSlots = maxActiveCourses - currentActiveCount;
+
+        if (coursesToImport.length > remainingSlots) {
+          toast.error(
+            `Cannot import ${coursesToImport.length} course(s). You can only add ${remainingSlots} more active course(s) (maximum ${maxActiveCourses} active courses allowed).`
+          );
+          return;
+        }
         // Import mode: Create courses with schedules
         const coursesWithSchedules = courses.map((course, index) => ({
           code: course.code,
