@@ -2,10 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpenText, Loader2, Calendar } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useState, useEffect, startTransition } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useActiveCourses } from "@/lib/hooks/queries";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -31,29 +30,22 @@ interface CourseShortcutsProps {
 
 const CourseShortcut = ({
   course,
-  basePath,
   showAttendanceStats = false,
+  onNavigate,
+  isLoading,
+  disabled,
 }: {
   course: Course;
-  basePath: string;
   showAttendanceStats?: boolean;
+  onNavigate: () => void;
+  isLoading: boolean;
+  disabled: boolean;
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-
-  const handleClick = () => {
-    router.push(`${basePath}/${course.slug}`);
-    // Update state after navigation starts
-    startTransition(() => {
-      setIsLoading(true);
-    });
-  };
-
   return (
     <button
-      onClick={handleClick}
-      disabled={isLoading}
-      className="w-full bg-white/10 hover:bg-white/20 rounded-lg p-3 text-left transition-all duration-200 border border-white/20 hover:border-white/40 disabled:opacity-50"
+      onClick={onNavigate}
+      disabled={disabled || isLoading}
+      className="w-full bg-white/10 hover:bg-white/20 rounded-lg p-3 text-left transition-all duration-200 border border-white/20 hover:border-white/40 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
@@ -121,6 +113,8 @@ export default function CourseShortcuts({
 }: CourseShortcutsProps) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
+  const router = useRouter();
+  const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
 
   const moduleConfig = getModuleConfig(pathname);
   const basePath = propBasePath || moduleConfig.basePath;
@@ -158,6 +152,17 @@ export default function CourseShortcuts({
           }
         : undefined,
     }));
+
+  useEffect(() => {
+    // Reset loading state when route changes
+    setLoadingSlug(null);
+  }, [pathname]);
+
+  const handleCourseNavigate = (slug: string) => {
+    if (loadingSlug && loadingSlug !== slug) return;
+    setLoadingSlug(slug);
+    router.push(`${basePath}/${slug}`);
+  };
 
   if (isLoading) {
     return (
@@ -207,8 +212,10 @@ export default function CourseShortcuts({
           <CourseShortcut
             key={course.id}
             course={course}
-            basePath={basePath}
             showAttendanceStats={showAttendanceStats}
+            onNavigate={() => handleCourseNavigate(course.slug)}
+            isLoading={loadingSlug === course.slug}
+            disabled={loadingSlug !== null && loadingSlug !== course.slug}
           />
         ))}
       </CardContent>

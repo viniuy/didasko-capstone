@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -18,7 +20,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSession } from "next-auth/react";
-import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
 import {
   useNotes,
@@ -112,63 +113,16 @@ export default function Notes() {
     }
   };
 
-  // Skeleton UI for loading state
+  // Loading state with spinner
   if (status === "loading" || isLoading)
     return (
       <div className="h-full flex flex-col">
         <div className="flex justify-between items-center mb-1">
           <h2 className="text-lg font-semibold text-[#FAEDCB]">Notes</h2>
-          <Skeleton className="w-6 h-6 rounded-full" />
         </div>
         <div className="flex-1 bg-white rounded-lg p-2 shadow-md overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#124A69] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#0a2f42]">
-          <div className="space-y-2 mt-2">
-            {/* First date group */}
-            <div className="flex items-center gap-2 text-[#124A69] mb-1">
-              <Skeleton className="h-4 w-32" />
-            </div>
-
-            {/* First group of note skeletons */}
-            {[...Array(2)].map((_, index) => (
-              <Card
-                key={index}
-                className="border-l-[8px] border-[#FAEDCB] mb-1"
-              >
-                <CardContent className="p-2 relative">
-                  <div className="absolute right-1 -top-5 flex gap-0.5">
-                    <Skeleton className="h-5 w-5 rounded-full" />
-                    <Skeleton className="h-5 w-5 rounded-full" />
-                  </div>
-                  <div className="-mt-4 -mb-4">
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            {/* Second date group */}
-            <div className="flex items-center gap-2 text-[#124A69] mb-1 mt-4">
-              <Skeleton className="h-4 w-32" />
-            </div>
-
-            {/* Second group of note skeletons */}
-            {[...Array(2)].map((_, index) => (
-              <Card
-                key={`second-${index}`}
-                className="border-l-[8px] border-[#FAEDCB] mb-1"
-              >
-                <CardContent className="p-2 relative">
-                  <div className="absolute right-1 -top-5 flex gap-0.5">
-                    <Skeleton className="h-5 w-5 rounded-full" />
-                    <Skeleton className="h-5 w-5 rounded-full" />
-                  </div>
-                  <div className="-mt-4 -mb-4">
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex items-center justify-center h-full min-h-[200px]">
+            <Loader2 className="w-8 h-8 animate-spin text-[#124A69]" />
           </div>
         </div>
       </div>
@@ -279,52 +233,60 @@ export default function Notes() {
       </div>
       <div className="flex-1 bg-white rounded-lg p-2 shadow-md overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#124A69] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#0a2f42]">
         {noteList.length > 0 ? (
-          noteList.map((note: Note) => (
-            <Card
+          noteList.map((note: Note, index: number) => (
+            <motion.div
               key={note.id}
-              className="border-l-[8px] border-[#FAEDCB] mb-1 hover:shadow-md transition-shadow"
+              initial={{ x: -100, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{
+                duration: 0.9,
+                delay: index * 0.1,
+                ease: "easeOut",
+              }}
             >
-              <CardContent className="p-2 relative">
-                <div className="absolute right-1 -top-5 flex gap-0.5">
-                  <Button
-                    variant="ghost"
-                    className="h-5 w-5 p-0 hover:bg-transparent"
-                    onClick={() => handleEditClick(note)}
-                    disabled={
-                      deleteNoteMutation.isPending && noteToDelete === note.id
-                    }
-                  >
-                    <Edit className="h-3 w-3" color="#124a69" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-5 w-5 p-0 hover:bg-transparent"
-                    onClick={() => handleDeleteClick(note.id)}
-                    disabled={
-                      deleteNoteMutation.isPending && noteToDelete === note.id
-                    }
-                  >
-                    {deleteNoteMutation.isPending &&
-                    noteToDelete === note.id ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#124A69]" />
-                    ) : (
-                      <Trash className="h-3 w-3" color="#124a69" />
-                    )}
-                  </Button>
-                </div>
-                <div className="-mt-4 -mb-4">
-                  <div className="text-[#124A69] font-medium text-xs mb-0.5">
-                    {note.title}
+              <Card className="border-l-[8px] border-[#FAEDCB] mb-1 hover:shadow-md transition-shadow">
+                <CardContent className="p-2 relative">
+                  <div className="absolute right-1 -top-5 flex gap-0.5">
+                    <Button
+                      variant="ghost"
+                      className="h-5 w-5 p-0 hover:bg-transparent"
+                      onClick={() => handleEditClick(note)}
+                      disabled={
+                        deleteNoteMutation.isPending && noteToDelete === note.id
+                      }
+                    >
+                      <Edit className="h-3 w-3" color="#124a69" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-5 w-5 p-0 hover:bg-transparent"
+                      onClick={() => handleDeleteClick(note.id)}
+                      disabled={
+                        deleteNoteMutation.isPending && noteToDelete === note.id
+                      }
+                    >
+                      {deleteNoteMutation.isPending &&
+                      noteToDelete === note.id ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#124A69]" />
+                      ) : (
+                        <Trash className="h-3 w-3" color="#124a69" />
+                      )}
+                    </Button>
                   </div>
-                  <div className="text-gray-600 text-[11px] whitespace-pre-wrap">
-                    {note.description}
+                  <div className="-mt-4 -mb-4">
+                    <div className="text-[#124A69] font-medium text-xs mb-0.5">
+                      {note.title}
+                    </div>
+                    <div className="text-gray-600 text-[11px] whitespace-pre-wrap">
+                      {note.description}
+                    </div>
+                    <div className="text-gray-400 text-[10px] mt-1.5">
+                      {formatDate(note.createdAt)}
+                    </div>
                   </div>
-                  <div className="text-gray-400 text-[10px] mt-1.5">
-                    {formatDate(note.createdAt)}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </motion.div>
           ))
         ) : (
           <div className="flex items-center justify-center h-full min-h-[200px]">

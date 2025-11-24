@@ -1,9 +1,9 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useRouter, usePathname } from "next/navigation";
 import { useGroupsByCourse } from "@/lib/hooks/queries/useGroups";
 import { Loader2, Users } from "lucide-react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -23,6 +23,9 @@ export default function GroupQuickAccess() {
   const params = useParams();
   const courseSlug = (params.course_slug || params.slug) as string;
   const currentGroupId = params.group_id as string | undefined;
+  const router = useRouter();
+  const pathname = usePathname();
+  const [loadingGroupId, setLoadingGroupId] = useState<string | null>(null);
 
   const { data: groupsData, isLoading } = useGroupsByCourse(courseSlug);
 
@@ -34,6 +37,10 @@ export default function GroupQuickAccess() {
 
   // Exclude the current group from the list
   const groups = allGroups.filter((group: any) => group.id !== currentGroupId);
+
+  useEffect(() => {
+    setLoadingGroupId(null);
+  }, [pathname]);
 
   if (isLoading) {
     return (
@@ -82,16 +89,27 @@ export default function GroupQuickAccess() {
         {groups.map((group: any) => {
           const isActive = currentGroupId === group.id;
           const groupUrl = `/main/grading/reporting/${courseSlug}/group/${group.id}`;
+          const isLoadingGroup = loadingGroupId === group.id;
+          const isDisabled =
+            loadingGroupId !== null && loadingGroupId !== group.id;
+
+          const handleGroupClick = () => {
+            if (isDisabled || isLoadingGroup) return;
+            setLoadingGroupId(group.id);
+            router.push(groupUrl);
+          };
 
           return (
-            <Link
+            <button
               key={group.id}
-              href={groupUrl}
-              className={`block p-3 rounded-lg border transition-all duration-200 ${
+              type="button"
+              onClick={handleGroupClick}
+              disabled={isDisabled || isLoadingGroup}
+              className={`block p-3 rounded-lg border transition-all duration-200 text-left w-full ${
                 isActive
                   ? "bg-white/20 text-white border-white/40"
                   : "bg-white/10 hover:bg-white/20 border-white/20 hover:border-white/40 text-white"
-              }`}
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex flex-col min-w-0 flex-1">
@@ -108,19 +126,24 @@ export default function GroupQuickAccess() {
                     </span>
                   )}
                 </div>
-                {group.students && (
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ml-2 ${
-                      isActive
-                        ? "bg-white/30 text-white"
-                        : "bg-white/20 text-white/90"
-                    }`}
-                  >
-                    {group.students.length}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {group.students && (
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
+                        isActive
+                          ? "bg-white/30 text-white"
+                          : "bg-white/20 text-white/90"
+                      }`}
+                    >
+                      {group.students.length}
+                    </span>
+                  )}
+                  {isLoadingGroup && (
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  )}
+                </div>
               </div>
-            </Link>
+            </button>
           );
         })}
       </CardContent>

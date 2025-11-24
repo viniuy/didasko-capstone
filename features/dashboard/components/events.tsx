@@ -1,7 +1,8 @@
 "use client";
 
-import { Clock, Trash, Edit, Plus } from "lucide-react";
+import { Clock, Trash, Edit, Plus, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { motion } from "framer-motion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +25,6 @@ import { useSession } from "next-auth/react";
 import { Role } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
 
 import {
   Popover,
@@ -688,55 +688,9 @@ export default function UpcomingEvents() {
       <div className="flex-1 bg-white rounded-lg p-2 shadow-md overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#124A69] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#0a2f42]">
         <div className="space-y-2 mt-2">
           {isLoading ? (
-            <>
-              {/* Date header skeleton */}
-              <div className="flex items-center gap-2 text-[#124A69] mb-1">
-                <Skeleton className="h-4 w-32" />
-              </div>
-
-              {/* Event card skeletons */}
-              {[...Array(3)].map((_, index) => (
-                <Card
-                  key={index}
-                  className="border-l-[8px] border-[#124A69] mb-1"
-                >
-                  <CardContent className="p-2 relative">
-                    <div className="-mt-4 -mb-4">
-                      <Skeleton className="h-4 w-3/4 mb-2" />
-                      <Skeleton className="h-3 w-1/2 mb-2" />
-                      <div className="flex items-center gap-1">
-                        <Skeleton className="h-3 w-3" />
-                        <Skeleton className="h-3 w-24" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              {/* Another date header skeleton */}
-              <div className="flex items-center gap-2 text-[#124A69] mb-1 mt-4">
-                <Skeleton className="h-4 w-32" />
-              </div>
-
-              {/* More event card skeletons */}
-              {[...Array(2)].map((_, index) => (
-                <Card
-                  key={`second-${index}`}
-                  className="border-l-[8px] border-[#124A69] mb-1"
-                >
-                  <CardContent className="p-2 relative">
-                    <div className="-mt-4 -mb-4">
-                      <Skeleton className="h-4 w-3/4 mb-2" />
-                      <Skeleton className="h-3 w-1/2 mb-2" />
-                      <div className="flex items-center gap-1">
-                        <Skeleton className="h-3 w-3" />
-                        <Skeleton className="h-3 w-24" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </>
+            <div className="flex items-center justify-center h-full min-h-[200px]">
+              <Loader2 className="w-8 h-8 animate-spin text-[#124A69]" />
+            </div>
           ) : eventList.length > 0 ? (
             eventList.map((event, eventIndex) => {
               const isToday = isSameDay(event.date, new Date());
@@ -751,79 +705,95 @@ export default function UpcomingEvents() {
                       )
                     </p>
                   </div>
-                  {event.items.map((item) => {
+                  {event.items.map((item, itemIndex) => {
                     const isPastEvent = isBefore(
                       event.date,
                       new Date(new Date().setHours(0, 0, 0, 0))
                     );
                     return (
-                      <Card
+                      <motion.div
                         key={item.id}
-                        className={cn(
-                          "border-l-[8px] mb-1 hover:shadow-md transition-shadow",
-                          isPastEvent
-                            ? "border-gray-400 bg-gray-50"
-                            : "border-[#124A69]"
-                        )}
+                        initial={{ x: -100, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{
+                          duration: 0.9,
+                          delay: itemIndex * 0.1,
+                          ease: "easeOut",
+                        }}
                       >
-                        <CardContent className="p-2 relative">
-                          {canManageEvents && (
-                            <div className="absolute right-1 -top-5 flex gap-0.5">
-                              <Button
-                                variant="ghost"
-                                className="h-5 w-5 p-0 hover:bg-transparent"
-                                onClick={() => handleOpenEdit(item)}
-                              >
-                                <Edit
-                                  className="h-3 w-3"
-                                  color={isPastEvent ? "#6b7280" : "#124a69"}
-                                />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                className="h-5 w-5 p-0 hover:bg-transparent"
-                                onClick={() => handleDeleteClick(item.id)}
-                              >
-                                <Trash
-                                  className="h-3 w-3"
-                                  color={isPastEvent ? "#6b7280" : "#124a69"}
-                                />
-                              </Button>
-                            </div>
+                        <Card
+                          className={cn(
+                            "border-l-[8px] mb-1 hover:shadow-md transition-shadow",
+                            isPastEvent
+                              ? "border-gray-400 bg-gray-50"
+                              : "border-[#124A69]"
                           )}
-                          <div className="-mt-4 -mb-4">
-                            <div
-                              className={cn(
-                                "font-medium text-xs mb-0.5",
-                                isPastEvent ? "text-gray-500" : "text-[#124A69]"
-                              )}
-                            >
-                              {item.title}
+                        >
+                          <CardContent className="p-2 relative">
+                            {canManageEvents && (
+                              <div className="absolute right-1 -top-5 flex gap-0.5">
+                                <Button
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0 hover:bg-transparent"
+                                  onClick={() => handleOpenEdit(item)}
+                                >
+                                  <Edit
+                                    className="h-3 w-3"
+                                    color={isPastEvent ? "#6b7280" : "#124a69"}
+                                  />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  className="h-5 w-5 p-0 hover:bg-transparent"
+                                  onClick={() => handleDeleteClick(item.id)}
+                                >
+                                  <Trash
+                                    className="h-3 w-3"
+                                    color={isPastEvent ? "#6b7280" : "#124a69"}
+                                  />
+                                </Button>
+                              </div>
+                            )}
+                            <div className="-mt-4 -mb-4">
+                              <div
+                                className={cn(
+                                  "font-medium text-xs mb-0.5",
+                                  isPastEvent
+                                    ? "text-gray-500"
+                                    : "text-[#124A69]"
+                                )}
+                              >
+                                {item.title}
+                              </div>
+                              <div
+                                className={cn(
+                                  "text-[11px]",
+                                  isPastEvent
+                                    ? "text-gray-400"
+                                    : "text-gray-600"
+                                )}
+                              >
+                                {item.description}
+                              </div>
+                              <div
+                                className={cn(
+                                  "flex items-center text-[11px]",
+                                  isPastEvent
+                                    ? "text-gray-400"
+                                    : "text-gray-500"
+                                )}
+                              >
+                                <Clock className="w-3 h-3 mr-0.5" />
+                                {item.fromTime && item.toTime
+                                  ? `${formatTimeTo12Hour(
+                                      item.fromTime
+                                    )} - ${formatTimeTo12Hour(item.toTime)}`
+                                  : "All day"}
+                              </div>
                             </div>
-                            <div
-                              className={cn(
-                                "text-[11px]",
-                                isPastEvent ? "text-gray-400" : "text-gray-600"
-                              )}
-                            >
-                              {item.description}
-                            </div>
-                            <div
-                              className={cn(
-                                "flex items-center text-[11px]",
-                                isPastEvent ? "text-gray-400" : "text-gray-500"
-                              )}
-                            >
-                              <Clock className="w-3 h-3 mr-0.5" />
-                              {item.fromTime && item.toTime
-                                ? `${formatTimeTo12Hour(
-                                    item.fromTime
-                                  )} - ${formatTimeTo12Hour(item.toTime)}`
-                                : "All day"}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
                     );
                   })}
                 </div>
