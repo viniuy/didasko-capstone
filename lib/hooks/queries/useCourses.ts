@@ -30,21 +30,81 @@ export function useCourses(filters?: {
   return useQuery({
     queryKey: queryKeys.courses.list(filters),
     queryFn: async ({ signal }) => {
-      const params = new URLSearchParams();
-      if (filters?.facultyId) params.append("facultyId", filters.facultyId);
-      if (filters?.search) params.append("search", filters.search);
-      if (filters?.department) params.append("department", filters.department);
-      if (filters?.semester) params.append("semester", filters.semester);
-      if (filters?.code) params.append("code", filters.code);
-      if (filters?.section) params.append("section", filters.section);
-      if (filters?.status) params.append("status", filters.status);
+      try {
+        const params = new URLSearchParams();
+        if (filters?.facultyId) params.append("facultyId", filters.facultyId);
+        if (filters?.search) params.append("search", filters.search);
+        if (filters?.department)
+          params.append("department", filters.department);
+        if (filters?.semester) params.append("semester", filters.semester);
+        if (filters?.code) params.append("code", filters.code);
+        if (filters?.section) params.append("section", filters.section);
+        if (filters?.status) params.append("status", filters.status);
 
-      const { data } = await axios.get<CourseResponse>(
-        `/courses?${params.toString()}`,
-        { signal }
-      );
-      return data;
+        const { data } = await axios.get<CourseResponse>(
+          `/courses?${params.toString()}`,
+          {
+            signal,
+            timeout: 30000, // 30 second timeout
+          }
+        );
+        return data;
+      } catch (error: any) {
+        // Handle Prisma connection errors (P1017)
+        if (
+          error.response?.data?.error?.includes("P1017") ||
+          error.response?.data?.error?.includes(
+            "Server has closed the connection"
+          ) ||
+          error.message?.includes("P1017") ||
+          error.message?.includes("Server has closed the connection")
+        ) {
+          throw new Error(
+            "Database connection error. Please try again in a moment."
+          );
+        }
+        if (
+          error.code === "ECONNABORTED" ||
+          error.message?.includes("timeout")
+        ) {
+          throw new Error("Request timeout. Please try again.");
+        }
+        if (error.response) {
+          throw new Error(
+            error.response?.data?.error || "Failed to fetch courses"
+          );
+        }
+        if (error.request && !error.response) {
+          throw new Error(
+            "No response from server. Please check your connection."
+          );
+        }
+        throw error;
+      }
     },
+    retry: (failureCount, error: any) => {
+      // Retry on connection errors (P1017) or network errors
+      if (failureCount < 3) {
+        const errorMessage = error?.message || "";
+        const responseError = error?.response?.data?.error || "";
+
+        if (
+          errorMessage.includes("P1017") ||
+          errorMessage.includes("Server has closed the connection") ||
+          errorMessage.includes("Database connection error") ||
+          responseError.includes("P1017") ||
+          responseError.includes("Server has closed the connection") ||
+          error.code === "ECONNABORTED" ||
+          errorMessage.includes("timeout") ||
+          (error.request && !error.response)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff: 1s, 2s, 4s
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
@@ -70,21 +130,115 @@ export function useActiveCourses(options?: {
   return useQuery({
     queryKey: queryKeys.courses.active(filters),
     queryFn: async ({ signal }) => {
-      const params = new URLSearchParams();
-      if (filters?.facultyId) params.append("facultyId", filters.facultyId);
-      if (filters?.search) params.append("search", filters.search);
-      if (filters?.department) params.append("department", filters.department);
-      if (filters?.semester) params.append("semester", filters.semester);
+      try {
+        const params = new URLSearchParams();
+        if (filters?.facultyId) params.append("facultyId", filters.facultyId);
+        if (filters?.search) params.append("search", filters.search);
+        if (filters?.department)
+          params.append("department", filters.department);
+        if (filters?.semester) params.append("semester", filters.semester);
 
-      const { data } = await axios.get<CourseResponse>(
-        `/courses/active?${params.toString()}`,
-        { signal }
-      );
-      return data;
+        const { data } = await axios.get<CourseResponse>(
+          `/courses/active?${params.toString()}`,
+          {
+            signal,
+            timeout: 30000, // 30 second timeout
+          }
+        );
+        return data;
+      } catch (error: any) {
+        // Handle Prisma connection errors (P1017)
+        if (
+          error.response?.data?.error?.includes("P1017") ||
+          error.response?.data?.error?.includes(
+            "Server has closed the connection"
+          ) ||
+          error.message?.includes("P1017") ||
+          error.message?.includes("Server has closed the connection")
+        ) {
+          throw new Error(
+            "Database connection error. Please try again in a moment."
+          );
+        }
+        if (
+          error.code === "ECONNABORTED" ||
+          error.message?.includes("timeout")
+        ) {
+          throw new Error("Request timeout. Please try again.");
+        }
+        if (error.response) {
+          throw new Error(
+            error.response?.data?.error || "Failed to fetch active courses"
+          );
+        }
+        if (error.request && !error.response) {
+          throw new Error(
+            "No response from server. Please check your connection."
+          );
+        }
+        throw error;
+      }
     },
     initialData,
     refetchOnMount,
     refetchOnWindowFocus,
+    retry: (failureCount, error: any) => {
+      // Retry on connection errors (P1017) or network errors
+      if (failureCount < 3) {
+        const errorMessage = error?.message || "";
+        const responseError = error?.response?.data?.error || "";
+
+        if (
+          errorMessage.includes("P1017") ||
+          errorMessage.includes("Server has closed the connection") ||
+          errorMessage.includes("Database connection error") ||
+          responseError.includes("P1017") ||
+          responseError.includes("Server has closed the connection") ||
+          error.code === "ECONNABORTED" ||
+          errorMessage.includes("timeout") ||
+          (error.request && !error.response)
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff: 1s, 2s, 4s
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+// Query: Get archived courses (lightweight, for settings dialog)
+export function useArchivedCourses(filters?: {
+  facultyId?: string;
+  search?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.courses.archived(filters),
+    queryFn: async ({ signal }) => {
+      try {
+        const params = new URLSearchParams();
+        if (filters?.facultyId) params.append("facultyId", filters.facultyId);
+        if (filters?.search) params.append("search", filters.search);
+
+        const { data } = await axios.get<Course[]>(
+          `/courses/archived?${params.toString()}`,
+          {
+            signal,
+            timeout: 30000,
+          }
+        );
+        return data;
+      } catch (error: any) {
+        if (error.response) {
+          throw new Error(
+            error.response?.data?.error || "Failed to fetch archived courses"
+          );
+        }
+        throw error;
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 

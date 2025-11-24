@@ -8,9 +8,10 @@ interface StatCardProps {
   icon: React.ReactNode;
   count: number;
   label: string;
+  isLoading?: boolean;
 }
 
-const StatCard = ({ icon, count, label }: StatCardProps) => {
+const StatCard = ({ icon, count, label, isLoading }: StatCardProps) => {
   return (
     <Card className="w-full">
       <CardContent className="flex items-center -mt-2 -mb-2 justify-between">
@@ -18,9 +19,13 @@ const StatCard = ({ icon, count, label }: StatCardProps) => {
           <CardDescription className="text-xs sm:text-sm font-semibold">
             {label}
           </CardDescription>
-          <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69]">
-            {count}
-          </p>
+          {isLoading ? (
+            <div className="h-8 sm:h-9 md:h-10 w-16 sm:w-20 md:w-24 bg-gray-200 animate-pulse rounded mt-1" />
+          ) : (
+            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-[#124A69]">
+              {count}
+            </p>
+          )}
         </div>
         <div className="bg-[#124A69] p-2 sm:p-2.5 md:p-3 rounded-lg text-white">
           <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-6 md:h-6">{icon}</div>
@@ -49,12 +54,12 @@ export default function Dashboard({
   userRole,
 }: StatsProps) {
   // React Query hooks with initialData
-  const { data: facultyStats } = useFacultyStats({
+  const { data: facultyStats, isLoading: isLoadingStats } = useFacultyStats({
     initialData: initialFacultyStats,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
-  const { data: facultyCount } = useFacultyCount({
+  const { data: facultyCount, isLoading: isLoadingCount } = useFacultyCount({
     initialData: initialFacultyCount,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -91,11 +96,13 @@ export default function Dashboard({
             icon={<Users className="w-full h-full" />}
             count={stats.fullTime}
             label="FACULTY FULL-TIME"
+            isLoading={isLoadingCount}
           />
           <StatCard
             icon={<Users className="w-full h-full" />}
             count={stats.partTime}
             label="FACULTY PART-TIME"
+            isLoading={isLoadingCount}
           />
         </div>
       </div>
@@ -109,16 +116,19 @@ export default function Dashboard({
           icon={<User className="w-full h-full" />}
           count={stats.totalStudents}
           label="TOTAL STUDENTS"
+          isLoading={isLoadingStats}
         />
         <StatCard
           icon={<BookOpen className="w-full h-full" />}
           count={stats.totalCourses}
           label="TOTAL SUBJECTS"
+          isLoading={isLoadingStats}
         />
         <StatCard
           icon={<GraduationCap className="w-full h-full" />}
           count={stats.totalClasses}
           label="TOTAL SECTIONS"
+          isLoading={isLoadingStats}
         />
       </div>
     </div>

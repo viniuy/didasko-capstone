@@ -7,6 +7,7 @@ const axiosInstance = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true, // This is important for handling cookies
+  timeout: 30000, // 30 second default timeout
 });
 
 // Add request interceptor

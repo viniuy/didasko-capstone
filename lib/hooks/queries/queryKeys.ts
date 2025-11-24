@@ -31,6 +31,8 @@ export const queryKeys = {
       department?: string;
       semester?: string;
     }) => [...queryKeys.courses.all, "active", filters] as const,
+    archived: (filters?: { facultyId?: string; search?: string }) =>
+      [...queryKeys.courses.all, "archived", filters] as const,
     stats: (slug: string) => [...queryKeys.courses.all, "stats", slug] as const,
     statsBatch: (slugs: string[]) =>
       [...queryKeys.courses.all, "statsBatch", ...slugs.sort()] as const,

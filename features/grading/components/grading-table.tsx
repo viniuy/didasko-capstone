@@ -387,6 +387,16 @@ export function GradingTable({
     failed: false,
     noGrades: false,
   });
+  // Temporary filter state for the filter sheet (only applied on "Apply")
+  const [tempGradeFilter, setTempGradeFilter] = useState<{
+    passed: boolean;
+    failed: boolean;
+    noGrades: boolean;
+  }>({
+    passed: false,
+    failed: false,
+    noGrades: false,
+  });
   const [validationErrors, setValidationErrors] = useState<{
     name?: string;
     rubrics?: string[];
@@ -446,10 +456,13 @@ export function GradingTable({
     Map<string, { studentId: string; scores: number[]; total: number }>
   >(new Map());
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const manuallyOpenedDialogRef = useRef(false);
 
   // Function to handle dialog close
   const handleDialogClose = () => {
     setShowCriteriaDialog(false);
+    // Reset manual open flag when dialog is closed
+    manuallyOpenedDialogRef.current = false;
     // Only reset if there's no active report
     if (!activeReport) {
       setStudents([]);
@@ -458,6 +471,21 @@ export function GradingTable({
       setSelectedReport("");
     }
   };
+
+  // Helper function to convert date to Philippines timezone (UTC+8)
+  const convertToPhilippinesDate = useCallback((date: Date | string): Date => {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+
+    // Get date components - treat as if it's already in Philippines time
+    // Extract YYYY-MM-DD from the date
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth();
+    const day = dateObj.getDate();
+
+    // Create a new date at noon in local timezone (Philippines)
+    // This ensures we get the correct date regardless of UTC conversion
+    return new Date(year, month, day, 12, 0, 0, 0);
+  }, []);
 
   // React Query hooks for data fetching
   const formattedDate = selectedDate?.toISOString().split("T")[0];
@@ -485,7 +513,7 @@ export function GradingTable({
   const { data: groupStudentsData, isLoading: isLoadingGroupQuery } =
     useGroupStudents(courseSlug, groupId || "");
 
-  // Fetch grades
+  // Fetch grades - only when date, criteria, and course info are available
   const { data: gradesData, isLoading: isLoadingGrades } = useGrades(
     courseSlug,
     {
@@ -631,45 +659,39 @@ export function GradingTable({
     setIsLoadingGroup(isLoadingGroupQuery);
   }, [isLoadingGrades, isLoadingStudents, isLoadingGroupQuery]);
 
-  // React Query hooks for criteria fetching
+  // React Query hooks for criteria fetching - fetch all criteria, filter by date on client
   const { data: allCriteriaData, isLoading: isLoadingCriteria } =
-    useCriteriaByCourse(
-      courseSlug,
-      !isGroupView &&
+    useCriteriaByCourse(courseSlug, {
+      initialData:
+        !isGroupView &&
         !isRecitationCriteria &&
         initialCriteria &&
         initialCriteria.length > 0
-        ? {
-            initialData: initialCriteria,
-            refetchOnMount: false,
-            refetchOnWindowFocus: false,
-          }
-        : undefined
-    );
+          ? initialCriteria
+          : undefined,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    });
   const { data: recitationCriteriaData, isLoading: isLoadingRecitation } =
-    useRecitationCriteria(
-      courseSlug,
-      isRecitationCriteria &&
+    useRecitationCriteria(courseSlug, {
+      initialData:
+        isRecitationCriteria &&
         initialRecitationCriteria &&
         initialRecitationCriteria.length > 0
-        ? {
-            initialData: initialRecitationCriteria,
-            refetchOnMount: false,
-            refetchOnWindowFocus: false,
-          }
-        : undefined
-    );
+          ? initialRecitationCriteria
+          : undefined,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    });
   const { data: groupCriteriaData, isLoading: isLoadingGroupCriteria } =
-    useGroupCriteriaByCourse(
-      courseSlug,
-      isGroupView && initialCriteria && initialCriteria.length > 0
-        ? {
-            initialData: initialCriteria,
-            refetchOnMount: false,
-            refetchOnWindowFocus: false,
-          }
-        : undefined
-    );
+    useGroupCriteriaByCourse(courseSlug, {
+      initialData:
+        isGroupView && initialCriteria && initialCriteria.length > 0
+          ? initialCriteria
+          : undefined,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+    });
 
   // Determine which criteria to use
   const allReports = isRecitationCriteria
@@ -684,7 +706,10 @@ export function GradingTable({
     if (!selectedDate && !activeReport) {
       setRubricDetails([]);
       setSelectedReport("");
-      setShowCriteriaDialog(false);
+      // Don't close dialog if it was manually opened
+      if (!manuallyOpenedDialogRef.current) {
+        setShowCriteriaDialog(false);
+      }
       setSavedReports([]);
       setInitialLoading(false);
       setHasSelectedCriteria(false);
@@ -720,8 +745,7 @@ export function GradingTable({
     setInitialLoading(false);
 
     try {
-      // Filter reports based on view type only (not by date - criteria can be reused on any date)
-      // Grades are linked to criteriaId + date combination, so same criteria can be used on different dates
+      // Filter reports by view type only - no date filtering
       let filteredReports: GradingReport[] = [];
       if (isGroupView) {
         // Group criteria is for the whole section, not specific to a group
@@ -748,15 +772,11 @@ export function GradingTable({
       }
       setSavedReports(filteredReports);
 
-      // Check if there are existing grades for any criteria on the selected date
-      // If yes, auto-select that criteria; otherwise show dialog
+      // Show dialog to let user select criteria
       if (filteredReports.length > 0 && !hasSelectedCriteria && !activeReport) {
-        // Try to find a criteria that has grades for the selected date
-        // This will be handled by the grades query which uses criteriaId + date
-        // For now, just show the dialog to let user select
         setShowCriteriaDialog(true);
-      } else if (!hasSelectedCriteria) {
-        // Only show dialog if no criteria has been selected yet
+      } else if (filteredReports.length === 0 && !hasSelectedCriteria) {
+        // No criteria exists, show dialog to create new one
         setShowCriteriaDialog(true);
       }
     } catch (error) {
@@ -791,82 +811,43 @@ export function GradingTable({
   // Track the last criteria ID we auto-selected a date for to prevent re-selecting
   const lastAutoSelectedCriteriaIdRef = useRef<string | null>(null);
 
-  // Auto-select date when criteria with grades is selected
+  // Auto-select date from criteria when criteria is selected - always update date to match criteria
   useEffect(() => {
-    // Wait for gradeDates to be loaded and ensure we have an active report
-    if (activeReport?.id) {
+    if (activeReport?.id && activeReport?.date) {
       // Only auto-select once per criteria selection
       if (lastAutoSelectedCriteriaIdRef.current === activeReport.id) {
         return;
       }
 
-      // If gradeDates are loaded and we have dates, use the first one
-      if (!isLoadingGradeDates && gradeDates.length > 0) {
-        // Parse the first date that has grades and set it as selectedDate
-        // Parse as local time (Philippines time) to avoid timezone issues
-        const firstDateStr = gradeDates[0];
-        if (firstDateStr) {
-          const [year, month, day] = firstDateStr.split("-").map(Number);
-          // Create date in local timezone (Philippines) to avoid UTC conversion issues
-          const date = new Date(year, month - 1, day, 12, 0, 0, 0); // Use noon to avoid timezone edge cases
+      // Convert criteria date to Philippines timezone
+      const phDate = convertToPhilippinesDate(activeReport.date);
 
-          console.log("Auto-selecting date from gradeDates:", {
-            firstDateStr,
-            date,
-            gradeDates,
-            criteriaId: activeReport.id,
-          });
-
-          lastAutoSelectedCriteriaIdRef.current = activeReport.id;
-          onDateSelect?.(date);
-          return;
-        }
-      }
-      // If no gradeDates yet but criteria has a date property, use that as fallback
-      else if (
-        !isLoadingGradeDates &&
-        gradeDates.length === 0 &&
-        activeReport.date
-      ) {
-        // Use the criteria's date property as fallback
-        const criteriaDate = new Date(activeReport.date);
-        // Ensure it's in local timezone
-        const date = new Date(
-          criteriaDate.getFullYear(),
-          criteriaDate.getMonth(),
-          criteriaDate.getDate(),
-          12,
-          0,
-          0,
-          0
-        );
-
-        console.log("Auto-selecting date from criteria.date:", {
-          criteriaDate,
-          date,
+      console.log(
+        "Auto-selecting date from criteria.date (Philippines timezone):",
+        {
+          originalDate: activeReport.date,
+          phDate,
           criteriaId: activeReport.id,
-        });
+        }
+      );
 
-        lastAutoSelectedCriteriaIdRef.current = activeReport.id;
-        onDateSelect?.(date);
-      }
-    } else {
+      lastAutoSelectedCriteriaIdRef.current = activeReport.id;
+      onDateSelect?.(phDate);
+    } else if (!activeReport) {
       // Reset when no active report
       lastAutoSelectedCriteriaIdRef.current = null;
     }
   }, [
     activeReport?.id,
     activeReport?.date,
-    gradeDates,
     onDateSelect,
-    isLoadingGradeDates,
+    convertToPhilippinesDate,
   ]);
 
-  // Reset scores when date changes (but keep activeReport if it exists - date was auto-selected)
+  // Reset scores when date changes
   useEffect(() => {
     setScores({});
-    // Only reset criteria selection if we don't have an active report
-    // This prevents resetting when date is auto-selected after criteria selection
+    setOriginalScores({});
     if (!activeReport) {
       setHasSelectedCriteria(false);
     }
@@ -1065,7 +1046,12 @@ export function GradingTable({
         setActiveReport(selected);
         setRubricDetails(selected.rubrics);
         setHasSelectedCriteria(true); // Mark criteria as selected
-        // The date will be auto-selected by the useEffect when gradeDates loads
+
+        // Set date to criteria's date using Philippines timezone
+        if (selected.date) {
+          const phDate = convertToPhilippinesDate(selected.date);
+          onDateSelect?.(phDate);
+        }
       }
       setShowCriteriaDialog(false);
     }
@@ -1100,6 +1086,7 @@ export function GradingTable({
     pendingScoresRef.current.clear();
 
     try {
+      toast.loading("Saving grades...", { id: "save-grades" });
       const formattedDate = selectedDate.toISOString().split("T")[0];
 
       // Prepare grades in the format expected by the API
@@ -1111,7 +1098,7 @@ export function GradingTable({
         recitationScore: isRecitationCriteria ? grade.total : 0,
       }));
 
-      // Save all grades in a single request (silent auto-save, no toasts)
+      // Save all grades in a single request
       await saveGradesMutation.mutateAsync({
         courseSlug,
         gradeData: {
@@ -1123,6 +1110,8 @@ export function GradingTable({
           isRecitationCriteria,
         },
       });
+
+      toast.success("Grades saved successfully", { id: "save-grades" });
 
       // Update original scores after successful save
       setOriginalScores((prev) => {
@@ -1152,15 +1141,13 @@ export function GradingTable({
       const errorMessage =
         error?.response?.data?.error ||
         error?.message ||
-        "Failed to auto-save grades. Changes will be saved when you click Save.";
+        "Failed to save grades. Please try again.";
 
-      // Only show error toast for auto-save failures (silent success)
       toast.error(errorMessage, {
-        id: "auto-save-grades",
-        duration: 5000,
+        id: "save-grades",
       });
 
-      console.error("Error auto-saving grades:", error);
+      console.error("Error saving grades:", error);
       console.error("Grades that failed to save:", validGrades);
 
       // Re-queue the save after a delay
@@ -1708,36 +1695,31 @@ export function GradingTable({
     }
   };
 
-  // Update saved reports when criteria data changes (no date filtering - show all criteria)
+  // Update saved reports when criteria data changes - filter by view type only (no date filtering)
   useEffect(() => {
-    if (!selectedDate) return;
-
     try {
-      // Use React Query data - show all criteria regardless of their original date
-      // Criteria can be reused on any date, grades are linked by criteriaId + date
       const allReportsData = isRecitationCriteria
         ? recitationCriteriaData || []
         : isGroupView
         ? groupCriteriaData || []
         : allCriteriaData || [];
 
-      // Filter by view type only (not by date)
+      // Filter by view type only - no date filtering
       let reports: GradingReport[] = [];
       if (isGroupView) {
-        reports = (allReportsData as GradingReport[]).filter(
-          (r: any) => r.isGroupCriteria === true
-        );
+        reports = (allReportsData as GradingReport[]).filter((r: any) => {
+          return r.isGroupCriteria === true;
+        });
       } else if (isRecitationCriteria) {
-        // For recitation view, show only recitation criteria
-        reports = (allReportsData as GradingReport[]).filter(
-          (r: any) => r.isRecitationCriteria === true
-        );
+        reports = (allReportsData as GradingReport[]).filter((r: any) => {
+          return r.isRecitationCriteria === true;
+        });
       } else {
-        // For regular grading view, show only non-group, non-recitation criteria
-        reports = (allReportsData as GradingReport[]).filter(
-          (r: any) =>
+        reports = (allReportsData as GradingReport[]).filter((r: any) => {
+          return (
             r.isGroupCriteria === false && r.isRecitationCriteria === false
-        );
+          );
+        });
       }
       setSavedReports(reports);
     } catch (error) {
@@ -1752,7 +1734,6 @@ export function GradingTable({
       });
     }
   }, [
-    selectedDate,
     courseId,
     isGroupView,
     groupId,
@@ -1995,22 +1976,22 @@ export function GradingTable({
     }
   };
 
-  // Function to handle filter changes
-  const handleFilterChange = (key: keyof typeof gradeFilter) => {
+  // Function to handle filter changes in the filter sheet (temporary state)
+  const handleFilterChange = (key: keyof typeof tempGradeFilter) => {
     const newFilter = {
-      ...gradeFilter,
-      [key]: !gradeFilter[key],
+      ...tempGradeFilter,
+      [key]: !tempGradeFilter[key],
     };
 
     // If all options are checked, set all to true
     if (Object.values(newFilter).every(Boolean)) {
-      setGradeFilter({
+      setTempGradeFilter({
         passed: true,
         failed: true,
         noGrades: true,
       });
     } else {
-      setGradeFilter(newFilter);
+      setTempGradeFilter(newFilter);
     }
   };
 
@@ -2113,14 +2094,36 @@ export function GradingTable({
         return nameMatch && studentMatchesFilter(student);
       });
 
+      // Sort students alphabetically by lastName, then firstName, then middleInitial
+      const sorted = [...filtered].sort((a, b) => {
+        // Compare last names
+        const lastNameA = (a.lastName || "").toLowerCase();
+        const lastNameB = (b.lastName || "").toLowerCase();
+        if (lastNameA !== lastNameB) {
+          return lastNameA.localeCompare(lastNameB);
+        }
+
+        // If last names are equal, compare first names
+        const firstNameA = (a.firstName || "").toLowerCase();
+        const firstNameB = (b.firstName || "").toLowerCase();
+        if (firstNameA !== firstNameB) {
+          return firstNameA.localeCompare(firstNameB);
+        }
+
+        // If first names are also equal, compare middle initials
+        const middleA = (a.middleInitial || "").toLowerCase();
+        const middleB = (b.middleInitial || "").toLowerCase();
+        return middleA.localeCompare(middleB);
+      });
+
       const startIndex = (currentPage - 1) * studentsPerPage;
       const endIndex = startIndex + studentsPerPage;
 
       return {
-        filteredStudents: filtered,
-        paginatedStudents: filtered.slice(startIndex, endIndex),
-        totalPages: Math.ceil(filtered.length / studentsPerPage),
-        totalStudents: filtered.length,
+        filteredStudents: sorted,
+        paginatedStudents: sorted.slice(startIndex, endIndex),
+        totalPages: Math.ceil(sorted.length / studentsPerPage),
+        totalStudents: sorted.length,
       };
     }, [
       students,
@@ -2145,6 +2148,7 @@ export function GradingTable({
     activeReport,
     handleScoreChange,
     paginatedStudents,
+    isLoading,
   }: {
     students: Student[];
     scores: Record<string, GradingScore>;
@@ -2156,6 +2160,7 @@ export function GradingTable({
       value: number | ""
     ) => void;
     paginatedStudents: Student[];
+    isLoading: boolean;
   }) => {
     if (paginatedStudents.length === 0) {
       return (
@@ -2223,46 +2228,53 @@ export function GradingTable({
                     className={`text-center px-4 py-2 align-middle w-[120px] ${cellBg}`}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <select
-                        className="w-full border rounded px-2 py-1"
-                        value={groupValue}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          setScores((prev) => {
-                            const updated = { ...prev };
-                            students.forEach((student) => {
-                              const studentScores =
-                                updated[student.id]?.scores ||
-                                new Array(rubricDetails.length).fill(0);
-                              // Set the group rubric score for all students
-                              studentScores[rubricIdx] = value;
-                              const total = calculateTotal(studentScores);
-                              updated[student.id] = {
-                                ...updated[student.id],
-                                scores: studentScores,
-                                total,
-                              };
-                              // Queue for auto-save for each student
-                              queueScoreForSaving(
-                                student.id,
-                                studentScores,
-                                total
-                              );
+                      {isLoading ? (
+                        <div className="w-full border rounded px-2 py-1 bg-gray-50 flex items-center justify-center">
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                        </div>
+                      ) : (
+                        <select
+                          className="w-full border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          value={groupValue}
+                          onChange={(e) => {
+                            const value = Number(e.target.value);
+                            setScores((prev) => {
+                              const updated = { ...prev };
+                              students.forEach((student) => {
+                                const studentScores =
+                                  updated[student.id]?.scores ||
+                                  new Array(rubricDetails.length).fill(0);
+                                // Set the group rubric score for all students
+                                studentScores[rubricIdx] = value;
+                                const total = calculateTotal(studentScores);
+                                updated[student.id] = {
+                                  ...updated[student.id],
+                                  scores: studentScores,
+                                  total,
+                                };
+                                // Queue for auto-save for each student
+                                queueScoreForSaving(
+                                  student.id,
+                                  studentScores,
+                                  total
+                                );
+                              });
+                              return updated;
                             });
-                            return updated;
-                          });
-                        }}
-                      >
-                        <option value="">Select grade</option>
-                        {Array.from(
-                          { length: Number(activeReport?.scoringRange) || 5 },
-                          (_, i) => (
-                            <option key={i + 1} value={i + 1}>
-                              {i + 1}
-                            </option>
-                          )
-                        )}
-                      </select>
+                          }}
+                          disabled={isLoading}
+                        >
+                          <option value="">Select grade</option>
+                          {Array.from(
+                            { length: Number(activeReport?.scoringRange) || 5 },
+                            (_, i) => (
+                              <option key={i + 1} value={i + 1}>
+                                {i + 1}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      )}
                     </div>
                   </td>
                 );
@@ -2286,24 +2298,31 @@ export function GradingTable({
                   key={rubricIdx}
                   className={`text-center px-4 py-2 align-middle w-[120px] ${cellBg}`}
                 >
-                  <select
-                    className="w-full border rounded px-2 py-1"
-                    value={value}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      handleScoreChange(student.id, rubricIdx, v);
-                    }}
-                  >
-                    <option value="">Select grade</option>
-                    {Array.from(
-                      { length: Number(activeReport?.scoringRange) || 5 },
-                      (_, i) => (
-                        <option key={i + 1} value={i + 1}>
-                          {i + 1}
-                        </option>
-                      )
-                    )}
-                  </select>
+                  {isLoading ? (
+                    <div className="w-full border rounded px-2 py-1 bg-gray-50 flex items-center justify-center">
+                      <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                    </div>
+                  ) : (
+                    <select
+                      className="w-full border rounded px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={value}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        handleScoreChange(student.id, rubricIdx, v);
+                      }}
+                      disabled={isLoading}
+                    >
+                      <option value="">Select grade</option>
+                      {Array.from(
+                        { length: Number(activeReport?.scoringRange) || 5 },
+                        (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {i + 1}
+                          </option>
+                        )
+                      )}
+                    </select>
+                  )}
                 </td>
               );
             }
@@ -2752,6 +2771,13 @@ export function GradingTable({
           onFilterClick={() => setIsFilterOpen(true)}
           onDateSelect={(date) => onDateSelect?.(date)}
           onManageReport={() => {
+            // Reset editing state when opening via Manage Report button
+            setIsEditingCriteria(false);
+            setEditingReport(null);
+            setSelectedReport(activeReport?.id || "");
+            // Mark as manually opened to prevent useEffect from closing it
+            manuallyOpenedDialogRef.current = true;
+            // Open the criteria dialog
             setShowCriteriaDialog(true);
           }}
           hasActiveReport={!!activeReport}
@@ -2770,10 +2796,25 @@ export function GradingTable({
             }
           }}
           gradeDates={gradeDates}
+          isLoading={
+            isLoadingStudents || isLoading || isLoadingGrades || !activeReport
+          }
         />
 
         {/* Add Filter Sheet */}
-        <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+        <Sheet
+          open={isFilterOpen}
+          onOpenChange={(open) => {
+            if (open) {
+              // When opening, initialize temp filter with current filter state
+              setTempGradeFilter(gradeFilter);
+            } else {
+              // When closing without applying, revert temp filter
+              setTempGradeFilter(gradeFilter);
+            }
+            setIsFilterOpen(open);
+          }}
+        >
           <SheetContent side="right" className="w-[340px] sm:w-[400px] p-0">
             <div className="p-6 border-b">
               <SheetHeader>
@@ -2790,7 +2831,7 @@ export function GradingTable({
                 <div className="space-y-3 border rounded-lg p-4 bg-white">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox
-                      checked={gradeFilter.passed}
+                      checked={tempGradeFilter.passed}
                       onCheckedChange={() => handleFilterChange("passed")}
                       className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
                     />
@@ -2798,7 +2839,7 @@ export function GradingTable({
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox
-                      checked={gradeFilter.failed}
+                      checked={tempGradeFilter.failed}
                       onCheckedChange={() => handleFilterChange("failed")}
                       className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
                     />
@@ -2806,7 +2847,7 @@ export function GradingTable({
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Checkbox
-                      checked={gradeFilter.noGrades}
+                      checked={tempGradeFilter.noGrades}
                       onCheckedChange={() => handleFilterChange("noGrades")}
                       className="rounded border-gray-300 text-[#124A69] focus:ring-[#124A69]"
                     />
@@ -2820,19 +2861,34 @@ export function GradingTable({
                 variant="outline"
                 className="flex-1 rounded-lg"
                 onClick={() => {
-                  setGradeFilter({
+                  // Cancel: revert to previous state and close
+                  setTempGradeFilter(gradeFilter);
+                  setIsFilterOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 rounded-lg"
+                onClick={() => {
+                  // Clear: set all to false in temp state
+                  setTempGradeFilter({
                     passed: false,
                     failed: false,
                     noGrades: false,
                   });
-                  setIsFilterOpen(false);
                 }}
               >
                 Clear
               </Button>
               <Button
                 className="flex-1 rounded-lg bg-[#124A69] hover:bg-[#0D3A54] text-white"
-                onClick={() => setIsFilterOpen(false)}
+                onClick={() => {
+                  // Apply: update actual filter state and close
+                  setGradeFilter(tempGradeFilter);
+                  setIsFilterOpen(false);
+                }}
               >
                 Apply
               </Button>
@@ -2859,21 +2915,32 @@ export function GradingTable({
                 {isGroupView ? (
                   <tbody>
                     {isLoadingGroup || isLoadingStudents ? (
-                      <tr>
-                        <td
-                          colSpan={rubricDetails.length + 3}
-                          className="text-center py-8"
-                        >
-                          <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="h-8 w-8 animate-spin text-[#124A69]" />
-                            <p className="text-gray-500">
-                              {isLoadingGroup
-                                ? "Loading group data..."
-                                : "Loading students..."}
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
+                      Array.from({ length: Math.min(studentsPerPage, 10) }).map(
+                        (_, idx) => (
+                          <tr key={idx}>
+                            <td className="sticky left-0 z-10 bg-white px-4 py-2 align-middle w-[300px]">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+                                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+                              </div>
+                            </td>
+                            {rubricDetails.map((_, rubricIdx) => (
+                              <td
+                                key={rubricIdx}
+                                className="text-center px-4 py-2 align-middle w-[120px]"
+                              >
+                                <div className="h-8 w-full bg-gray-200 rounded animate-pulse" />
+                              </td>
+                            ))}
+                            <td className="text-center px-4 py-2 align-middle w-[100px]">
+                              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse mx-auto" />
+                            </td>
+                            <td className="text-center px-4 py-2 align-middle w-[100px]">
+                              <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse mx-auto" />
+                            </td>
+                          </tr>
+                        )
+                      )
                     ) : (
                       <GroupViewTable
                         students={students}
@@ -2882,94 +2949,86 @@ export function GradingTable({
                         activeReport={activeReport}
                         handleScoreChange={handleScoreChange}
                         paginatedStudents={paginatedStudents}
+                        isLoading={isLoadingGrades || isLoadingStudents}
                       />
                     )}
                   </tbody>
                 ) : (
                   <tbody>
-                    {isLoadingStudents ? (
-                      <tr>
-                        <td
-                          colSpan={rubricDetails.length + 3}
-                          className="text-center py-8"
-                        >
-                          <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="h-8 w-8 animate-spin text-[#124A69]" />
-                            <p className="text-gray-500">Loading students...</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : isLoading ? (
-                      Array.from({ length: 5 }).map((_, idx) => (
-                        <tr key={idx}>
-                          <td className="sticky left-0 z-10 bg-white px-4 py-2 align-middle w-[300px]">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
-                              <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
-                            </div>
-                          </td>
-                          {rubricDetails.map((_, rubricIdx) => (
-                            <td
-                              key={rubricIdx}
-                              className="text-center px-4 py-2 align-middle w-[120px]"
-                            >
-                              <div className="h-8 w-full bg-gray-200 rounded animate-pulse" />
+                    {isLoadingStudents || isLoading
+                      ? Array.from({
+                          length: Math.min(studentsPerPage, 10),
+                        }).map((_, idx) => (
+                          <tr key={idx}>
+                            <td className="sticky left-0 z-10 bg-white px-4 py-2 align-middle w-[300px]">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+                                <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+                              </div>
                             </td>
-                          ))}
-                          <td className="text-center px-4 py-2 align-middle w-[100px]">
-                            <div className="h-4 w-16 bg-gray-200 rounded animate-pulse mx-auto" />
-                          </td>
-                          <td className="text-center px-4 py-2 align-middle w-[100px]">
-                            <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse mx-auto" />
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      (() => {
-                        // Use memoized paginatedStudents from above (already computed via useMemo)
-                        if (paginatedStudents.length === 0) {
-                          return (
-                            <tr>
+                            {rubricDetails.map((_, rubricIdx) => (
                               <td
-                                colSpan={rubricDetails.length + 3}
-                                className="text-center py-8 text-muted-foreground"
+                                key={rubricIdx}
+                                className="text-center px-4 py-2 align-middle w-[120px]"
                               >
-                                No students found
+                                <div className="h-8 w-full bg-gray-200 rounded animate-pulse" />
                               </td>
-                            </tr>
-                          );
-                        }
-
-                        return paginatedStudents.map(
-                          (student: Student, idx: number) => {
-                            const studentScore = scores[student.id] || {
-                              studentId: student.id,
-                              scores: new Array(rubricDetails.length).fill(0),
-                              total: 0,
-                            };
+                            ))}
+                            <td className="text-center px-4 py-2 align-middle w-[100px]">
+                              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse mx-auto" />
+                            </td>
+                            <td className="text-center px-4 py-2 align-middle w-[100px]">
+                              <div className="h-6 w-20 bg-gray-200 rounded-full animate-pulse mx-auto" />
+                            </td>
+                          </tr>
+                        ))
+                      : (() => {
+                          // Use memoized paginatedStudents from above (already computed via useMemo)
+                          if (paginatedStudents.length === 0) {
                             return (
-                              <GradingTableRow
-                                key={student.id}
-                                student={student}
-                                rubricDetails={rubricDetails}
-                                activeReport={activeReport}
-                                studentScore={studentScore}
-                                handleScoreChange={handleScoreChange}
-                                idx={idx}
-                                onImageUpload={handleImageUpload}
-                                onSaveImageChanges={handleSaveImageChanges}
-                                onRemoveImage={(index, name) =>
-                                  setImageToRemove({ index, name })
-                                }
-                                tempImage={tempImage}
-                                isSaving={isSaving}
-                                showSuccessMessage={showSuccessMessage}
-                              />
+                              <tr>
+                                <td
+                                  colSpan={rubricDetails.length + 3}
+                                  className="text-center py-8 text-muted-foreground"
+                                >
+                                  No students found
+                                </td>
+                              </tr>
                             );
                           }
-                        );
-                      })()
-                    )}
+
+                          return paginatedStudents.map(
+                            (student: Student, idx: number) => {
+                              const studentScore = scores[student.id] || {
+                                studentId: student.id,
+                                scores: new Array(rubricDetails.length).fill(0),
+                                total: 0,
+                              };
+                              return (
+                                <GradingTableRow
+                                  key={student.id}
+                                  student={student}
+                                  rubricDetails={rubricDetails}
+                                  activeReport={activeReport}
+                                  studentScore={studentScore}
+                                  handleScoreChange={handleScoreChange}
+                                  idx={idx}
+                                  onImageUpload={handleImageUpload}
+                                  onSaveImageChanges={handleSaveImageChanges}
+                                  onRemoveImage={(index, name) =>
+                                    setImageToRemove({ index, name })
+                                  }
+                                  tempImage={tempImage}
+                                  isSaving={isSaving}
+                                  showSuccessMessage={showSuccessMessage}
+                                  isLoading={
+                                    isLoadingGrades || isLoadingStudents
+                                  }
+                                />
+                              );
+                            }
+                          );
+                        })()}
                   </tbody>
                 )}
               </table>
@@ -3090,13 +3149,21 @@ export function GradingTable({
             }
           }}
           onExport={handleExport}
-          onSave={handleSaveGrades}
         />
       </div>
 
       {/* Keep all the dialogs here */}
       {/* ... existing dialogs ... */}
-      <Dialog open={showCriteriaDialog} onOpenChange={setShowCriteriaDialog}>
+      <Dialog
+        open={showCriteriaDialog}
+        onOpenChange={(open) => {
+          setShowCriteriaDialog(open);
+          if (!open) {
+            // Reset manual open flag when dialog is closed
+            manuallyOpenedDialogRef.current = false;
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[450px] p-6">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold text-[#124A69]">
@@ -3143,9 +3210,8 @@ export function GradingTable({
                         : "Select a report"}
                     </div>
                     <p className="text-xs text-gray-500">
-                      You can reuse any criteria on different dates. Grades are
-                      saved separately for each date. The date shown is when the
-                      criteria was originally created.
+                      Select a criteria to use for grading. Each criteria shows
+                      the date it was created.
                     </p>
                   </div>
                   {criteriaLoading ? (
@@ -3201,13 +3267,10 @@ export function GradingTable({
                                       {report.name}
                                     </span>
                                     <span className="text-xs text-gray-500">
-                                      Created:{" "}
+                                      Date:{" "}
                                       {format(new Date(report.date), "PPP")} |{" "}
                                       {report.rubrics.length} Criteria | Passing
-                                      Score: {report.passingScore}% | Using on:{" "}
-                                      {selectedDate
-                                        ? format(selectedDate, "PPP")
-                                        : "N/A"}
+                                      Score: {report.passingScore}%
                                     </span>
                                   </div>
                                 </SelectItem>
@@ -4026,8 +4089,8 @@ export function GradingTable({
               Unsaved Changes
             </DialogTitle>
             <DialogDescription className="text-gray-500">
-              You have unsaved grade changes. Please save your grades before
-              changing the rubric count. Would you like to save now?
+              You have unsaved grade changes. Please wait for auto-save to
+              complete before changing the rubric count.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -4043,7 +4106,10 @@ export function GradingTable({
             </Button>
             <Button
               onClick={async () => {
-                await handleSaveGrades();
+                // Wait for any pending auto-saves to complete
+                if (pendingScoresRef.current.size > 0) {
+                  await savePendingScores();
+                }
                 await handleConfirmRubricChange();
               }}
               className="bg-[#124A69] hover:bg-[#0D3A54] text-white"

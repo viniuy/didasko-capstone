@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Camera, X } from "lucide-react";
+import { Camera, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -49,6 +49,7 @@ interface GradingTableRowProps {
   tempImage: { index: number; dataUrl: string } | null;
   isSaving: boolean;
   showSuccessMessage: { [key: number]: boolean };
+  isLoading?: boolean;
 }
 
 const GradingTableRow: React.FC<GradingTableRowProps> = ({
@@ -64,6 +65,7 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
   tempImage,
   isSaving,
   showSuccessMessage,
+  isLoading = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showImageDialog, setShowImageDialog] = useState(false);
@@ -108,10 +110,7 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
         <td className="sticky left-0 z-10 bg-white px-4 py-2 align-middle font-medium w-[300px]">
           <div className="flex items-center gap-3">
             <div className="relative group">
-              <div
-                className="cursor-pointer"
-                onClick={() => setShowImageDialog(true)}
-              >
+              <div>
                 {tempImage && tempImage.index === idx ? (
                   <img
                     src={tempImage.dataUrl}
@@ -177,8 +176,13 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
               key={rubric.name + rubricIdx}
               className={`text-center px-4 py-2 align-middle w-[120px] ${cellBg}`}
             >
+              {isLoading ? (
+                <div className="w-full rounded border border-gray-300 px-2 py-1 bg-gray-50 flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
+              ) : (
               <select
-                className="w-full rounded border border-gray-300 px-2 py-1"
+                  className="w-full rounded border border-gray-300 px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 value={value}
                 onChange={(e) =>
                   handleScoreChange(
@@ -187,6 +191,7 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
                     parseInt(e.target.value) || 0
                   )
                 }
+                  disabled={isLoading}
               >
                 <option value="">Select grade</option>
                 {Array.from(
@@ -198,6 +203,7 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
                   </option>
                 ))}
               </select>
+              )}
             </td>
           );
         })}

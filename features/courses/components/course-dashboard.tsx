@@ -129,6 +129,11 @@ export function CourseDashboard({
     });
   const importStudentsMutation = useImportStudentsToCourse();
 
+  // Check if course is archived
+  const isArchived = useMemo(() => {
+    return courseInfo?.status === "ARCHIVED";
+  }, [courseInfo?.status]);
+
   // Update local state when React Query data changes
   useEffect(() => {
     if (analyticsData) {
@@ -363,40 +368,44 @@ export function CourseDashboard({
                 <Download className="w-4 h-4" />
                 {!isSmallScreen && <span>Export</span>}
               </Button>
-              <Button
-                onClick={() => setShowImportDialog(true)}
-                variant="outline"
-                className={`${
-                  isSmallScreen ? "" : "gap-2"
-                } border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white`}
-                size={isSmallScreen ? "icon" : "default"}
-              >
-                <Upload className="w-4 h-4" />
-                {!isSmallScreen && <span>Import Students</span>}
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowAddSheet(true);
-                }}
-                className={`${
-                  isSmallScreen ? "" : "gap-2"
-                } bg-[#124A69] hover:bg-[#0D3A54] text-white`}
-                size={isSmallScreen ? "icon" : "default"}
-              >
-                <Users className="w-4 h-4" />
-                {!isSmallScreen && <span>Add Student</span>}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowRemoveSheet(true)}
-                className={`${
-                  isSmallScreen ? "" : "gap-2"
-                } border-red-500 text-red-600 hover:bg-red-50`}
-                size={isSmallScreen ? "icon" : "default"}
-              >
-                <UserX className="w-4 h-4" />
-                {!isSmallScreen && <span>Remove Student</span>}
-              </Button>
+              {!isArchived && (
+                <>
+                  <Button
+                    onClick={() => setShowImportDialog(true)}
+                    variant="outline"
+                    className={`${
+                      isSmallScreen ? "" : "gap-2"
+                    } border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white`}
+                    size={isSmallScreen ? "icon" : "default"}
+                  >
+                    <Upload className="w-4 h-4" />
+                    {!isSmallScreen && <span>Import Students</span>}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowAddSheet(true);
+                    }}
+                    className={`${
+                      isSmallScreen ? "" : "gap-2"
+                    } bg-[#124A69] hover:bg-[#0D3A54] text-white`}
+                    size={isSmallScreen ? "icon" : "default"}
+                  >
+                    <Users className="w-4 h-4" />
+                    {!isSmallScreen && <span>Add Student</span>}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowRemoveSheet(true)}
+                    className={`${
+                      isSmallScreen ? "" : "gap-2"
+                    } border-red-500 text-red-600 hover:bg-red-50`}
+                    size={isSmallScreen ? "icon" : "default"}
+                  >
+                    <UserX className="w-4 h-4" />
+                    {!isSmallScreen && <span>Remove Student</span>}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -475,28 +484,32 @@ export function CourseDashboard({
                       It seems empty here
                     </h3>
                     <p className="text-gray-500 mb-4">
-                      Start by adding students to this course
+                      {isArchived
+                        ? "This course is archived. Student management is disabled."
+                        : "Start by adding students to this course"}
                     </p>
-                    <div className="flex items-center gap-3 justify-center flex-wrap">
-                      <Button
-                        onClick={() => {
-                          setShowAddSheet(true);
-                        }}
-                        className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
-                      >
-                        <Users className="w-4 h-4" />
-                        Add Student
-                      </Button>
-                      <span className="text-gray-500">or</span>
-                      <Button
-                        onClick={() => setShowImportDialog(true)}
-                        variant="outline"
-                        className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2"
-                      >
-                        <Upload className="w-4 h-4" />
-                        Import Students
-                      </Button>
-                    </div>
+                    {!isArchived && (
+                      <div className="flex items-center gap-3 justify-center flex-wrap">
+                        <Button
+                          onClick={() => {
+                            setShowAddSheet(true);
+                          }}
+                          className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
+                        >
+                          <Users className="w-4 h-4" />
+                          Add Student
+                        </Button>
+                        <span className="text-gray-500">or</span>
+                        <Button
+                          onClick={() => setShowImportDialog(true)}
+                          variant="outline"
+                          className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2"
+                        >
+                          <Upload className="w-4 h-4" />
+                          Import Students
+                        </Button>
+                      </div>
+                    )}
                   </div>
                   {/* Tumbleweed Animation */}
                   <div className="relative w-full flex items-end">

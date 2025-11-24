@@ -12,12 +12,14 @@ export function useCriteriaByCourse(
     initialData?: any;
     refetchOnMount?: boolean;
     refetchOnWindowFocus?: boolean;
+    enabled?: boolean;
   }
 ) {
   const {
     initialData,
     refetchOnMount = true,
     refetchOnWindowFocus = true,
+    enabled = true,
   } = options || {};
 
   return useQuery({
@@ -26,7 +28,7 @@ export function useCriteriaByCourse(
       const { data } = await axios.get(`/courses/${courseSlug}/criteria`);
       return data;
     },
-    enabled: !!courseSlug,
+    enabled: !!courseSlug && enabled,
     initialData,
     refetchOnMount,
     refetchOnWindowFocus,
@@ -40,12 +42,14 @@ export function useRecitationCriteria(
     initialData?: any;
     refetchOnMount?: boolean;
     refetchOnWindowFocus?: boolean;
+    enabled?: boolean;
   }
 ) {
   const {
     initialData,
     refetchOnMount = true,
     refetchOnWindowFocus = true,
+    enabled = true,
   } = options || {};
 
   return useQuery({
@@ -56,7 +60,7 @@ export function useRecitationCriteria(
       );
       return data;
     },
-    enabled: !!courseSlug,
+    enabled: !!courseSlug && enabled,
     initialData,
     refetchOnMount,
     refetchOnWindowFocus,
@@ -70,12 +74,14 @@ export function useGroupCriteriaByCourse(
     initialData?: any;
     refetchOnMount?: boolean;
     refetchOnWindowFocus?: boolean;
+    enabled?: boolean;
   }
 ) {
   const {
     initialData,
     refetchOnMount = true,
     refetchOnWindowFocus = true,
+    enabled = true,
   } = options || {};
 
   return useQuery({
@@ -84,7 +90,7 @@ export function useGroupCriteriaByCourse(
       const { data } = await axios.get(`/courses/${courseSlug}/group-criteria`);
       return data;
     },
-    enabled: !!courseSlug,
+    enabled: !!courseSlug && enabled,
     initialData,
     refetchOnMount,
     refetchOnWindowFocus,

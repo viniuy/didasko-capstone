@@ -30,6 +30,7 @@ import {
   Archive,
   Filter,
   X,
+  History,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ import {
   useCoursesStatsBatch,
   useFaculty,
   useBulkArchiveCourses,
+  useArchivedCourses,
 } from "@/lib/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/queries/queryKeys";
@@ -87,7 +89,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/svdialog";
+  DialogFooter,
+} from "@/components/ui/dialog";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import axiosInstance from "@/lib/axios";
@@ -660,27 +663,10 @@ export function CourseDataTable({
   // Responsive items per page
   const itemsPerPage = useItemsPerPage();
 
-  // React Query hooks
-  const queryClient = useQueryClient();
-  const { data: coursesData, isLoading: isLoadingCourses } = useCourses();
-  const { data: facultyData } = useFaculty();
-  const bulkArchiveMutation = useBulkArchiveCourses();
-
-  // Get course slugs for batch stats
-  // Use coursesData from React Query if available, otherwise fall back to initialCourses
-  const coursesForStats = coursesData?.courses || initialCourses;
-  const courseSlugs = useMemo(
-    () => coursesForStats.map((c) => c.slug),
-    [coursesForStats]
-  );
-  const { data: statsData, isLoading: isLoadingStats } =
-    useCoursesStatsBatch(courseSlugs);
-
   // State
   const [tableData, setTableData] = useState<Course[]>(initialCourses);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CourseStatus | "ALL">("ALL");
   const [facultyFilter, setFacultyFilter] = useState<string[]>([userId]);
   const [sectionFilter, setSectionFilter] = useState<string[]>([]);
   const [dayFilter, setDayFilter] = useState<string>("ALL");
@@ -727,6 +713,8 @@ export function CourseDataTable({
 
   // Import/Export State
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showBacktrackDialog, setShowBacktrackDialog] = useState(false);
+  const [isBacktracking, setIsBacktracking] = useState(false);
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
@@ -749,6 +737,32 @@ export function CourseDataTable({
     error?: string;
     hasError?: boolean;
   } | null>(null);
+
+  // React Query hooks
+  const queryClient = useQueryClient();
+  const { data: coursesData, isLoading: isLoadingCourses } = useCourses();
+  const { data: facultyData } = useFaculty();
+  const bulkArchiveMutation = useBulkArchiveCourses();
+
+  // Fetch archived courses for backtrack dialog
+  const { data: archivedCoursesData = [], isLoading: isLoadingArchived } =
+    useArchivedCourses(
+      showBacktrackDialog
+        ? {
+            facultyId: userRole === "ACADEMIC_HEAD" ? undefined : userId,
+          }
+        : undefined
+    );
+
+  // Get course slugs for batch stats
+  // Use coursesData from React Query if available, otherwise fall back to initialCourses
+  const coursesForStats = coursesData?.courses || initialCourses;
+  const courseSlugs = useMemo(
+    () => coursesForStats.map((c) => c.slug),
+    [coursesForStats]
+  );
+  const { data: statsData, isLoading: isLoadingStats } =
+    useCoursesStatsBatch(courseSlugs);
 
   // Sync faculty data from React Query
   useEffect(() => {
@@ -931,12 +945,9 @@ export function CourseDataTable({
           course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           course.section.toLowerCase().includes(searchQuery.toLowerCase());
 
+        // Show only ACTIVE and INACTIVE courses (ARCHIVED are handled via backtrack dialog)
         const matchesStatus =
-          statusFilter === "ALL"
-            ? true
-            : statusFilter === "ACTIVE"
-            ? course.status === "ACTIVE" || course.status === "INACTIVE"
-            : course.status === statusFilter;
+          course.status === "ACTIVE" || course.status === "INACTIVE";
 
         // Filter by section
         const matchesSection =
@@ -1005,7 +1016,6 @@ export function CourseDataTable({
   }, [
     baseFilteredCourses,
     searchQuery,
-    statusFilter,
     sectionFilter,
     dayFilter,
     roomFilter,
@@ -2115,11 +2125,6 @@ export function CourseDataTable({
       }
     }
 
-    // Check status filter
-    if (statusFilter !== "ALL") {
-      activeFilters.push(`with status "${statusFilter}"`);
-    }
-
     // Check day filter
     if (dayFilter !== "ALL") {
       activeFilters.push(`on ${dayFilter}`);
@@ -2172,9 +2177,6 @@ export function CourseDataTable({
     }
     if (startTimeFilter || endTimeFilter) {
       suggestions.push("adjust time filters");
-    }
-    if (statusFilter !== "ALL") {
-      suggestions.push("try a different status");
     }
     if (searchQuery) {
       suggestions.push("adjust your search");
@@ -2266,6 +2268,14 @@ export function CourseDataTable({
                         </Button>
                         <Button
                           variant="outline"
+                          onClick={() => setShowBacktrackDialog(true)}
+                          className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                        >
+                          <History className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span className="hidden xl:inline">Backtrack</span>
+                        </Button>
+                        <Button
+                          variant="outline"
                           onClick={() => setShowSettingsDialog(true)}
                           className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                         >
@@ -2312,52 +2322,6 @@ export function CourseDataTable({
                         )}
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex gap-1 sm:gap-2 border-b overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
-                    <button
-                      onClick={() => setStatusFilter("ALL")}
-                      className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                        statusFilter === "ALL"
-                          ? "text-[#124A69] border-b-2 border-[#124A69]"
-                          : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      All ({baseFilteredCourses.length})
-                    </button>
-
-                    <button
-                      onClick={() => setStatusFilter("ACTIVE")}
-                      className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                        statusFilter === "ACTIVE"
-                          ? "text-[#124A69] border-b-2 border-[#124A69]"
-                          : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      Active (
-                      {
-                        baseFilteredCourses.filter((c) => c.status === "ACTIVE")
-                          .length
-                      }
-                      )
-                    </button>
-
-                    <button
-                      onClick={() => setStatusFilter("ARCHIVED")}
-                      className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap min-h-[44px] sm:min-h-0 ${
-                        statusFilter === "ARCHIVED"
-                          ? "text-[#124A69] border-b-2 border-[#124A69]"
-                          : "text-gray-600 hover:text-gray-900"
-                      }`}
-                    >
-                      Archived (
-                      {
-                        baseFilteredCourses.filter(
-                          (c) => c.status === "ARCHIVED"
-                        ).length
-                      }
-                      )
-                    </button>
                   </div>
 
                   {isInitialLoading ? (
@@ -2732,6 +2696,140 @@ export function CourseDataTable({
                 userId={userId}
                 userRole={userRole}
               />
+
+              {/* Backtrack Dialog - Show Archived Courses */}
+              <Dialog
+                open={showBacktrackDialog}
+                onOpenChange={(open) => {
+                  // Prevent closing while backtracking is in progress
+                  if (!open && isBacktracking) {
+                    return;
+                  }
+                  if (!open) {
+                    setIsBacktracking(false);
+                  }
+                  setShowBacktrackDialog(open);
+                }}
+              >
+                <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl text-[#124A69]">
+                      <History className="h-5 w-5" />
+                      Backtrack - Archived Courses
+                    </DialogTitle>
+                    <DialogDescription>
+                      Click on any archived course to navigate to it
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {isBacktracking ? (
+                    <div className="flex-1 flex items-center justify-center py-12">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="flex gap-2">
+                          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"></div>
+                          <div
+                            className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          ></div>
+                          <div
+                            className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          ></div>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-[#124A69] text-center">
+                          Backtracking in progress...
+                        </h2>
+                        <p className="text-sm sm:text-base text-gray-600 text-center">
+                          Please wait while we navigate to the archived course
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1 overflow-y-auto border rounded-lg mt-4">
+                        {isLoadingArchived ? (
+                          <div className="text-center py-8 text-gray-500">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69] mx-auto mb-2"></div>
+                            Loading archived courses...
+                          </div>
+                        ) : archivedCoursesData.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                            <Archive className="h-12 w-12 mb-2 opacity-50" />
+                            <p className="font-medium">No archived courses</p>
+                            <p className="text-sm">
+                              Archive courses to access them here
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {archivedCoursesData.map((course: any) => (
+                              <div
+                                key={course.id}
+                                onClick={() => {
+                                  if (course.slug) {
+                                    setIsBacktracking(true);
+                                    setTimeout(() => {
+                                      router.push(
+                                        `/main/course/${course.slug}`
+                                      );
+                                    }, 300);
+                                  } else {
+                                    toast.error("Course slug not available");
+                                  }
+                                }}
+                                className="flex items-center gap-3 p-4 hover:bg-[#124A69]/5 cursor-pointer transition-colors group"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-semibold text-base text-[#124A69] group-hover:text-[#0d3a56]">
+                                      {course.code} - {course.section}
+                                    </h4>
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs border-red-300 text-red-700"
+                                    >
+                                      ARCHIVED
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-gray-600 truncate">
+                                    {course.title}
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {course.semester} • {course.academicYear}
+                                  </p>
+                                </div>
+                                <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-[#124A69] hover:text-[#0d3a56]"
+                                  >
+                                    View →
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (!isBacktracking) {
+                              setShowBacktrackDialog(false);
+                            }
+                          }}
+                          disabled={isBacktracking}
+                        >
+                          Close
+                        </Button>
+                      </DialogFooter>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
 
               {/* Filter Sheet */}
               <Sheet

@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Search, Archive, ArchiveRestore, Settings2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useArchivedCourses } from "@/lib/hooks/queries/useCourses";
 
 interface Course {
   id: string;
@@ -54,7 +55,18 @@ export function CourseSettingsDialog({
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Filter courses - only show user's own courses
+  // Fetch archived courses independently (only when dialog is open)
+  const { data: archivedCoursesData = [], isLoading: isLoadingArchived } =
+    useArchivedCourses(
+      open
+        ? {
+            facultyId: userId,
+            search: searchArchived || undefined,
+          }
+        : undefined
+    );
+
+  // Filter active courses - only show user's own courses
   const activeCourses = useMemo(() => {
     return courses.filter(
       (c) =>
@@ -66,16 +78,16 @@ export function CourseSettingsDialog({
     );
   }, [courses, searchActive, userId]);
 
+  // Use fetched archived courses
   const archivedCourses = useMemo(() => {
-    return courses.filter(
+    return archivedCoursesData.filter(
       (c) =>
         c.facultyId === userId && // ONLY USER'S COURSES
-        c.status === "ARCHIVED" &&
         (c.code.toLowerCase().includes(searchArchived.toLowerCase()) ||
           c.title.toLowerCase().includes(searchArchived.toLowerCase()) ||
           c.section.toLowerCase().includes(searchArchived.toLowerCase()))
     );
-  }, [courses, searchArchived, userId]);
+  }, [archivedCoursesData, searchArchived, userId]);
 
   // Selection toggling
   const toggleActiveSelection = (courseId: string) => {
@@ -300,7 +312,11 @@ export function CourseSettingsDialog({
               </div>
 
               <div className="flex-1 overflow-y-auto border rounded-lg">
-                {archivedCourses.length === 0 ? (
+                {isLoadingArchived ? (
+                  <div className="text-center py-8 text-gray-500">
+                    Loading archived courses...
+                  </div>
+                ) : archivedCourses.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-64 text-gray-500">
                     <ArchiveRestore className="h-12 w-12 mb-2 opacity-50" />
                     <p className="font-medium">No archived courses</p>

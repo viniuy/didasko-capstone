@@ -39,7 +39,72 @@ export async function getCourseBySlug(slug: string) {
   )(slug);
 }
 
+// Get archived courses count (lightweight, just count)
+export async function getArchivedCoursesCount(filters: { facultyId?: string }) {
+  return unstable_cache(
+    async () => {
+      const where: Prisma.CourseWhereInput = {
+        status: "ARCHIVED",
+      };
+
+      if (filters.facultyId) where.facultyId = filters.facultyId;
+
+      return await prisma.course.count({ where });
+    },
+    [`archived-count-${JSON.stringify(filters)}`],
+    {
+      tags: ["courses"],
+      revalidate: 300, // 5 minutes
+    }
+  )();
+}
+
+// Get archived courses (lightweight, minimal fields for settings dialog)
+export async function getArchivedCourses(filters: {
+  facultyId?: string;
+  search?: string;
+}) {
+  return unstable_cache(
+    async () => {
+      const where: Prisma.CourseWhereInput = {
+        status: "ARCHIVED",
+      };
+
+      if (filters.facultyId) where.facultyId = filters.facultyId;
+      if (filters.search) {
+        where.OR = [
+          { title: { contains: filters.search, mode: "insensitive" } },
+          { code: { contains: filters.search, mode: "insensitive" } },
+          { section: { contains: filters.search, mode: "insensitive" } },
+        ];
+      }
+
+      return await prisma.course.findMany({
+        where,
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          section: true,
+          status: true,
+          semester: true,
+          academicYear: true,
+          facultyId: true,
+          slug: true,
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      });
+    },
+    [`archived-courses-${JSON.stringify(filters)}`],
+    {
+      tags: ["courses"],
+      revalidate: 300, // 5 minutes
+    }
+  )();
+}
+
 // Get courses with filters (merged /courses and /courses/active) (cached)
+// Optimized: Excludes ARCHIVED by default unless explicitly requested
 export async function getCourses(filters: {
   facultyId?: string;
   search?: string;
@@ -56,7 +121,13 @@ export async function getCourses(filters: {
     async () => {
       const where: Prisma.CourseWhereInput = {};
 
-      if (filters.status) where.status = filters.status;
+      // Exclude ARCHIVED by default unless explicitly requested
+      if (filters.status) {
+        where.status = filters.status;
+      } else {
+        // Default: exclude archived courses
+        where.status = { not: "ARCHIVED" };
+      }
       if (filters.facultyId) where.facultyId = filters.facultyId;
       if (filters.department)
         where.faculty = { department: filters.department };
@@ -71,21 +142,34 @@ export async function getCourses(filters: {
         ];
       }
 
+      // Optimized: Use select instead of include, don't load all students
       const courses = await prisma.course.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          room: true,
+          semester: true,
+          academicYear: true,
+          classNumber: true,
+          status: true,
+          section: true,
+          slug: true,
+          facultyId: true,
+          createdAt: true,
+          updatedAt: true,
           faculty: {
             select: { id: true, name: true, email: true, department: true },
           },
-          students: {
+          schedules: {
             select: {
               id: true,
-              lastName: true,
-              firstName: true,
-              middleInitial: true,
+              day: true,
+              fromTime: true,
+              toTime: true,
             },
           },
-          schedules: true,
           _count: {
             select: {
               attendance: true,
@@ -153,47 +237,64 @@ export async function getCourses(filters: {
         lastAttendanceDates.map((a) => [a.courseId, a.date])
       );
 
-      // Get absents count for the most recent attendance date for each course
-      // Build date ranges for each course's last attendance date
-      const dateRanges: Array<{
-        courseId: string;
-        startDate: Date;
-        endDate: Date;
-      }> = [];
-      for (const [courseId, lastDate] of lastDateMap.entries()) {
-        if (lastDate) {
-          const startDate = new Date(lastDate);
-          startDate.setHours(0, 0, 0, 0);
-          const endDate = new Date(lastDate);
-          endDate.setHours(23, 59, 59, 999);
-          dateRanges.push({ courseId, startDate, endDate });
+      // Optimized: Get absents count for last attendance dates efficiently
+      // Group courses by date and fetch in batches (reduces from N queries to ~unique dates)
+      const lastAttendanceAbsentsMap = new Map<string, number>();
+
+      if (lastDateMap.size > 0) {
+        // Group courses by their last attendance date (YYYY-MM-DD format)
+        const dateToCourses = new Map<string, string[]>();
+        for (const [courseId, lastDate] of lastDateMap.entries()) {
+          if (lastDate) {
+            const dateKey = lastDate.toISOString().split("T")[0];
+            if (!dateToCourses.has(dateKey)) {
+              dateToCourses.set(dateKey, []);
+            }
+            dateToCourses.get(dateKey)!.push(courseId);
+          }
         }
+
+        // Fetch absents for all date groups in parallel (one query per unique date)
+        // This reduces from potentially 100+ queries to ~5-10 queries
+        const absentsPromises = Array.from(dateToCourses.entries()).map(
+          async ([dateKey, courseIds]) => {
+            // Parse date and set time boundaries for the entire day (UTC)
+            const [year, month, day] = dateKey.split("-").map(Number);
+            const startDate = new Date(
+              Date.UTC(year, month - 1, day, 0, 0, 0, 0)
+            );
+            const endDate = new Date(
+              Date.UTC(year, month - 1, day, 23, 59, 59, 999)
+            );
+
+            const results = await prisma.attendance.groupBy({
+              by: ["courseId"],
+              where: {
+                courseId: { in: courseIds },
+                date: {
+                  gte: startDate,
+                  lte: endDate,
+                },
+                status: "ABSENT",
+              },
+              _count: { id: true },
+            });
+
+            return results.map(
+              (r) => [r.courseId, r._count.id] as [string, number]
+            );
+          }
+        );
+
+        const absentsResults = await Promise.all(absentsPromises);
+        absentsResults.flat().forEach(([courseId, count]) => {
+          lastAttendanceAbsentsMap.set(courseId, count);
+        });
       }
 
-      // Fetch all absents for last attendance dates in parallel
-      const lastAttendanceAbsentsPromises = dateRanges.map(
-        async ({ courseId, startDate, endDate }) => {
-          const count = await prisma.attendance.count({
-            where: {
-              courseId,
-              date: {
-                gte: startDate,
-                lte: endDate,
-              },
-              status: "ABSENT",
-            },
-          });
-          return [courseId, count] as [string, number];
-        }
-      );
-
-      const lastAttendanceAbsentsResults = await Promise.all(
-        lastAttendanceAbsentsPromises
-      );
-      const lastAttendanceAbsentsMap = new Map(lastAttendanceAbsentsResults);
-
       return courses.map((course) => {
-        const totalStudents = course.students.length;
+        // Use _count instead of loading all students
+        const totalStudents = course._count.students;
         const totalPresent = presentCountMap.get(course.id) || 0;
         const totalAbsents = absentCountMap.get(course.id) || 0;
         const totalLate = lateCountMap.get(course.id) || 0;
@@ -215,14 +316,12 @@ export async function getCourses(filters: {
             totalAbsents,
             totalLate,
             lastAttendanceDate,
-            lastAttendanceAbsents, // Add absents count for most recent attendance
+            lastAttendanceAbsents,
             attendanceRate:
               totalStudents > 0 ? totalPresent / totalStudents : 0,
           },
-          students: course.students.map((s) => ({
-            ...s,
-            middleInitial: s.middleInitial || undefined,
-          })),
+          // Don't include students array - use _count instead to reduce data transfer
+          students: [],
           schedules: course.schedules,
           attendance: undefined,
         };
@@ -231,7 +330,7 @@ export async function getCourses(filters: {
     [cacheKey],
     {
       tags: ["courses"],
-      revalidate: 60, // Revalidate every 60 seconds
+      revalidate: 300, // Revalidate every 5 minutes (reduced database load)
     }
   )();
 }
@@ -584,14 +683,20 @@ export async function getCourseStats(courseSlug: string) {
       const studentsWithGrades = new Set<string>();
       const passingStudents = new Set<string>();
 
-      termConfigs.forEach((config) => {
-        config.termGrades.forEach((grade) => {
+      // Only use FINALS term for passing rate calculation
+      const finalsConfig = termConfigs.find(
+        (config) => config.term === "FINALS" || config.term === "Finals"
+      );
+
+      // Only count students with FINALS term grades for passing rate
+      if (finalsConfig) {
+        finalsConfig.termGrades.forEach((grade) => {
           studentsWithGrades.add(grade.studentId);
           if (grade.remarks === "PASSED") {
             passingStudents.add(grade.studentId);
           }
         });
-      });
+      }
 
       const passingRate =
         studentsWithGrades.size > 0

@@ -316,7 +316,7 @@ export function useSaveGrades() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.stats.gradesLeaderboard(),
       });
-      toast.success("Grades saved successfully");
+      // Toast is handled by the calling function (auto-save) to avoid duplicates
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to save grades");

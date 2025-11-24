@@ -24,6 +24,7 @@ interface HeaderSectionProps {
   gradeDates?: string[]; // Dates where grades exist (for highlighting)
   hasActiveReport?: boolean; // Whether criteria is already selected
   isRecitationCriteria?: boolean; // Whether this is recitation criteria
+  isLoading?: boolean; // Whether students/grades are loading
 }
 
 export function HeaderSection({
@@ -40,6 +41,7 @@ export function HeaderSection({
   gradeDates = [],
   hasActiveReport = false,
   isRecitationCriteria = false,
+  isLoading = false,
 }: HeaderSectionProps) {
   return (
     <div className="bg-white rounded-lg shadow-md">
@@ -74,6 +76,7 @@ export function HeaderSection({
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className="pl-8 w-[200px]"
+                disabled={isLoading}
               />
               {searchQuery && (
                 <button
@@ -90,8 +93,9 @@ export function HeaderSection({
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              className="rounded-full relative flex items-center gap-2 px-3 bg-white text-[#124A69] hover:bg-gray-100 border border-gray-200"
+              className="rounded-full relative flex items-center gap-2 px-3 bg-white text-[#124A69] hover:bg-gray-100 border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onFilterClick}
+              disabled={isLoading}
             >
               <Filter className="h-4 w-4" />
               <span>Filter</span>

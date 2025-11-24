@@ -10,6 +10,7 @@ export const maxDuration = 30; // Maximum execution time
 
 type TermConfigWithGrades = {
   courseId: string;
+  term: string;
   termGrades: Array<{
     studentId: string;
     remarks: string | null;
@@ -68,7 +69,9 @@ export async function POST(req: NextRequest) {
             in: courseIds,
           },
         },
-        include: {
+        select: {
+          courseId: true,
+          term: true,
           termGrades: {
             select: {
               studentId: true,
@@ -126,11 +129,18 @@ export async function POST(req: NextRequest) {
       const courseTermConfigs = termConfigsByCourse.get(course.id) || [];
       const courseAttendance = attendanceByCourse.get(course.id) || [];
 
+      // Only use FINALS term for passing rate calculation
+      const finalsConfig = courseTermConfigs.find(
+        (config: TermConfigWithGrades) =>
+          config.term === "FINALS" || config.term === "Finals"
+      );
+
       const studentsWithGrades = new Set<string>();
       const passingStudents = new Set<string>();
 
-      courseTermConfigs.forEach((config: TermConfigWithGrades) => {
-        config.termGrades.forEach(
+      // Only count students with FINALS term grades for passing rate
+      if (finalsConfig) {
+        finalsConfig.termGrades.forEach(
           (grade: { studentId: string; remarks: string | null }) => {
             studentsWithGrades.add(grade.studentId);
             if (grade.remarks === "PASSED") {
@@ -138,7 +148,7 @@ export async function POST(req: NextRequest) {
             }
           }
         );
-      });
+      }
 
       const passingRate =
         studentsWithGrades.size > 0

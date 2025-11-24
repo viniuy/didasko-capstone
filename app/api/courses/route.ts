@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       semester: searchParams.get("semester") || undefined,
       code: searchParams.get("code") || undefined,
       section: searchParams.get("section") || undefined,
-      status: undefined, // Default to all courses
+      status: undefined, // Default excludes ARCHIVED (handled in getCourses)
     };
 
     const courses = await getCourses(filters);
