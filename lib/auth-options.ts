@@ -29,28 +29,37 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async jwt({ token, user }) {
-      try {
-        if (user) {
+      // Only fetch from DB on initial login (when user is provided)
+      // This prevents connection pool exhaustion from querying on every token refresh
+      if (user) {
+        try {
+          // Fetch full user info from DB only on initial login
+          const dbUser = await prisma.user.findUnique({
+            where: { email: user.email ?? "" },
+            select: { id: true, name: true, role: true, email: true },
+          });
+
+          if (dbUser) {
+            token.id = dbUser.id;
+            token.name = dbUser.name;
+            token.role = dbUser.role;
+            token.email = dbUser.email;
+          } else {
+            // Fallback to user data from OAuth provider
+            token.id = user.id;
+            token.name = user.name;
+            token.email = user.email;
+          }
+        } catch (error) {
+          console.error("JWT callback error:", error);
+          // Fallback to user data from OAuth provider on error
           token.id = user.id;
           token.name = user.name;
           token.email = user.email;
         }
-
-        // Fetch full user info from DB
-        const dbUser = await prisma.user.findUnique({
-          where: { email: token.email ?? "" },
-          select: { id: true, name: true, role: true, email: true },
-        });
-
-        if (dbUser) {
-          token.id = dbUser.id;
-          token.name = dbUser.name;
-          token.role = dbUser.role;
-          token.email = dbUser.email;
-        }
-      } catch (error) {
-        console.error("JWT callback error:", error);
       }
+      // On subsequent token refreshes, use cached token data (no DB query)
+      // This prevents connection pool timeouts
 
       return token;
     },
