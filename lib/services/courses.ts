@@ -63,6 +63,7 @@ export async function getArchivedCoursesCount(filters: { facultyId?: string }) {
 export async function getArchivedCourses(filters: {
   facultyId?: string;
   search?: string;
+  limit?: number;
 }) {
   return unstable_cache(
     async () => {
@@ -79,7 +80,7 @@ export async function getArchivedCourses(filters: {
         ];
       }
 
-      return await prisma.course.findMany({
+      const queryOptions: any = {
         where,
         select: {
           id: true,
@@ -93,7 +94,15 @@ export async function getArchivedCourses(filters: {
           slug: true,
         },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      });
+      };
+
+      // Limit to 100 courses if no search query (initial load)
+      // If search is provided, fetch all matching results
+      if (!filters.search && (filters.limit || filters.limit === undefined)) {
+        queryOptions.take = filters.limit || 100;
+      }
+
+      return await prisma.course.findMany(queryOptions);
     },
     [`archived-courses-${JSON.stringify(filters)}`],
     {

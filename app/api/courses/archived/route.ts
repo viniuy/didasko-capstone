@@ -16,9 +16,11 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get("limit");
     const filters = {
       facultyId: searchParams.get("facultyId") || undefined,
       search: searchParams.get("search") || undefined,
+      limit: limitParam ? parseInt(limitParam, 10) : undefined,
     };
 
     const courses = await getArchivedCourses(filters);

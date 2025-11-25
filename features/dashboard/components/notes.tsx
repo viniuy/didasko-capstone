@@ -3,8 +3,9 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { motion } from "framer-motion";
+import AnimatedContent from "@/components/ui/AnimatedContent";
 import { Loader2 } from "lucide-react";
+import { gsap } from "gsap";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -35,6 +36,8 @@ interface Note {
   createdAt: string;
 }
 
+const MAX_NOTES_PER_USER = 30;
+
 // Helper function to format date in a subtle way
 function formatDate(dateString: string): string {
   const date = new Date(dateString);
@@ -61,6 +64,8 @@ export default function Notes() {
   const { data: session, status } = useSession();
   const [openDelete, setOpenDelete] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+  const noteRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const [openEdit, setOpenEdit] = useState(false);
   const [editData, setEditData] = useState<Note>({
@@ -85,6 +90,8 @@ export default function Notes() {
 
   // Extract notes from response
   const noteList = notesData?.notes || [];
+  const totalNotes = notesData?.pagination?.total || noteList.length;
+  const hasReachedMaxNotes = totalNotes >= MAX_NOTES_PER_USER;
 
   // Function to show alert notifications
   const showAlert = (
@@ -133,6 +140,14 @@ export default function Notes() {
   }
 
   function handleAddClick() {
+    if (hasReachedMaxNotes) {
+      showAlert(
+        "Error",
+        `Maximum limit of ${MAX_NOTES_PER_USER} notes reached. Please delete some notes before creating new ones.`,
+        "error"
+      );
+      return;
+    }
     setOpenAdd(true);
   }
 
@@ -144,6 +159,15 @@ export default function Notes() {
 
     if (!session?.user?.id) {
       showAlert("Error", "User ID not found. Please sign in again.", "error");
+      return;
+    }
+
+    if (hasReachedMaxNotes) {
+      showAlert(
+        "Error",
+        `Maximum limit of ${MAX_NOTES_PER_USER} notes reached. Please delete some notes before creating new ones.`,
+        "error"
+      );
       return;
     }
 
@@ -176,11 +200,29 @@ export default function Notes() {
     }
 
     try {
-      await deleteNoteMutation.mutateAsync(noteToDelete);
       setOpenDelete(false);
+      setDeletingNoteId(noteToDelete);
+
+      // Get the note element
+      const noteElement = noteRefs.current.get(noteToDelete);
+      if (noteElement) {
+        // Animate slide to the right
+        await gsap.to(noteElement, {
+          x: 150,
+          opacity: 0,
+          scale: 0.8,
+          duration: 0.5,
+          ease: "power3.in",
+        });
+      }
+
+      // Delete the note after animation
+      await deleteNoteMutation.mutateAsync(noteToDelete);
       setNoteToDelete(null);
+      setDeletingNoteId(null);
     } catch (error) {
       // Error is handled by the mutation hook
+      setDeletingNoteId(null);
     }
   }
 
@@ -225,68 +267,98 @@ export default function Notes() {
         <Button
           variant="ghost"
           size="icon"
-          className="text-[#FAEDCB] hover:text-white hover:bg-[#0a2f42]"
+          className="text-[#FAEDCB] hover:text-white hover:bg-[#0a2f42] disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleAddClick}
+          disabled={hasReachedMaxNotes}
+          title={
+            hasReachedMaxNotes
+              ? `Maximum ${MAX_NOTES_PER_USER} notes reached. Delete some notes to create new ones.`
+              : "Add new note"
+          }
         >
           <Plus className="h-5 w-5" />
         </Button>
       </div>
+      {hasReachedMaxNotes && (
+        <p className="text-xs text-amber-600 mb-1 px-1">
+          Maximum {MAX_NOTES_PER_USER} notes reached ({totalNotes}/
+          {MAX_NOTES_PER_USER}). Delete some notes to create new ones.
+        </p>
+      )}
       <div className="flex-1 bg-white rounded-lg p-2 shadow-md overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#124A69] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#0a2f42]">
         {noteList.length > 0 ? (
           noteList.map((note: Note, index: number) => (
-            <motion.div
+            <AnimatedContent
               key={note.id}
-              initial={{ x: -100, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{
-                duration: 0.9,
-                delay: index * 0.1,
-                ease: "easeOut",
-              }}
+              distance={150}
+              direction="horizontal"
+              reverse={true}
+              duration={1.2}
+              ease="power3.out"
+              initialOpacity={0.2}
+              animateOpacity
+              scale={1.1}
+              threshold={0.2}
+              delay={0.3 + index * 0.1}
+              container="snap-main-container"
+              onComplete={() => {}}
+              onDisappearanceComplete={() => {}}
             >
-              <Card className="border-l-[8px] border-[#FAEDCB] mb-1 hover:shadow-md transition-shadow">
-                <CardContent className="p-2 relative">
-                  <div className="absolute right-1 -top-5 flex gap-0.5">
-                    <Button
-                      variant="ghost"
-                      className="h-5 w-5 p-0 hover:bg-transparent"
-                      onClick={() => handleEditClick(note)}
-                      disabled={
-                        deleteNoteMutation.isPending && noteToDelete === note.id
-                      }
-                    >
-                      <Edit className="h-3 w-3" color="#124a69" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="h-5 w-5 p-0 hover:bg-transparent"
-                      onClick={() => handleDeleteClick(note.id)}
-                      disabled={
-                        deleteNoteMutation.isPending && noteToDelete === note.id
-                      }
-                    >
-                      {deleteNoteMutation.isPending &&
-                      noteToDelete === note.id ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#124A69]" />
-                      ) : (
-                        <Trash className="h-3 w-3" color="#124a69" />
-                      )}
-                    </Button>
-                  </div>
-                  <div className="-mt-4 -mb-4">
-                    <div className="text-[#124A69] font-medium text-xs mb-0.5">
-                      {note.title}
+              <div
+                ref={(el) => {
+                  if (el) {
+                    noteRefs.current.set(note.id, el);
+                  } else {
+                    noteRefs.current.delete(note.id);
+                  }
+                }}
+              >
+                <Card className="border-l-[8px] border-[#FAEDCB] mb-1 hover:shadow-md transition-shadow">
+                  <CardContent className="p-2 relative">
+                    <div className="absolute right-1 -top-5 flex gap-0.5">
+                      <Button
+                        variant="ghost"
+                        className="h-5 w-5 p-0 hover:bg-transparent"
+                        onClick={() => handleEditClick(note)}
+                        disabled={
+                          deleteNoteMutation.isPending &&
+                          noteToDelete === note.id
+                        }
+                      >
+                        <Edit className="h-3 w-3" color="#124a69" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="h-5 w-5 p-0 hover:bg-transparent"
+                        onClick={() => handleDeleteClick(note.id)}
+                        disabled={
+                          deleteNoteMutation.isPending &&
+                          noteToDelete === note.id
+                        }
+                      >
+                        {deleteNoteMutation.isPending &&
+                        noteToDelete === note.id ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#124A69]" />
+                        ) : (
+                          <Trash className="h-3 w-3" color="#124a69" />
+                        )}
+                      </Button>
                     </div>
-                    <div className="text-gray-600 text-[11px] whitespace-pre-wrap">
-                      {note.description}
+                    <div className="-mt-4 -mb-4">
+                      <div className="text-[#124A69] font-medium text-xs mb-0.5">
+                        {note.title}
+                      </div>
+                      <div className="text-gray-600 text-[11px] whitespace-pre-wrap">
+                        {note.description}
+                      </div>
+                      <div className="text-gray-400 text-[10px] mt-1.5">
+                        {formatDate(note.createdAt)}
+                      </div>
                     </div>
-                    <div className="text-gray-400 text-[10px] mt-1.5">
-                      {formatDate(note.createdAt)}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
+                  </CardContent>
+                </Card>
+              </div>
+            </AnimatedContent>
           ))
         ) : (
           <div className="flex items-center justify-center h-full min-h-[200px]">

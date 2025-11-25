@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import React from "react";
 import { CourseDataTable } from "@/features/courses/components/course-data-table";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
@@ -7,7 +7,6 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@/lib/permission";
 import { authOptions } from "@/lib/auth-options";
-import { CourseTableSkeleton } from "@/shared/components/skeletons/course-skeletons";
 import { CourseDataTableWrapper } from "@/features/courses/components/course-data-table-wrapper";
 
 // Route segment config for performance
@@ -38,10 +37,7 @@ export default async function CourseDashboardPage() {
 
       <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex flex-col flex-grow px-4 overflow-y-auto">
-          {/* Courses Table with Suspense */}
-          <Suspense fallback={<CourseTableSkeleton />}>
-            <CourseDataTableWrapper userRole={userRole} userId={userId} />
-          </Suspense>
+          <CourseDataTableWrapper userRole={userRole} userId={userId} />
         </div>
 
         {/* Right Sidebar */}

@@ -18,6 +18,8 @@ export function useNotes(options?: { page?: number; limit?: number }) {
       const { data } = await axios.get(`/notes?${params.toString()}`);
       return data;
     },
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 }
 

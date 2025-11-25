@@ -9,6 +9,8 @@ import {
   NoteResponse,
 } from "@/shared/types/note";
 
+const MAX_NOTES_PER_USER = 30;
+
 // ✅ Utility to transform Prisma note into serializable format
 function serializeNote(note: {
   id: string;
@@ -97,6 +99,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Unauthorized to create note for another user" },
         { status: 403 }
+      );
+    }
+
+    // Check if user has reached the maximum number of notes
+    const noteCount = await prisma.note.count({
+      where: { userId: session.user.id },
+    });
+
+    if (noteCount >= MAX_NOTES_PER_USER) {
+      return NextResponse.json(
+        {
+          error: `Maximum limit of ${MAX_NOTES_PER_USER} notes reached. Please delete some notes before creating new ones.`,
+        },
+        { status: 400 }
       );
     }
 

@@ -2,7 +2,8 @@
 
 import { Clock, Trash, Edit, Plus, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { motion } from "framer-motion";
+import AnimatedContent from "@/components/ui/AnimatedContent";
+import { gsap } from "gsap";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +56,7 @@ export default function UpcomingEvents() {
   const { data: session, status } = useSession();
   const userRole = session?.user?.role as Role | undefined;
   const todayRef = useRef<HTMLDivElement>(null);
+  const hasFetchedRef = useRef(false);
 
   const [eventList, setEventList] = useState<GroupedEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +80,8 @@ export default function UpcomingEvents() {
 
   const [openDelete, setOpenDelete] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const eventRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [openConfirmSave, setOpenConfirmSave] = useState(false);
   const [eventsToSave, setEventsToSave] = useState<{
     type: "new" | "edit";
@@ -144,12 +148,15 @@ export default function UpcomingEvents() {
     return true;
   };
 
-  // Fetch events from database
+  // Fetch events from database (only once on mount)
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+
     const fetchEvents = async () => {
       setIsLoading(true);
       await refreshEvents();
       setIsLoading(false);
+      hasFetchedRef.current = true;
     };
 
     fetchEvents();
@@ -435,17 +442,40 @@ export default function UpcomingEvents() {
       return;
     }
 
-    const result = await handleDeleteEvent({
-      eventId: eventToDelete,
-      userRole,
-      onSuccess: (message) => toast.success(message),
-      onError: (error) => toast.error(error),
-    });
-
-    if (result?.success) {
-      await refreshEvents();
+    try {
       setOpenDelete(false);
-      setEventToDelete(null);
+      setDeletingEventId(eventToDelete);
+
+      // Get the event element
+      const eventElement = eventRefs.current.get(eventToDelete);
+      if (eventElement) {
+        // Animate slide to the right
+        await gsap.to(eventElement, {
+          x: 150,
+          opacity: 0,
+          scale: 0.8,
+          duration: 0.5,
+          ease: "power3.in",
+        });
+      }
+
+      // Delete the event after animation
+      const result = await handleDeleteEvent({
+        eventId: eventToDelete,
+        userRole,
+        onSuccess: (message) => toast.success(message),
+        onError: (error) => toast.error(error),
+      });
+
+      if (result?.success) {
+        await refreshEvents();
+        setEventToDelete(null);
+        setDeletingEventId(null);
+      } else {
+        setDeletingEventId(null);
+      }
+    } catch (error) {
+      setDeletingEventId(null);
     }
   }
 
@@ -711,89 +741,109 @@ export default function UpcomingEvents() {
                       new Date(new Date().setHours(0, 0, 0, 0))
                     );
                     return (
-                      <motion.div
+                      <AnimatedContent
                         key={item.id}
-                        initial={{ x: -100, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{
-                          duration: 0.9,
-                          delay: itemIndex * 0.1,
-                          ease: "easeOut",
-                        }}
+                        distance={150}
+                        direction="horizontal"
+                        reverse={true}
+                        duration={1.2}
+                        ease="power3.out"
+                        initialOpacity={0.2}
+                        animateOpacity
+                        scale={1.1}
+                        threshold={0.2}
+                        delay={0.3 + itemIndex * 0.1}
+                        container="snap-main-container"
+                        onComplete={() => {}}
+                        onDisappearanceComplete={() => {}}
                       >
-                        <Card
-                          className={cn(
-                            "border-l-[8px] mb-1 hover:shadow-md transition-shadow",
-                            isPastEvent
-                              ? "border-gray-400 bg-gray-50"
-                              : "border-[#124A69]"
-                          )}
+                        <div
+                          ref={(el) => {
+                            if (el) {
+                              eventRefs.current.set(item.id, el);
+                            } else {
+                              eventRefs.current.delete(item.id);
+                            }
+                          }}
                         >
-                          <CardContent className="p-2 relative">
-                            {canManageEvents && (
-                              <div className="absolute right-1 -top-5 flex gap-0.5">
-                                <Button
-                                  variant="ghost"
-                                  className="h-5 w-5 p-0 hover:bg-transparent"
-                                  onClick={() => handleOpenEdit(item)}
-                                >
-                                  <Edit
-                                    className="h-3 w-3"
-                                    color={isPastEvent ? "#6b7280" : "#124a69"}
-                                  />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  className="h-5 w-5 p-0 hover:bg-transparent"
-                                  onClick={() => handleDeleteClick(item.id)}
-                                >
-                                  <Trash
-                                    className="h-3 w-3"
-                                    color={isPastEvent ? "#6b7280" : "#124a69"}
-                                  />
-                                </Button>
-                              </div>
+                          <Card
+                            className={cn(
+                              "border-l-[8px] mb-1 hover:shadow-md transition-shadow",
+                              isPastEvent
+                                ? "border-gray-400 bg-gray-50"
+                                : "border-[#124A69]"
                             )}
-                            <div className="-mt-4 -mb-4">
-                              <div
-                                className={cn(
-                                  "font-medium text-xs mb-0.5",
-                                  isPastEvent
-                                    ? "text-gray-500"
-                                    : "text-[#124A69]"
-                                )}
-                              >
-                                {item.title}
+                          >
+                            <CardContent className="p-2 relative">
+                              {canManageEvents && (
+                                <div className="absolute right-1 -top-5 flex gap-0.5">
+                                  <Button
+                                    variant="ghost"
+                                    className="h-5 w-5 p-0 hover:bg-transparent"
+                                    onClick={() => handleOpenEdit(item)}
+                                  >
+                                    <Edit
+                                      className="h-3 w-3"
+                                      color={
+                                        isPastEvent ? "#6b7280" : "#124a69"
+                                      }
+                                    />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    className="h-5 w-5 p-0 hover:bg-transparent"
+                                    onClick={() => handleDeleteClick(item.id)}
+                                  >
+                                    <Trash
+                                      className="h-3 w-3"
+                                      color={
+                                        isPastEvent ? "#6b7280" : "#124a69"
+                                      }
+                                    />
+                                  </Button>
+                                </div>
+                              )}
+                              <div className="-mt-4 -mb-4">
+                                <div
+                                  className={cn(
+                                    "font-medium text-xs mb-0.5",
+                                    isPastEvent
+                                      ? "text-gray-500"
+                                      : "text-[#124A69]"
+                                  )}
+                                >
+                                  {item.title}
+                                </div>
+                                <div
+                                  className={cn(
+                                    "text-[11px]",
+                                    isPastEvent
+                                      ? "text-gray-400"
+                                      : "text-gray-600"
+                                  )}
+                                >
+                                  {item.description}
+                                </div>
+                                <div
+                                  className={cn(
+                                    "flex items-center text-[11px]",
+                                    isPastEvent
+                                      ? "text-gray-400"
+                                      : "text-gray-500"
+                                  )}
+                                >
+                                  <Clock className="w-3 h-3 mr-0.5" />
+                                  {item.fromTime && item.toTime
+                                    ? `${formatTimeTo12Hour(
+                                        item.fromTime
+                                      )} - ${formatTimeTo12Hour(item.toTime)}`
+                                    : "All day"}
+                                </div>
                               </div>
-                              <div
-                                className={cn(
-                                  "text-[11px]",
-                                  isPastEvent
-                                    ? "text-gray-400"
-                                    : "text-gray-600"
-                                )}
-                              >
-                                {item.description}
-                              </div>
-                              <div
-                                className={cn(
-                                  "flex items-center text-[11px]",
-                                  isPastEvent
-                                    ? "text-gray-400"
-                                    : "text-gray-500"
-                                )}
-                              >
-                                <Clock className="w-3 h-3 mr-0.5" />
-                                {item.fromTime && item.toTime
-                                  ? `${formatTimeTo12Hour(
-                                      item.fromTime
-                                    )} - ${formatTimeTo12Hour(item.toTime)}`
-                                  : "All day"}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </AnimatedContent>
                     );
                   })}
                 </div>

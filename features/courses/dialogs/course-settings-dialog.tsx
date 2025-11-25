@@ -16,6 +16,8 @@ import { Search, Archive, ArchiveRestore, Settings2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useArchivedCourses } from "@/lib/hooks/queries/useCourses";
 
+const MAX_ACTIVE_COURSES = 15;
+
 interface Course {
   id: string;
   code: string;
@@ -66,6 +68,19 @@ export function CourseSettingsDialog({
         : undefined
     );
 
+  // Calculate current active courses count for this faculty
+  const currentActiveCount = useMemo(() => {
+    return courses.filter(
+      (c) =>
+        c.facultyId === userId &&
+        (c.status === "ACTIVE" || c.status === "INACTIVE")
+    ).length;
+  }, [courses, userId]);
+
+  // Calculate remaining slots that can be activated
+  const remainingSlots = MAX_ACTIVE_COURSES - currentActiveCount;
+  const canActivateMore = remainingSlots > 0;
+
   // Filter active courses - only show user's own courses
   const activeCourses = useMemo(() => {
     return courses.filter(
@@ -99,10 +114,27 @@ export function CourseSettingsDialog({
   };
 
   const toggleArchivedSelection = (courseId: string) => {
+    // If limit is reached and trying to add a new selection, prevent it
+    if (!selectedArchived.has(courseId) && !canActivateMore) {
+      toast.error(
+        `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before unarchiving new ones.`
+      );
+      return;
+    }
+
     const newSelected = new Set(selectedArchived);
     newSelected.has(courseId)
       ? newSelected.delete(courseId)
       : newSelected.add(courseId);
+
+    // Check if the new selection would exceed the limit
+    if (newSelected.size > remainingSlots) {
+      toast.error(
+        `Cannot select ${newSelected.size} course(s). You can only activate ${remainingSlots} more course(s) (maximum ${MAX_ACTIVE_COURSES} active courses allowed).`
+      );
+      return;
+    }
+
     setSelectedArchived(newSelected);
   };
 
@@ -110,8 +142,17 @@ export function CourseSettingsDialog({
   const selectAllActive = () =>
     setSelectedActive(new Set(activeCourses.map((c) => c.id)));
   const deselectAllActive = () => setSelectedActive(new Set());
-  const selectAllArchived = () =>
-    setSelectedArchived(new Set(archivedCourses.map((c) => c.id)));
+  const selectAllArchived = () => {
+    if (!canActivateMore) {
+      toast.error(
+        `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before unarchiving new ones.`
+      );
+      return;
+    }
+    // Only select up to the remaining slots
+    const selectableCourses = archivedCourses.slice(0, remainingSlots);
+    setSelectedArchived(new Set(selectableCourses.map((c) => c.id)));
+  };
   const deselectAllArchived = () => setSelectedArchived(new Set());
 
   // Handle archive
@@ -141,6 +182,14 @@ export function CourseSettingsDialog({
   const handleUnarchive = async () => {
     if (selectedArchived.size === 0) {
       toast.error("Please select at least one course to unarchive");
+      return;
+    }
+
+    // Check if unarchiving would exceed the limit
+    if (selectedArchived.size > remainingSlots) {
+      toast.error(
+        `Cannot unarchive ${selectedArchived.size} course(s). You can only activate ${remainingSlots} more course(s) (maximum ${MAX_ACTIVE_COURSES} active courses allowed).`
+      );
       return;
     }
 
@@ -296,7 +345,7 @@ export function CourseSettingsDialog({
                     variant="outline"
                     size="sm"
                     onClick={selectAllArchived}
-                    disabled={archivedCourses.length === 0}
+                    disabled={archivedCourses.length === 0 || !canActivateMore}
                   >
                     Select All
                   </Button>
@@ -326,44 +375,66 @@ export function CourseSettingsDialog({
                   </div>
                 ) : (
                   <div className="divide-y">
-                    {archivedCourses.map((course) => (
-                      <div
-                        key={course.id}
-                        className="flex items-center gap-3 p-4 hover:bg-gray-50 transition-colors"
-                      >
-                        <Checkbox
-                          checked={selectedArchived.has(course.id)}
-                          onCheckedChange={() =>
-                            toggleArchivedSelection(course.id)
-                          }
-                          className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69]"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold text-sm text-gray-600">
-                              {course.code} - {course.section}
-                            </h4>
-                            <Badge variant="outline" className="text-xs">
-                              ARCHIVED
-                            </Badge>
+                    {archivedCourses.map((course) => {
+                      const isSelected = selectedArchived.has(course.id);
+                      // Disable if: limit reached and not selected, OR selecting would exceed limit
+                      const isDisabled =
+                        (!canActivateMore && !isSelected) ||
+                        (!isSelected &&
+                          selectedArchived.size >= remainingSlots);
+                      return (
+                        <div
+                          key={course.id}
+                          className={`flex items-center gap-3 p-4 transition-colors ${
+                            isDisabled
+                              ? "opacity-50 cursor-not-allowed"
+                              : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() =>
+                              toggleArchivedSelection(course.id)
+                            }
+                            disabled={isDisabled}
+                            className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69]"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-sm text-gray-600">
+                                {course.code} - {course.section}
+                              </h4>
+                              <Badge variant="outline" className="text-xs">
+                                ARCHIVED
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-gray-500 truncate">
+                              {course.title}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {course.semester} • {course.academicYear}
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-500 truncate">
-                            {course.title}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {course.semester} • {course.academicYear}
-                          </p>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="flex items-center justify-between">
+                <div className="text-sm text-gray-600 ">
+                  <span className="font-medium">{currentActiveCount}</span> of{" "}
+                  <span className="font-medium">{MAX_ACTIVE_COURSES}</span>{" "}
+                  active courses
+                </div>
                 <Button
                   onClick={handleUnarchive}
-                  disabled={selectedArchived.size === 0 || isProcessing}
+                  disabled={
+                    selectedArchived.size === 0 ||
+                    isProcessing ||
+                    selectedArchived.size > remainingSlots
+                  }
                   variant="outline"
                   className="gap-2"
                 >

@@ -7,6 +7,7 @@ import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "react-hot-toast";
 import { Loading } from "@/shared/components/layout/Loading";
 import { NProgressProvider } from "@/shared/components/layout/NProgress";
+import ClickSpark from "@/components/ClickSpark";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -26,68 +27,76 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=0.8" />
       </head>
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="didasko"
-          enableSystem
-          disableTransitionOnChange
+        <ClickSpark
+          sparkColor="#124A69"
+          sparkSize={9}
+          sparkRadius={25}
+          sparkCount={14}
+          duration={600}
         >
-          <Toaster
-            position="top-center"
-            containerClassName="my-toaster-container"
-            toastOptions={{
-              className: "",
-              style: {
-                background: "#fff",
-                color: "#124A69",
-                border: "1px solid #e5e7eb",
-                boxShadow:
-                  "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-                borderRadius: "0.5rem",
-                padding: "1rem",
-              },
-              success: {
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="didasko"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <Toaster
+              position="top-center"
+              containerClassName="my-toaster-container"
+              toastOptions={{
+                className: "",
                 style: {
                   background: "#fff",
                   color: "#124A69",
                   border: "1px solid #e5e7eb",
+                  boxShadow:
+                    "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+                  borderRadius: "0.5rem",
+                  padding: "1rem",
                 },
-                iconTheme: {
-                  primary: "#124A69",
-                  secondary: "#fff",
+                success: {
+                  style: {
+                    background: "#fff",
+                    color: "#124A69",
+                    border: "1px solid #e5e7eb",
+                  },
+                  iconTheme: {
+                    primary: "#124A69",
+                    secondary: "#fff",
+                  },
                 },
-              },
-              error: {
-                style: {
-                  background: "#fff",
-                  color: "#dc2626",
-                  border: "1px solid #e5e7eb",
+                error: {
+                  style: {
+                    background: "#fff",
+                    color: "#dc2626",
+                    border: "1px solid #e5e7eb",
+                  },
+                  iconTheme: {
+                    primary: "#dc2626",
+                    secondary: "#fff",
+                  },
                 },
-                iconTheme: {
-                  primary: "#dc2626",
-                  secondary: "#fff",
+                loading: {
+                  style: {
+                    background: "#fff",
+                    color: "#124A69",
+                    border: "1px solid #e5e7eb",
+                  },
                 },
-              },
-              loading: {
-                style: {
-                  background: "#fff",
-                  color: "#124A69",
-                  border: "1px solid #e5e7eb",
-                },
-              },
-            }}
-          />
+              }}
+            />
 
-          <QueryProvider>
-            <AuthProvider>
-              <Loading />
-              <Suspense fallback={null}>
-                <NProgressProvider />
-              </Suspense>
-              {children}
-            </AuthProvider>
-          </QueryProvider>
-        </ThemeProvider>
+            <QueryProvider>
+              <AuthProvider>
+                <Loading />
+                <Suspense fallback={null}>
+                  <NProgressProvider />
+                </Suspense>
+                {children}
+              </AuthProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </ClickSpark>
       </body>
     </html>
   );

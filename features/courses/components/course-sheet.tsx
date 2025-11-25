@@ -82,12 +82,30 @@ export function CourseSheet({
 
   const [isLoading, setIsLoading] = useState(false);
 
+  // Function to get the current academic year based on the date
+  const getCurrentAcademicYear = (): string => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12 (January = 1, December = 12)
+    const currentYear = now.getFullYear();
+
+    // January - June: (Current year - 1) - Current year (e.g., Jan 2025 = 2024-2025)
+    // July - December: Current year - (Current year + 1) (e.g., Nov 2025 = 2025-2026)
+    if (currentMonth >= 1 && currentMonth <= 6) {
+      // January - June
+      return `${currentYear - 1}-${currentYear}`;
+    } else {
+      // July - December
+      return `${currentYear}-${currentYear + 1}`;
+    }
+  };
+
   const [formData, setFormData] = useState({
     code: course?.code || "",
     title: course?.title || "",
     room: course?.room || "",
     semester: course?.semester || "1st Semester",
-    academicYear: course?.academicYear || "",
+    academicYear:
+      course?.academicYear || (mode === "add" ? getCurrentAcademicYear() : ""),
     classNumber: course?.classNumber?.toString() || "1",
     section: course?.section || "",
     status: course?.status || CourseStatus.ACTIVE,
@@ -108,6 +126,16 @@ export function CourseSheet({
       });
     }
   }, [course]);
+
+  // Update academic year when sheet opens in "add" mode
+  useEffect(() => {
+    if (open && mode === "add" && !course) {
+      setFormData((prev) => ({
+        ...prev,
+        academicYear: getCurrentAcademicYear(),
+      }));
+    }
+  }, [open, mode, course]);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -213,7 +241,7 @@ export function CourseSheet({
           title: "",
           room: "",
           semester: "1st Semester",
-          academicYear: "",
+          academicYear: getCurrentAcademicYear(),
           classNumber: "1",
           section: "",
           status: CourseStatus.ACTIVE,

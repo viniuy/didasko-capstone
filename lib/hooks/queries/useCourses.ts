@@ -212,6 +212,7 @@ export function useActiveCourses(options?: {
 export function useArchivedCourses(filters?: {
   facultyId?: string;
   search?: string;
+  limit?: number;
 }) {
   return useQuery({
     queryKey: queryKeys.courses.archived(filters),
@@ -220,6 +221,7 @@ export function useArchivedCourses(filters?: {
         const params = new URLSearchParams();
         if (filters?.facultyId) params.append("facultyId", filters.facultyId);
         if (filters?.search) params.append("search", filters.search);
+        if (filters?.limit) params.append("limit", filters.limit.toString());
 
         const { data } = await axios.get<Course[]>(
           `/courses/archived?${params.toString()}`,
