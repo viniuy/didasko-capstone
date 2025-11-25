@@ -2,8 +2,6 @@
 import React, { useState } from "react";
 import { useSession } from "next-auth/react";
 import { Users, Search } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface Faculty {
@@ -30,36 +28,24 @@ export function FacultyFilter({
   const currentUser = session?.user;
   const [searchQuery, setSearchQuery] = useState("");
 
-  const handleToggleFaculty = (facultyId: string) => {
-    if (selectedFacultyIds.includes(facultyId)) {
-      onChange(selectedFacultyIds.filter((id) => id !== facultyId));
-    } else {
-      onChange([...selectedFacultyIds, facultyId]);
-    }
-  };
+  // Get the selected faculty ID (should be single selection)
+  const selectedFacultyId =
+    selectedFacultyIds.length > 0 ? selectedFacultyIds[0] : "";
 
-  const handleSelectAll = () => {
-    const allFacultyIds = [currentUserId, ...faculties.map((f) => f.id)];
-    if (selectedFacultyIds.length === allFacultyIds.length) {
-      onChange([]);
-    } else {
-      onChange(allFacultyIds);
-    }
+  const handleSelectFaculty = (facultyId: string) => {
+    // Radio button behavior: always set to the selected faculty
+    onChange([facultyId]);
   };
 
   const getDisplayText = () => {
-    if (selectedFacultyIds.length === 0) {
+    if (!selectedFacultyId) {
       return "No faculty selected";
     }
-    if (selectedFacultyIds.length === 1) {
-      const id = selectedFacultyIds[0];
-      if (id === currentUserId) {
-        return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
-      }
-      const faculty = faculties.find((f) => f.id === id);
-      return faculty?.name || "Selected faculty";
+    if (selectedFacultyId === currentUserId) {
+      return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
     }
-    return `${selectedFacultyIds.length} faculty selected`;
+    const faculty = faculties.find((f) => f.id === selectedFacultyId);
+    return faculty?.name || "Selected faculty";
   };
 
   // Filter faculties based on search query
@@ -81,23 +67,9 @@ export function FacultyFilter({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <Users className="w-4 h-4" />
-          <span>Filter by Faculty:</span>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={handleSelectAll}
-          className="h-7 text-xs"
-        >
-          {selectedFacultyIds.length ===
-          [currentUserId, ...faculties.map((f) => f.id)].length
-            ? "Deselect All"
-            : "Select All"}
-        </Button>
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <Users className="w-4 h-4" />
+        <span>Filter by Faculty:</span>
       </div>
       <div className="border rounded-md p-3 bg-gray-50">
         <div className="text-sm text-gray-600 mb-2 min-h-[20px]">
@@ -118,13 +90,31 @@ export function FacultyFilter({
           <div className="space-y-2">
             {/* My Courses option */}
             {shouldShowMyCourses && (
-              <div className="flex items-center space-x-2 p-2 rounded hover:bg-white transition-colors">
-                <Checkbox
-                  id={`faculty-${currentUserId}`}
-                  checked={selectedFacultyIds.includes(currentUserId)}
-                  onCheckedChange={() => handleToggleFaculty(currentUserId)}
-                  className="data-[state=checked]:bg-[#124A69] data-[state=checked]:text-white data-[state=checked]:border-[#124A69]"
-                />
+              <div className="flex items-center space-x-2 p-2 rounded hover:bg-white transition-colors group">
+                <label
+                  htmlFor={`faculty-${currentUserId}`}
+                  className="flex items-center cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    id={`faculty-${currentUserId}`}
+                    name="faculty-filter"
+                    checked={selectedFacultyId === currentUserId}
+                    onChange={() => handleSelectFaculty(currentUserId)}
+                    className="sr-only peer"
+                  />
+                  <div
+                    className={`relative w-4 h-4 rounded-full border-2 transition-all duration-200 flex items-center justify-center group-hover:border-[#124A69]/60 peer-focus-visible:ring-2 peer-focus-visible:ring-[#124A69]/50 peer-focus-visible:ring-offset-2 peer-focus-visible:outline-none ${
+                      selectedFacultyId === currentUserId
+                        ? "border-[#124A69]"
+                        : "border-gray-300"
+                    }`}
+                  >
+                    {selectedFacultyId === currentUserId && (
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#124A69] transition-all duration-200"></div>
+                    )}
+                  </div>
+                </label>
                 <label
                   htmlFor={`faculty-${currentUserId}`}
                   className="text-sm font-medium cursor-pointer flex-1"
@@ -146,14 +136,32 @@ export function FacultyFilter({
               .map((faculty) => (
                 <div
                   key={faculty.id}
-                  className="flex items-center space-x-2 p-2 rounded hover:bg-white transition-colors"
+                  className="flex items-center space-x-2 p-2 rounded hover:bg-white transition-colors group"
                 >
-                  <Checkbox
-                    id={`faculty-${faculty.id}`}
-                    checked={selectedFacultyIds.includes(faculty.id)}
-                    onCheckedChange={() => handleToggleFaculty(faculty.id)}
-                    className="data-[state=checked]:bg-[#124A69] data-[state=checked]:text-white data-[state=checked]:border-[#124A69]"
-                  />
+                  <label
+                    htmlFor={`faculty-${faculty.id}`}
+                    className="flex items-center cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      id={`faculty-${faculty.id}`}
+                      name="faculty-filter"
+                      checked={selectedFacultyId === faculty.id}
+                      onChange={() => handleSelectFaculty(faculty.id)}
+                      className="sr-only peer"
+                    />
+                    <div
+                      className={`relative w-4 h-4 rounded-full border-2 transition-all duration-200 flex items-center justify-center group-hover:border-[#124A69]/60 peer-focus-visible:ring-2 peer-focus-visible:ring-[#124A69]/50 peer-focus-visible:ring-offset-2 peer-focus-visible:outline-none ${
+                        selectedFacultyId === faculty.id
+                          ? "border-[#124A69]"
+                          : "border-gray-300"
+                      }`}
+                    >
+                      {selectedFacultyId === faculty.id && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-[#124A69] transition-all duration-200"></div>
+                      )}
+                    </div>
+                  </label>
                   <label
                     htmlFor={`faculty-${faculty.id}`}
                     className="text-sm cursor-pointer flex-1"

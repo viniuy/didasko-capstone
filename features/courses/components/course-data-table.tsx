@@ -756,14 +756,11 @@ export function CourseDataTable({
 
       if (!isActiveOrInactive) return false;
 
-      // For ACADEMIC_HEAD, count courses matching the selected faculty filter
+      // For ACADEMIC_HEAD, count courses matching the selected faculty filter (single selection)
       if (userRole === "ACADEMIC_HEAD") {
         if (facultyFilter.length === 0) return false;
-        const allFacultyIds = [userId, ...faculties.map((f) => f.id)];
-        // If all faculties are selected, count all courses
-        if (facultyFilter.length === allFacultyIds.length) return true;
-        // Otherwise, only count courses matching selected faculty IDs
-        return course.facultyId && facultyFilter.includes(course.facultyId);
+        const selectedFacultyId = facultyFilter[0];
+        return course.facultyId === selectedFacultyId;
       }
 
       // For regular faculty, only count courses belonging to the current user
@@ -775,19 +772,15 @@ export function CourseDataTable({
 
   // Filter courses based on role and faculty (without search/status filters)
   const baseFilteredCourses = useMemo(() => {
-    // For Academic Head with multiple faculty selection
+    // For Academic Head with single faculty selection (radio button)
     if (userRole === "ACADEMIC_HEAD") {
       if (facultyFilter.length === 0) {
         return [];
       }
-      // If all faculties are selected (or "ALL" equivalent), show all courses
-      const allFacultyIds = [userId, ...faculties.map((f) => f.id)];
-      if (facultyFilter.length === allFacultyIds.length) {
-        return tableData;
-      }
-      // Filter by selected faculty IDs
+      // Filter by selected faculty ID (single selection)
+      const selectedFacultyId = facultyFilter[0];
       return tableData.filter(
-        (course) => course.facultyId && facultyFilter.includes(course.facultyId)
+        (course) => course.facultyId === selectedFacultyId
       );
     }
     // For Faculty, use the original function (single user)
@@ -829,7 +822,8 @@ export function CourseDataTable({
     const sections = new Set<string>();
     baseFilteredCourses.forEach((course) => {
       if (course.section) {
-        sections.add(course.section);
+        // Store the original section value (preserve case for display)
+        sections.add(course.section.trim());
       }
     });
     return Array.from(sections).sort();
@@ -849,9 +843,14 @@ export function CourseDataTable({
         const matchesStatus =
           course.status === "ACTIVE" || course.status === "INACTIVE";
 
-        // Filter by section
+        // Filter by section (case-insensitive and trimmed)
         const matchesSection =
-          sectionFilter.length === 0 || sectionFilter.includes(course.section);
+          sectionFilter.length === 0 ||
+          sectionFilter.some(
+            (filterSection) =>
+              filterSection.trim().toUpperCase() ===
+              (course.section || "").trim().toUpperCase()
+          );
 
         // Filter by day
         const matchesDay =
@@ -1090,37 +1089,70 @@ export function CourseDataTable({
     try {
       setIsLoading(true);
 
+      // Fetch archived courses to verify ownership
+      // Filter courses to only include those owned by current user
+      const archivedCoursesResponse = await fetch(
+        `/api/courses/archived?facultyId=${userId}`
+      );
+      const archivedCoursesData = archivedCoursesResponse.ok
+        ? await archivedCoursesResponse.json()
+        : [];
+
+      const coursesToUnarchive = archivedCoursesData
+        .filter(
+          (course: any) =>
+            courseIds.includes(course.id) && course.facultyId === userId
+        )
+        .map((course: any) => course.id);
+
+      if (coursesToUnarchive.length === 0) {
+        toast.error("You can only unarchive your own courses", {
+          id: loadingToast,
+        });
+        return;
+      }
+
+      if (coursesToUnarchive.length < courseIds.length) {
+        toast.error(
+          `Only unarchiving ${coursesToUnarchive.length} of ${courseIds.length} courses (you can only unarchive your own courses)`,
+          { id: loadingToast }
+        );
+      }
+
       // Optimistically update the local state
       setTableData((prevData) =>
         prevData.map((course) =>
-          courseIds.includes(course.id)
+          coursesToUnarchive.includes(course.id)
             ? { ...course, status: "ACTIVE" as CourseStatus }
             : course
         )
       );
 
       await bulkArchiveMutation.mutateAsync({
-        courseIds,
+        courseIds: coursesToUnarchive,
         status: "ACTIVE",
       });
 
       // Update loading toast to success
-      toast.success(`Successfully unarchived ${courseIds.length} course(s)`, {
-        id: loadingToast,
-        style: {
-          background: "#fff",
-          color: "#124A69",
-          border: "1px solid #e5e7eb",
-          boxShadow:
-            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-          borderRadius: "0.5rem",
-          padding: "1rem",
-        },
-        iconTheme: {
-          primary: "#124A69",
-          secondary: "#fff",
-        },
-      });
+      toast.success(
+        `Successfully unarchived ${coursesToUnarchive.length} course(s)`,
+        {
+          id: loadingToast,
+          style: {
+            background: "#fff",
+            color: "#124A69",
+            border: "1px solid #e5e7eb",
+            boxShadow:
+              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+            borderRadius: "0.5rem",
+            padding: "1rem",
+          },
+          iconTheme: {
+            primary: "#124A69",
+            secondary: "#fff",
+          },
+        }
+      );
 
       // Refresh table data to ensure consistency
       await refreshTableData(true);
@@ -1154,19 +1186,41 @@ export function CourseDataTable({
 
   // Export handler
   const handleExport = useCallback(
-    async (exportFilter: "ALL" | "ACTIVE" | "ARCHIVED") => {
+    async (exportFilter: "ACTIVE" | "ARCHIVED", facultyId?: string) => {
       try {
-        // Filter courses based on export option
+        // Filter courses based on export option and faculty
         let coursesToExport: Course[];
-        if (exportFilter === "ALL") {
-          coursesToExport = baseFilteredCourses;
-        } else if (exportFilter === "ACTIVE") {
-          coursesToExport = baseFilteredCourses.filter(
-            (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+
+        if (exportFilter === "ARCHIVED") {
+          // For archived courses, fetch them from the API
+          const archivedResponse = await fetch(
+            `/api/courses/archived?${facultyId ? `facultyId=${facultyId}` : ""}`
           );
+          if (archivedResponse.ok) {
+            coursesToExport = await archivedResponse.json();
+          } else {
+            coursesToExport = [];
+          }
         } else {
-          coursesToExport = baseFilteredCourses.filter(
-            (c) => c.status === "ARCHIVED"
+          // For active courses, filter from baseFilteredCourses
+          // First filter by faculty if specified (for Academic Head)
+          if (facultyId) {
+            coursesToExport = baseFilteredCourses.filter(
+              (c) => c.facultyId === facultyId
+            );
+          } else if (userRole === "ACADEMIC_HEAD") {
+            // Academic Head without faculty selection - export all courses
+            coursesToExport = baseFilteredCourses;
+          } else {
+            // Regular faculty - only their own courses
+            coursesToExport = baseFilteredCourses.filter(
+              (c) => c.facultyId === userId
+            );
+          }
+
+          // Then filter by status (ACTIVE/INACTIVE)
+          coursesToExport = coursesToExport.filter(
+            (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
           );
         }
 
@@ -1272,13 +1326,15 @@ export function CourseDataTable({
         const blob = new Blob([buffer], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         });
-        const filterSuffix =
-          exportFilter === "ALL"
-            ? "all"
-            : exportFilter === "ACTIVE"
-            ? "active"
-            : "archived";
-        const filename = `courses_${filterSuffix}_${
+        const filterSuffix = exportFilter === "ACTIVE" ? "active" : "archived";
+        const facultySuffix = facultyId
+          ? `_${
+              faculties
+                .find((f) => f.id === facultyId)
+                ?.name.replace(/\s+/g, "_") || "faculty"
+            }`
+          : "";
+        const filename = `courses_${filterSuffix}${facultySuffix}_${
           new Date().toISOString().split("T")[0]
         }.xlsx`;
         saveAs(blob, filename);
@@ -1304,7 +1360,7 @@ export function CourseDataTable({
         toast.error("Failed to export courses");
       }
     },
-    [baseFilteredCourses]
+    [baseFilteredCourses, userRole, userId, faculties]
   );
 
   // Import template handler
@@ -1677,17 +1733,41 @@ export function CourseDataTable({
 
       for (let rowIndex = 0; rowIndex < previewData.length; rowIndex++) {
         const row = previewData[rowIndex];
-        const code = row["Course Code"]?.trim().toUpperCase() || "N/A";
-        const section = row["Section"]?.trim().toUpperCase() || "A";
+        const code = row["Course Code"]?.trim().toUpperCase() || "";
+        const title = row["Course Title"]?.trim() || "";
+        const section = row["Section"]?.trim().toUpperCase() || "";
         let academicYear = row["Academic Year"]?.trim() || "";
         let semester = row["Semester"]?.trim() || "";
         let room = row["Room"]?.trim() || "";
+        const classNumberStr = row["Class Number"]?.toString().trim() || "";
+        const status = row["Status"]?.trim() || "";
 
         // Remove "Room:" prefix if present
         room = room.replace(/^room:\s*/i, "").trim();
 
         // Validation errors
         const errors: string[] = [];
+
+        // Validate course code
+        if (!code) {
+          errors.push("Course Code is required");
+        } else if (code.length > 15) {
+          errors.push("Course Code must be 15 characters or less");
+        }
+
+        // Validate course title
+        if (!title) {
+          errors.push("Course Title is required");
+        } else if (title.length > 80) {
+          errors.push("Course Title must be 80 characters or less");
+        }
+
+        // Validate section
+        if (!section) {
+          errors.push("Section is required");
+        } else if (section.length > 10) {
+          errors.push("Section must be 10 characters or less");
+        }
 
         // Validate room
         if (!room) {
@@ -1725,40 +1805,73 @@ export function CourseDataTable({
           }
         }
 
+        // Validate class number
+        if (!classNumberStr) {
+          errors.push("Class Number is required");
+        } else {
+          const classNumber = parseInt(classNumberStr, 10);
+          if (isNaN(classNumber) || classNumber < 1) {
+            errors.push("Class Number must be a positive number");
+          } else if (classNumber > 9999999999999) {
+            errors.push("Class Number cannot exceed 9999999999999");
+          }
+        }
+
+        // Validate status
+        const normalizedStatus = status.toLowerCase();
+        const validStatuses = ["active", "inactive", "archived"];
+        if (!status) {
+          errors.push("Status is required");
+        } else if (!validStatuses.includes(normalizedStatus)) {
+          errors.push(
+            'Status must be exactly "Active", "Inactive", or "Archived"'
+          );
+        }
+
         // If there are validation errors, collect them (no toast)
         if (errors.length > 0) {
           validationErrors.push({
             row: rowIndex + 2, // +2 because Excel starts at 1 and has header row
-            code,
+            code: code || "N/A",
             status: "error",
             message: errors.join(", "),
           });
           continue;
         }
 
-        // Check if course already exists in database
+        // Check if course already exists in database (case-insensitive comparison)
         const isDuplicate = existingCourses.some(
           (c: any) =>
-            c.code === code &&
-            c.section === section &&
-            c.academicYear === academicYear &&
-            c.semester === semester
+            c.code?.trim().toUpperCase() === code &&
+            c.section?.trim().toUpperCase() === section &&
+            c.academicYear?.trim() === academicYear &&
+            c.semester?.trim() === semester
         );
 
         if (isDuplicate) {
           validationErrors.push({
             row: rowIndex + 2,
-            code,
+            code: code || "N/A",
             status: "skipped",
             message: `Course already exists (${code}-${section} for ${academicYear} ${semester})`,
           });
         } else {
-          // Use cleaned values
+          // Normalize status to enum format (ACTIVE, INACTIVE, ARCHIVED)
+          const normalizedStatus = status
+            ? status.trim().toUpperCase()
+            : "ACTIVE";
+
+          // Use cleaned and normalized values
           validCourses.push({
             ...row,
+            "Course Code": code,
+            "Course Title": title.trim(),
+            Section: section,
             Room: room.toUpperCase(),
             Semester: semester,
             "Academic Year": academicYear,
+            "Class Number": classNumberStr,
+            Status: normalizedStatus,
           });
         }
       }
@@ -1775,14 +1888,11 @@ export function CourseDataTable({
 
         if (!isActiveOrInactive) return false;
 
-        // For ACADEMIC_HEAD, count courses matching the selected faculty filter
+        // For ACADEMIC_HEAD, count courses matching the selected faculty filter (single selection)
         if (userRole === "ACADEMIC_HEAD") {
           if (facultyFilter.length === 0) return false;
-          const allFacultyIds = [userId, ...faculties.map((f) => f.id)];
-          // If all faculties are selected, count all courses
-          if (facultyFilter.length === allFacultyIds.length) return true;
-          // Otherwise, only count courses matching selected faculty IDs
-          return c.facultyId && facultyFilter.includes(c.facultyId);
+          const selectedFacultyId = facultyFilter[0];
+          return c.facultyId === selectedFacultyId;
         }
 
         // For regular faculty, only count courses belonging to the current user
@@ -2013,10 +2123,7 @@ export function CourseDataTable({
   // Check if filters are active and count them
   const getActiveFilterCount = () => {
     let count = 0;
-    if (
-      facultyFilter.length > 0 &&
-      (facultyFilter.length !== 1 || facultyFilter[0] !== userId)
-    ) {
+    if (facultyFilter.length > 0 && facultyFilter[0] !== userId) {
       count++;
     }
     if (sectionFilter.length > 0) count++;
@@ -2045,26 +2152,12 @@ export function CourseDataTable({
 
     // Check faculty filter
     const isFacultyFilterActive =
-      facultyFilter.length > 0 &&
-      (facultyFilter.length !== 1 || facultyFilter[0] !== userId);
+      facultyFilter.length > 0 && facultyFilter[0] !== userId;
     if (isFacultyFilterActive) {
-      const selectedFacultyNames = facultyFilter
-        .map((id) => {
-          if (id === userId) {
-            return "My Courses";
-          }
-          const faculty = faculties.find((f) => f.id === id);
-          return faculty?.name || "Unknown";
-        })
-        .filter(Boolean);
-
-      if (selectedFacultyNames.length === 1) {
-        activeFilters.push(`for ${selectedFacultyNames[0]}`);
-      } else if (selectedFacultyNames.length > 1) {
-        activeFilters.push(
-          `for ${selectedFacultyNames.length} selected faculty`
-        );
-      }
+      const selectedFacultyId = facultyFilter[0];
+      const faculty = faculties.find((f) => f.id === selectedFacultyId);
+      const facultyName = faculty?.name || "Unknown";
+      activeFilters.push(`for ${facultyName}`);
     }
 
     // Check section filter
@@ -2113,10 +2206,9 @@ export function CourseDataTable({
 
     // Check faculty filter
     const isFacultyFilterActive =
-      facultyFilter.length > 0 &&
-      (facultyFilter.length !== 1 || facultyFilter[0] !== userId);
+      facultyFilter.length > 0 && facultyFilter[0] !== userId;
     if (isFacultyFilterActive) {
-      suggestions.push("try selecting different faculty");
+      suggestions.push("try selecting a different faculty");
     }
 
     // Check other filters
@@ -2588,6 +2680,9 @@ export function CourseDataTable({
               courses={filteredCourses}
               allCourses={baseFilteredCourses}
               onExport={handleExport}
+              userRole={userRole}
+              userId={userId}
+              faculties={faculties}
             />
 
             {/* Import Dialog */}
@@ -2882,12 +2977,20 @@ export function CourseDataTable({
                             id="section-all"
                             checked={
                               tempSectionFilter.length === 0 ||
-                              tempSectionFilter.length ===
-                                availableSections.length
+                              availableSections.every((section) =>
+                                tempSectionFilter.some(
+                                  (s) =>
+                                    s.trim().toUpperCase() ===
+                                    section.trim().toUpperCase()
+                                )
+                              )
                             }
                             onCheckedChange={(checked) => {
                               if (checked) {
-                                setTempSectionFilter(availableSections);
+                                // Normalize sections when setting all
+                                setTempSectionFilter(
+                                  availableSections.map((s) => s.trim())
+                                );
                               } else {
                                 setTempSectionFilter([]);
                               }
@@ -2908,16 +3011,32 @@ export function CourseDataTable({
                           >
                             <Checkbox
                               id={`section-${section}`}
-                              checked={tempSectionFilter.includes(section)}
+                              checked={tempSectionFilter.some(
+                                (s) =>
+                                  s.trim().toUpperCase() ===
+                                  section.trim().toUpperCase()
+                              )}
                               onCheckedChange={(checked) => {
                                 if (checked) {
-                                  setTempSectionFilter((prev) => [
-                                    ...prev,
-                                    section,
-                                  ]);
+                                  // Add section if not already in filter (case-insensitive check)
+                                  setTempSectionFilter((prev) => {
+                                    const normalizedSection = section.trim();
+                                    const alreadyExists = prev.some(
+                                      (s) =>
+                                        s.trim().toUpperCase() ===
+                                        normalizedSection.toUpperCase()
+                                    );
+                                    if (alreadyExists) return prev;
+                                    return [...prev, normalizedSection];
+                                  });
                                 } else {
+                                  // Remove section (case-insensitive)
                                   setTempSectionFilter((prev) =>
-                                    prev.filter((s) => s !== section)
+                                    prev.filter(
+                                      (s) =>
+                                        s.trim().toUpperCase() !==
+                                        section.trim().toUpperCase()
+                                    )
                                   );
                                 }
                               }}

@@ -36,6 +36,7 @@ import {
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   useCourseAnalytics,
   useImportStudentsToCourse,
@@ -81,11 +82,16 @@ export function CourseDashboard({
   initialAnalyticsData,
 }: CourseDashboardProps) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const userRole = session?.user?.role;
+  const userId = session?.user?.id;
+  const isAcademicHead = userRole === "ACADEMIC_HEAD";
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
   const [tableData, setTableData] = useState<StudentWithGrades[]>([]);
   const [stats, setStats] = useState<CourseStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([
     { id: "lastName", desc: false },
   ]);
@@ -150,11 +156,46 @@ export function CourseDashboard({
     return courseInfo?.status === "ARCHIVED";
   }, [courseInfo?.status]);
 
+  // Check if this is the Academic Head's own course
+  const isOwnCourse = useMemo(() => {
+    if (!courseInfo || !userId) return false;
+    return courseInfo.facultyId === userId;
+  }, [courseInfo, userId]);
+
+  // Check if Academic Head is viewing someone else's course (view-only)
+  const isViewOnly = useMemo(() => {
+    return isAcademicHead && !isOwnCourse;
+  }, [isAcademicHead, isOwnCourse]);
+
   // Update local state when React Query data changes
   useEffect(() => {
-    if (analyticsData) {
+    if (analyticsData && userId) {
       const { course, stats, students } = analyticsData;
-      setCourseInfo(course);
+
+      // Get facultyId from course (either directly or from faculty relation)
+      const courseFacultyId =
+        (course as any).facultyId || (course as any).faculty?.id;
+
+      // Authorization check: redirect if user is not course owner and not Academic Head
+      if (courseFacultyId) {
+        const isCourseOwner = courseFacultyId === userId;
+        const hasAccess = isCourseOwner || isAcademicHead;
+
+        if (!hasAccess) {
+          setIsUnauthorized(true);
+          toast.error("You don't have access to this course");
+          setTimeout(() => {
+            router.push(backUrl);
+          }, 1500);
+          return;
+        }
+      }
+
+      // Set courseInfo with facultyId
+      setCourseInfo({
+        ...course,
+        facultyId: courseFacultyId,
+      });
       setStats(stats);
       setTableData(students);
 
@@ -176,7 +217,7 @@ export function CourseDashboard({
         })
       );
     }
-  }, [analyticsData, courseSlug]);
+  }, [analyticsData, courseSlug, userId, isAcademicHead, router, backUrl]);
 
   useEffect(() => {
     setIsLoading(isLoadingAnalytics);
@@ -264,6 +305,14 @@ export function CourseDashboard({
   });
 
   const handleSelectExistingStudent = async (student: Student) => {
+    // Prevent view-only users from adding students
+    if (isViewOnly) {
+      toast.error(
+        "You don't have permission to manage students for this course"
+      );
+      return;
+    }
+
     try {
       // Format: "Last Name, First Name M."
       const fullName = `${student.lastName}, ${student.firstName}${
@@ -296,6 +345,23 @@ export function CourseDashboard({
     setIsRedirecting(true);
     router.push(backUrl);
   };
+
+  // Show unauthorized message
+  if (isUnauthorized) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] transition-opacity duration-200">
+        <div className="flex flex-col items-center justify-center h-96">
+          <p className="text-gray-500 text-lg mb-4">
+            You don't have access to this course
+          </p>
+          <Button onClick={handleBackNavigation} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Courses
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading skeleton when redirecting or when initial data is loading
   if (isLoading || isRedirecting) {
@@ -431,7 +497,7 @@ export function CourseDashboard({
                 <Download className="w-4 h-4" />
                 {!isSmallScreen && <span>Export</span>}
               </Button>
-              {!isArchived && (
+              {!isArchived && !isViewOnly && (
                 <>
                   <Button
                     onClick={() => setShowImportDialog(true)}
@@ -445,9 +511,7 @@ export function CourseDashboard({
                     {!isSmallScreen && <span>Import Students</span>}
                   </Button>
                   <Button
-                    onClick={() => {
-                      setShowAddSheet(true);
-                    }}
+                    onClick={() => setShowAddSheet(true)}
                     className={`${
                       isSmallScreen ? "" : "gap-2"
                     } bg-[#124A69] hover:bg-[#0D3A54] text-white`}
@@ -574,14 +638,14 @@ export function CourseDashboard({
                     <p className="text-gray-500 mb-4">
                       {isArchived
                         ? "This course is archived. Student management is disabled."
+                        : isViewOnly
+                        ? "You can view course data but cannot manage students for this course."
                         : "Start by adding students to this course"}
                     </p>
-                    {!isArchived && (
+                    {!isArchived && !isViewOnly && (
                       <div className="flex items-center gap-3 justify-center flex-wrap">
                         <Button
-                          onClick={() => {
-                            setShowAddSheet(true);
-                          }}
+                          onClick={() => setShowAddSheet(true)}
                           className="bg-[#124A69] hover:bg-[#0D3A54] text-white gap-2"
                         >
                           <Users className="w-4 h-4" />
@@ -728,44 +792,48 @@ export function CourseDashboard({
         />
 
         {/* Modals */}
-        <AddStudentSheet
-          isOpen={showAddSheet}
-          onOpenChange={setShowAddSheet}
-          enrolledStudentIds={tableData.map((s) => s.id)}
-          onSelectStudent={handleSelectExistingStudent}
-        />
+        {!isViewOnly && (
+          <>
+            <AddStudentSheet
+              isOpen={showAddSheet}
+              onOpenChange={setShowAddSheet}
+              enrolledStudentIds={tableData.map((s) => s.id)}
+              onSelectStudent={handleSelectExistingStudent}
+            />
 
-        <RemoveStudentSheet
-          isOpen={showRemoveSheet}
-          onOpenChange={setShowRemoveSheet}
-          students={studentsWithRecords}
-          isLoading={false}
-          courseSlug={courseSlug}
-          onRemoveSuccess={async () => {
-            // Data will be refetched automatically by React Query
-            // Dispatch custom event to refresh sidebar components
-            window.dispatchEvent(
-              new CustomEvent("courseStudentsUpdated", {
-                detail: { courseSlug },
-              })
-            );
-          }}
-        />
+            <RemoveStudentSheet
+              isOpen={showRemoveSheet}
+              onOpenChange={setShowRemoveSheet}
+              students={studentsWithRecords}
+              isLoading={false}
+              courseSlug={courseSlug}
+              onRemoveSuccess={async () => {
+                // Data will be refetched automatically by React Query
+                // Dispatch custom event to refresh sidebar components
+                window.dispatchEvent(
+                  new CustomEvent("courseStudentsUpdated", {
+                    detail: { courseSlug },
+                  })
+                );
+              }}
+            />
 
-        <StudentImportDialog
-          open={showImportDialog}
-          onOpenChange={setShowImportDialog}
-          courseSlug={courseSlug}
-          onImportComplete={async () => {
-            // Data will be refetched automatically by React Query
-            // Dispatch custom event to refresh sidebar components
-            window.dispatchEvent(
-              new CustomEvent("courseStudentsUpdated", {
-                detail: { courseSlug },
-              })
-            );
-          }}
-        />
+            <StudentImportDialog
+              open={showImportDialog}
+              onOpenChange={setShowImportDialog}
+              courseSlug={courseSlug}
+              onImportComplete={async () => {
+                // Data will be refetched automatically by React Query
+                // Dispatch custom event to refresh sidebar components
+                window.dispatchEvent(
+                  new CustomEvent("courseStudentsUpdated", {
+                    detail: { courseSlug },
+                  })
+                );
+              }}
+            />
+          </>
+        )}
       </div>
     </div>
   );

@@ -69,6 +69,7 @@ export interface CourseInfo {
   academicYear: string;
   slug: string;
   status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  facultyId?: string | null;
 }
 
 export interface ImportStatus {
