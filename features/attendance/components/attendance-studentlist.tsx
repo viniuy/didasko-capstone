@@ -71,7 +71,6 @@ import {
 import {
   useStudentsByCourse,
   useAttendanceByCourse,
-  useAllAttendanceByCourse,
   useAttendanceStats,
   useAttendanceDates,
   useRecordAttendance,
@@ -243,18 +242,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [cooldownMap, setCooldownMap] = useState<{ [key: string]: boolean }>(
     {}
   );
-  const [pendingUpdates, setPendingUpdates] = useState<{
-    [key: string]: {
-      studentId: string;
-      status: AttendanceStatus;
-      reason?: string | null;
-    };
-  }>({});
-  const [toastTimeout, setToastTimeout] = useState<NodeJS.Timeout | null>(null);
-  const latestUpdateRef = useRef<{
-    studentId: string;
-    status: AttendanceStatus;
-  } | null>(null);
+  const [savingStudents, setSavingStudents] = useState<Set<string>>(new Set());
   const [isUpdating, setIsUpdating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
@@ -263,6 +251,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [showTimeSetupModal, setShowTimeSetupModal] = useState(false);
   const [graceMinutes, setGraceMinutes] = useState<number>(5);
+  const [gracePeriodError, setGracePeriodError] = useState<string>("");
   const [restoredFromStorage, setRestoredFromStorage] = useState(false);
   const [attendanceStartTime, setAttendanceStartTime] = useState<Date | null>(
     null
@@ -280,6 +269,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [isScanning, setIsScanning] = useState(false);
   const rfidInputRef = useRef<HTMLInputElement>(null);
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastKeyTimeRef = useRef<number>(0);
+  const isRfidScanRef = useRef<boolean>(false);
   const batchSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [timeIn, setTimeIn] = useState<string>("");
   const [timeOut, setTimeOut] = useState<string>("");
@@ -390,44 +381,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const { data: studentsData, isLoading: isLoadingStudents } =
     useStudentsByCourse(courseSlug, selectedDate || undefined);
-  // Fetch all attendance data once, then filter client-side
-  const { data: allAttendanceData, isLoading: isLoadingAllAttendance } =
-    useAllAttendanceByCourse(courseSlug);
+
+  // Fetch attendance only for the selected date
+  const { data: attendanceData, isLoading: isLoadingAttendance } =
+    useAttendanceByCourse(
+      courseSlug,
+      selectedDateStr || "",
+      { limit: 1000 } // Fetch all records for the date
+    );
+
   const { data: attendanceStatsData } = useAttendanceStats(courseSlug);
   const { data: attendanceDatesData } = useAttendanceDates(courseSlug);
-
-  // Filter attendance data by selected date (client-side)
-  const attendanceData = useMemo(() => {
-    if (!allAttendanceData?.attendance || !selectedDateStr) {
-      return { attendance: [] };
-    }
-
-    const filtered = allAttendanceData.attendance.filter((record: any) => {
-      // Handle different date formats from API
-      let recordDate: string | null = null;
-      if (record.date) {
-        try {
-          // If it's already a string in YYYY-MM-DD format
-          if (
-            typeof record.date === "string" &&
-            record.date.match(/^\d{4}-\d{2}-\d{2}/)
-          ) {
-            recordDate = record.date.split("T")[0]; // Get date part only
-          } else {
-            // If it's a Date object or ISO string
-            recordDate = format(new Date(record.date), "yyyy-MM-dd");
-          }
-        } catch (e) {
-          console.error("Error parsing date:", record.date, e);
-        }
-      }
-      return recordDate === selectedDateStr;
-    });
-
-    return { attendance: filtered };
-  }, [allAttendanceData, selectedDateStr]);
-
-  const isLoadingAttendance = isLoadingAllAttendance;
 
   // React Query mutations
   const recordAttendanceMutation = useRecordAttendance();
@@ -825,20 +789,28 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const bulkUpdateStatus = async (status: AttendanceStatus) => {
     if (selectedStudents.length === 0) return;
 
+    // Clear selection immediately when user picks a status
+    const studentsToUpdate = [...selectedStudents];
+    setSelectedStudents([]);
+
     if (status === "EXCUSED") {
       setIsBulkExcuse(true);
       setShowExcuseModal(true);
+      // For EXCUSED, we need to keep the selection until modal is submitted
+      // So restore it temporarily - it will be cleared in updateBulkExcusedStatuses
+      setSelectedStudents(studentsToUpdate);
       return;
     }
 
-    selectedStudents.forEach((id) => {
+    // Exit selection mode after picking a status
+    setIsSelecting(false);
+
+    studentsToUpdate.forEach((id) => {
       const index = filteredStudents.findIndex((s) => s.id === id);
       if (index !== -1) {
         updateStatusContinue(index, status);
       }
     });
-
-    setSelectedStudents([]);
   };
 
   const updateBulkExcusedStatuses = async (
@@ -848,108 +820,89 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (studentIds.length === 0 || !reason.trim()) return;
 
     setIsUpdating(true);
-
-    const nextDay = new Date(selectedDate);
-    nextDay.setDate(nextDay.getDate() + 1);
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-    // Build the updates array
-    const updates = studentIds.map((id) => ({
-      studentId: id,
-      status: "EXCUSED" as AttendanceStatus,
-      reason: reason.trim(),
-    }));
+    // 1. IMMEDIATELY update local studentList array
+    setStudentList((prev) =>
+      prev.map((s) => {
+        if (studentIds.includes(s.id)) {
+          const existingRecordIndex = s.attendanceRecords.findIndex(
+            (r) => r.date === dateStr
+          );
+          const newRecord: AttendanceRecord = {
+            id:
+              existingRecordIndex >= 0
+                ? s.attendanceRecords[existingRecordIndex].id
+                : crypto.randomUUID(),
+            studentId: s.id,
+            courseId: courseSlug,
+            status: "EXCUSED",
+            date: dateStr,
+            reason: reason.trim(),
+          };
 
-    // Optimistically update UI
-    setPendingUpdates((prev) => {
-      const updated = { ...prev };
-      updates.forEach((u) => {
-        updated[u.studentId] = u;
-      });
-      return updated;
-    });
+          return {
+            ...s,
+            status: "EXCUSED",
+            attendanceRecords:
+              existingRecordIndex >= 0
+                ? s.attendanceRecords.map((r, idx) =>
+                    idx === existingRecordIndex ? newRecord : r
+                  )
+                : [...s.attendanceRecords, newRecord],
+          };
+        }
+        return s;
+      })
+    );
 
-    toast.loading("Updating excused students...", { id: "attendance-update" });
-
+    // 2. Save to database
+    setSavingStudents(new Set(studentIds));
     try {
       await recordAttendanceMutation.mutateAsync({
         courseSlug,
-        date: nextDay.toISOString(),
-        attendance: updates.map((u) => ({
-          studentId: u.studentId,
-          status: u.status,
-          reason: u.reason,
+        date: dateStr,
+        attendance: studentIds.map((id) => ({
+          studentId: id,
+          status: "EXCUSED" as AttendanceStatus,
+          reason: reason.trim(),
         })),
       });
-
-      // Update local state with attendance records including reason
-      const records = updates.map((update) => ({
-        id: crypto.randomUUID(),
-        studentId: update.studentId,
-        courseId: courseSlug,
-        status: update.status,
-        date: dateStr,
-        reason: update.reason,
-      }));
-
-      setStudentList((prev) =>
-        prev.map((s) => {
-          const update = updates.find((u) => u.studentId === s.id);
-          if (update) {
-            const record = records.find((r) => r.studentId === s.id);
-            const existingRecordIndex = s.attendanceRecords.findIndex(
-              (r) => r.date === dateStr
-            );
-            return {
-              ...s,
-              status: update.status,
-              attendanceRecords:
-                existingRecordIndex >= 0
-                  ? s.attendanceRecords.map((r, idx) =>
-                      idx === existingRecordIndex && record ? record : r
-                    )
-                  : record
-                  ? [...s.attendanceRecords, record]
-                  : s.attendanceRecords,
-            };
-          }
-          return s;
-        })
-      );
-
-      // Immediately refetch only the specific date's attendance data (not all dates)
-      const dateStr = format(selectedDate, "yyyy-MM-dd");
-      await Promise.all([
-        refetchAllAttendance(),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.dates(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.stats(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.students.byCourse(courseSlug),
-        }),
-      ]);
 
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
 
       toast.success(
-        `Excused ${updates.length} student${updates.length > 1 ? "s" : ""}`,
+        `Excused ${studentIds.length} student${
+          studentIds.length > 1 ? "s" : ""
+        }`,
         {
           id: "attendance-update",
         }
       );
     } catch (error) {
       console.error("Bulk excuse error:", error);
+      // Revert on error
+      setStudentList((prev) =>
+        prev.map((s) => {
+          if (studentIds.includes(s.id)) {
+            const record = s.attendanceRecords.find((r) => r.date === dateStr);
+            return {
+              ...s,
+              status: record?.status || "NOT_SET",
+            };
+          }
+          return s;
+        })
+      );
+      toast.dismiss("error-toast");
       toast.error("Failed to bulk excuse students", {
-        id: "attendance-update",
+        id: "error-toast",
       });
     } finally {
       setIsUpdating(false);
       setSelectedStudents([]);
-      setPendingUpdates({});
+      setSavingStudents(new Set());
     }
   };
 
@@ -964,6 +917,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       setExcuseReason("");
       setPendingExcusedStudent(null);
       setSelectedStudents([]);
+      // Exit selection mode after submitting excuse
+      setIsSelecting(false);
       return;
     }
 
@@ -977,6 +932,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     setPendingExcusedStudent(null);
   };
 
+  // Simple debounce ref for batching rapid updates
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingSavesRef = useRef<
+    Map<string, { status: AttendanceStatus; reason?: string | null }>
+  >(new Map());
+
   const updateStatusContinue = async (
     index: number,
     newStatus: AttendanceStatus,
@@ -986,185 +947,118 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const student = filteredStudents[actualIndex];
     if (!student) return;
 
-    if (cooldownMap[student.id]) {
-      return;
-    }
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-    setCooldownMap((prev) => ({ ...prev, [student.id]: true }));
-    setIsUpdating(true);
+    // 1. IMMEDIATELY update local studentList array
+    setStudentList((prev) =>
+      prev.map((s) => {
+        if (s.id === student.id) {
+          // Create or update attendance record
+          const existingRecordIndex = s.attendanceRecords.findIndex(
+            (r) => r.date === dateStr
+          );
+          const newRecord: AttendanceRecord = {
+            id:
+              existingRecordIndex >= 0
+                ? s.attendanceRecords[existingRecordIndex].id
+                : crypto.randomUUID(),
+            studentId: s.id,
+            courseId: courseSlug,
+            status: newStatus,
+            date: dateStr,
+            reason: reason ?? null,
+          };
 
-    const nextDay = new Date(selectedDate);
-    nextDay.setDate(nextDay.getDate() + 1);
+          return {
+            ...s,
+            status: newStatus,
+            attendanceRecords:
+              existingRecordIndex >= 0
+                ? s.attendanceRecords.map((r, idx) =>
+                    idx === existingRecordIndex ? newRecord : r
+                  )
+                : [...s.attendanceRecords, newRecord],
+          };
+        }
+        return s;
+      })
+    );
 
-    latestUpdateRef.current = { studentId: student.id, status: newStatus };
-
-    // Build the new pending update entry immediately
-    const newPendingUpdate = {
-      studentId: student.id,
+    // 2. Track this update for batching
+    pendingSavesRef.current.set(student.id, {
       status: newStatus,
       reason: reason ?? null,
-    };
-
-    // Update the state immediately
-    setPendingUpdates((prev) => ({
-      ...prev,
-      [student.id]: newPendingUpdate,
-    }));
-
-    if (toastTimeout) {
-      clearTimeout(toastTimeout);
-    }
-
-    toast.loading("Updating attendance... (feel free to add more students)", {
-      id: "attendance-update",
-      style: {
-        background: "#fff",
-        color: "#124A69",
-        border: "1px solid #e5e7eb",
-        boxShadow:
-          "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-        borderRadius: "0.5rem",
-        padding: "1rem",
-      },
     });
 
-    const timeout = setTimeout(async () => {
+    // 3. Mark student as saving
+    setSavingStudents((prev) => new Set(prev).add(student.id));
+
+    // 4. Clear existing timeout and set new one (debounce for batching)
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      const updatesToSave = Array.from(pendingSavesRef.current.entries()).map(
+        ([studentId, data]) => ({
+          studentId,
+          status: data.status,
+          reason: data.reason ?? undefined,
+        })
+      );
+
+      if (updatesToSave.length === 0) {
+        setSavingStudents(new Set());
+        return;
+      }
+
+      // Mark all students as saving
+      const savingIds = new Set(updatesToSave.map((u) => u.studentId));
+      setSavingStudents(savingIds);
+
       try {
-        const updates = Object.values({
-          ...pendingUpdates,
-          [student.id]: newPendingUpdate,
-        });
-
-        if (latestUpdateRef.current) {
-          const latestUpdate = latestUpdateRef.current;
-          if (
-            !updates.some(
-              (update) => update.studentId === latestUpdate.studentId
-            )
-          ) {
-            updates.push(latestUpdate);
-          }
-        }
-
-        if (updates.length === 0) {
-          setIsUpdating(false);
-          return;
-        }
-
-        const promise = recordAttendanceMutation.mutateAsync({
+        // Save to database
+        await recordAttendanceMutation.mutateAsync({
           courseSlug,
-          date: nextDay.toISOString(),
-          attendance: updates.map((u) => ({
-            studentId: u.studentId,
-            status: u.status,
-            reason: u.reason ?? undefined,
-          })),
+          date: dateStr,
+          attendance: updatesToSave,
         });
 
+        // Clear pending saves
+        pendingSavesRef.current.clear();
+
+        // Clear saving state
+        setSavingStudents(new Set());
+
+        // Dispatch event to update right sidebar
+        dispatchAttendanceUpdate();
+      } catch (error) {
+        console.error("Error saving attendance:", error);
+        toast.dismiss("error-toast");
+        toast.error("Failed to save attendance", {
+          id: "error-toast",
+        });
+        // Revert local state on error
         setStudentList((prev) =>
           prev.map((s) => {
-            const update = updates.find((u) => u.studentId === s.id);
+            const update = updatesToSave.find((u) => u.studentId === s.id);
             if (update) {
-              return { ...s, status: update.status };
-            }
-            return s;
-          })
-        );
-
-        await promise;
-
-        const records = updates.map((update) => ({
-          id: crypto.randomUUID(),
-          studentId: update.studentId,
-          courseId: courseSlug!,
-          status: update.status,
-          date: format(selectedDate, "yyyy-MM-dd"),
-          reason: update.reason ?? null,
-        }));
-
-        setStudentList((prev) =>
-          prev.map((s) => {
-            const record = records.find((r) => r.studentId === s.id);
-            if (record) {
+              // Revert to previous status (NOT_SET or find from attendanceRecords)
+              const record = s.attendanceRecords.find(
+                (r) => r.date === dateStr
+              );
               return {
                 ...s,
-                status: record.status,
-                attendanceRecords: [record],
+                status: record?.status || "NOT_SET",
               };
             }
             return s;
           })
         );
-
-        setPendingUpdates({});
-        latestUpdateRef.current = null;
-
-        // Immediately refetch only the specific date's attendance data (not all dates)
-        const dateStr = format(selectedDate, "yyyy-MM-dd");
-        await Promise.all([
-          refetchAllAttendance(),
-          queryClient.refetchQueries({
-            queryKey: queryKeys.attendance.dates(courseSlug),
-          }),
-          queryClient.refetchQueries({
-            queryKey: queryKeys.attendance.stats(courseSlug),
-          }),
-          queryClient.refetchQueries({
-            queryKey: queryKeys.students.byCourse(courseSlug),
-          }),
-        ]);
-
-        // Dispatch event to update right sidebar
-        dispatchAttendanceUpdate();
-
-        toast.success(
-          `Updated ${updates.length} student${updates.length > 1 ? "s" : ""}`,
-          {
-            id: "attendance-update",
-            style: {
-              background: "#fff",
-              color: "#124A69",
-              border: "1px solid #e5e7eb",
-              boxShadow:
-                "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-              borderRadius: "0.5rem",
-              padding: "1rem",
-            },
-          }
-        );
-      } catch (error) {
-        console.error("Error saving attendance:", error);
-        setStudentList((prev) =>
-          prev.map((s) => {
-            const update = Object.values(pendingUpdates).find(
-              (u) => u.studentId === s.id
-            );
-            if (update) {
-              return { ...s, status: "NOT_SET" };
-            }
-            return s;
-          })
-        );
-
-        toast.error("Failed to update attendance", {
-          id: "attendance-update",
-          style: {
-            background: "#fff",
-            color: "#dc2626",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-        });
-      } finally {
-        setCooldownMap({});
-        setIsUpdating(false);
+        // Clear saving state on error
+        setSavingStudents(new Set());
       }
-    }, 1000);
-
-    setToastTimeout(timeout);
+    }, 500); // 500ms debounce for batching
   };
 
   const updateStatus = async (index: number, newStatus: AttendanceStatus) => {
@@ -1211,28 +1105,38 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       graceTimeoutTimer,
       scanTimeoutRef.current,
       batchSaveTimeoutRef.current,
-      toastTimeout,
+      saveTimeoutRef.current,
     ].filter(Boolean);
 
     return () => {
       timers.forEach((timer) => timer && clearTimeout(timer));
     };
-  }, [timeoutTimer, gracePeriodTimer, graceTimeoutTimer, toastTimeout]);
+  }, [timeoutTimer, gracePeriodTimer, graceTimeoutTimer]);
 
   const currentStudents = useMemo(() => {
     const startIdx = (currentPage - 1) * itemsPerPage;
     return filteredStudents.slice(startIdx, startIdx + itemsPerPage);
   }, [filteredStudents, currentPage, itemsPerPage]);
 
+  // Check if any student's attendance is being saved
+  const isAnyStudentSaving = useMemo(() => {
+    return savingStudents.size > 0;
+  }, [savingStudents]);
+
   const handleExport = async () => {
     if (!selectedDate) {
-      toast.error("Please select a date before exporting");
+      toast.dismiss("error-toast");
+      toast.error("Please select a date before exporting", {
+        id: "error-toast",
+      });
       return;
     }
 
     if (filteredStudents.some((student) => student.status === "NOT_SET")) {
+      toast.dismiss("error-toast");
       toast.error(
-        "Please set attendance status for all students before exporting"
+        "Please set attendance status for all students before exporting",
+        { id: "error-toast" }
       );
       return;
     }
@@ -1338,7 +1242,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       setShowExportPreview(false);
     } catch (error) {
       console.error("Export error:", error);
-      toast.error("Failed to export attendance data");
+      toast.dismiss("error-toast");
+      toast.error("Failed to export attendance data", {
+        id: "error-toast",
+      });
     }
   };
 
@@ -1355,7 +1262,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
-        toast.error("No worksheet found in the Excel file");
+        toast.dismiss("error-toast");
+        toast.error("No worksheet found in the Excel file", {
+          id: "error-toast",
+        });
         return;
       }
 
@@ -1398,7 +1308,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       });
 
       if (jsonData.length === 0) {
-        toast.error("No valid data found in the Excel file");
+        toast.dismiss("error-toast");
+        toast.error("No valid data found in the Excel file", {
+          id: "error-toast",
+        });
         return;
       }
 
@@ -1426,7 +1339,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       toast.success("Excel file imported successfully");
     } catch (error) {
       console.error("Error importing Excel file:", error);
-      toast.error("Failed to import Excel file");
+      toast.dismiss("error-toast");
+      toast.error("Failed to import Excel file", {
+        id: "error-toast",
+      });
     }
   };
 
@@ -1466,7 +1382,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       toast.success("Student added successfully");
     } catch (error) {
       console.error("Error adding student:", error);
-      toast.error("Failed to add student");
+      toast.dismiss("error-toast");
+      toast.error("Failed to add student", {
+        id: "error-toast",
+      });
     }
   };
 
@@ -1499,8 +1418,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       toast.success("Student added successfully");
     } catch (error) {
       console.error("Error adding existing student:", error);
+      toast.dismiss("error-toast");
       toast.error(
-        error instanceof Error ? error.message : "Failed to add student"
+        error instanceof Error ? error.message : "Failed to add student",
+        { id: "error-toast" }
       );
     }
   };
@@ -1519,7 +1440,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const clearAllAttendance = async () => {
     if (!selectedDate || !courseSlug) {
-      toast.error("Please select a date before clearing attendance");
+      toast.dismiss("error-toast");
+      toast.error("Please select a date before clearing attendance", {
+        id: "error-toast",
+      });
       return;
     }
 
@@ -1544,13 +1468,20 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       .filter((id): id is string => !!id);
 
     if (recordsToDelete.length === 0) {
-      toast.error("No attendance records to clear");
+      toast.dismiss("error-toast");
+      toast.error("No attendance records to clear", {
+        id: "error-toast",
+      });
       setIsClearing(false);
       setCooldownMap({});
       return;
     }
 
     try {
+      // Clear any pending saves for this date
+      pendingSavesRef.current.clear();
+      setPendingAttendanceUpdates({});
+
       // Optimistically update UI first
       setStudentList((prev) =>
         prev.map((student) => ({
@@ -1562,10 +1493,21 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         }))
       );
 
-      // Clear attendance via mutation
+      // Clear attendance via mutation (this clears in the database)
       await clearAttendanceMutation.mutateAsync({
         courseSlug,
         date: dateStr,
+      });
+
+      // Invalidate the attendance query for this specific date to ensure fresh data
+      queryClient.invalidateQueries({
+        queryKey: [...queryKeys.attendance.byCourse(courseSlug), dateStr],
+      });
+      // Invalidate attendance dates to remove the cleared date from the list
+      // Use refetchType: 'active' to only refetch active queries, preventing errors from cancelled queries
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.attendance.dates(courseSlug),
+        refetchType: "active", // Only refetch active queries
       });
 
       setShowClearConfirm(false);
@@ -1574,23 +1516,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       // Show success toast
       toast.success("Attendance cleared successfully");
 
-      // Immediately refetch all attendance-related data for real-time updates
-      // Use the specific date in the query key to ensure correct refetch
-      await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: [...queryKeys.attendance.byCourse(courseSlug), dateStr],
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.dates(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.stats(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.students.byCourse(courseSlug),
-        }),
-      ]);
-
+      // Update local attendance dates list
       setAttendanceDates((prev) =>
         prev.filter((d) => format(d, "yyyy-MM-dd") !== dateStr)
       );
@@ -1601,7 +1527,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         setAttendanceStartTime(null);
         setShowTimeoutModal(false);
         setIsInGracePeriod(false);
-        setPendingUpdates({});
+        pendingSavesRef.current.clear();
         setCurrentPage(1);
         setShowTimeSetupModal(true);
       }
@@ -1736,7 +1662,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const startAttendance = async () => {
     if (!selectedDate || !courseSlug) {
-      toast.error("Please select a date before starting attendance");
+      toast.dismiss("error-toast");
+      toast.error("Please select a date before starting attendance", {
+        id: "error-toast",
+      });
       return;
     }
 
@@ -1771,7 +1700,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       toast.success("Attendance session started successfully");
     } catch (error) {
       console.error("Error starting attendance:", error);
-      toast.error("Failed to start attendance");
+      toast.dismiss("error-toast");
+      toast.error("Failed to start attendance", {
+        id: "error-toast",
+      });
     }
   };
 
@@ -1913,14 +1845,18 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               rfid_id: s.rfid_id,
             })),
           });
+          toast.dismiss("error-toast");
           toast.error("Student not found in this course for this RFID", {
+            id: "error-toast",
             duration: 2000,
           });
           return;
         }
 
         if (student.status !== "NOT_SET") {
+          toast.dismiss("error-toast");
           toast.error(`${student.name} already marked as ${student.status}`, {
+            id: "error-toast",
             duration: 2000,
           });
           return;
@@ -1964,7 +1900,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         // This optimizes performance by batching all updates at once
       } catch (error) {
         console.error("RFID processing error:", error);
-        toast.error("Failed to process RFID", { duration: 2000 });
+        toast.dismiss("error-toast");
+        toast.error("Failed to process RFID", {
+          id: "error-toast",
+          duration: 2000,
+        });
       } finally {
         setIsProcessingRfid(false);
       }
@@ -1982,15 +1922,35 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   const handleRfidInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    const now = Date.now();
+    const timeSinceLastKey = now - lastKeyTimeRef.current;
 
-    // Debug: Log what we're receiving
-    if (process.env.NODE_ENV === "development") {
-      console.log("RFID input received:", {
-        value,
-        length: value.length,
-        isScanning,
-        currentInputRef: rfidInputRef.current?.value,
-      });
+    // RFID scanners send data very quickly (< 1ms between characters)
+    // Keyboard typing is much slower (> 1ms between characters)
+    // If time between keystrokes is too long, it's keyboard typing - ignore it
+    if (lastKeyTimeRef.current > 0 && timeSinceLastKey > 100) {
+      // This is keyboard typing, not RFID scanner - reset and ignore
+      if (rfidInputRef.current) {
+        rfidInputRef.current.value = "";
+      }
+      setRfidInput("");
+      isRfidScanRef.current = false;
+      lastKeyTimeRef.current = 0;
+      return;
+    }
+
+    // Update last key time
+    lastKeyTimeRef.current = now;
+
+    // If this is the first character, mark as potential RFID scan
+    if (value.length === 1) {
+      isRfidScanRef.current = true;
+      setIsScanning(true);
+    }
+
+    // If not a valid RFID scan, ignore
+    if (!isRfidScanRef.current) {
+      return;
     }
 
     // Clear any existing timeout
@@ -1998,49 +1958,35 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       clearTimeout(scanTimeoutRef.current);
     }
 
-    // Update the input value immediately
+    // Update the input value
     setRfidInput(value);
 
-    // If this is the first character, start scanning mode
-    if (value.length === 1 && !isScanning) {
-      setIsScanning(true);
-    }
-
-    // RFID scanners typically send data very quickly (all at once)
-    // Wait for a short period after the last character to ensure we have the complete scan
-    // Use a longer timeout to ensure we capture the full RFID value (10+ digits)
+    // RFID scanners send complete data quickly, then usually send Enter key
+    // Wait a short time after last character to process complete scan
     scanTimeoutRef.current = setTimeout(async () => {
-      // Get the current value from the input ref to ensure we have the latest
-      // This is important because the value might have changed between the event and now
       const currentValue = rfidInputRef.current?.value || value;
 
-      // Debug: Log what we're processing
-      if (process.env.NODE_ENV === "development") {
-        console.log("Processing RFID:", {
-          originalValue: value,
-          currentValue,
-          currentValueLength: currentValue.length,
-        });
-      }
-
-      if (currentValue && currentValue.length > 0) {
+      // Only process if we have a value and it was a valid RFID scan
+      if (currentValue && currentValue.length > 0 && isRfidScanRef.current) {
         // Process the complete RFID value
         await processRfidAttendance(currentValue);
       }
 
-      // Clear input but keep scanning state if input is still focused
+      // Reset everything
       setRfidInput("");
+      isRfidScanRef.current = false;
+      lastKeyTimeRef.current = 0;
+
       if (rfidInputRef.current) {
         rfidInputRef.current.value = "";
-        // Check if input is still focused - if so, keep scanning state
-        if (document.activeElement === rfidInputRef.current) {
-          // Input is still focused, keep scanning state
-          return;
+        // Keep scanning state if input is still focused
+        if (document.activeElement !== rfidInputRef.current) {
+          setIsScanning(false);
         }
+      } else {
+        setIsScanning(false);
       }
-      // Only set to false if input is not focused
-      setIsScanning(false);
-    }, 500); // Increased timeout to 500ms to ensure full RFID is captured (for 10+ digit RFIDs)
+    }, 100); // Short timeout - RFID scanners send data very quickly
   };
 
   const batchUpdateAttendance = async (overrideUpdates?: {
@@ -2133,34 +2079,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       await updatePromise;
 
-      // Immediately refetch only the specific date's attendance data (not all dates)
-      await Promise.all([
-        refetchAllAttendance(),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.dates(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.stats(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.students.byCourse(courseSlug),
-        }),
-      ]);
+      // Note: Don't refetch attendance data - mutations already handle invalidations
+      // Data will be refetched when components need it
 
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
-
-      toast.success(
-        `Saved ${Object.keys(sourceUpdates).length} attendance record(s)`,
-        {
-          id: "rfid-attendance-saving",
-          duration: 2000,
-        }
-      );
     } catch (error) {
       console.error("Error batch updating attendance:", error);
+      toast.dismiss("error-toast");
       toast.error("Failed to batch update attendance", {
-        id: "rfid-attendance-saving",
+        id: "error-toast",
       });
       // Attendance will be refetched automatically by React Query
     } finally {
@@ -2239,82 +2167,80 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     }
 
     setIsMarkingAll(true);
-    const allStudentCooldowns = studentList.reduce((acc, student) => {
-      acc[student.id] = true;
-      return acc;
-    }, {} as { [key: string]: boolean });
-    setCooldownMap(allStudentCooldowns);
-
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-    try {
-      const attendanceRecords = studentList.map((student) => ({
-        studentId: student.id,
-        status: "PRESENT" as AttendanceStatus,
-      }));
+    // 1. IMMEDIATELY update local studentList array
+    setStudentList((prev) =>
+      prev.map((student) => {
+        const existingRecordIndex = student.attendanceRecords.findIndex(
+          (r) => r.date === dateStr
+        );
+        const newRecord: AttendanceRecord = {
+          id:
+            existingRecordIndex >= 0
+              ? student.attendanceRecords[existingRecordIndex].id
+              : crypto.randomUUID(),
+          studentId: student.id,
+          courseId: courseSlug,
+          status: "PRESENT",
+          date: dateStr,
+          reason: null,
+        };
 
-      const promise = recordAttendanceMutation.mutateAsync({
-        courseSlug,
-        date: dateStr,
-        attendance: attendanceRecords,
-      });
-
-      toast.promise(promise, {
-        loading: "Marking all students as present...",
-        success: "All students marked as present",
-        error: "Failed to mark students as present",
-      });
-
-      setStudentList((prev) =>
-        prev.map((student) => ({
+        return {
           ...student,
           status: "PRESENT",
-          attendanceRecords: [
-            {
-              id: crypto.randomUUID(),
-              studentId: student.id,
-              courseId: courseSlug,
-              status: "PRESENT",
-              date: dateStr,
-              reason: null,
-            },
-          ],
-        }))
-      );
+          attendanceRecords:
+            existingRecordIndex >= 0
+              ? student.attendanceRecords.map((r, idx) =>
+                  idx === existingRecordIndex ? newRecord : r
+                )
+              : [...student.attendanceRecords, newRecord],
+        };
+      })
+    );
 
-      await promise;
+    // 2. Save to database
+    const allStudentIds = new Set(studentList.map((s) => s.id));
+    setSavingStudents(allStudentIds);
+    try {
+      await recordAttendanceMutation.mutateAsync({
+        courseSlug,
+        date: dateStr,
+        attendance: studentList.map((student) => ({
+          studentId: student.id,
+          status: "PRESENT" as AttendanceStatus,
+        })),
+      });
+
       setShowMarkAllConfirm(false);
-
-      // Immediately refetch all attendance-related data for real-time updates
-      await Promise.all([
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.byCourse(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.dates(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.stats(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.students.byCourse(courseSlug),
-        }),
-      ]);
 
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
+
+      toast.success("All students marked as present");
     } catch (error) {
       console.error("Error marking all as present:", error);
+      // Revert on error
       setStudentList((prev) =>
-        prev.map((student) => ({
-          ...student,
-          status: "NOT_SET",
-          attendanceRecords: [],
-        }))
+        prev.map((student) => {
+          const record = student.attendanceRecords.find(
+            (r) => r.date === dateStr
+          );
+          return {
+            ...student,
+            status: record?.status || "NOT_SET",
+          };
+        })
       );
+      toast.dismiss("error-toast");
+      toast.error("Failed to mark students as present", {
+        id: "error-toast",
+      });
     } finally {
       setIsMarkingAll(false);
       setCooldownMap({});
+      setSavingStudents(new Set());
     }
   };
 
@@ -2326,82 +2252,89 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
     const lateStudents = studentList.filter((s) => s.status === "LATE");
     if (lateStudents.length === 0) {
-      toast.error("No late students to mark as present");
+      toast.dismiss("error-toast");
+      toast.error("No late students to mark as present", {
+        id: "error-toast",
+      });
       return;
     }
 
     setIsMarkingAll(true);
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-    try {
-      const attendanceRecords = lateStudents.map((student) => ({
-        studentId: student.id,
-        status: "PRESENT" as AttendanceStatus,
-      }));
+    // 1. IMMEDIATELY update local studentList array
+    setStudentList((prev) =>
+      prev.map((student) => {
+        if (student.status === "LATE") {
+          const existingRecordIndex = student.attendanceRecords.findIndex(
+            (r) => r.date === dateStr
+          );
+          const newRecord: AttendanceRecord = {
+            id:
+              existingRecordIndex >= 0
+                ? student.attendanceRecords[existingRecordIndex].id
+                : crypto.randomUUID(),
+            studentId: student.id,
+            courseId: courseSlug,
+            status: "PRESENT",
+            date: dateStr,
+            reason: null,
+          };
 
-      const promise = recordAttendanceMutation.mutateAsync({
+          return {
+            ...student,
+            status: "PRESENT",
+            attendanceRecords:
+              existingRecordIndex >= 0
+                ? student.attendanceRecords.map((r, idx) =>
+                    idx === existingRecordIndex ? newRecord : r
+                  )
+                : [...student.attendanceRecords, newRecord],
+          };
+        }
+        return student;
+      })
+    );
+
+    // 2. Save to database
+    const lateStudentIds = new Set(lateStudents.map((s) => s.id));
+    setSavingStudents(lateStudentIds);
+    try {
+      await recordAttendanceMutation.mutateAsync({
         courseSlug,
         date: dateStr,
-        attendance: attendanceRecords,
+        attendance: lateStudents.map((student) => ({
+          studentId: student.id,
+          status: "PRESENT" as AttendanceStatus,
+        })),
       });
-
-      toast.promise(promise, {
-        loading: "Marking late students as present...",
-        success: "Late students marked as present",
-        error: "Failed to mark late students as present",
-      });
-
-      setStudentList((prev) =>
-        prev.map((student) =>
-          student.status === "LATE"
-            ? {
-                ...student,
-                status: "PRESENT",
-                attendanceRecords: [
-                  {
-                    id: crypto.randomUUID(),
-                    studentId: student.id,
-                    courseId: courseSlug!,
-                    status: "PRESENT",
-                    date: dateStr,
-                    reason: null,
-                  },
-                ],
-              }
-            : student
-        )
-      );
-
-      await promise;
-
-      // Immediately refetch only the specific date's attendance data (not all dates)
-      await Promise.all([
-        refetchAllAttendance(),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.dates(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.attendance.stats(courseSlug),
-        }),
-        queryClient.refetchQueries({
-          queryKey: queryKeys.students.byCourse(courseSlug),
-        }),
-      ]);
 
       // Dispatch event to update right sidebar
       dispatchAttendanceUpdate();
     } catch (error) {
       console.error("Error marking late as present:", error);
+      // Revert on error
       setStudentList((prev) =>
-        prev.map((student) =>
-          student.status === "PRESENT" &&
-          lateStudents.find((ls) => ls.id === student.id)
-            ? { ...student, status: "LATE" }
-            : student
-        )
+        prev.map((student) => {
+          if (lateStudents.find((ls) => ls.id === student.id)) {
+            const record = student.attendanceRecords.find(
+              (r) => r.date === dateStr
+            );
+            return {
+              ...student,
+              status: record?.status || "LATE",
+            };
+          }
+          return student;
+        })
       );
+      toast.dismiss("error-toast");
+      toast.error("Failed to mark late students as present", {
+        id: "error-toast",
+      });
     } finally {
       setIsMarkingAll(false);
+      setSavingStudents(new Set());
     }
   };
 
@@ -2422,9 +2355,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           isSelected={selectedStudents.includes(student.id)}
           onSelect={isSelecting ? handleSelectStudent : undefined}
           isSelecting={isSelecting}
-          disableStatusChange={isSelecting}
+          disableStatusChange={isSelecting || savingStudents.has(student.id)}
           isSavingRfidAttendance={isSavingRfidAttendance}
-          isLoading={isDateLoading && !isInitialLoad}
+          isLoading={savingStudents.has(student.id) || isDateLoading}
         />
       </div>
     ));
@@ -2436,6 +2369,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     isSavingRfidAttendance,
     isDateLoading,
     isInitialLoad,
+    savingStudents,
   ]);
 
   if (isLoading) {
@@ -2516,7 +2450,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   value={searchQuery}
                   onChange={handleSearch}
                   disabled={
-                    !hasAttendanceForSelectedDate || isSavingRfidAttendance
+                    !hasAttendanceForSelectedDate ||
+                    isSavingRfidAttendance ||
+                    isAnyStudentSaving
                   }
                 />
                 {searchQuery && (
@@ -2524,7 +2460,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                     onClick={() => setSearchQuery("")}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     disabled={
-                      !hasAttendanceForSelectedDate || isSavingRfidAttendance
+                      !hasAttendanceForSelectedDate ||
+                      isSavingRfidAttendance ||
+                      isAnyStudentSaving
                     }
                   >
                     <svg
@@ -2544,7 +2482,24 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   </button>
                 )}
               </div>
-              <Popover open={open} onOpenChange={setOpen}>
+              <Popover
+                open={open && !attendanceStartTime}
+                onOpenChange={(open) => {
+                  // Prevent opening the popover if attendance is ongoing
+                  if (attendanceStartTime && open) {
+                    toast.dismiss("error-toast");
+                    toast.error(
+                      "Cannot change date while attendance is ongoing. Please end the session first.",
+                      {
+                        id: "error-toast",
+                        duration: 3000,
+                      }
+                    );
+                    return;
+                  }
+                  setOpen(open);
+                }}
+              >
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
@@ -2554,7 +2509,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       isUpdating ||
                       isClearing ||
                       isMarkingAll ||
-                      isSavingRfidAttendance
+                      isSavingRfidAttendance ||
+                      !!attendanceStartTime ||
+                      isAnyStudentSaving
                     }
                   >
                     <span className="truncate">
@@ -2581,12 +2538,29 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       mode="single"
                       selected={selectedDate}
                       onSelect={(date) => {
+                        // Prevent date selection if attendance is ongoing
+                        if (attendanceStartTime) {
+                          toast.dismiss("error-toast");
+                          toast.error(
+                            "Cannot change date while attendance is ongoing. Please end the session first.",
+                            {
+                              id: "error-toast",
+                              duration: 3000,
+                            }
+                          );
+                          setOpen(false);
+                          return;
+                        }
                         if (date) {
                           setSelectedDate(date);
                           setOpen(false);
                         }
                       }}
                       disabled={(date) => {
+                        // If attendance is ongoing, disable all dates
+                        if (attendanceStartTime) {
+                          return true;
+                        }
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
                         const jan2025 = new Date(2025, 0, 1);
@@ -2649,7 +2623,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                     isDateLoading ||
                     isClearing ||
                     isMarkingAll ||
-                    isSavingRfidAttendance
+                    isSavingRfidAttendance ||
+                    isAnyStudentSaving
                   }
                 >
                   <MoreHorizontal className="h-4 w-4" />
@@ -2665,7 +2640,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                     isClearing ||
                     isMarkingAll ||
                     isSavingRfidAttendance ||
-                    !hasAttendanceForSelectedDate
+                    !hasAttendanceForSelectedDate ||
+                    isAnyStudentSaving
                   }
                 >
                   Mark All as Present
@@ -2679,7 +2655,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                     isClearing ||
                     isMarkingAll ||
                     isSavingRfidAttendance ||
-                    !hasAttendanceForSelectedDate
+                    !hasAttendanceForSelectedDate ||
+                    isAnyStudentSaving
                   }
                 >
                   Mark All Late as Present
@@ -2707,7 +2684,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   <Button
                     variant="outline"
                     className="rounded-full shadow-md bg-[#FAEDCB] border-gray-200 hover:bg-[#f1deb1]"
-                    disabled={isSaving || isUpdating || isSavingRfidAttendance}
+                    disabled={
+                      isSaving ||
+                      isUpdating ||
+                      isSavingRfidAttendance ||
+                      isAnyStudentSaving
+                    }
                   >
                     Mark Selected Students as...
                   </Button>
@@ -2716,25 +2698,25 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuItem
                     onClick={() => bulkUpdateStatus("PRESENT")}
-                    disabled={isSavingRfidAttendance}
+                    disabled={isSavingRfidAttendance || isAnyStudentSaving}
                   >
                     Present
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => bulkUpdateStatus("LATE")}
-                    disabled={isSavingRfidAttendance}
+                    disabled={isSavingRfidAttendance || isAnyStudentSaving}
                   >
                     Late
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => bulkUpdateStatus("ABSENT")}
-                    disabled={isSavingRfidAttendance}
+                    disabled={isSavingRfidAttendance || isAnyStudentSaving}
                   >
                     Absent
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => bulkUpdateStatus("EXCUSED")}
-                    disabled={isSavingRfidAttendance}
+                    disabled={isSavingRfidAttendance || isAnyStudentSaving}
                   >
                     Excused
                   </DropdownMenuItem>
@@ -2764,7 +2746,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   !hasAttendanceForSelectedDate ||
                   isSavingRfidAttendance ||
                   isClearing ||
-                  isMarkingAll
+                  isMarkingAll ||
+                  isAnyStudentSaving
                 }
               >
                 <MousePointerClick
@@ -2782,7 +2765,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   isClearing ||
                   isMarkingAll ||
                   isSavingRfidAttendance ||
-                  !hasAttendanceForSelectedDate
+                  !hasAttendanceForSelectedDate ||
+                  isAnyStudentSaving
                 }
               >
                 <Filter className="h-4 w-4" />
@@ -2819,7 +2803,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   isClearing ||
                   isMarkingAll ||
                   isSavingRfidAttendance ||
-                  !hasAttendanceForSelectedDate
+                  !hasAttendanceForSelectedDate ||
+                  isAnyStudentSaving
                 }
               >
                 <Download className="h-4 w-4" />
@@ -3380,62 +3365,110 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       {/* Time Setup Modal */}
       <Dialog open={showTimeSetupModal} onOpenChange={setShowTimeSetupModal}>
-        <DialogContent className="max-w-[500px] p-6">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-[#124A69]">
-              Set Attendance Grace Period
+        <DialogContent className="max-w-[600px] p-8">
+          <DialogHeader className="text-center space-y-2">
+            <DialogTitle className="text-2xl font-bold text-[#124A69]">
+              Start Attendance Session
             </DialogTitle>
-            <DialogDescription className="text-gray-500">
-              Set the grace period for this attendance session.
+            <DialogDescription className="text-base text-gray-600">
+              Configure your attendance session settings
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Grace Period (minutes)
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={60}
-                  value={graceMinutes}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (isNaN(v) || v <= 0) {
-                      setGraceMinutes(1);
-                      toast.error("Grace period must be at least 1 minute");
-                    } else {
-                      setGraceMinutes(v);
-                    }
-                  }}
-                  className="w-full"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Late arrivals within this window are marked LATE
-                </p>
+          <div className="space-y-8 py-4">
+            <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-[#124A69] flex items-center justify-center flex-shrink-0">
+                    <svg
+                      className="w-6 h-6 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-base font-semibold text-gray-900 block mb-1">
+                      Grace Period
+                    </label>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Students arriving within this time will be marked as LATE
+                      instead of ABSENT
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-4">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={45}
+                          step={1}
+                          value={graceMinutes}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setGracePeriodError(""); // Clear error on change
+                            if (isNaN(v) || v <= 0) {
+                              setGraceMinutes(1);
+                              setGracePeriodError(
+                                "Grace period must be at least 1 minute"
+                              );
+                            } else if (v > 45) {
+                              setGraceMinutes(45);
+                              setGracePeriodError(
+                                "Grace period cannot exceed 45 minutes"
+                              );
+                            } else {
+                              setGraceMinutes(Math.floor(v)); // Ensure it's a whole number
+                            }
+                          }}
+                          className={`w-24 text-center text-lg font-semibold ${
+                            gracePeriodError
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : ""
+                          }`}
+                          required
+                        />
+                        <span className="text-base text-gray-700 font-medium">
+                          {graceMinutes === 1 ? "minute" : "minutes"}
+                        </span>
+                      </div>
+                      {gracePeriodError && (
+                        <p className="text-sm text-red-600 font-medium">
+                          {gracePeriodError}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Maximum: 45 minutes
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={() => setShowTimeSetupModal(false)}
+                variant="outline"
+                className="flex-1 h-12 text-base"
+                disabled={isSavingRfidAttendance}
+              >
+                Cancel
+              </Button>
               <Button
                 onClick={confirmAttendanceStart}
                 disabled={
                   isSavingRfidAttendance || !graceMinutes || graceMinutes <= 0
                 }
-                className="flex-1 bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                className="flex-1 h-12 text-base bg-[#124A69] hover:bg-[#0D3A54] text-white font-semibold"
               >
-                Start Attendance Session
-              </Button>
-              <Button
-                onClick={() => setShowTimeSetupModal(false)}
-                variant="outline"
-                className="flex-1"
-                disabled={isSavingRfidAttendance}
-              >
-                Cancel
+                Start Session
               </Button>
             </div>
           </div>
@@ -3463,6 +3496,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               rfidInputRef.current.value = "";
             }
             setRfidInput("");
+            // Reset RFID scan detection
+            isRfidScanRef.current = false;
+            lastKeyTimeRef.current = 0;
             setShowTimeoutModal(false);
             return;
           }
@@ -3481,6 +3517,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               image: undefined,
               studentId: "",
             });
+            // Reset RFID scan detection
+            isRfidScanRef.current = false;
+            lastKeyTimeRef.current = 0;
+            // Clear grace period error when opening modal
+            setGracePeriodError("");
             // Focus the input with multiple attempts to ensure it works
             const focusInput = () => {
               if (rfidInputRef.current) {
@@ -3517,8 +3558,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   value={rfidInput}
                   onChange={handleRfidInput}
                   onKeyDown={(e) => {
-                    // Handle Enter key to process RFID immediately
-                    if (e.key === "Enter" && rfidInputRef.current) {
+                    // Handle Enter key to process RFID immediately (scanners often send Enter at the end)
+                    if (
+                      e.key === "Enter" &&
+                      rfidInputRef.current &&
+                      isRfidScanRef.current
+                    ) {
                       e.preventDefault();
                       const value = rfidInputRef.current.value.trim();
                       if (value) {
@@ -3529,6 +3574,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                         processRfidAttendance(value);
                         rfidInputRef.current.value = "";
                         setRfidInput("");
+                        isRfidScanRef.current = false;
+                        lastKeyTimeRef.current = 0;
                         // Keep scanning state if input is still focused
                         if (document.activeElement !== rfidInputRef.current) {
                           setIsScanning(false);
@@ -3536,57 +3583,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       }
                     }
                   }}
-                  onInput={(e) => {
-                    // Handle input events (some scanners use this instead of onChange)
-                    const target = e.target as HTMLInputElement;
-                    if (target.value) {
-                      // Debug: Log input event
-                      if (process.env.NODE_ENV === "development") {
-                        console.log("RFID onInput event:", {
-                          value: target.value,
-                          length: target.value.length,
-                        });
-                      }
-                      setRfidInput(target.value);
-                      // Clear and reset timeout
-                      if (scanTimeoutRef.current) {
-                        clearTimeout(scanTimeoutRef.current);
-                      }
-                      scanTimeoutRef.current = setTimeout(async () => {
-                        const currentValue =
-                          rfidInputRef.current?.value || target.value;
-                        if (currentValue && currentValue.length > 0) {
-                          await processRfidAttendance(currentValue);
-                        }
-                        setRfidInput("");
-                        if (rfidInputRef.current) {
-                          rfidInputRef.current.value = "";
-                          // Check if input is still focused - if so, keep scanning state
-                          if (document.activeElement === rfidInputRef.current) {
-                            // Input is still focused, keep scanning state
-                            return;
-                          }
-                        }
-                        // Only set to false if input is not focused
-                        setIsScanning(false);
-                      }, 500); // Increased to 500ms to match onChange handler
-                    }
-                  }}
-                  onPaste={(e) => {
-                    // Handle paste events (some scanners use paste)
-                    e.preventDefault();
-                    const pastedValue = e.clipboardData.getData("text").trim();
-                    if (pastedValue) {
-                      processRfidAttendance(pastedValue);
-                      if (rfidInputRef.current) {
-                        rfidInputRef.current.value = "";
-                      }
-                      setRfidInput("");
-                    }
-                  }}
                   onFocus={() => {
                     // Start scanning when input receives focus
                     setIsScanning(true);
+                    // Reset RFID scan detection
+                    isRfidScanRef.current = false;
+                    lastKeyTimeRef.current = 0;
                   }}
                   onBlur={() => {
                     // Stop scanning when input loses focus
@@ -3596,6 +3598,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       clearTimeout(scanTimeoutRef.current);
                       scanTimeoutRef.current = null;
                     }
+                    // Reset RFID scan detection
+                    isRfidScanRef.current = false;
+                    lastKeyTimeRef.current = 0;
                   }}
                   style={{
                     position: "absolute",

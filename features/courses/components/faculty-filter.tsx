@@ -42,10 +42,10 @@ export function FacultyFilter({
       return "No faculty selected";
     }
     if (selectedFacultyId === currentUserId) {
-      return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
-    }
+        return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
+      }
     const faculty = faculties.find((f) => f.id === selectedFacultyId);
-    return faculty?.name || "Selected faculty";
+      return faculty?.name || "Selected faculty";
   };
 
   // Filter faculties based on search query
@@ -67,9 +67,9 @@ export function FacultyFilter({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-        <Users className="w-4 h-4" />
-        <span>Filter by Faculty:</span>
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <Users className="w-4 h-4" />
+          <span>Filter by Faculty:</span>
       </div>
       <div className="border rounded-md p-3 bg-gray-50">
         <div className="text-sm text-gray-600 mb-2 min-h-[20px]">
@@ -97,7 +97,7 @@ export function FacultyFilter({
                 >
                   <input
                     type="radio"
-                    id={`faculty-${currentUserId}`}
+                  id={`faculty-${currentUserId}`}
                     name="faculty-filter"
                     checked={selectedFacultyId === currentUserId}
                     onChange={() => handleSelectFaculty(currentUserId)}
@@ -144,7 +144,7 @@ export function FacultyFilter({
                   >
                     <input
                       type="radio"
-                      id={`faculty-${faculty.id}`}
+                    id={`faculty-${faculty.id}`}
                       name="faculty-filter"
                       checked={selectedFacultyId === faculty.id}
                       onChange={() => handleSelectFaculty(faculty.id)}

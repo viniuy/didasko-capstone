@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { getAttendance, createAttendanceBatch } from "@/lib/services";
+import { getAttendance } from "@/lib/services";
 import { AttendanceResponse } from "@/shared/types/attendance";
+import { prisma } from "@/lib/prisma";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -69,24 +70,117 @@ export async function POST(request: Request, context: { params }) {
     const { date, attendance } = await request.json();
 
     try {
-      const records = attendance.map((record: any) => ({
-        studentId: record.studentId,
-        date,
-        status: record.status,
-        reason:
-          record.status.toUpperCase() === "EXCUSED"
-            ? record.reason ?? undefined
-            : undefined,
-      }));
+      // Parse date and set to UTC midnight
+      const utcDate = new Date(date);
+      utcDate.setUTCHours(0, 0, 0, 0);
 
-      await createAttendanceBatch(course_slug, records);
+      // Get course
+      const course = await prisma.course.findUnique({
+        where: { slug: course_slug },
+        select: { id: true },
+      });
+
+      if (!course) {
+        return NextResponse.json(
+          { error: "Course not found" },
+          { status: 404 }
+        );
+      }
+
+      // Process attendance records efficiently in batch
+      await prisma.$transaction(async (tx) => {
+        // 1. Fetch all existing records for this date in one query
+        const studentIds = attendance.map((r: any) => r.studentId);
+        const existingRecords = await tx.attendance.findMany({
+          where: {
+            studentId: { in: studentIds },
+            courseId: course.id,
+            date: {
+              gte: utcDate,
+              lt: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000),
+            },
+          },
+        });
+
+        // 2. Create a map of existing records by studentId for quick lookup
+        const existingMap = new Map(
+          existingRecords.map((r) => [r.studentId, r])
+        );
+
+        // 3. Separate records into updates and creates
+        const toUpdate: Array<{
+          id: string;
+          status: string;
+          reason: string | null;
+        }> = [];
+        const toCreate: Array<{
+          studentId: string;
+          courseId: string;
+          date: Date;
+          status: "PRESENT" | "LATE" | "ABSENT" | "EXCUSED";
+          reason: string | null;
+        }> = [];
+
+        for (const record of attendance) {
+          const existing = existingMap.get(record.studentId);
+          const status = record.status as
+            | "PRESENT"
+            | "LATE"
+            | "ABSENT"
+            | "EXCUSED";
+          const reason =
+            record.status.toUpperCase() === "EXCUSED"
+              ? record.reason ?? null
+              : null;
+
+          if (existing) {
+            toUpdate.push({
+              id: existing.id,
+              status: status,
+              reason: reason,
+            });
+          } else {
+            toCreate.push({
+              studentId: record.studentId,
+              courseId: course.id,
+              date: utcDate,
+              status: status,
+              reason: reason,
+            });
+          }
+        }
+
+        // 4. Batch update existing records
+        if (toUpdate.length > 0) {
+          // Prisma doesn't support batch update with different values, so we use Promise.all
+          await Promise.all(
+            toUpdate.map((update) =>
+              tx.attendance.update({
+                where: { id: update.id },
+                data: {
+                  status: update.status as any,
+                  reason: update.reason,
+                },
+              })
+            )
+          );
+        }
+
+        // 5. Batch create new records
+        if (toCreate.length > 0) {
+          await tx.attendance.createMany({
+            data: toCreate,
+            skipDuplicates: true,
+          });
+        }
+      });
 
       return NextResponse.json({
         message: "Attendance saved successfully",
         records: attendance.length,
       });
     } catch (error: any) {
-      if (error.message.includes("not found")) {
+      if (error.message?.includes("not found")) {
         return NextResponse.json({ error: error.message }, { status: 404 });
       }
       throw error;

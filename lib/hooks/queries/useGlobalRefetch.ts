@@ -33,9 +33,8 @@ export function useGlobalRefetch() {
     queryClient.invalidateQueries({
       queryKey: queryKeys.courses.stats(slug),
     });
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.attendance.byCourse(slug),
-    });
+    // Note: Attendance queries are NOT invalidated here to prevent unnecessary refetches
+    // when grades are saved. Attendance should only be refetched when attendance data changes.
     queryClient.invalidateQueries({
       queryKey: queryKeys.grading.classRecord(slug),
     });

@@ -1137,20 +1137,20 @@ export function CourseDataTable({
       toast.success(
         `Successfully unarchived ${coursesToUnarchive.length} course(s)`,
         {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#124A69",
-            secondary: "#fff",
-          },
+        id: loadingToast,
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+        iconTheme: {
+          primary: "#124A69",
+          secondary: "#fff",
+        },
         }
       );
 
@@ -1205,15 +1205,15 @@ export function CourseDataTable({
           // For active courses, filter from baseFilteredCourses
           // First filter by faculty if specified (for Academic Head)
           if (facultyId) {
-            coursesToExport = baseFilteredCourses.filter(
+          coursesToExport = baseFilteredCourses.filter(
               (c) => c.facultyId === facultyId
-            );
+          );
           } else if (userRole === "ACADEMIC_HEAD") {
             // Academic Head without faculty selection - export all courses
             coursesToExport = baseFilteredCourses;
-          } else {
+        } else {
             // Regular faculty - only their own courses
-            coursesToExport = baseFilteredCourses.filter(
+          coursesToExport = baseFilteredCourses.filter(
               (c) => c.facultyId === userId
             );
           }
@@ -2264,305 +2264,305 @@ export function CourseDataTable({
           isRedirecting ? "opacity-0" : "opacity-100"
         }`}
       >
-        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[500px] md:min-h-[590px] overflow-x-visible">
-          <h1 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
-            Course Management Dashboard
-          </h1>
+          <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[500px] md:min-h-[590px] overflow-x-visible">
+            <h1 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
+              Course Management Dashboard
+            </h1>
 
-          <div className="space-y-4 sm:space-y-5 md:space-y-6">
+            <div className="space-y-4 sm:space-y-5 md:space-y-6">
             {/* Search Bar and Action Buttons - Always Visible */}
-            <div className="flex flex-col gap-3 sm:gap-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-                {/* Search Bar */}
-                <div className="relative w-[300px]">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search courses..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    disabled={isLoading}
-                    className="pl-9 h-10 sm:h-9 text-sm sm:text-base "
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
-                  {/* Filter Button */}
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsFilterSheetOpen(true)}
-                    disabled={isLoading}
-                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
-                  >
-                    <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xl:inline">Filter</span>
-                    {hasActiveFilters && (
-                      <>
-                        <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center 2xl:hidden">
+                  <div className="flex flex-col gap-3 sm:gap-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+                      {/* Search Bar */}
+                      <div className="relative w-[300px]">
+                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Search courses..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          disabled={isLoading}
+                          className="pl-9 h-10 sm:h-9 text-sm sm:text-base "
+                        />
+                      </div>
+                      <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
+                        {/* Filter Button */}
+                        <Button
+                          variant="outline"
+                          onClick={() => setIsFilterSheetOpen(true)}
+                          disabled={isLoading}
+                          className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
+                        >
+                          <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span className="hidden xl:inline">Filter</span>
+                          {hasActiveFilters && (
+                            <>
+                              <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center 2xl:hidden">
                           {activeFilterCount > 3 ? "3" : activeFilterCount}
-                        </span>
-                        <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 items-center justify-center hidden 2xl:flex">
-                          {activeFilterCount}
-                        </span>
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowBacktrackDialog(true)}
-                    disabled={isLoading}
-                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                  >
-                    <History className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xl:inline">Backtrack</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowSettingsDialog(true)}
-                    disabled={isLoading}
-                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                  >
-                    <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xl:inline">Archive</span>
-                  </Button>
-                  {permissions.canExportData && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowExportPreview(true)}
-                      disabled={isLoading}
-                      className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                    >
-                      <Download className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden xl:inline">Export</span>
-                    </Button>
-                  )}
-                  {permissions.canImportCourses && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (hasReachedMaxActiveCourses) {
-                          toast.error(
-                            `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
-                          );
-                          return;
-                        }
-                        setShowImportPreview(true);
-                      }}
-                      disabled={hasReachedMaxActiveCourses || isLoading}
-                      className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                      title={
-                        hasReachedMaxActiveCourses
-                          ? `Maximum ${MAX_ACTIVE_COURSES} active courses reached`
-                          : "Import courses"
-                      }
-                    >
-                      <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden xl:inline">Import</span>
-                    </Button>
-                  )}
-                  {permissions.canCreateCourse && (
-                    <CourseSheet
-                      mode="add"
-                      onSuccess={async (courseData) => {
-                        // Check if limit is reached before proceeding
-                        if (hasReachedMaxActiveCourses) {
-                          toast.error(
-                            `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
-                          );
-                          return;
-                        }
-                        // Store course data and open schedule dialog
-                        // Course is NOT created yet - waiting for schedules
-                        if (courseData) {
-                          setPendingCourseData(courseData);
-                          setImportedCoursesForSchedule([courseData]);
-                          setScheduleDialogMode("create");
-                          setShowScheduleAssignment(true);
-                        }
-                      }}
-                      faculties={faculties}
-                      userId={userId}
-                      userRole={userRole}
-                      disabled={hasReachedMaxActiveCourses || isLoading}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
+                              </span>
+                              <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 items-center justify-center hidden 2xl:flex">
+                                {activeFilterCount}
+                              </span>
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowBacktrackDialog(true)}
+                          disabled={isLoading}
+                          className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                        >
+                          <History className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span className="hidden xl:inline">Backtrack</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowSettingsDialog(true)}
+                          disabled={isLoading}
+                          className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                        >
+                          <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
+                          <span className="hidden xl:inline">Archive</span>
+                        </Button>
+                        {permissions.canExportData && (
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowExportPreview(true)}
+                            disabled={isLoading}
+                            className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                          >
+                            <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden xl:inline">Export</span>
+                          </Button>
+                        )}
+                        {permissions.canImportCourses && (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (hasReachedMaxActiveCourses) {
+                                toast.error(
+                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+                                );
+                                return;
+                              }
+                              setShowImportPreview(true);
+                            }}
+                            disabled={hasReachedMaxActiveCourses || isLoading}
+                            className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                            title={
+                              hasReachedMaxActiveCourses
+                                ? `Maximum ${MAX_ACTIVE_COURSES} active courses reached`
+                                : "Import courses"
+                            }
+                          >
+                            <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                            <span className="hidden xl:inline">Import</span>
+                          </Button>
+                        )}
+                        {permissions.canCreateCourse && (
+                          <CourseSheet
+                            mode="add"
+                            onSuccess={async (courseData) => {
+                              // Check if limit is reached before proceeding
+                              if (hasReachedMaxActiveCourses) {
+                                toast.error(
+                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
+                                );
+                                return;
+                              }
+                              // Store course data and open schedule dialog
+                              // Course is NOT created yet - waiting for schedules
+                              if (courseData) {
+                                setPendingCourseData(courseData);
+                                setImportedCoursesForSchedule([courseData]);
+                                setScheduleDialogMode("create");
+                                setShowScheduleAssignment(true);
+                              }
+                            }}
+                            faculties={faculties}
+                            userId={userId}
+                            userRole={userRole}
+                            disabled={hasReachedMaxActiveCourses || isLoading}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
             {/* Content Area - Conditionally Rendered */}
             {isInitialLoading || isLoading || !hasLoadedOnce ? (
-              <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
-                <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69] mb-4"></div>
+                    <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
+                      <div className="flex flex-col items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69] mb-4"></div>
                   <p className="text-sm text-gray-600">Loading courses...</p>
-                </div>
-              </div>
+                      </div>
+                    </div>
             ) : tableData.length > 0 ? (
               <>
                 {filteredCourses.length > 0 ? (
-                  <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
-                      {paginatedCourses.map((course) => (
-                        <CourseCard
-                          key={course.id}
-                          course={course}
-                          onEdit={handleEditCourse}
-                          onAddSchedule={handleAddSchedule}
-                          onViewDetails={handleViewDetails}
-                          onNavigate={handleCourseNavigate}
-                          itemsPerPage={itemsPerPage}
-                        />
-                      ))}
-                    </div>
-
-                    {totalPages > 1 && (
-                      <div className="flex flex-col sm:flex-row -mt-2 sm:-mt-3 items-center justify-between w-full gap-3 sm:gap-0">
-                        <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left w-[300px]">
-                          Showing{" "}
-                          {Math.min(
-                            (currentPage - 1) * itemsPerPage + 1,
-                            filteredCourses.length
-                          )}
-                          –
-                          {Math.min(
-                            currentPage * itemsPerPage,
-                            filteredCourses.length
-                          )}{" "}
-                          of {filteredCourses.length} courses
-                        </span>
-
-                        <Pagination className="justify-end">
-                          <PaginationContent className="flex gap-1">
-                            <PaginationItem>
-                              <PaginationPrevious
-                                onClick={() =>
-                                  currentPage > 1 &&
-                                  handlePageChange(currentPage - 1)
-                                }
-                                className={`min-h-[44px] sm:min-h-0 ${
-                                  currentPage === 1
-                                    ? "pointer-events-none opacity-50"
-                                    : "cursor-pointer"
-                                }`}
-                              />
-                            </PaginationItem>
-
-                            {(() => {
-                              const pages: number[] = [];
-
-                              // If total pages is 5 or less, show all pages
-                              if (totalPages <= 5) {
-                                for (let i = 1; i <= totalPages; i++) {
-                                  pages.push(i);
-                                }
-                              } else {
-                                // Always show first 2 pages
-                                pages.push(1, 2);
-
-                                // Determine which pages to show around current
-                                const showAroundCurrent: number[] = [];
-                                if (
-                                  currentPage > 2 &&
-                                  currentPage < totalPages - 1
-                                ) {
-                                  // Show current-1, current, current+1 if in middle
-                                  showAroundCurrent.push(
-                                    currentPage - 1,
-                                    currentPage,
-                                    currentPage + 1
-                                  );
-                                } else if (currentPage <= 2) {
-                                  // If current is 1 or 2, show 3, 4
-                                  showAroundCurrent.push(3, 4);
-                                } else if (currentPage >= totalPages - 1) {
-                                  // If current is near end, show last-3, last-2, last-1
-                                  showAroundCurrent.push(
-                                    totalPages - 3,
-                                    totalPages - 2,
-                                    totalPages - 1
-                                  );
-                                }
-
-                                // Remove duplicates and sort
-                                const uniquePages = Array.from(
-                                  new Set([
-                                    ...pages,
-                                    ...showAroundCurrent,
-                                    totalPages,
-                                  ])
-                                ).sort((a, b) => a - b) as number[];
-
-                                // Build final array with ellipsis
-                                const finalPages: (number | string)[] = [];
-                                for (let i = 0; i < uniquePages.length; i++) {
-                                  const page = uniquePages[i];
-                                  if (i > 0 && page - uniquePages[i - 1] > 1) {
-                                    finalPages.push("…");
-                                  }
-                                  finalPages.push(page);
-                                }
-
-                                return finalPages;
-                              }
-
-                              return pages;
-                            })().map((item, i) => (
-                              <PaginationItem key={i}>
-                                {item === "…" ? (
-                                  <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
-                                    …
-                                  </span>
-                                ) : (
-                                  <PaginationLink
-                                    onClick={() =>
-                                      handlePageChange(item as number)
-                                    }
-                                    isActive={currentPage === item}
-                                    className={`hidden sm:inline-flex min-h-[44px] sm:min-h-0 ${
-                                      currentPage === item
-                                        ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
-                                        : ""
-                                    }`}
-                                  >
-                                    {item}
-                                  </PaginationLink>
-                                )}
-                              </PaginationItem>
-                            ))}
-
-                            <PaginationItem>
-                              <PaginationNext
-                                onClick={() =>
-                                  currentPage < totalPages &&
-                                  handlePageChange(currentPage + 1)
-                                }
-                                className={`min-h-[44px] sm:min-h-0 ${
-                                  currentPage === totalPages
-                                    ? "pointer-events-none opacity-50"
-                                    : "cursor-pointer"
-                                }`}
-                              />
-                            </PaginationItem>
-                          </PaginationContent>
-                        </Pagination>
+                    <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 overflow-visible p-2">
+                        {paginatedCourses.map((course) => (
+                          <CourseCard
+                            key={course.id}
+                            course={course}
+                            onEdit={handleEditCourse}
+                            onAddSchedule={handleAddSchedule}
+                            onViewDetails={handleViewDetails}
+                            onNavigate={handleCourseNavigate}
+                            itemsPerPage={itemsPerPage}
+                          />
+                        ))}
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-48 sm:h-64 text-center px-4">
-                    <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2 sm:mb-3" />
-                    <p className="text-sm sm:text-base text-gray-600 font-medium">
-                      {getEmptyStateMessage()}
-                    </p>
-                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                      {getEmptyStateSubMessage()}
-                    </p>
-                  </div>
-                )}
-              </>
-            ) : hasLoadedOnce && tableData.length === 0 ? (
-              // Empty state when there are no courses at all (only show after loading is complete)
-              <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
-                <style>{`
+
+                      {totalPages > 1 && (
+                        <div className="flex flex-col sm:flex-row -mt-2 sm:-mt-3 items-center justify-between w-full gap-3 sm:gap-0">
+                          <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left w-[300px]">
+                            Showing{" "}
+                            {Math.min(
+                              (currentPage - 1) * itemsPerPage + 1,
+                              filteredCourses.length
+                            )}
+                            –
+                            {Math.min(
+                              currentPage * itemsPerPage,
+                              filteredCourses.length
+                            )}{" "}
+                            of {filteredCourses.length} courses
+                          </span>
+
+                          <Pagination className="justify-end">
+                            <PaginationContent className="flex gap-1">
+                              <PaginationItem>
+                                <PaginationPrevious
+                                  onClick={() =>
+                                    currentPage > 1 &&
+                                    handlePageChange(currentPage - 1)
+                                  }
+                                  className={`min-h-[44px] sm:min-h-0 ${
+                                    currentPage === 1
+                                      ? "pointer-events-none opacity-50"
+                                      : "cursor-pointer"
+                                  }`}
+                                />
+                              </PaginationItem>
+
+                              {(() => {
+                                const pages: number[] = [];
+
+                                // If total pages is 5 or less, show all pages
+                                if (totalPages <= 5) {
+                                  for (let i = 1; i <= totalPages; i++) {
+                                    pages.push(i);
+                                  }
+                                } else {
+                                  // Always show first 2 pages
+                                  pages.push(1, 2);
+
+                                  // Determine which pages to show around current
+                                  const showAroundCurrent: number[] = [];
+                                  if (
+                                    currentPage > 2 &&
+                                    currentPage < totalPages - 1
+                                  ) {
+                                    // Show current-1, current, current+1 if in middle
+                                    showAroundCurrent.push(
+                                      currentPage - 1,
+                                      currentPage,
+                                      currentPage + 1
+                                    );
+                                  } else if (currentPage <= 2) {
+                                    // If current is 1 or 2, show 3, 4
+                                    showAroundCurrent.push(3, 4);
+                                  } else if (currentPage >= totalPages - 1) {
+                                    // If current is near end, show last-3, last-2, last-1
+                                    showAroundCurrent.push(
+                                      totalPages - 3,
+                                      totalPages - 2,
+                                      totalPages - 1
+                                    );
+                                  }
+
+                                  // Remove duplicates and sort
+                                  const uniquePages = Array.from(
+                                    new Set([
+                                      ...pages,
+                                      ...showAroundCurrent,
+                                      totalPages,
+                                    ])
+                                  ).sort((a, b) => a - b) as number[];
+
+                                  // Build final array with ellipsis
+                                  const finalPages: (number | string)[] = [];
+                                  for (let i = 0; i < uniquePages.length; i++) {
+                                    const page = uniquePages[i];
+                                  if (i > 0 && page - uniquePages[i - 1] > 1) {
+                                      finalPages.push("…");
+                                    }
+                                    finalPages.push(page);
+                                  }
+
+                                  return finalPages;
+                                }
+
+                                return pages;
+                              })().map((item, i) => (
+                                <PaginationItem key={i}>
+                                  {item === "…" ? (
+                                    <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                                      …
+                                    </span>
+                                  ) : (
+                                    <PaginationLink
+                                      onClick={() =>
+                                        handlePageChange(item as number)
+                                      }
+                                      isActive={currentPage === item}
+                                      className={`hidden sm:inline-flex min-h-[44px] sm:min-h-0 ${
+                                        currentPage === item
+                                          ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                                          : ""
+                                      }`}
+                                    >
+                                      {item}
+                                    </PaginationLink>
+                                  )}
+                                </PaginationItem>
+                              ))}
+
+                              <PaginationItem>
+                                <PaginationNext
+                                  onClick={() =>
+                                    currentPage < totalPages &&
+                                    handlePageChange(currentPage + 1)
+                                  }
+                                  className={`min-h-[44px] sm:min-h-0 ${
+                                    currentPage === totalPages
+                                      ? "pointer-events-none opacity-50"
+                                      : "cursor-pointer"
+                                  }`}
+                                />
+                              </PaginationItem>
+                            </PaginationContent>
+                          </Pagination>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-48 sm:h-64 text-center px-4">
+                      <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mb-2 sm:mb-3" />
+                      <p className="text-sm sm:text-base text-gray-600 font-medium">
+                        {getEmptyStateMessage()}
+                      </p>
+                      <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                        {getEmptyStateSubMessage()}
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : hasLoadedOnce && tableData.length === 0 ? (
+                // Empty state when there are no courses at all (only show after loading is complete)
+                <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
+                  <style>{`
                   @keyframes tumbleweedHorizontal {
                     0% {
                       left: -100px;
@@ -2604,379 +2604,379 @@ export function CourseDataTable({
                     animation: tumbleweedRotate 4s linear infinite;
                   }
                 `}</style>
-                <div className="text-center px-4 pb-8 z-10 relative">
-                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                    It seems empty here
-                  </h3>
-                  <p className="text-gray-500 mb-4">
-                    {hasReachedMaxActiveCourses
-                      ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
-                      : "Start by adding courses to get started"}
-                  </p>
-                  {!hasReachedMaxActiveCourses && (
-                    <div className="flex items-center gap-3 justify-center flex-wrap">
-                      {permissions.canCreateCourse && (
-                        <CourseSheet
-                          mode="add"
-                          onSuccess={async (courseData) => {
-                            if (courseData) {
-                              setPendingCourseData(courseData);
-                              setImportedCoursesForSchedule([courseData]);
-                              setScheduleDialogMode("create");
-                              setShowScheduleAssignment(true);
-                            }
-                          }}
-                          faculties={faculties}
-                          userId={userId}
-                          userRole={userRole}
-                          disabled={hasReachedMaxActiveCourses}
-                        />
-                      )}
-                      {permissions.canImportCourses && (
-                        <>
-                          <span className="text-gray-500">or</span>
-                          <Button
-                            onClick={() => {
-                              if (hasReachedMaxActiveCourses) {
-                                toast.error(
-                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
-                                );
-                                return;
+                  <div className="text-center px-4 pb-8 z-10 relative">
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                      It seems empty here
+                    </h3>
+                    <p className="text-gray-500 mb-4">
+                      {hasReachedMaxActiveCourses
+                        ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
+                        : "Start by adding courses to get started"}
+                    </p>
+                    {!hasReachedMaxActiveCourses && (
+                      <div className="flex items-center gap-3 justify-center flex-wrap">
+                        {permissions.canCreateCourse && (
+                          <CourseSheet
+                            mode="add"
+                            onSuccess={async (courseData) => {
+                              if (courseData) {
+                                setPendingCourseData(courseData);
+                                setImportedCoursesForSchedule([courseData]);
+                                setScheduleDialogMode("create");
+                                setShowScheduleAssignment(true);
                               }
-                              setShowImportPreview(true);
                             }}
-                            variant="outline"
+                            faculties={faculties}
+                            userId={userId}
+                            userRole={userRole}
                             disabled={hasReachedMaxActiveCourses}
-                            className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Upload className="w-4 h-4" />
-                            Import Courses
-                          </Button>
-                        </>
-                      )}
+                          />
+                        )}
+                        {permissions.canImportCourses && (
+                          <>
+                            <span className="text-gray-500">or</span>
+                            <Button
+                              onClick={() => {
+                                if (hasReachedMaxActiveCourses) {
+                                  toast.error(
+                                    `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+                                  );
+                                  return;
+                                }
+                                setShowImportPreview(true);
+                              }}
+                              variant="outline"
+                              disabled={hasReachedMaxActiveCourses}
+                              className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Upload className="w-4 h-4" />
+                              Import Courses
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* Tumbleweed Animation */}
+                  <div className="relative w-full flex items-end">
+                    {/* Outer container: horizontal movement + vertical bounce */}
+                    <div className="absolute bottom-0 tumbleweed-container">
+                      {/* Inner SVG: rotation only */}
+                      <img
+                        src="/svg/tumbleweed.svg"
+                        alt="Tumbleweed"
+                        className="w-20 h-20 tumbleweed-svg"
+                        style={{ filter: "brightness(0.8)" }}
+                      />
                     </div>
-                  )}
-                </div>
-                {/* Tumbleweed Animation */}
-                <div className="relative w-full flex items-end">
-                  {/* Outer container: horizontal movement + vertical bounce */}
-                  <div className="absolute bottom-0 tumbleweed-container">
-                    {/* Inner SVG: rotation only */}
-                    <img
-                      src="/svg/tumbleweed.svg"
-                      alt="Tumbleweed"
-                      className="w-20 h-20 tumbleweed-svg"
-                      style={{ filter: "brightness(0.8)" }}
-                    />
                   </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            {/* Export Dialog */}
-            <ExportDialog
-              open={showExportPreview}
-              onOpenChange={setShowExportPreview}
-              courses={filteredCourses}
-              allCourses={baseFilteredCourses}
-              onExport={handleExport}
+              {/* Export Dialog */}
+              <ExportDialog
+                open={showExportPreview}
+                onOpenChange={setShowExportPreview}
+                courses={filteredCourses}
+                allCourses={baseFilteredCourses}
+                onExport={handleExport}
               userRole={userRole}
               userId={userId}
               faculties={faculties}
-            />
+              />
 
-            {/* Import Dialog */}
-            <ImportDialog
-              open={showImportPreview}
-              onOpenChange={(open) => {
-                setShowImportPreview(open);
-                if (!open) {
-                  setSelectedFile(null);
-                  setPreviewData([]);
-                  setIsValidFile(false);
-                  setImportProgress(null);
-                }
-              }}
-              previewData={previewData}
-              selectedFile={selectedFile}
-              isValidFile={isValidFile}
-              onFileChange={handleFileChange}
-              onImport={handleImport}
-              onDownloadTemplate={handleImportTemplate}
-              importProgress={importProgress}
-            />
+              {/* Import Dialog */}
+              <ImportDialog
+                open={showImportPreview}
+                onOpenChange={(open) => {
+                  setShowImportPreview(open);
+                  if (!open) {
+                    setSelectedFile(null);
+                    setPreviewData([]);
+                    setIsValidFile(false);
+                    setImportProgress(null);
+                  }
+                }}
+                previewData={previewData}
+                selectedFile={selectedFile}
+                isValidFile={isValidFile}
+                onFileChange={handleFileChange}
+                onImport={handleImport}
+                onDownloadTemplate={handleImportTemplate}
+                importProgress={importProgress}
+              />
 
-            {/* Validating Dialog */}
-            <Dialog open={showValidatingDialog} onOpenChange={() => {}}>
-              <DialogContent className="w-[90vw] sm:w-[80vw] md:w-[70vw] lg:w-[60vw] max-w-[500px] p-4 sm:p-6">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-semibold text-[#124A69]">
-                    Validating Courses
-                  </DialogTitle>
-                  <DialogDescription>
-                    Please wait while we validate your import data...
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="mt-6 flex items-center justify-center gap-4 py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69]" />
-                  <p className="text-sm font-medium text-gray-700">
-                    Checking for duplicates and validation errors...
-                  </p>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Import Status Dialog */}
-            <ImportStatusDialog
-              open={showImportStatus}
-              onOpenChange={setShowImportStatus}
-              importStatus={importStatus}
-              importProgress={importProgress}
-              onClose={() => {
-                setShowImportStatus(false);
-                setImportProgress(null);
-              }}
-              onImportMore={() => {
-                setShowImportStatus(false);
-                setShowImportPreview(true);
-              }}
-            />
-
-            {/* Schedule Assignment Dialog */}
-            <ScheduleAssignmentDialog
-              open={showScheduleAssignment}
-              onOpenChange={(open) => {
-                setShowScheduleAssignment(open);
-                // Only call handleScheduleAssignmentComplete if dialog was closed after successful completion
-                // The dialog will call onComplete() itself when saving, not when canceling
-                if (!open) {
-                  setPendingCourseData(null);
-                }
-              }}
-              courses={
-                scheduleDialogMode === "create"
-                  ? [pendingCourseData]
-                  : importedCoursesForSchedule
-              }
-              onComplete={handleScheduleAssignmentComplete}
-              mode={scheduleDialogMode}
-              maxActiveCourses={MAX_ACTIVE_COURSES}
-              currentActiveCount={activeCoursesCount}
-            />
-
-            <CourseSettingsDialog
-              open={showSettingsDialog}
-              onOpenChange={setShowSettingsDialog}
-              courses={filterArchivableCourses(
-                tableData.filter((course) => course.facultyId === userId),
-                userId
-              )}
-              onArchiveCourses={handleArchiveCourses}
-              onUnarchiveCourses={handleUnarchiveCourses}
-              userId={userId}
-              userRole={userRole}
-            />
-
-            {/* Backtrack Dialog - Show Archived Courses */}
-            <Dialog
-              open={showBacktrackDialog}
-              onOpenChange={(open) => {
-                // Prevent closing while backtracking is in progress
-                if (!open && isBacktracking) {
-                  return;
-                }
-                if (!open) {
-                  setIsBacktracking(false);
-                  setBacktrackSearchQuery(""); // Reset search when closing
-                }
-                setShowBacktrackDialog(open);
-              }}
-            >
-              <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-xl text-[#124A69]">
-                    <History className="h-5 w-5" />
-                    Backtrack - Archived Courses
-                  </DialogTitle>
-                  <DialogDescription>
-                    Click on any archived course to navigate to it
-                  </DialogDescription>
-                </DialogHeader>
-
-                {/* Search Bar */}
-                <div className="relative mt-4">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search archived courses by code, title, or section..."
-                    value={backtrackSearchQuery}
-                    onChange={(e) => setBacktrackSearchQuery(e.target.value)}
-                    className="pl-9"
-                    disabled={isBacktracking}
-                  />
-                </div>
-
-                {isBacktracking ? (
-                  <div className="flex-1 flex items-center justify-center py-12">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="flex gap-2">
-                        <div className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"></div>
-                        <div
-                          className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        ></div>
-                        <div
-                          className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
-                          style={{ animationDelay: "300ms" }}
-                        ></div>
-                      </div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-[#124A69] text-center">
-                        Backtracking in progress...
-                      </h2>
-                      <p className="text-sm sm:text-base text-gray-600 text-center">
-                        Please wait while we navigate to the archived course
-                      </p>
-                    </div>
+              {/* Validating Dialog */}
+              <Dialog open={showValidatingDialog} onOpenChange={() => {}}>
+                <DialogContent className="w-[90vw] sm:w-[80vw] md:w-[70vw] lg:w-[60vw] max-w-[500px] p-4 sm:p-6">
+                  <DialogHeader>
+                    <DialogTitle className="text-xl font-semibold text-[#124A69]">
+                      Validating Courses
+                    </DialogTitle>
+                    <DialogDescription>
+                      Please wait while we validate your import data...
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="mt-6 flex items-center justify-center gap-4 py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69]" />
+                    <p className="text-sm font-medium text-gray-700">
+                      Checking for duplicates and validation errors...
+                    </p>
                   </div>
-                ) : (
-                  <>
-                    {!backtrackSearchQuery &&
-                      archivedCoursesData.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Showing {archivedCoursesData.length} of archived
+                </DialogContent>
+              </Dialog>
+
+              {/* Import Status Dialog */}
+              <ImportStatusDialog
+                open={showImportStatus}
+                onOpenChange={setShowImportStatus}
+                importStatus={importStatus}
+                importProgress={importProgress}
+                onClose={() => {
+                  setShowImportStatus(false);
+                  setImportProgress(null);
+                }}
+                onImportMore={() => {
+                  setShowImportStatus(false);
+                  setShowImportPreview(true);
+                }}
+              />
+
+              {/* Schedule Assignment Dialog */}
+              <ScheduleAssignmentDialog
+                open={showScheduleAssignment}
+                onOpenChange={(open) => {
+                  setShowScheduleAssignment(open);
+                  // Only call handleScheduleAssignmentComplete if dialog was closed after successful completion
+                  // The dialog will call onComplete() itself when saving, not when canceling
+                  if (!open) {
+                    setPendingCourseData(null);
+                  }
+                }}
+                courses={
+                  scheduleDialogMode === "create"
+                    ? [pendingCourseData]
+                    : importedCoursesForSchedule
+                }
+                onComplete={handleScheduleAssignmentComplete}
+                mode={scheduleDialogMode}
+                maxActiveCourses={MAX_ACTIVE_COURSES}
+                currentActiveCount={activeCoursesCount}
+              />
+
+              <CourseSettingsDialog
+                open={showSettingsDialog}
+                onOpenChange={setShowSettingsDialog}
+                courses={filterArchivableCourses(
+                  tableData.filter((course) => course.facultyId === userId),
+                  userId
+                )}
+                onArchiveCourses={handleArchiveCourses}
+                onUnarchiveCourses={handleUnarchiveCourses}
+                userId={userId}
+                userRole={userRole}
+              />
+
+              {/* Backtrack Dialog - Show Archived Courses */}
+              <Dialog
+                open={showBacktrackDialog}
+                onOpenChange={(open) => {
+                  // Prevent closing while backtracking is in progress
+                  if (!open && isBacktracking) {
+                    return;
+                  }
+                  if (!open) {
+                    setIsBacktracking(false);
+                    setBacktrackSearchQuery(""); // Reset search when closing
+                  }
+                  setShowBacktrackDialog(open);
+                }}
+              >
+                <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-xl text-[#124A69]">
+                      <History className="h-5 w-5" />
+                      Backtrack - Archived Courses
+                    </DialogTitle>
+                    <DialogDescription>
+                      Click on any archived course to navigate to it
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {/* Search Bar */}
+                  <div className="relative mt-4">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search archived courses by code, title, or section..."
+                      value={backtrackSearchQuery}
+                      onChange={(e) => setBacktrackSearchQuery(e.target.value)}
+                      className="pl-9"
+                      disabled={isBacktracking}
+                    />
+                  </div>
+
+                  {isBacktracking ? (
+                    <div className="flex-1 flex items-center justify-center py-12">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="flex gap-2">
+                          <div className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"></div>
+                          <div
+                            className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          ></div>
+                          <div
+                            className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          ></div>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-[#124A69] text-center">
+                          Backtracking in progress...
+                        </h2>
+                        <p className="text-sm sm:text-base text-gray-600 text-center">
+                          Please wait while we navigate to the archived course
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {!backtrackSearchQuery &&
+                        archivedCoursesData.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            Showing {archivedCoursesData.length} of archived
                           courses (limited to 100). Use search to find specific
                           courses.
-                        </p>
-                      )}
-                    <div className="flex-1 overflow-y-auto border rounded-lg mt-4">
-                      {isLoadingArchived ? (
-                        <div className="text-center py-8 text-gray-500">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69] mx-auto mb-2"></div>
-                          Loading archived courses...
-                        </div>
-                      ) : archivedCoursesData.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                          <Archive className="h-12 w-12 mb-2 opacity-50" />
-                          <p className="font-medium">
-                            {backtrackSearchQuery
-                              ? "No archived courses found"
-                              : "No archived courses"}
                           </p>
-                          <p className="text-sm">
-                            {backtrackSearchQuery
-                              ? `No courses match "${backtrackSearchQuery}"`
-                              : "Archive courses to access them here"}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="divide-y">
-                          {archivedCoursesData.map((course: any) => (
-                            <div
-                              key={course.id}
-                              onClick={() => {
-                                if (course.slug) {
-                                  setIsBacktracking(true);
-                                  setTimeout(() => {
+                        )}
+                      <div className="flex-1 overflow-y-auto border rounded-lg mt-4">
+                        {isLoadingArchived ? (
+                          <div className="text-center py-8 text-gray-500">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69] mx-auto mb-2"></div>
+                            Loading archived courses...
+                          </div>
+                        ) : archivedCoursesData.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                            <Archive className="h-12 w-12 mb-2 opacity-50" />
+                            <p className="font-medium">
+                              {backtrackSearchQuery
+                                ? "No archived courses found"
+                                : "No archived courses"}
+                            </p>
+                            <p className="text-sm">
+                              {backtrackSearchQuery
+                                ? `No courses match "${backtrackSearchQuery}"`
+                                : "Archive courses to access them here"}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="divide-y">
+                            {archivedCoursesData.map((course: any) => (
+                              <div
+                                key={course.id}
+                                onClick={() => {
+                                  if (course.slug) {
+                                    setIsBacktracking(true);
+                                    setTimeout(() => {
                                     router.push(`/main/course/${course.slug}`);
-                                  }, 300);
-                                } else {
-                                  toast.error("Course slug not available");
-                                }
-                              }}
-                              className="flex items-center gap-3 p-4 hover:bg-[#124A69]/5 cursor-pointer transition-colors group"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-semibold text-base text-[#124A69] group-hover:text-[#0d3a56]">
-                                    {course.code} - {course.section}
-                                  </h4>
-                                  <Badge
-                                    variant="outline"
-                                    className="text-xs border-red-300 text-red-700"
-                                  >
-                                    ARCHIVED
-                                  </Badge>
+                                    }, 300);
+                                  } else {
+                                    toast.error("Course slug not available");
+                                  }
+                                }}
+                                className="flex items-center gap-3 p-4 hover:bg-[#124A69]/5 cursor-pointer transition-colors group"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-semibold text-base text-[#124A69] group-hover:text-[#0d3a56]">
+                                      {course.code} - {course.section}
+                                    </h4>
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs border-red-300 text-red-700"
+                                    >
+                                      ARCHIVED
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-gray-600 truncate">
+                                    {course.title}
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {course.semester} • {course.academicYear}
+                                  </p>
                                 </div>
-                                <p className="text-sm text-gray-600 truncate">
-                                  {course.title}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  {course.semester} • {course.academicYear}
-                                </p>
+                                <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-[#124A69] hover:text-[#0d3a56]"
+                                  >
+                                    View →
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-[#124A69] hover:text-[#0d3a56]"
-                                >
-                                  View →
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
-                    <DialogFooter>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (!isBacktracking) {
-                            setShowBacktrackDialog(false);
-                          }
-                        }}
-                        disabled={isBacktracking}
-                      >
-                        Close
-                      </Button>
-                    </DialogFooter>
-                  </>
-                )}
-              </DialogContent>
-            </Dialog>
-
-            {/* Filter Sheet */}
-            <Sheet
-              open={isFilterSheetOpen}
-              onOpenChange={handleFilterSheetOpen}
-            >
-              <SheetContent
-                side="right"
-                className="w-[340px] sm:w-[400px] p-0 flex flex-col"
-              >
-                <div className="p-6 border-b flex-shrink-0 bg-[#124A69]/5">
-                  <SheetHeader>
-                    <SheetTitle className="text-xl font-semibold text-[#124A69]">
-                      Filter Options
-                    </SheetTitle>
-                  </SheetHeader>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {/* Faculty Filter - Only for Academic Head */}
-                  {permissions.canFilterByFaculty && (
-                    <div className="w-full">
-                      <FacultyFilter
-                        faculties={faculties}
-                        selectedFacultyIds={tempFacultyFilter}
-                        onChange={setTempFacultyFilter}
-                        currentUserId={userId}
-                      />
-                    </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (!isBacktracking) {
+                              setShowBacktrackDialog(false);
+                            }
+                          }}
+                          disabled={isBacktracking}
+                        >
+                          Close
+                        </Button>
+                      </DialogFooter>
+                    </>
                   )}
+                </DialogContent>
+              </Dialog>
 
-                  {/* Filter by Section */}
-                  {availableSections.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium text-[#124A69]">
-                        Filter by Section
-                      </Label>
-                      <div className="space-y-2 max-h-48 overflow-y-auto border-2 border-[#124A69]/20 rounded-md p-3 bg-gray-50/50">
-                        <div className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors">
-                          <Checkbox
-                            id="section-all"
-                            checked={
-                              tempSectionFilter.length === 0 ||
+              {/* Filter Sheet */}
+              <Sheet
+                open={isFilterSheetOpen}
+                onOpenChange={handleFilterSheetOpen}
+              >
+                <SheetContent
+                  side="right"
+                  className="w-[340px] sm:w-[400px] p-0 flex flex-col"
+                >
+                  <div className="p-6 border-b flex-shrink-0 bg-[#124A69]/5">
+                    <SheetHeader>
+                      <SheetTitle className="text-xl font-semibold text-[#124A69]">
+                        Filter Options
+                      </SheetTitle>
+                    </SheetHeader>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Faculty Filter - Only for Academic Head */}
+                    {permissions.canFilterByFaculty && (
+                      <div className="w-full">
+                        <FacultyFilter
+                          faculties={faculties}
+                          selectedFacultyIds={tempFacultyFilter}
+                          onChange={setTempFacultyFilter}
+                          currentUserId={userId}
+                        />
+                      </div>
+                    )}
+
+                    {/* Filter by Section */}
+                    {availableSections.length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium text-[#124A69]">
+                          Filter by Section
+                        </Label>
+                        <div className="space-y-2 max-h-48 overflow-y-auto border-2 border-[#124A69]/20 rounded-md p-3 bg-gray-50/50">
+                          <div className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors">
+                            <Checkbox
+                              id="section-all"
+                              checked={
+                                tempSectionFilter.length === 0 ||
                               availableSections.every((section) =>
                                 tempSectionFilter.some(
                                   (s) =>
@@ -2984,40 +2984,40 @@ export function CourseDataTable({
                                     section.trim().toUpperCase()
                                 )
                               )
-                            }
-                            onCheckedChange={(checked) => {
-                              if (checked) {
+                              }
+                              onCheckedChange={(checked) => {
+                                if (checked) {
                                 // Normalize sections when setting all
                                 setTempSectionFilter(
                                   availableSections.map((s) => s.trim())
                                 );
-                              } else {
-                                setTempSectionFilter([]);
-                              }
-                            }}
-                            className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
-                          />
-                          <Label
-                            htmlFor="section-all"
-                            className="text-sm font-medium cursor-pointer text-[#124A69]"
-                          >
-                            All Sections ({availableSections.length})
-                          </Label>
-                        </div>
-                        {availableSections.map((section) => (
-                          <div
-                            key={section}
-                            className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
-                          >
-                            <Checkbox
-                              id={`section-${section}`}
+                                } else {
+                                  setTempSectionFilter([]);
+                                }
+                              }}
+                              className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
+                            />
+                            <Label
+                              htmlFor="section-all"
+                              className="text-sm font-medium cursor-pointer text-[#124A69]"
+                            >
+                              All Sections ({availableSections.length})
+                            </Label>
+                          </div>
+                          {availableSections.map((section) => (
+                            <div
+                              key={section}
+                              className="flex items-center space-x-2 p-1.5 rounded hover:bg-[#124A69]/5 transition-colors"
+                            >
+                              <Checkbox
+                                id={`section-${section}`}
                               checked={tempSectionFilter.some(
                                 (s) =>
                                   s.trim().toUpperCase() ===
                                   section.trim().toUpperCase()
                               )}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
                                   // Add section if not already in filter (case-insensitive check)
                                   setTempSectionFilter((prev) => {
                                     const normalizedSection = section.trim();
@@ -3029,242 +3029,242 @@ export function CourseDataTable({
                                     if (alreadyExists) return prev;
                                     return [...prev, normalizedSection];
                                   });
-                                } else {
+                                  } else {
                                   // Remove section (case-insensitive)
-                                  setTempSectionFilter((prev) =>
+                                    setTempSectionFilter((prev) =>
                                     prev.filter(
                                       (s) =>
                                         s.trim().toUpperCase() !==
                                         section.trim().toUpperCase()
                                     )
-                                  );
-                                }
-                              }}
-                              className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
-                            />
-                            <Label
-                              htmlFor={`section-${section}`}
-                              className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
-                            >
-                              {section}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Select one or more sections to filter courses
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Filter by Day */}
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="day-filter"
-                      className="text-sm font-medium text-[#124A69]"
-                    >
-                      Filter by Day
-                    </Label>
-                    <Select
-                      value={tempDayFilter}
-                      onValueChange={setTempDayFilter}
-                    >
-                      <SelectTrigger id="day-filter" className="w-full">
-                        <SelectValue placeholder="Select day" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All Days</SelectItem>
-                        <SelectItem value="Monday">Monday</SelectItem>
-                        <SelectItem value="Tuesday">Tuesday</SelectItem>
-                        <SelectItem value="Wednesday">Wednesday</SelectItem>
-                        <SelectItem value="Thursday">Thursday</SelectItem>
-                        <SelectItem value="Friday">Friday</SelectItem>
-                        <SelectItem value="Saturday">Saturday</SelectItem>
-                        <SelectItem value="Sunday">Sunday</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Filter by Room */}
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="room-filter"
-                      className="text-sm font-medium text-[#124A69]"
-                    >
-                      Filter by Room
-                    </Label>
-                    <Input
-                      id="room-filter"
-                      type="text"
-                      value={tempRoomFilter}
-                      onChange={(e) => setTempRoomFilter(e.target.value)}
-                      placeholder="Enter room name or number"
-                      className="w-full"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Filter courses by room name or number
-                    </p>
-                  </div>
-
-                  {/* Filter by Start Time and End Time */}
-                  <div className="flex gap-4">
-                    <div className="flex-1 space-y-2">
-                      <Label className="text-sm font-medium text-[#124A69]">
-                        Filter by Start Time
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <TimePicker
-                            value={tempStartTimeFilter}
-                            onChange={setTempStartTimeFilter}
-                          />
+                                    );
+                                  }
+                                }}
+                                className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]/30"
+                              />
+                              <Label
+                                htmlFor={`section-${section}`}
+                                className="text-sm cursor-pointer text-gray-700 hover:text-[#124A69] transition-colors"
+                              >
+                                {section}
+                              </Label>
+                            </div>
+                          ))}
                         </div>
-                        {tempStartTimeFilter && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setTempStartTimeFilter("")}
-                            className="h-9 w-9 p-0 flex-shrink-0"
-                            title="Clear start time"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <p className="text-xs text-gray-500">
+                          Select one or more sections to filter courses
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        Show courses starting at this exact time
-                      </p>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                      <Label className="text-sm font-medium text-[#124A69]">
-                        Filter by End Time
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <TimePicker
-                            value={tempEndTimeFilter}
-                            onChange={setTempEndTimeFilter}
-                          />
-                        </div>
-                        {tempEndTimeFilter && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setTempEndTimeFilter("")}
-                            className="h-9 w-9 p-0 flex-shrink-0"
-                            title="Clear end time"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Show courses ending at this exact time
-                      </p>
-                    </div>
-                  </div>
+                    )}
 
-                  {/* Sort by Attendance Rate */}
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="attendance-rate-sort"
-                      className="text-sm font-medium text-[#124A69]"
-                    >
-                      Sort by Attendance Rate
-                    </Label>
-                    <Select
-                      value={tempAttendanceRateSort}
-                      onValueChange={(value: "asc" | "desc" | "none") =>
-                        setTempAttendanceRateSort(value)
-                      }
-                    >
-                      <SelectTrigger
-                        id="attendance-rate-sort"
-                        className="w-full"
+                    {/* Filter by Day */}
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="day-filter"
+                        className="text-sm font-medium text-[#124A69]"
                       >
-                        <SelectValue placeholder="Select sort order" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Sort</SelectItem>
-                        <SelectItem value="asc">
-                          Ascending (Low to High)
-                        </SelectItem>
-                        <SelectItem value="desc">
-                          Descending (High to Low)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                        Filter by Day
+                      </Label>
+                      <Select
+                        value={tempDayFilter}
+                        onValueChange={setTempDayFilter}
+                      >
+                        <SelectTrigger id="day-filter" className="w-full">
+                          <SelectValue placeholder="Select day" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ALL">All Days</SelectItem>
+                          <SelectItem value="Monday">Monday</SelectItem>
+                          <SelectItem value="Tuesday">Tuesday</SelectItem>
+                          <SelectItem value="Wednesday">Wednesday</SelectItem>
+                          <SelectItem value="Thursday">Thursday</SelectItem>
+                          <SelectItem value="Friday">Friday</SelectItem>
+                          <SelectItem value="Saturday">Saturday</SelectItem>
+                          <SelectItem value="Sunday">Sunday</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  {/* Sort by Passing Rate */}
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="passing-rate-sort"
-                      className="text-sm font-medium text-[#124A69]"
-                    >
-                      Sort by Passing Rate
-                    </Label>
-                    <Select
-                      value={tempPassingRateSort}
-                      onValueChange={(value: "asc" | "desc" | "none") =>
-                        setTempPassingRateSort(value)
-                      }
-                    >
+                    {/* Filter by Room */}
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="room-filter"
+                        className="text-sm font-medium text-[#124A69]"
+                      >
+                        Filter by Room
+                      </Label>
+                      <Input
+                        id="room-filter"
+                        type="text"
+                        value={tempRoomFilter}
+                        onChange={(e) => setTempRoomFilter(e.target.value)}
+                        placeholder="Enter room name or number"
+                        className="w-full"
+                      />
+                      <p className="text-xs text-gray-500">
+                        Filter courses by room name or number
+                      </p>
+                    </div>
+
+                    {/* Filter by Start Time and End Time */}
+                    <div className="flex gap-4">
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-sm font-medium text-[#124A69]">
+                          Filter by Start Time
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <TimePicker
+                              value={tempStartTimeFilter}
+                              onChange={setTempStartTimeFilter}
+                            />
+                          </div>
+                          {tempStartTimeFilter && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setTempStartTimeFilter("")}
+                              className="h-9 w-9 p-0 flex-shrink-0"
+                              title="Clear start time"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Show courses starting at this exact time
+                        </p>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-sm font-medium text-[#124A69]">
+                          Filter by End Time
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <TimePicker
+                              value={tempEndTimeFilter}
+                              onChange={setTempEndTimeFilter}
+                            />
+                          </div>
+                          {tempEndTimeFilter && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setTempEndTimeFilter("")}
+                              className="h-9 w-9 p-0 flex-shrink-0"
+                              title="Clear end time"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Show courses ending at this exact time
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Sort by Attendance Rate */}
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="attendance-rate-sort"
+                        className="text-sm font-medium text-[#124A69]"
+                      >
+                        Sort by Attendance Rate
+                      </Label>
+                      <Select
+                        value={tempAttendanceRateSort}
+                        onValueChange={(value: "asc" | "desc" | "none") =>
+                          setTempAttendanceRateSort(value)
+                        }
+                      >
+                        <SelectTrigger
+                          id="attendance-rate-sort"
+                          className="w-full"
+                        >
+                          <SelectValue placeholder="Select sort order" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Sort</SelectItem>
+                          <SelectItem value="asc">
+                            Ascending (Low to High)
+                          </SelectItem>
+                          <SelectItem value="desc">
+                            Descending (High to Low)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Sort by Passing Rate */}
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="passing-rate-sort"
+                        className="text-sm font-medium text-[#124A69]"
+                      >
+                        Sort by Passing Rate
+                      </Label>
+                      <Select
+                        value={tempPassingRateSort}
+                        onValueChange={(value: "asc" | "desc" | "none") =>
+                          setTempPassingRateSort(value)
+                        }
+                      >
                       <SelectTrigger id="passing-rate-sort" className="w-full">
-                        <SelectValue placeholder="Select sort order" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Sort</SelectItem>
-                        <SelectItem value="asc">
-                          Ascending (Low to High)
-                        </SelectItem>
-                        <SelectItem value="desc">
-                          Descending (High to Low)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                          <SelectValue placeholder="Select sort order" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Sort</SelectItem>
+                          <SelectItem value="asc">
+                            Ascending (Low to High)
+                          </SelectItem>
+                          <SelectItem value="desc">
+                            Descending (High to Low)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                </div>
-                <div className="p-6 border-t bg-[#124A69]/5 flex-shrink-0">
-                  <div className="flex gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={handleCancelFilters}
-                      className="flex-1 border-[#124A69]/30 text-[#124A69] hover:bg-[#124A69]/10"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleApplyFilters}
-                      className="flex-1 bg-[#124A69] hover:bg-[#0D3A54] text-white"
-                    >
-                      Apply Filters
-                    </Button>
+                  <div className="p-6 border-t bg-[#124A69]/5 flex-shrink-0">
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelFilters}
+                        className="flex-1 border-[#124A69]/30 text-[#124A69] hover:bg-[#124A69]/10"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleApplyFilters}
+                        className="flex-1 bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                      >
+                        Apply Filters
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </SheetContent>
-            </Sheet>
+                </SheetContent>
+              </Sheet>
 
-            {/* Edit Course Sheet */}
-            {editingCourse && (
-              <CourseSheet
-                mode="edit"
-                course={editingCourse}
-                onSuccess={() => {
-                  refreshTableData(true);
-                  setEditingCourse(null);
-                }}
-                faculties={faculties}
-                userId={userId}
-                userRole={userRole}
-                open={!!editingCourse}
-                onOpenChange={(open) => !open && setEditingCourse(null)}
-              />
-            )}
+              {/* Edit Course Sheet */}
+              {editingCourse && (
+                <CourseSheet
+                  mode="edit"
+                  course={editingCourse}
+                  onSuccess={() => {
+                    refreshTableData(true);
+                    setEditingCourse(null);
+                  }}
+                  faculties={faculties}
+                  userId={userId}
+                  userRole={userRole}
+                  open={!!editingCourse}
+                  onOpenChange={(open) => !open && setEditingCourse(null)}
+                />
+              )}
+            </div>
           </div>
-        </div>
       </div>
     </div>
   );

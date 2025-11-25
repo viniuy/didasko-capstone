@@ -14,21 +14,40 @@ export function useAttendanceByCourse(
   return useQuery({
     queryKey: [...queryKeys.attendance.byCourse(courseSlug), date, options],
     queryFn: async ({ signal }) => {
-      const params = new URLSearchParams();
-      params.append("date", date);
-      if (options?.page) params.append("page", options.page.toString());
-      if (options?.limit) params.append("limit", options.limit.toString());
+      try {
+        const params = new URLSearchParams();
+        params.append("date", date);
+        if (options?.page) params.append("page", options.page.toString());
+        if (options?.limit) params.append("limit", options.limit.toString());
 
-      const { data } = await axios.get(
-        `/courses/${courseSlug}/attendance?${params.toString()}`,
-        { signal }
-      );
-      return data;
+        const { data } = await axios.get(
+          `/courses/${courseSlug}/attendance?${params.toString()}`,
+          { signal }
+        );
+        return data;
+      } catch (error: any) {
+        // If the request was cancelled (e.g., during component unmount or query invalidation),
+        // don't throw the error - just return empty attendance
+        if (
+          error.name === "CanceledError" ||
+          error.code === "ERR_CANCELED" ||
+          signal?.aborted
+        ) {
+          return {
+            attendance: [],
+            pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+          };
+        }
+        // For other errors, throw to let React Query handle it
+        throw error;
+      }
     },
     enabled: !!courseSlug && !!date,
     staleTime: 0, // Always consider data stale for real-time updates
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    retry: 1, // Only retry once on failure
+    retryDelay: 1000, // Wait 1 second before retrying
   });
 }
 
@@ -92,16 +111,32 @@ export function useAttendanceDates(courseSlug: string) {
   return useQuery({
     queryKey: queryKeys.attendance.dates(courseSlug),
     queryFn: async ({ signal }) => {
-      const { data } = await axios.get(
-        `/courses/${courseSlug}/attendance/dates`,
-        { signal }
-      );
-      return data;
+      try {
+        const { data } = await axios.get(
+          `/courses/${courseSlug}/attendance/dates`,
+          { signal }
+        );
+        return data;
+      } catch (error: any) {
+        // If the request was cancelled (e.g., during component unmount or query invalidation),
+        // don't throw the error - just return empty dates
+        if (
+          error.name === "CanceledError" ||
+          error.code === "ERR_CANCELED" ||
+          signal?.aborted
+        ) {
+          return { dates: [] };
+        }
+        // For other errors, throw to let React Query handle it
+        throw error;
+      }
     },
     enabled: !!courseSlug,
     staleTime: 30 * 1000, // Cache for 30 seconds to prevent unnecessary refetches
     refetchOnMount: false, // Don't refetch on mount if we have cached data
     refetchOnWindowFocus: false, // Don't refetch on window focus
+    retry: 1, // Only retry once on failure
+    retryDelay: 1000, // Wait 1 second before retrying
   });
 }
 
@@ -243,13 +278,8 @@ export function useRecordAttendance() {
       toast.error("Failed to record attendance");
     },
     onSuccess: (_, variables) => {
-      // Invalidate and immediately refetch for real-time updates
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.attendance.dates(variables.courseSlug),
-      });
+      // Note: Don't invalidate attendance queries - local state is the source of truth
+      // Only invalidate computed/derived data that depends on attendance
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
@@ -264,19 +294,6 @@ export function useRecordAttendance() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.stats.attendanceRanking(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.students.byCourse(variables.courseSlug),
-      });
-      // Immediately refetch attendance data
-      queryClient.refetchQueries({
-        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
-      });
-      queryClient.refetchQueries({
-        queryKey: queryKeys.attendance.dates(variables.courseSlug),
-      });
-      queryClient.refetchQueries({
-        queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
       // Dismiss any loading toasts first
       toast.dismiss();
@@ -313,13 +330,8 @@ export function useBatchAttendance() {
       return data;
     },
     onSuccess: (_, variables) => {
-      // Invalidate and immediately refetch for real-time updates
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.attendance.dates(variables.courseSlug),
-      });
+      // Note: Don't invalidate attendance queries - local state is the source of truth
+      // Only invalidate computed/derived data that depends on attendance
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
@@ -334,19 +346,6 @@ export function useBatchAttendance() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.stats.attendanceRanking(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.students.byCourse(variables.courseSlug),
-      });
-      // Immediately refetch attendance data
-      queryClient.refetchQueries({
-        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
-      });
-      queryClient.refetchQueries({
-        queryKey: queryKeys.attendance.dates(variables.courseSlug),
-      });
-      queryClient.refetchQueries({
-        queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
       // Dismiss any loading toasts first
       toast.dismiss();
@@ -381,13 +380,20 @@ export function useClearAttendance() {
       return data;
     },
     onSuccess: (_, variables) => {
-      // Invalidate all attendance queries for this course
+      // Invalidate attendance query for the specific date to ensure fresh data when user returns
       queryClient.invalidateQueries({
-        queryKey: queryKeys.attendance.byCourse(variables.courseSlug),
+        queryKey: [
+          ...queryKeys.attendance.byCourse(variables.courseSlug),
+          variables.date,
+        ],
       });
+      // Also invalidate attendance dates to remove the cleared date from the list
+      // Use refetchType: 'active' to only refetch active queries, preventing errors from cancelled queries
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.dates(variables.courseSlug),
+        refetchType: "active", // Only refetch active queries
       });
+      // Invalidate computed/derived data that depends on attendance
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.stats(variables.courseSlug),
       });
@@ -396,9 +402,6 @@ export function useClearAttendance() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.courses.analytics(variables.courseSlug),
-      });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.students.byCourse(variables.courseSlug),
       });
       // Note: Don't show toast here - let the component handle it to avoid duplicates
     },
