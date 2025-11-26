@@ -661,11 +661,31 @@ export function useAssignSchedules() {
       return data;
     },
     onSuccess: (_, variables) => {
+      // Invalidate all course-related queries to ensure UI updates
       queryClient.invalidateQueries({
         queryKey: queryKeys.courses.schedules(variables.courseSlug),
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.courses.detail(variables.courseSlug),
+      });
+      // Invalidate main courses list to update the course cards
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.courses.all,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.courses.lists(),
+      });
+      // Invalidate active courses query
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length >= 2 &&
+            key[0] === "courses" &&
+            key[1] === "active"
+          );
+        },
       });
       toast.success("Schedules assigned successfully");
     },

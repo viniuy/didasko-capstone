@@ -19,6 +19,7 @@ interface Course {
   attendanceStats?: {
     totalAbsents: number;
     lastAttendanceDate: string | null;
+    lastAttendanceAbsents?: number; // Absents count for most recent attendance date
   };
 }
 
@@ -57,7 +58,9 @@ const CourseShortcut = ({
           {showAttendanceStats && (
             <p className="text-xs text-white/60 mt-1">
               Absents last attendance:{" "}
-              {course.attendanceStats?.totalAbsents || 0}
+              {course.attendanceStats?.lastAttendanceAbsents ??
+                course.attendanceStats?.totalAbsents ??
+                0}
             </p>
           )}
         </div>
@@ -83,15 +86,15 @@ const LoadingSkeleton = () => (
 
 // Helper function to detect module from pathname
 const getModuleConfig = (pathname: string) => {
-  if (pathname.includes("/attendance/")) {
+  if (pathname.includes("/main/attendance")) {
     return {
       basePath: "/main/attendance/class",
-      title: "Quick Access",
+      title: "Quick Access - Attendance",
       showAttendanceStats: true,
     };
   } else if (
-    pathname.includes("/grading/") ||
-    pathname.includes("/class-record/")
+    pathname.includes("/grading") ||
+    pathname.includes("/class-record")
   ) {
     return {
       basePath: "/main/grading/class-record",
@@ -150,6 +153,8 @@ export default function CourseShortcuts({
                 ? course.attendanceStats.lastAttendanceDate.toISOString()
                 : String(course.attendanceStats.lastAttendanceDate)
               : null,
+            lastAttendanceAbsents:
+              course.attendanceStats.lastAttendanceAbsents ?? undefined,
           }
         : undefined,
     }));

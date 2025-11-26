@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -66,95 +67,6 @@ export async function PUT(
       }
     }
 
-    // Validate schedule overlaps with existing active courses for the same faculty
-    if (course.facultyId && schedules.length > 0) {
-      // Get all active courses for this faculty (excluding current course)
-      const activeCourses = await prisma.course.findMany({
-        where: {
-          facultyId: course.facultyId,
-          status: "ACTIVE",
-          id: { not: course.id },
-        },
-        include: {
-          schedules: true,
-        },
-      });
-
-      // Helper function to normalize day names
-      const normalizeDay = (day: string): string => {
-        const dayMap: Record<string, string> = {
-          Mon: "Monday",
-          Tue: "Tuesday",
-          Wed: "Wednesday",
-          Thu: "Thursday",
-          Fri: "Friday",
-          Sat: "Saturday",
-          Sun: "Sunday",
-        };
-        return dayMap[day] || day;
-      };
-
-      // Helper function to convert time to minutes
-      const timeToMinutes = (time: string): number => {
-        if (!time) return 0;
-        // Handle both "HH:MM" and "HH:MM AM/PM" formats
-        const parts = time.split(" ");
-        const [hours, minutes] = parts[0].split(":").map(Number);
-        let hour24 = hours;
-        if (parts[1] === "PM" && hours !== 12) hour24 = hours + 12;
-        if (parts[1] === "AM" && hours === 12) hour24 = 0;
-        return hour24 * 60 + (minutes || 0);
-      };
-
-      // Helper function to check time overlap
-      const checkOverlap = (
-        day1: string,
-        from1: string,
-        to1: string,
-        day2: string,
-        from2: string,
-        to2: string
-      ): boolean => {
-        if (normalizeDay(day1) !== normalizeDay(day2)) return false;
-        const start1 = timeToMinutes(from1);
-        const end1 = timeToMinutes(to1);
-        const start2 = timeToMinutes(from2);
-        const end2 = timeToMinutes(to2);
-        return start1 < end2 && start2 < end1;
-      };
-
-      // Check each new schedule against existing schedules
-      for (const newSchedule of schedules) {
-        for (const activeCourse of activeCourses) {
-          for (const existingSchedule of activeCourse.schedules) {
-            if (
-              checkOverlap(
-                newSchedule.day,
-                newSchedule.fromTime,
-                newSchedule.toTime,
-                existingSchedule.day,
-                existingSchedule.fromTime,
-                existingSchedule.toTime
-              )
-            ) {
-              return NextResponse.json(
-                {
-                  error: `Schedule overlaps with existing course "${
-                    activeCourse.code
-                  } - ${activeCourse.section}" on ${normalizeDay(
-                    newSchedule.day
-                  )} (${existingSchedule.fromTime} - ${
-                    existingSchedule.toTime
-                  })`,
-                },
-                { status: 400, headers: { "Cache-Control": "no-store" } }
-              );
-            }
-          }
-        }
-      }
-    }
-
     // Update schedules in a transaction
     await prisma.$transaction(async (tx) => {
       // Delete existing schedules for this course
@@ -174,6 +86,10 @@ export async function PUT(
         });
       }
     });
+
+    // Invalidate Next.js cache
+    revalidateTag("courses");
+    revalidateTag(`course-${course_slug}`);
 
     return NextResponse.json(
       { message: "Schedules updated successfully" },

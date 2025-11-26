@@ -30,7 +30,6 @@ import {
   Archive,
   Filter,
   X,
-  History,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -238,6 +237,9 @@ const CourseCard = ({
   onViewDetails,
   onNavigate,
   itemsPerPage,
+  userRole,
+  facultyFilter,
+  userId,
 }: {
   course: Course;
   onEdit: (course: Course) => void;
@@ -245,6 +247,9 @@ const CourseCard = ({
   onViewDetails: (course: Course) => void;
   onNavigate?: (slug: string) => void;
   itemsPerPage: number;
+  userRole?: UserRole;
+  facultyFilter?: string[];
+  userId?: string;
 }) => {
   const router = useRouter();
 
@@ -292,6 +297,15 @@ const CourseCard = ({
   const passingRate = course.stats?.passingRate ?? 0;
   const attendanceRate = course.stats?.attendanceRate ?? 0;
 
+  // Hide ellipsis menu if academic head is filtering by a specific faculty (viewing other faculty's courses)
+  // Show ellipsis if: not ACADEMIC_HEAD, or no filter, or viewing own courses only
+  const shouldHideEllipsis =
+    userRole === "ACADEMIC_HEAD" &&
+    facultyFilter &&
+    facultyFilter.length === 1 &&
+    userId &&
+    facultyFilter[0] !== userId;
+
   return (
     <div className="group relative w-auto h-auto min-h-[240px] sm:h-[250px] md:h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-2 sm:p-3 hover:border-[#124A69] hover:shadow-xl transition-all duration-300 ease-in-out text-[#124A69] transform hover:scale-105 hover:-translate-y-1 will-change-transform overflow-hidden">
       {/* Status Stripe - Diagonal top right (backward slash) */}
@@ -310,42 +324,44 @@ const CourseCard = ({
           marginRight: "-20px",
         }}
       />
-      {/* More Options Menu */}
-      <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 sm:h-9 sm:w-9 p-0 hover:bg-gray-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
-            >
-              <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Course Actions</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(course);
-              }}
-            >
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Course
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddSchedule(course);
-              }}
-            >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              {hasNoSchedule ? "Add Schedule" : "Edit Schedule"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      {/* More Options Menu - Hidden when academic head filters by faculty */}
+      {!shouldHideEllipsis && (
+        <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 sm:h-9 sm:w-9 p-0 hover:bg-gray-100 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
+              >
+                <MoreVertical className="h-4 w-4 sm:h-5 sm:w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Course Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(course);
+                }}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Course
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddSchedule(course);
+                }}
+              >
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                {hasNoSchedule ? "Add Schedule" : "Edit Schedule"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
 
       {/* Card Content - Clickable */}
       <div
@@ -565,9 +581,6 @@ export function CourseDataTable({
 
   // Import/Export State
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [showBacktrackDialog, setShowBacktrackDialog] = useState(false);
-  const [isBacktracking, setIsBacktracking] = useState(false);
-  const [backtrackSearchQuery, setBacktrackSearchQuery] = useState("");
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
@@ -601,40 +614,6 @@ export function CourseDataTable({
   const { data: facultyData } = useFaculty();
   const bulkArchiveMutation = useBulkArchiveCourses();
 
-  // Fetch initial 100 archived courses for backtrack dialog
-  const {
-    data: initialArchivedCourses = [],
-    isLoading: isLoadingInitialArchived,
-  } = useArchivedCourses(
-    showBacktrackDialog && !backtrackSearchQuery
-      ? {
-          facultyId: userRole === "ACADEMIC_HEAD" ? undefined : userId,
-          limit: 100,
-        }
-      : undefined
-  );
-
-  // Fetch searched archived courses (when search query is provided)
-  const {
-    data: searchedArchivedCourses = [],
-    isLoading: isLoadingSearchedArchived,
-  } = useArchivedCourses(
-    showBacktrackDialog && backtrackSearchQuery
-      ? {
-          facultyId: userRole === "ACADEMIC_HEAD" ? undefined : userId,
-          search: backtrackSearchQuery,
-        }
-      : undefined
-  );
-
-  // Determine which data to use and if we're loading
-  const archivedCoursesData = backtrackSearchQuery
-    ? searchedArchivedCourses
-    : initialArchivedCourses;
-  const isLoadingArchived = backtrackSearchQuery
-    ? isLoadingSearchedArchived
-    : isLoadingInitialArchived;
-
   // Get course slugs for batch stats
   // Use coursesData from React Query if available, otherwise fall back to initialCourses
   const coursesForStats = coursesData?.courses || initialCourses;
@@ -655,6 +634,49 @@ export function CourseDataTable({
     }
   }, [facultyData]);
 
+  // Helper function to map courses with stats
+  const mapCoursesWithStats = useCallback(
+    (courses: any[]): Course[] => {
+      if (courses.length === 0) {
+        return [];
+      }
+
+      // Map stats from batch response to courses
+      const defaultStats: CourseStats = {
+        passingRate: 0,
+        attendanceRate: 0,
+        totalStudents: 0,
+      };
+
+      const statsMap = new Map<string, CourseStats>();
+      (statsData?.stats || []).forEach((item: any) => {
+        if (item.slug && item.stats) {
+          statsMap.set(item.slug, {
+            passingRate: item.stats.passingRate ?? 0,
+            attendanceRate: item.stats.attendanceRate ?? 0,
+            totalStudents: item.stats.totalStudents ?? 0,
+          });
+        }
+      });
+
+      return courses.map((course: any) => {
+        const stats: CourseStats = statsMap.get(course.slug) || defaultStats;
+
+        return {
+          ...course,
+          stats,
+          // Ensure _count is preserved if it exists, otherwise calculate from available data
+          _count: course._count || {
+            students:
+              course.attendanceStats?.totalStudents ||
+              (Array.isArray(course.students) ? course.students.length : 0),
+          },
+        };
+      });
+    },
+    [statsData]
+  );
+
   // Sync courses with stats from React Query
   // Prefer coursesData from React Query (after mutations) over initialCourses (from SSR)
   useEffect(() => {
@@ -666,42 +688,10 @@ export function CourseDataTable({
       return;
     }
 
-    // Map stats from batch response to courses
-    const defaultStats: CourseStats = {
-      passingRate: 0,
-      attendanceRate: 0,
-      totalStudents: 0,
-    };
-
-    const statsMap = new Map<string, CourseStats>();
-    (statsData?.stats || []).forEach((item: any) => {
-      if (item.slug && item.stats) {
-        statsMap.set(item.slug, {
-          passingRate: item.stats.passingRate ?? 0,
-          attendanceRate: item.stats.attendanceRate ?? 0,
-          totalStudents: item.stats.totalStudents ?? 0,
-        });
-      }
-    });
-
-    const coursesWithStats: Course[] = coursesToUse.map((course: any) => {
-      const stats: CourseStats = statsMap.get(course.slug) || defaultStats;
-
-      return {
-        ...course,
-        stats,
-        // Ensure _count is preserved if it exists, otherwise calculate from available data
-        _count: course._count || {
-          students:
-            course.attendanceStats?.totalStudents ||
-            (Array.isArray(course.students) ? course.students.length : 0),
-        },
-      };
-    });
-
+    const coursesWithStats = mapCoursesWithStats(coursesToUse);
     setTableData(coursesWithStats);
     setHasLoadedOnce(true);
-  }, [coursesData, initialCourses, statsData]);
+  }, [coursesData, initialCourses, mapCoursesWithStats]);
 
   // Update loading state based on query
   useEffect(() => {
@@ -722,9 +712,32 @@ export function CourseDataTable({
           queryKey: queryKeys.stats.all,
         });
 
+        // Invalidate specific course queries that might be cached
+        await queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) && key.length >= 1 && key[0] === "courses"
+            );
+          },
+        });
+
         // Refetch all course queries to get fresh data
         await queryClient.refetchQueries({
           queryKey: queryKeys.courses.all,
+        });
+
+        // Force refetch active courses to ensure UI updates
+        await queryClient.refetchQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              (key[1] === "list" || key[1] === "active")
+            );
+          },
         });
 
         // Stats will be refetched automatically via useCoursesStatsBatch when courseSlugs change
@@ -1101,21 +1114,47 @@ export function CourseDataTable({
         status: "ARCHIVED",
       });
 
-      // Refetch the courses query directly using the hook's refetch method
-      // This ensures the data is updated and the component re-renders
+      // Optimistically remove archived courses from tableData immediately
+      setTableData((prevData) =>
+        prevData.filter((course) => !coursesToArchive.includes(course.id))
+      );
+
+      // Then refetch to get fresh data from server
       try {
-        const { data: refetchedData } = await refetchCourses();
+        // Invalidate to mark as stale
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.list(undefined),
+        });
 
-        // Wait a bit to ensure React has processed the data update
-        // This allows the useEffect to sync the new data to tableData
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        // Invalidate and refetch all archived courses queries (for settings dialog and backtrack dialog)
+        // Use a broader pattern to catch all variations with different filters
+        await queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              key[1] === "archived"
+            );
+          },
+        });
 
-        if (refetchedData) {
-          console.log(
-            "Courses refetched successfully:",
-            refetchedData.courses.length
-          );
-        }
+        // Force refetch of all active archived queries (in case dialog is open)
+        await queryClient.refetchQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              key[1] === "archived"
+            );
+          },
+        });
+
+        // Refetch using the hook's refetch method
+        await refetchCourses();
       } catch (refetchError) {
         // Log but don't fail - the query will retry automatically
         console.warn("Error refetching courses after archive:", refetchError);
@@ -1308,27 +1347,118 @@ export function CourseDataTable({
         );
       }
 
+      // Fetch full course data with schedules before unarchiving
+      // This ensures we have complete data for the optimistic update
+      const coursesWithSchedules = await Promise.all(
+        coursesToUnarchiveData.map(async (course: any) => {
+          if (!course.slug) {
+            // If no slug, return the basic course data (shouldn't happen, but handle gracefully)
+            return course;
+          }
+          try {
+            const response = await fetch(`/api/courses/${course.slug}`);
+            if (response.ok) {
+              const fullCourse = await response.json();
+              return fullCourse;
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to fetch full data for course ${course.slug}:`,
+              error
+            );
+          }
+          // Fallback to basic course data if fetch fails
+          return course;
+        })
+      );
+
       // Perform bulk unarchive operation
       await bulkArchiveMutation.mutateAsync({
         courseIds: coursesToUnarchive,
         status: "ACTIVE",
       });
 
-      // Refetch the courses query directly using the hook's refetch method
-      // This ensures the data is updated and the component re-renders
+      // Optimistically add unarchived courses to tableData immediately
+      // Map the full course data to the Course format with updated status
+      const coursesToAdd = coursesWithSchedules.map((course: any) => {
+        // Use default stats for optimistic update (will be updated after refetch)
+        const stats: CourseStats = {
+          passingRate: 0,
+          attendanceRate: 0,
+          totalStudents: 0,
+        };
+
+        return {
+          ...course,
+          status: "ACTIVE" as const,
+          stats,
+          // Ensure schedules are preserved from the full course data
+          // Schedules should be an array - handle both array and undefined/null cases
+          schedules: Array.isArray(course.schedules) ? course.schedules : [],
+          _count: course._count || {
+            students:
+              course.attendanceStats?.totalStudents ||
+              (Array.isArray(course.students) ? course.students.length : 0),
+          },
+        };
+      });
+
+      // Add the courses to tableData immediately
+      setTableData((prevData) => {
+        // Filter out any existing courses with the same IDs (in case they exist)
+        const filtered = prevData.filter(
+          (c) => !coursesToUnarchive.includes(c.id)
+        );
+        // Add the newly activated courses
+        return [...filtered, ...coursesToAdd];
+      });
+
+      // Then refetch to get fresh data from server
       try {
-        const { data: refetchedData } = await refetchCourses();
+        // Invalidate all course-related queries to ensure fresh data
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.all,
+        });
 
-        // Wait a bit to ensure React has processed the data update
-        // This allows the useEffect to sync the new data to tableData
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        // Invalidate and refetch all archived courses queries (for settings dialog and backtrack dialog)
+        // Use a broader pattern to catch all variations with different filters
+        await queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              key[1] === "archived"
+            );
+          },
+        });
 
-        if (refetchedData) {
-          console.log(
-            "Courses refetched successfully:",
-            refetchedData.courses.length
-          );
-        }
+        // Force refetch of all active archived queries (in case dialog is open)
+        await queryClient.refetchQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              key[1] === "archived"
+            );
+          },
+        });
+
+        // Invalidate active courses query
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.active({ facultyId: userId }),
+        });
+
+        // Invalidate stats queries so they refetch with new courses
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.stats.all,
+        });
+
+        // Refetch using the hook's refetch method
+        await refetchCourses();
       } catch (refetchError) {
         // Log but don't fail - the query will retry automatically
         console.warn("Error refetching courses after unarchive:", refetchError);
@@ -2288,8 +2418,48 @@ export function CourseDataTable({
       // Small delay for visual feedback
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // Refresh table data
-      await refreshTableData(false);
+      // For edit mode, ensure comprehensive invalidation and refetch
+      if (scheduleDialogMode === "edit") {
+        // Invalidate all course-related queries
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.all,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.stats.all,
+        });
+
+        // Invalidate specific course queries
+        await queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) && key.length >= 1 && key[0] === "courses"
+            );
+          },
+        });
+
+        // Force refetch all course queries
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.courses.all,
+        });
+
+        // Force refetch active courses to ensure UI updates immediately
+        await queryClient.refetchQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              (key[1] === "list" || key[1] === "active")
+            );
+          },
+        });
+      } else {
+        // For create/import mode, use the standard refresh
+        await refreshTableData(false);
+      }
+
       if (onCourseAdded) onCourseAdded();
 
       // Reset all state
@@ -2309,6 +2479,7 @@ export function CourseDataTable({
       onCourseAdded,
       scheduleDialogMode,
       preImportValidationErrors,
+      queryClient,
     ]
   );
 
@@ -2552,15 +2723,6 @@ export function CourseDataTable({
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setShowBacktrackDialog(true)}
-                    disabled={isLoading}
-                    className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
-                  >
-                    <History className="h-3 w-3 sm:h-4 sm:w-4" />
-                    <span className="hidden xl:inline">Backtrack</span>
-                  </Button>
-                  <Button
-                    variant="outline"
                     onClick={() => setShowSettingsDialog(true)}
                     disabled={isLoading}
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
@@ -2670,6 +2832,9 @@ export function CourseDataTable({
                               onViewDetails={handleViewDetails}
                               onNavigate={handleCourseNavigate}
                               itemsPerPage={itemsPerPage}
+                              userRole={userRole}
+                              facultyFilter={facultyFilter}
+                              userId={userId}
                             />
                           </AnimatedContent>
                         ) : (
@@ -2681,6 +2846,9 @@ export function CourseDataTable({
                             onViewDetails={handleViewDetails}
                             onNavigate={handleCourseNavigate}
                             itemsPerPage={itemsPerPage}
+                            userRole={userRole}
+                            facultyFilter={facultyFilter}
+                            userId={userId}
                           />
                         )
                       )}
@@ -3052,166 +3220,8 @@ export function CourseDataTable({
               onUnarchiveCourses={handleUnarchiveCourses}
               userId={userId}
               userRole={userRole}
+              faculties={faculties}
             />
-
-            {/* Backtrack Dialog - Show Archived Courses */}
-            <Dialog
-              open={showBacktrackDialog}
-              onOpenChange={(open) => {
-                // Prevent closing while backtracking is in progress
-                if (!open && isBacktracking) {
-                  return;
-                }
-                if (!open) {
-                  setIsBacktracking(false);
-                  setBacktrackSearchQuery(""); // Reset search when closing
-                }
-                setShowBacktrackDialog(open);
-              }}
-            >
-              <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-xl text-[#124A69]">
-                    <History className="h-5 w-5" />
-                    Backtrack - Archived Courses
-                  </DialogTitle>
-                  <DialogDescription>
-                    Click on any archived course to navigate to it
-                  </DialogDescription>
-                </DialogHeader>
-
-                {/* Search Bar */}
-                <div className="relative mt-4">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Search archived courses by code, title, or section..."
-                    value={backtrackSearchQuery}
-                    onChange={(e) => setBacktrackSearchQuery(e.target.value)}
-                    className="pl-9"
-                    disabled={isBacktracking}
-                  />
-                </div>
-
-                {isBacktracking ? (
-                  <div className="flex-1 flex items-center justify-center py-12">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="flex gap-2">
-                        <div className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"></div>
-                        <div
-                          className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        ></div>
-                        <div
-                          className="w-2 h-2 sm:w-3 sm:h-3 bg-[#124A69] rounded-full animate-bounce"
-                          style={{ animationDelay: "300ms" }}
-                        ></div>
-                      </div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-[#124A69] text-center">
-                        Backtracking in progress...
-                      </h2>
-                      <p className="text-sm sm:text-base text-gray-600 text-center">
-                        Please wait while we navigate to the archived course
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {!backtrackSearchQuery &&
-                      archivedCoursesData.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Showing {archivedCoursesData.length} of archived
-                          courses (limited to 100). Use search to find specific
-                          courses.
-                        </p>
-                      )}
-                    <div className="flex-1 overflow-y-auto border rounded-lg mt-4">
-                      {isLoadingArchived ? (
-                        <div className="text-center py-8 text-gray-500">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#124A69] mx-auto mb-2"></div>
-                          Loading archived courses...
-                        </div>
-                      ) : archivedCoursesData.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                          <Archive className="h-12 w-12 mb-2 opacity-50" />
-                          <p className="font-medium">
-                            {backtrackSearchQuery
-                              ? "No archived courses found"
-                              : "No archived courses"}
-                          </p>
-                          <p className="text-sm">
-                            {backtrackSearchQuery
-                              ? `No courses match "${backtrackSearchQuery}"`
-                              : "Archive courses to access them here"}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="divide-y">
-                          {archivedCoursesData.map((course: any) => (
-                            <div
-                              key={course.id}
-                              onClick={() => {
-                                if (course.slug) {
-                                  setIsBacktracking(true);
-                                  setTimeout(() => {
-                                    router.push(`/main/course/${course.slug}`);
-                                  }, 300);
-                                } else {
-                                  toast.error("Course slug not available");
-                                }
-                              }}
-                              className="flex items-center gap-3 p-4 hover:bg-[#124A69]/5 cursor-pointer transition-colors group"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-semibold text-base text-[#124A69] group-hover:text-[#0d3a56]">
-                                    {course.code} - {course.section}
-                                  </h4>
-                                  <Badge
-                                    variant="outline"
-                                    className="text-xs border-red-300 text-red-700"
-                                  >
-                                    ARCHIVED
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-gray-600 truncate">
-                                  {course.title}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  {course.semester} • {course.academicYear}
-                                </p>
-                              </div>
-                              <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-[#124A69] hover:text-[#0d3a56]"
-                                >
-                                  View →
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <DialogFooter>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (!isBacktracking) {
-                            setShowBacktrackDialog(false);
-                          }
-                        }}
-                        disabled={isBacktracking}
-                      >
-                        Close
-                      </Button>
-                    </DialogFooter>
-                  </>
-                )}
-              </DialogContent>
-            </Dialog>
 
             {/* Filter Sheet */}
             <Sheet

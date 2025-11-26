@@ -25,7 +25,6 @@ import {
   useCreateCourse,
   useImportCoursesWithSchedulesArray,
   useAssignSchedules,
-  useActiveCourses,
 } from "@/lib/hooks/queries";
 import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
@@ -110,18 +109,6 @@ export function ScheduleAssignmentDialog({
 
   const currentCourse = courses[currentIndex];
   const progress = ((currentIndex + 1) / courses.length) * 100;
-
-  // Fetch existing active courses for overlap validation
-  const { data: existingCoursesData } = useActiveCourses({
-    filters: currentCourse?.facultyId
-      ? { facultyId: currentCourse.facultyId }
-      : session?.user?.id
-      ? { facultyId: session.user.id }
-      : undefined,
-    refetchOnMount: true,
-  });
-
-  const existingCourses = existingCoursesData?.courses || [];
 
   const isSubmitting =
     createCourseMutation.isPending ||
@@ -304,44 +291,6 @@ export function ScheduleAssignmentDialog({
             { id: toastId }
           );
           return false;
-        }
-      }
-    }
-
-    // Check for overlaps with existing active courses (excluding current course if editing)
-    const currentCourseId = mode === "edit" ? currentCourse?.id : null;
-    for (const existingCourse of existingCourses) {
-      // Skip the current course if editing
-      if (currentCourseId && existingCourse.id === currentCourseId) {
-        continue;
-      }
-
-      // Skip if course doesn't have schedules
-      if (!existingCourse.schedules || existingCourse.schedules.length === 0) {
-        continue;
-      }
-
-      // Check each new schedule against existing course schedules
-      for (const newSchedule of completeSchedules) {
-        for (const existingSchedule of existingCourse.schedules) {
-          const normalizedNewDay = normalizeDayName(newSchedule.day);
-          const normalizedExistingDay = normalizeDayName(existingSchedule.day);
-
-          if (normalizedNewDay === normalizedExistingDay) {
-            const overlapSchedule: Schedule = {
-              day: normalizedExistingDay,
-              fromTime: existingSchedule.fromTime,
-              toTime: existingSchedule.toTime,
-            };
-
-            if (checkTimeOverlap(newSchedule, overlapSchedule)) {
-              toast.error(
-                `Schedule overlaps with existing course "${existingCourse.code} - ${existingCourse.section}" on ${normalizedNewDay} (${existingSchedule.fromTime} - ${existingSchedule.toTime}). Please adjust the time.`,
-                { id: toastId }
-              );
-              return false;
-            }
-          }
         }
       }
     }

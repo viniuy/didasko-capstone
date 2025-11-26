@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { CourseStatus } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { logAction } from "@/lib/audit";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
@@ -308,6 +308,11 @@ export async function editCourse(
       }
 
       revalidatePath("/admin/courses");
+      // Also invalidate cache tags for consistency with API routes
+      revalidateTag("courses");
+      if (updatedCourse.slug) {
+        revalidateTag(`course-${updatedCourse.slug}`);
+      }
 
       // Log course edit
       try {

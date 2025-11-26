@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -35,35 +34,49 @@ export async function GET(req: Request) {
       return NextResponse.json({ courses: [] });
     }
 
-    // 2️⃣ Group attendance stats by courseId
-    const attendanceStats = await prisma.attendance.groupBy({
+    // 2️⃣ Get the most recent attendance date for each course
+    const courseIds = courses.map((c) => c.id);
+
+    // Get most recent attendance date per course
+    const mostRecentDates = await prisma.attendance.groupBy({
       by: ["courseId"],
-      _count: {
-        _all: true,
-        // we can count absents later via filter
-      },
       _max: {
         date: true,
       },
-    });
-
-    // 3️⃣ Count only ABSENT status separately for accuracy
-    const absentCounts = await prisma.attendance.groupBy({
-      by: ["courseId"],
       where: {
-        status: "ABSENT",
-      },
-      _count: {
-        status: true,
+        courseId: { in: courseIds },
       },
     });
-
-    const absentsMap = Object.fromEntries(
-      absentCounts.map((a) => [a.courseId, a._count.status])
-    );
 
     const lastDateMap = Object.fromEntries(
-      attendanceStats.map((a) => [a.courseId, a._max.date])
+      mostRecentDates.map((a) => [a.courseId, a._max.date])
+    );
+
+    // 3️⃣ Count ABSENT status only for the most recent attendance date per course
+    // Build a query condition for all (courseId, date) pairs
+    const dateConditions = mostRecentDates
+      .filter((a) => a._max.date !== null)
+      .map((a) => ({
+        courseId: a.courseId,
+        date: a._max.date!,
+      }));
+
+    // Count absents for the most recent date of each course in a single query
+    const absentCounts = await Promise.all(
+      dateConditions.map(async ({ courseId, date }) => {
+        const count = await prisma.attendance.count({
+          where: {
+            courseId,
+            date,
+            status: "ABSENT",
+          },
+        });
+        return { courseId, count };
+      })
+    );
+
+    const absentsMap = Object.fromEntries(
+      absentCounts.map((a) => [a.courseId, a.count])
     );
 
     // 4️⃣ Merge the data into one response

@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { CourseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
-import { checkScheduleOverlap } from "@/lib/utils/schedule-utils";
+import { revalidateTag } from "next/cache";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Get courses before update for logging and validation
+    // Get courses before update for logging
     const coursesToUpdate = await prisma.course.findMany({
       where: { id: { in: courseIds } },
       select: {
@@ -49,89 +49,8 @@ export async function PATCH(request: NextRequest) {
         facultyId: true,
         semester: true,
         academicYear: true,
-        schedules: {
-          select: {
-            day: true,
-            fromTime: true,
-            toTime: true,
-          },
-        },
       },
     });
-
-    // Validate schedule conflicts when unarchiving (activating) courses
-    if (status === "ACTIVE") {
-      const scheduleConflicts: Array<{
-        courseId: string;
-        courseCode: string;
-        courseSection: string;
-        error: string;
-      }> = [];
-
-      for (const course of coursesToUpdate) {
-        if (!course.facultyId) {
-          scheduleConflicts.push({
-            courseId: course.id,
-            courseCode: course.code,
-            courseSection: course.section || "",
-            error: "Course has no assigned faculty",
-          });
-          continue;
-        }
-
-        // Skip if course has no schedules
-        if (!course.schedules || course.schedules.length === 0) {
-          continue;
-        }
-
-        // Check for schedule conflicts with existing active courses
-        // Exclude courses that are being unarchived in the same batch
-        const excludeCourseIds = coursesToUpdate
-          .filter((c) => c.id !== course.id)
-          .map((c) => c.id);
-
-        const overlapError = await checkScheduleOverlap(
-          course.schedules.map((s) => ({
-            day: s.day,
-            fromTime: s.fromTime,
-            toTime: s.toTime,
-          })),
-          course.facultyId,
-          excludeCourseIds,
-          course.semester,
-          course.academicYear
-        );
-
-        if (overlapError) {
-          scheduleConflicts.push({
-            courseId: course.id,
-            courseCode: course.code,
-            courseSection: course.section || "",
-            error: overlapError,
-          });
-        }
-      }
-
-      // If there are schedule conflicts, return error with details
-      if (scheduleConflicts.length > 0) {
-        const conflictMessages = scheduleConflicts.map(
-          (conflict) => `${conflict.courseCode}: ${conflict.error}`
-        );
-
-        return NextResponse.json(
-          {
-            error: "Schedule conflicts detected",
-            conflicts: scheduleConflicts,
-            message: `Cannot unarchive ${
-              scheduleConflicts.length
-            } course(s) due to schedule conflicts: ${conflictMessages.join(
-              "; "
-            )}`,
-          },
-          { status: 400 }
-        );
-      }
-    }
 
     // Update all courses with the new status
     const result = await prisma.course.updateMany({
@@ -145,6 +64,15 @@ export async function PATCH(request: NextRequest) {
         updatedAt: new Date(),
       },
     });
+
+    // Invalidate Next.js cache for courses to ensure fresh data
+    // This is critical to prevent stale cache from showing courses in wrong lists
+    try {
+      revalidateTag("courses");
+    } catch (cacheError) {
+      console.warn("Failed to revalidate courses cache:", cacheError);
+      // Don't fail the operation if cache invalidation fails
+    }
 
     // Log course archive/activate
     try {
