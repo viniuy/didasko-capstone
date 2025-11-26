@@ -67,6 +67,47 @@ export async function saveTermConfigs(
     }
   }
 
+  // ✅ OPTIMIZATION: Collect all unique criteriaIds that will be linked
+  const criteriaIdsToFetch = new Set<string>();
+  Object.values(termConfigs).forEach((config: any) => {
+    config.assessments?.forEach((assessment: any) => {
+      if (assessment.linkedCriteriaId) {
+        criteriaIdsToFetch.add(assessment.linkedCriteriaId);
+      }
+    });
+  });
+
+  // ✅ OPTIMIZATION: Batch fetch all criteria in ONE query (avoids N+1 and pool exhaustion)
+  const criteriaMap = new Map<
+    string,
+    { scoringRange: number; rubrics: any[] }
+  >();
+  if (criteriaIdsToFetch.size > 0) {
+    const criteriaList = await prisma.criteria.findMany({
+      where: { id: { in: Array.from(criteriaIdsToFetch) } },
+      select: {
+        id: true,
+        scoringRange: true,
+        rubrics: {
+          select: {
+            id: true,
+            name: true,
+            percentage: true,
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    // Build map for O(1) lookup
+    criteriaList.forEach((c) => {
+      criteriaMap.set(c.id, {
+        scoringRange: Number(c.scoringRange) || 5,
+        rubrics: c.rubrics,
+      });
+    });
+  }
+
   // Process each term config in parallel for better performance
   const termConfigPromises = Object.entries(termConfigs).map(
     async ([term, config]) => {
@@ -118,9 +159,21 @@ export async function saveTermConfigs(
           async (assessment: any) => {
             const existsInDb = existingIds.includes(assessment.id);
 
+            // ✅ AUTO-SET maxScore when linking criteria
+            let computedMaxScore = assessment.maxScore;
+            if (assessment.linkedCriteriaId) {
+              const criteria = criteriaMap.get(assessment.linkedCriteriaId);
+              if (criteria) {
+                // Set maxScore to: number of rubrics × scoringRange
+                // Example: 3 rubrics × 5 (scoringRange) = 15 max score
+                const numberOfRubrics = criteria.rubrics?.length || 0;
+                computedMaxScore = numberOfRubrics * criteria.scoringRange;
+              }
+            }
+
             const assessmentData = {
               name: assessment.name,
-              maxScore: assessment.maxScore,
+              maxScore: computedMaxScore, // ✅ Use computed maxScore
               date: assessment.date ? new Date(assessment.date) : null,
               enabled: assessment.enabled,
               order: assessment.order,
@@ -541,6 +594,23 @@ export async function getClassRecordData(courseSlug: string) {
             studentId: true,
             criteriaId: true,
             value: true,
+            scores: true, // ✅ Add raw rubric scores
+            total: true, // ✅ Add total percentage
+            criteria: {
+              // ✅ Include criteria with rubrics in SAME query (avoids connection pool exhaustion)
+              select: {
+                id: true,
+                scoringRange: true,
+                rubrics: {
+                  select: {
+                    id: true,
+                    name: true,
+                    percentage: true,
+                  },
+                  orderBy: { createdAt: "asc" }, // Ensure consistent order
+                },
+              },
+            },
           },
         }),
       ]);
@@ -556,16 +626,31 @@ export async function getClassRecordData(courseSlug: string) {
         };
       });
 
-      criteriaScores.forEach((grade) => {
+      // Build criteria metadata map for efficient lookup
+      const criteriaMetadata: Record<string, any> = {};
+
+      criteriaScores.forEach((grade: any) => {
         const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
         scoresMap[key] = {
           studentId: grade.studentId,
           assessmentId: `criteria:${grade.criteriaId}`,
-          score: grade.value,
+          score: grade.value, // Keep percentage for backward compatibility
+          rawScores: grade.scores, // ✅ Add raw rubric scores
+          criteriaId: grade.criteriaId, // ✅ Add for lookup
         };
+
+        // Cache criteria metadata (only once per criteria)
+        if (grade.criteria && !criteriaMetadata[grade.criteriaId]) {
+          criteriaMetadata[grade.criteriaId] = {
+            scoringRange: Number(grade.criteria.scoringRange) || 5,
+            rubrics: grade.criteria.rubrics.map((r: any) => ({
+              percentage: r.percentage,
+            })),
+          };
+        }
       });
 
-      return scoresMap;
+      return { scoresMap, criteriaMetadata };
     })(),
 
     // Criteria links
@@ -596,12 +681,16 @@ export async function getClassRecordData(courseSlug: string) {
   });
 
   // Ensure assessmentScores is never null
-  const assessmentScores: Record<string, any> = assessmentScoresResult ?? {};
+  const assessmentScores: Record<string, any> =
+    assessmentScoresResult?.scoresMap ?? {};
+  const criteriaMetadata: Record<string, any> =
+    assessmentScoresResult?.criteriaMetadata ?? {};
 
   return {
     students,
     termConfigs,
     assessmentScores,
     criteriaLinks,
+    criteriaMetadata, // ✅ Add criteria metadata
   };
 }

@@ -77,30 +77,62 @@ export function useGrades(
     courseCode?: string;
     courseSection?: string;
     groupId?: string;
+    studentIds?: string[];
   }
 ) {
-  return useQuery({
-    queryKey: [...queryKeys.grading.grades(courseSlug), filters],
-    queryFn: async ({ signal }) => {
-      const params = new URLSearchParams();
-      if (filters?.date) params.append("date", filters.date);
-      if (filters?.criteriaId) params.append("criteriaId", filters.criteriaId);
-      if (filters?.courseCode) params.append("courseCode", filters.courseCode);
-      if (filters?.courseSection)
-        params.append("courseSection", filters.courseSection);
-      if (filters?.groupId) params.append("groupId", filters.groupId);
+  // Create stable query key by sorting studentIds
+  const stableFilters = filters
+    ? {
+        ...filters,
+        studentIds: filters.studentIds
+          ? [...filters.studentIds].sort()
+          : undefined,
+      }
+    : undefined;
 
-      const { data } = await axios.get(
-        `/courses/${courseSlug}/grades?${params.toString()}`,
-        { signal }
-      );
-      return data;
+  return useQuery({
+    queryKey: [...queryKeys.grading.grades(courseSlug), stableFilters],
+    queryFn: async ({ signal }) => {
+      try {
+        const params = new URLSearchParams();
+        if (filters?.date) params.append("date", filters.date);
+        if (filters?.criteriaId)
+          params.append("criteriaId", filters.criteriaId);
+        if (filters?.courseCode)
+          params.append("courseCode", filters.courseCode);
+        if (filters?.courseSection)
+          params.append("courseSection", filters.courseSection);
+        if (filters?.groupId) params.append("groupId", filters.groupId);
+        if (filters?.studentIds && filters.studentIds.length > 0) {
+          params.append("studentIds", filters.studentIds.join(","));
+        }
+
+        const { data } = await axios.get(
+          `/courses/${courseSlug}/grades?${params.toString()}`,
+          { signal }
+        );
+        return data;
+      } catch (error: any) {
+        // Ignore cancellation errors (they're expected when query key changes)
+        // This happens when React Query cancels a previous request
+        if (
+          error.name === "CanceledError" ||
+          error.code === "ERR_CANCELED" ||
+          error.message === "canceled" ||
+          signal?.aborted
+        ) {
+          return [];
+        }
+        throw error;
+      }
     },
     enabled:
       !!courseSlug &&
       !!filters?.date &&
       !!filters?.courseCode &&
       !!filters?.courseSection,
+    staleTime: 0, // Always fetch fresh data when switching criteria
+    refetchOnMount: true, // Refetch when component mounts (e.g., switching back to criteria)
   });
 }
 

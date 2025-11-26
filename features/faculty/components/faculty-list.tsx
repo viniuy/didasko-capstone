@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Role, WorkType } from "@prisma/client";
 import { UserCircle2 } from "lucide-react";
 import { useFaculty } from "@/lib/hooks/queries";
@@ -59,9 +59,26 @@ const FacultyList: React.FC<FacultyListProps> = ({
   onTeacherClick,
   onPageChange,
 }) => {
-  // Ensure itemsPerPage is capped at 10
-  const itemsPerPage = Math.min(rawItemsPerPage, 10);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [maxItemsPerPage, setMaxItemsPerPage] = useState(8);
+
+  // Adjust max items per page based on window height
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerHeight < 940) {
+        setMaxItemsPerPage(4);
+      } else {
+        setMaxItemsPerPage(8);
+      }
+    };
+
+    handleResize(); // Set initial value
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Ensure itemsPerPage is capped based on window height
+  const itemsPerPage = Math.min(rawItemsPerPage, maxItemsPerPage);
 
   // React Query hook
   const { data: faculty = [], isLoading, error } = useFaculty();
@@ -108,12 +125,12 @@ const FacultyList: React.FC<FacultyListProps> = ({
 
   return (
     <div
-      className={`flex flex-col gap-8 min-h-[600px] transition-opacity duration-200 ${
+      className={`flex flex-col gap-8 transition-opacity duration-200 ${
         isNavigating ? "opacity-0" : "opacity-100"
       }`}
     >
       {filteredFaculty.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-96 text-gray-500 min-h-[610px] max-h-[610px]">
+        <div className="flex flex-col items-center justify-center h-96 text-gray-500">
           <UserCircle2 size={72} className="mb-6 text-gray-400" />
           <p className="text-2xl font-medium mb-2">No teachers found</p>
           <p className="text-base text-gray-400">
@@ -124,7 +141,7 @@ const FacultyList: React.FC<FacultyListProps> = ({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 items-start justify-center min-h-[610px] max-h-[610px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 items-start justify-center">
             {currentFaculty.map((faculty: any) => (
               <div
                 key={faculty.id}

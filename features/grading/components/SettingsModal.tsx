@@ -27,6 +27,7 @@ import {
   CalendarIcon,
   ArrowRight,
   Lightbulb,
+  Info,
 } from "lucide-react";
 import type { Term, Assessment, TermConfig } from "../types/ClassRecordTable";
 import type { CriteriaOption } from "../types/ClassRecordTable";
@@ -551,10 +552,7 @@ export function SettingsModal({
       if (exam.maxScore > 200) {
         errors.push(`${term}: Exam max score cannot exceed 200`);
       }
-      const transmutationBase = exam.transmutationBase ?? 0;
-      if (transmutationBase < 0 || transmutationBase > 75) {
-        errors.push(`${term}: Exam transmutation base must be between 0-75`);
-      }
+      // Note: Exam does not have transmutation base
     }
 
     const ptNames = new Set<string>();
@@ -937,24 +935,43 @@ export function SettingsModal({
                     />
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">Max Score:</span>
-                      <input
-                        type="number"
-                        value={pt.maxScore}
-                        onChange={(e) =>
-                          updateAssessment("PT", pt.id, {
-                            maxScore: Number(e.target.value),
-                          })
-                        }
-                        onKeyDown={(e) => {
-                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                            e.preventDefault();
+                      <div className="relative flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={pt.maxScore}
+                          onChange={(e) =>
+                            updateAssessment("PT", pt.id, {
+                              maxScore: Number(e.target.value),
+                            })
                           }
-                        }}
-                        className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                        placeholder="Max"
-                        min="0"
-                        max="200"
-                      />
+                          onKeyDown={(e) => {
+                            if (
+                              [".", ",", "e", "E", "+", "-"].includes(e.key)
+                            ) {
+                              e.preventDefault();
+                            }
+                          }}
+                          disabled={!!pt.linkedCriteriaId}
+                          className={`w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm ${
+                            pt.linkedCriteriaId
+                              ? "bg-gray-100 cursor-not-allowed text-gray-500"
+                              : ""
+                          }`}
+                          placeholder="Max"
+                          min="0"
+                          max="200"
+                        />
+                        {pt.linkedCriteriaId && (
+                          <div className="group relative cursor-help">
+                            <Info className="w-4 h-4 text-blue-500 hover:text-blue-600" />
+                            <div className="absolute left-0 top-6 z-50 hidden w-64 rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
+                              Max score is automatically calculated from the
+                              linked criteria (number of rubrics × scoring
+                              range). Unlink the criteria to edit manually.
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-600">Base</span>
@@ -1036,6 +1053,7 @@ export function SettingsModal({
 
                         updateAssessment("PT", pt.id, {
                           linkedCriteriaId: linkedId,
+                          // Update maxScore from availableCriteria (now correctly calculated)
                           ...(linkedCriteria?.maxScore && {
                             maxScore: linkedCriteria.maxScore,
                           }),
@@ -1143,24 +1161,43 @@ export function SettingsModal({
                     />
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">Max Score:</span>
-                      <input
-                        type="number"
-                        value={quiz.maxScore}
-                        onChange={(e) =>
-                          updateAssessment("QUIZ", quiz.id, {
-                            maxScore: Number(e.target.value),
-                          })
-                        }
-                        onKeyDown={(e) => {
-                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                            e.preventDefault();
+                      <div className="relative flex items-center gap-1">
+                        <input
+                          type="number"
+                          value={quiz.maxScore}
+                          onChange={(e) =>
+                            updateAssessment("QUIZ", quiz.id, {
+                              maxScore: Number(e.target.value),
+                            })
                           }
-                        }}
-                        className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                        placeholder="Max"
-                        min="0"
-                        max="200"
-                      />
+                          onKeyDown={(e) => {
+                            if (
+                              [".", ",", "e", "E", "+", "-"].includes(e.key)
+                            ) {
+                              e.preventDefault();
+                            }
+                          }}
+                          disabled={!!quiz.linkedCriteriaId}
+                          className={`w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm ${
+                            quiz.linkedCriteriaId
+                              ? "bg-gray-100 cursor-not-allowed text-gray-500"
+                              : ""
+                          }`}
+                          placeholder="Max"
+                          min="0"
+                          max="200"
+                        />
+                        {quiz.linkedCriteriaId && (
+                          <div className="group relative cursor-help">
+                            <Info className="w-4 h-4 text-blue-500 hover:text-blue-600" />
+                            <div className="absolute left-0 top-6 z-50 hidden w-64 rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
+                              Max score is automatically calculated from the
+                              linked criteria (number of rubrics × scoring
+                              range). Unlink the criteria to edit manually.
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-600">Base</span>
@@ -1244,6 +1281,7 @@ export function SettingsModal({
 
                         updateAssessment("QUIZ", quiz.id, {
                           linkedCriteriaId: linkedId,
+                          // Update maxScore from availableCriteria (now correctly calculated)
                           ...(linkedCriteria?.maxScore && {
                             maxScore: linkedCriteria.maxScore,
                           }),
@@ -1333,46 +1371,44 @@ export function SettingsModal({
                   />
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-600">Max Score:</span>
-                    <input
-                      type="number"
-                      value={exam.maxScore}
-                      onChange={(e) =>
-                        updateAssessment("EXAM", exam.id, {
-                          maxScore: Number(e.target.value),
-                        })
-                      }
-                      onKeyDown={(e) => {
-                        if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                          e.preventDefault();
+                    <div className="relative flex items-center gap-1">
+                      <input
+                        type="number"
+                        value={exam.maxScore}
+                        onChange={(e) =>
+                          updateAssessment("EXAM", exam.id, {
+                            maxScore: Number(e.target.value),
+                          })
                         }
-                      }}
-                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      placeholder="Max"
-                      min="0"
-                      max="200"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-600">Base</span>
-                    <input
-                      type="number"
-                      value={exam.transmutationBase ?? 0}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value);
-                        const value = clamp(raw, 0, 75);
-                        updateAssessment("EXAM", exam.id, {
-                          transmutationBase: value,
-                        });
-                      }}
-                      onKeyDown={(e) => {
-                        if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
-                          e.preventDefault();
-                        }
-                      }}
-                      min="0"
-                      max="75"
-                      className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-xs"
-                    />
+                        onKeyDown={(e) => {
+                          if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        disabled={!!exam.linkedCriteriaId}
+                        className={`w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm ${
+                          exam.linkedCriteriaId
+                            ? "bg-gray-100 cursor-not-allowed text-gray-500"
+                            : ""
+                        }`}
+                        placeholder="Max"
+                        min="0"
+                        max="200"
+                      />
+                      {exam.linkedCriteriaId && (
+                        <div
+                          className="group relative cursor-help"
+                          title="Max score is automatically calculated from linked criteria (number of rubrics × scoring range)"
+                        >
+                          <Info className="w-4 h-4 text-blue-500 hover:text-blue-600" />
+                          <div className="absolute left-0 top-6 z-50 hidden w-64 rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
+                            Max score is automatically calculated from the
+                            linked criteria (number of rubrics × scoring range).
+                            Unlink the criteria to edit manually.
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 flex-1">
                     <Calendar className="w-4 h-4 text-gray-400" />

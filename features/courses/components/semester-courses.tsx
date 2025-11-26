@@ -188,7 +188,7 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
     switch (type) {
       case "attendance":
         return {
-          main: "Loading Attendance...",
+          main: "Loading Course Attendance",
           secondary: "Please wait while we prepare the attendance page...",
         };
       case "recitation":

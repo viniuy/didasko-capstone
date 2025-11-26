@@ -13,13 +13,13 @@ export function LoadingSpinner({
   secondaryMessage?: string;
 }) {
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm min-h-[840px] max-h-[840px]">
-      <div className="flex flex-col items-center gap-4 mt-40">
-        <h2 className="text-3xl font-bold text-[#124A69] animate-pulse">
+    <div className="flex items-center justify-center min-h-[840px] max-h-[840px]">
+      <div className="flex flex-col items-center gap-4 w-fit">
+        <h2 className="text-3xl font-bold text-[#124A69] animate-pulse text-center">
           {mainMessage}
         </h2>
         <p
-          className="text-lg text-gray-600 animate-pulse"
+          className="text-lg text-gray-600 animate-pulse text-center"
           style={{ animationDelay: "150ms" }}
         >
           {secondaryMessage}

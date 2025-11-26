@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -32,6 +31,9 @@ export async function GET(request: Request) {
         role: true,
         image: true,
         coursesTeaching: {
+          where: {
+            status: "ACTIVE",
+          },
           include: {
             schedules: true,
             students: {

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Role, WorkType } from "@prisma/client";
-import { Users, GraduationCap, BookOpen, UserCircle2 } from "lucide-react";
+import { Users, GraduationCap, Clock, UserCircle2 } from "lucide-react";
 
 interface Course {
   id: string;
@@ -9,6 +9,7 @@ interface Course {
   title: string;
   description: string | null;
   semester: string;
+  status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   schedules: {
     id: string;
     day: Date;
@@ -43,7 +44,7 @@ export default function FacultyDetails({
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalClasses: 0,
-    totalCourses: 0,
+    totalTeachingHours: 0,
   });
   const [isNavigating, setIsNavigating] = useState(false);
 
@@ -52,23 +53,62 @@ export default function FacultyDetails({
   };
 
   useEffect(() => {
-    // Calculate total unique students across all courses
+    // Filter to only include active courses
+    const activeCourses = faculty.coursesTeaching.filter(
+      (course) => course.status === "ACTIVE" || !course.status
+    );
+
+    // Calculate total unique students across all active courses
     const uniqueStudents = new Set();
     let totalClasses = 0;
+    let totalTeachingHours = 0;
 
-    faculty.coursesTeaching.forEach((course) => {
+    activeCourses.forEach((course) => {
       // Count students
       course.students?.forEach((student) => {
         uniqueStudents.add(student.id);
       });
       // Count classes (schedules)
       totalClasses += course.schedules?.length || 0;
+
+      // Calculate teaching hours per week
+      course.schedules?.forEach((schedule) => {
+        if (!schedule.fromTime || !schedule.toTime) return;
+        
+        try {
+          const fromParts = schedule.fromTime.split(":");
+          const toParts = schedule.toTime.split(":");
+          
+          if (fromParts.length !== 2 || toParts.length !== 2) return;
+          
+          const fromHours = parseInt(fromParts[0], 10);
+          const fromMinutes = parseInt(fromParts[1], 10);
+          const toHours = parseInt(toParts[0], 10);
+          const toMinutes = parseInt(toParts[1], 10);
+          
+          if (isNaN(fromHours) || isNaN(fromMinutes) || isNaN(toHours) || isNaN(toMinutes)) {
+            return;
+          }
+          
+          const fromTotalMinutes = fromHours * 60 + fromMinutes;
+          const toTotalMinutes = toHours * 60 + toMinutes;
+          
+          const durationHours = (toTotalMinutes - fromTotalMinutes) / 60;
+          
+          if (durationHours > 0 && !isNaN(durationHours)) {
+            totalTeachingHours += durationHours;
+          }
+        } catch (error) {
+          // Skip invalid schedule times
+          console.warn("Invalid schedule time format:", schedule);
+        }
+      });
     });
 
     setStats({
       totalStudents: uniqueStudents.size,
       totalClasses: totalClasses,
-      totalCourses: faculty.coursesTeaching.length,
+      totalTeachingHours: Math.round(totalTeachingHours * 10) / 10, // Round to 1 decimal place
     });
   }, [faculty]);
 
@@ -164,12 +204,12 @@ export default function FacultyDetails({
 
           <div className="bg-[#F8F9FA] rounded-lg p-4 text-center">
             <div className="flex items-center justify-center mb-2 text-[#124A69]">
-              <BookOpen size={24} />
+              <Clock size={24} />
             </div>
             <div className="text-2xl font-bold text-[#124A69]">
-              {stats.totalCourses}
+              {stats.totalTeachingHours}
             </div>
-            <div className="text-sm text-gray-600">SUBJECTS</div>
+            <div className="text-sm text-gray-600">HOURS/WEEK</div>
           </div>
         </div>
       </div>

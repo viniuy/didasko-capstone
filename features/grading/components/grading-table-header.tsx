@@ -25,8 +25,11 @@ const GradingTableHeader: React.FC<GradingTableHeaderProps> = ({
           className={`border-b font-bold text-[#124A69] text-center px-4 py-3 w-[120px] ${
             rubricDetails.length === 4 ? "text-sm" : ""
           }`}
+          title={rubric.name}
         >
+          <div className="truncate" title={rubric.name}>
           {rubric.name}
+          </div>
           <div className="text-xs text-gray-500 font-normal">
             ({rubric.percentage}%)
           </div>

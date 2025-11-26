@@ -7,6 +7,7 @@ export async function getGrades(
     date: string;
     criteriaId?: string;
     groupId?: string;
+    studentIds?: string[];
   }
 ) {
   const course = await prisma.course.findFirst({
@@ -41,8 +42,13 @@ export async function getGrades(
     where.criteriaId = filters.criteriaId;
   }
 
+  // If studentIds are provided, filter by those students
+  if (filters.studentIds && filters.studentIds.length > 0) {
+    where.studentId = {
+      in: filters.studentIds,
+    };
+  } else if (filters.groupId) {
   // If groupId is provided, filter by students in that group
-  if (filters.groupId) {
     const group = await prisma.group.findUnique({
       where: { id: filters.groupId },
       select: { students: { select: { id: true } } },
@@ -57,16 +63,14 @@ export async function getGrades(
 
   return prisma.grade.findMany({
     where,
-    include: {
-      student: {
         select: {
           id: true,
-          firstName: true,
-          lastName: true,
-          middleInitial: true,
-          image: true,
-        },
-      },
+      studentId: true,
+      scores: true,
+      total: true,
+      value: true,
+      date: true,
+      criteriaId: true,
     },
   });
 }

@@ -111,10 +111,10 @@ export default function FacultyLoad() {
   ];
 
   return (
-    <div className="h-full flex flex-col min-h-[600px]">
+    <div className="h-full flex flex-col min-h-[600px] max-h-screen overflow-y-auto sm:max-h-full">
       {/* Search and Filter Bar */}
       {!selectedTeacher && (
-        <div className="bg-[#124A69] text-white p-4 rounded-t-lg">
+        <div className="bg-[#124A69] text-white p-4 rounded-t-lg flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="relative">
               <svg
@@ -233,7 +233,7 @@ export default function FacultyLoad() {
         </div>
       )}
       {/* Main Content Area */}
-      <div className="flex-grow ">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="grid grid-cols-1 gap-4 mb-4">
           {selectedTeacher ? (
             <div

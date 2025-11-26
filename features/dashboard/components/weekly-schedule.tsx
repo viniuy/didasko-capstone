@@ -49,6 +49,19 @@ export default function WeeklySchedule({
       : "Failed to load schedules"
     : null;
 
+  // Group schedules by course ID
+  const groupedByCourse = schedules.reduce((acc, schedule) => {
+    const courseId = schedule.course.id;
+    if (!acc[courseId]) {
+      acc[courseId] = {
+        course: schedule.course,
+        schedules: [],
+      };
+    }
+    acc[courseId].schedules.push(schedule);
+    return acc;
+  }, {} as Record<string, { course: ScheduleWithCourse["course"]; schedules: ScheduleWithCourse[] }>);
+
   const getSchedulesForDay = (dayName: string) => {
     // Map abbreviated day names to full day names for comparison
     const dayMap: { [key: string]: string } = {
@@ -63,15 +76,35 @@ export default function WeeklySchedule({
 
     const fullDayName = dayMap[dayName];
 
-    const daySchedules = schedules
-      .filter(
-        (schedule) => schedule.day.toLowerCase() === fullDayName.toLowerCase()
+    // Get courses that have schedules on this day
+    const coursesForDay = Object.values(groupedByCourse)
+      .filter((group) =>
+        group.schedules.some(
+          (s) => s.day.toLowerCase() === fullDayName.toLowerCase()
+        )
       )
+      .map((group) => {
+        // Get the schedule for this specific day
+        const daySchedule = group.schedules.find(
+          (s) => s.day.toLowerCase() === fullDayName.toLowerCase()
+        );
+        return {
+          ...group,
+          daySchedule, // The specific schedule for this day
+          allDays: group.schedules.map((s) => {
+            const dayAbbr = Object.keys(dayMap).find(
+              (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
+            );
+            return dayAbbr || s.day.substring(0, 3);
+          }),
+        };
+      })
       .sort((a, b) => {
-        return a.fromTime.localeCompare(b.fromTime);
+        if (!a.daySchedule || !b.daySchedule) return 0;
+        return a.daySchedule.fromTime.localeCompare(b.daySchedule.fromTime);
       });
-    console.log(`Schedules for ${dayName}:`, daySchedules);
-    return daySchedules;
+
+    return coursesForDay;
   };
 
   const formatTime = (time: string) => {
@@ -167,36 +200,65 @@ export default function WeeklySchedule({
                 {day}
               </div>
               <div className="space-y-1 sm:space-y-2">
-                {getSchedulesForDay(day).map((schedule) => (
-                  <div key={schedule.id} className="group perspective">
-                    <div className="preserve-3d">
-                      {/* Front of card */}
-                      <div className="backface-hidden">
-                        <div className="bg-[#FAEDCB] rounded-lg p-1.5 sm:p-2 text-[#124A69] shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
-                          <div className="font-bold text-[10px] sm:text-xs md:text-sm">
-                            {schedule.course.code}
-                          </div>
-                          <div className="text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
-                            {formatTime(schedule.fromTime)} -{" "}
-                            {formatTime(schedule.toTime)}
+                {getSchedulesForDay(day).map((courseGroup) => {
+                  if (!courseGroup.daySchedule) return null;
+                  const hasMultipleDays = courseGroup.allDays.length > 1;
+                  return (
+                    <div
+                      key={courseGroup.course.id}
+                      className="group perspective"
+                    >
+                      <div className="preserve-3d">
+                        {/* Front of card */}
+                        <div className="backface-hidden">
+                          <div className="bg-[#FAEDCB] rounded-lg p-1.5 sm:p-2 text-[#124A69] shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center relative">
+                            <div className="font-bold text-[10px] sm:text-xs md:text-sm">
+                              {courseGroup.course.code}
+                            </div>
+                            <div className="text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
+                              {formatTime(courseGroup.daySchedule.fromTime)} -{" "}
+                              {formatTime(courseGroup.daySchedule.toTime)}
+                            </div>
+                            {hasMultipleDays && (
+                              <div className="absolute top-1 right-1 flex gap-0.5">
+                                {courseGroup.allDays.map((d, idx) => (
+                                  <span
+                                    key={idx}
+                                    className={`text-[7px] px-0.5 py-0.5 rounded ${
+                                      d === day
+                                        ? "bg-[#124A69] text-white"
+                                        : "bg-[#124A69]/20 text-[#124A69]"
+                                    }`}
+                                    title={`Also on ${d}`}
+                                  >
+                                    {d}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      </div>
-                      {/* Back of card */}
-                      <div className="backface-hidden rotate-y-180">
-                        <div className="bg-[#124A69] rounded-lg p-1.5 sm:p-2 text-white shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
-                          <div className="text-[9px] sm:text-[10px] md:text-xs space-y-0.5 sm:space-y-1">
-                            <div className="font-semibold">
-                              {schedule.course.code}
+                        {/* Back of card */}
+                        <div className="backface-hidden rotate-y-180">
+                          <div className="bg-[#124A69] rounded-lg p-1.5 sm:p-2 text-white shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
+                            <div className="text-[9px] sm:text-[10px] md:text-xs space-y-0.5 sm:space-y-1">
+                              <div className="font-semibold">
+                                {courseGroup.course.code}
+                              </div>
+                              <div>Section: {courseGroup.course.section}</div>
+                              <div>Room: {courseGroup.course.room}</div>
+                              {hasMultipleDays && (
+                                <div className="text-[8px] mt-1 opacity-75">
+                                  Days: {courseGroup.allDays.join(", ")}
+                                </div>
+                              )}
                             </div>
-                            <div>Section: {schedule.course.section}</div>
-                            <div>Room: {schedule.course.room}</div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}

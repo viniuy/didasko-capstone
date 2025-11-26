@@ -823,12 +823,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // 1. IMMEDIATELY update local studentList array
-    setStudentList((prev) =>
-      prev.map((s) => {
+      setStudentList((prev) =>
+        prev.map((s) => {
         if (studentIds.includes(s.id)) {
-          const existingRecordIndex = s.attendanceRecords.findIndex(
-            (r) => r.date === dateStr
-          );
+            const existingRecordIndex = s.attendanceRecords.findIndex(
+              (r) => r.date === dateStr
+            );
           const newRecord: AttendanceRecord = {
             id:
               existingRecordIndex >= 0
@@ -841,20 +841,20 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             reason: reason.trim(),
           };
 
-          return {
-            ...s,
+            return {
+              ...s,
             status: "EXCUSED",
-            attendanceRecords:
-              existingRecordIndex >= 0
-                ? s.attendanceRecords.map((r, idx) =>
+              attendanceRecords:
+                existingRecordIndex >= 0
+                  ? s.attendanceRecords.map((r, idx) =>
                     idx === existingRecordIndex ? newRecord : r
-                  )
+                    )
                 : [...s.attendanceRecords, newRecord],
-          };
-        }
-        return s;
-      })
-    );
+            };
+          }
+          return s;
+        })
+      );
 
     // 2. Save to database
     setSavingStudents(new Set(studentIds));
@@ -964,10 +964,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 : crypto.randomUUID(),
             studentId: s.id,
             courseId: courseSlug,
-            status: newStatus,
+      status: newStatus,
             date: dateStr,
-            reason: reason ?? null,
-          };
+      reason: reason ?? null,
+    };
 
           return {
             ...s,
@@ -1009,8 +1009,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       if (updatesToSave.length === 0) {
         setSavingStudents(new Set());
-        return;
-      }
+          return;
+        }
 
       // Mark all students as saving
       const savingIds = new Set(updatesToSave.map((u) => u.studentId));
@@ -1984,7 +1984,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           setIsScanning(false);
         }
       } else {
-        setIsScanning(false);
+      setIsScanning(false);
       }
     }, 100); // Short timeout - RFID scanners send data very quickly
   };
@@ -2170,7 +2170,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // 1. IMMEDIATELY update local studentList array
-    setStudentList((prev) =>
+      setStudentList((prev) =>
       prev.map((student) => {
         const existingRecordIndex = student.attendanceRecords.findIndex(
           (r) => r.date === dateStr
@@ -2180,11 +2180,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             existingRecordIndex >= 0
               ? student.attendanceRecords[existingRecordIndex].id
               : crypto.randomUUID(),
-          studentId: student.id,
-          courseId: courseSlug,
-          status: "PRESENT",
-          date: dateStr,
-          reason: null,
+              studentId: student.id,
+              courseId: courseSlug,
+              status: "PRESENT",
+              date: dateStr,
+              reason: null,
         };
 
         return {
@@ -2228,7 +2228,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             (r) => r.date === dateStr
           );
           return {
-            ...student,
+          ...student,
             status: record?.status || "NOT_SET",
           };
         })
@@ -2263,7 +2263,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // 1. IMMEDIATELY update local studentList array
-    setStudentList((prev) =>
+      setStudentList((prev) =>
       prev.map((student) => {
         if (student.status === "LATE") {
           const existingRecordIndex = student.attendanceRecords.findIndex(
@@ -2274,11 +2274,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               existingRecordIndex >= 0
                 ? student.attendanceRecords[existingRecordIndex].id
                 : crypto.randomUUID(),
-            studentId: student.id,
+                    studentId: student.id,
             courseId: courseSlug,
-            status: "PRESENT",
-            date: dateStr,
-            reason: null,
+                    status: "PRESENT",
+                    date: dateStr,
+                    reason: null,
           };
 
           return {
@@ -3397,24 +3397,24 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   <div className="flex-1">
                     <label className="text-base font-semibold text-gray-900 block mb-1">
                       Grace Period
-                    </label>
+                </label>
                     <p className="text-sm text-gray-600 mb-3">
                       Students arriving within this time will be marked as LATE
                       instead of ABSENT
                     </p>
                     <div className="space-y-2">
                       <div className="flex items-center gap-4">
-                        <Input
-                          type="number"
-                          min={1}
+                <Input
+                  type="number"
+                  min={1}
                           max={45}
                           step={1}
-                          value={graceMinutes}
-                          onChange={(e) => {
-                            const v = Number(e.target.value);
+                  value={graceMinutes}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
                             setGracePeriodError(""); // Clear error on change
-                            if (isNaN(v) || v <= 0) {
-                              setGraceMinutes(1);
+                    if (isNaN(v) || v <= 0) {
+                      setGraceMinutes(1);
                               setGracePeriodError(
                                 "Grace period must be at least 1 minute"
                               );
@@ -3423,17 +3423,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                               setGracePeriodError(
                                 "Grace period cannot exceed 45 minutes"
                               );
-                            } else {
+                    } else {
                               setGraceMinutes(Math.floor(v)); // Ensure it's a whole number
-                            }
-                          }}
+                    }
+                  }}
                           className={`w-24 text-center text-lg font-semibold ${
                             gracePeriodError
                               ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                               : ""
                           }`}
-                          required
-                        />
+                  required
+                />
                         <span className="text-base text-gray-700 font-medium">
                           {graceMinutes === 1 ? "minute" : "minutes"}
                         </span>
@@ -3445,7 +3445,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       )}
                       <p className="text-xs text-gray-500">
                         Maximum: 45 minutes
-                      </p>
+                </p>
                     </div>
                   </div>
                 </div>

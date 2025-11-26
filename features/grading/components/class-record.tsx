@@ -289,6 +289,8 @@ interface StudentScore {
   studentId: string;
   assessmentId: string;
   score: number | null;
+  rawScores?: number[];
+  criteriaId?: string;
 }
 
 interface Student {
@@ -331,6 +333,13 @@ interface ClassRecordData {
       maxScore: number;
     }>;
   } | null;
+  criteriaMetadata?: Record<
+    string,
+    {
+      scoringRange: number;
+      rubrics: Array<{ percentage: number }>;
+    }
+  >;
 }
 
 interface ClassRecordTableProps {
@@ -571,6 +580,15 @@ export function ClassRecordTable({
     []
   );
   const [scores, setScores] = useState<Map<string, StudentScore>>(new Map());
+  const [criteriaMetadata, setCriteriaMetadata] = useState<
+    Record<
+      string,
+      {
+        scoringRange: number;
+        rubrics: Array<{ percentage: number }>;
+      }
+    >
+  >({});
   const [search, setSearch] = useState("");
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIM");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -622,10 +640,18 @@ export function ClassRecordTable({
             studentId: value.studentId,
             assessmentId: value.assessmentId,
             score: value.score,
+            // ✅ Store raw scores and criteriaId for linked criteria
+            rawScores: value.rawScores,
+            criteriaId: value.criteriaId,
           });
         }
       );
       setScores(assessmentScoresMap);
+
+      // ✅ Cache criteria metadata
+      if (classRecordData.criteriaMetadata) {
+        setCriteriaMetadata(classRecordData.criteriaMetadata);
+      }
       const {
         recitations = [],
         groupReportings = [],
@@ -890,21 +916,89 @@ export function ClassRecordTable({
     return student?.score ?? null;
   };
 
+  /**
+   * Calculate weighted percentage from raw rubric scores
+   * Uses the same formula as grading-table.tsx calculateTotal
+   */
+  const calculateWeightedPercentage = (
+    rawScores: number[] | null | undefined,
+    rubrics: Array<{ percentage: number }>,
+    scoringRange: number
+  ): number => {
+    if (
+      !rawScores ||
+      !Array.isArray(rawScores) ||
+      !rubrics ||
+      rubrics.length === 0
+    )
+      return 0;
+
+    // Ensure we only use scores up to the number of rubrics
+    const validScores = rawScores.slice(0, rubrics.length);
+
+    // Calculate weighted percentage for each rubric
+    const weightedScores = validScores.map((score, index) => {
+      const weight = rubrics[index]?.percentage || 0;
+      // Convert score to percentage based on max score, then apply weight
+      return (score / scoringRange) * weight;
+    });
+
+    // Sum up all weighted scores and round to 2 decimal places
+    const total = Number(
+      weightedScores.reduce((sum, score) => sum + score, 0).toFixed(2)
+    );
+
+    return total;
+  };
+
+  /**
+   * Get the true score (not percentage) from linked criteria
+   */
+  const getTrueScoreFromCriteria = (
+    studentId: string,
+    criteriaId: string,
+    assessmentMaxScore: number
+  ): number | null => {
+    const gradeData = scores.get(`${studentId}:criteria:${criteriaId}`);
+    if (!gradeData) return null;
+
+    // Get raw scores and criteria metadata
+    const rawScores = gradeData.rawScores;
+    const criteriaMeta = criteriaMetadata?.[criteriaId];
+
+    // Ensure rawScores is an array
+    const scoresArray = Array.isArray(rawScores) ? rawScores : null;
+
+    if (!scoresArray || !criteriaMeta) {
+      // Fallback: use percentage if raw scores not available
+      const percentage = gradeData.score;
+      if (percentage === null) return null;
+      return Math.round((percentage / 100) * assessmentMaxScore * 100) / 100;
+    }
+
+    // Calculate weighted percentage from raw scores
+    const weightedPercentage = calculateWeightedPercentage(
+      scoresArray,
+      criteriaMeta.rubrics,
+      criteriaMeta.scoringRange
+    );
+
+    // Convert percentage to actual score
+    const trueScore = (weightedPercentage / 100) * assessmentMaxScore;
+    return Math.round(trueScore * 100) / 100;
+  };
+
   const getEffectiveScore = (
     studentId: string,
     assessment: Assessment
   ): number | null => {
     if (assessment.linkedCriteriaId) {
-      const percentageScore = getLinkedCriteriaScore(
+      // ✅ Use new function to get true score from raw rubric scores
+      return getTrueScoreFromCriteria(
         studentId,
-        assessment.linkedCriteriaId
+        assessment.linkedCriteriaId,
+        assessment.maxScore
       );
-      if (percentageScore === null) return null;
-      // Ensure percentage is within valid range (0-100)
-      const clampedPercentage = Math.max(0, Math.min(100, percentageScore));
-      // Calculate score with proper precision (round to 2 decimal places)
-      const calculatedScore = (clampedPercentage / 100) * assessment.maxScore;
-      return Math.round(calculatedScore * 100) / 100;
     }
     return getScore(studentId, assessment.id);
   };
@@ -2849,9 +2943,11 @@ export function ClassRecordTable({
         isOpen={isPasteModalOpen}
         onClose={() => setIsPasteModalOpen(false)}
         availableColumns={(() => {
-          if (activeTerm === "SUMMARY") {
+          // Type guard: check if activeTerm is "SUMMARY" first
+          if (activeTerm === ("SUMMARY" as Term)) {
             return [];
           }
+          // After the check, TypeScript knows activeTerm is not "SUMMARY"
           const config =
             termConfigs[
               activeTerm as "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS"

@@ -139,6 +139,12 @@ export async function getCriteriaLinks(courseSlug: string) {
           name: true,
           date: true,
           scoringRange: true,
+          rubrics: {
+            select: {
+              id: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -152,6 +158,12 @@ export async function getCriteriaLinks(courseSlug: string) {
           name: true,
           date: true,
           scoringRange: true,
+          rubrics: {
+            select: {
+              id: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -166,6 +178,12 @@ export async function getCriteriaLinks(courseSlug: string) {
           name: true,
           date: true,
           scoringRange: true,
+          rubrics: {
+            select: {
+              id: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -178,14 +196,22 @@ export async function getCriteriaLinks(courseSlug: string) {
       name: string;
       date: Date | null;
       scoringRange: string;
+      rubrics: Array<{ id: string }>;
     }>
   ) => {
-    return criteria.map((c) => ({
-      id: c.id,
-      name: c.name,
-      date: c.date ? c.date.toISOString().split("T")[0] : null,
-      maxScore: parseFloat(c.scoringRange) || 0,
-    }));
+    return criteria.map((c) => {
+      const numberOfRubrics = c.rubrics?.length || 0;
+      const scoringRange = parseFloat(c.scoringRange) || 5;
+      // Calculate maxScore as: numberOfRubrics × scoringRange
+      const maxScore = numberOfRubrics * scoringRange;
+
+      return {
+        id: c.id,
+        name: c.name,
+        date: c.date ? c.date.toISOString().split("T")[0] : null,
+        maxScore,
+      };
+    });
   };
 
   return {

@@ -40,7 +40,7 @@ export default async function AcademicHeadDashboard() {
         <div className="flex-1 px-2 sm:px-4 md:px-6">
           <div className="flex flex-col flex-grow">
             <div className="px-2 sm:px-4">
-              <Greet />
+              <Greet firstName={session.user.name?.split(" ")[0] || "User"} />
 
               <Stats
                 initialFacultyStats={facultyStats}

@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useActiveCourses } from "@/lib/hooks/queries";
 import { Skeleton } from "@/components/ui/skeleton";
+import AnimatedContent from "@/components/ui/AnimatedContent";
 
 interface Course {
   id: string;
@@ -208,15 +209,31 @@ export default function CourseShortcuts({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto flex flex-col space-y-2">
-        {courses.map((course) => (
-          <CourseShortcut
+        {courses.map((course, index) => (
+          <AnimatedContent
             key={course.id}
-            course={course}
-            showAttendanceStats={showAttendanceStats}
-            onNavigate={() => handleCourseNavigate(course.slug)}
-            isLoading={loadingSlug === course.slug}
-            disabled={loadingSlug !== null && loadingSlug !== course.slug}
-          />
+            distance={150}
+            direction="horizontal"
+            reverse={true}
+            duration={1.2}
+            ease="power3.out"
+            initialOpacity={0.2}
+            animateOpacity
+            scale={1.1}
+            threshold={0.2}
+            delay={0.3 + index * 0.1}
+            container="snap-main-container"
+            onComplete={() => {}}
+            onDisappearanceComplete={() => {}}
+          >
+            <CourseShortcut
+              course={course}
+              showAttendanceStats={showAttendanceStats}
+              onNavigate={() => handleCourseNavigate(course.slug)}
+              isLoading={loadingSlug === course.slug}
+              disabled={loadingSlug !== null && loadingSlug !== course.slug}
+            />
+          </AnimatedContent>
         ))}
       </CardContent>
     </Card>

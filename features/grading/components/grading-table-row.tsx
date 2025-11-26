@@ -181,28 +181,35 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
                   <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
                 </div>
               ) : (
-              <select
-                  className="w-full rounded border border-gray-300 px-2 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                value={value}
-                onChange={(e) =>
-                  handleScoreChange(
-                    student.id,
-                    rubricIdx,
-                    parseInt(e.target.value) || 0
-                  )
-                }
+                <input
+                  type="number"
+                  min="1"
+                  max={Number(activeReport.scoringRange) || 5}
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  value={value || ""}
+                  onChange={(e) => {
+                    const inputValue = e.target.value;
+                    if (inputValue === "") {
+                      handleScoreChange(student.id, rubricIdx, 0);
+                    } else {
+                      const numValue = parseInt(inputValue);
+                      if (
+                        !isNaN(numValue) &&
+                        numValue >= 1 &&
+                        numValue <= Number(activeReport.scoringRange)
+                      ) {
+                        handleScoreChange(student.id, rubricIdx, numValue);
+                      }
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (["e", "E", "+", "-", "."].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  placeholder="—"
                   disabled={isLoading}
-              >
-                <option value="">Select grade</option>
-                {Array.from(
-                  { length: Number(activeReport.scoringRange) },
-                  (_, i) => i + 1
-                ).map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+                />
               )}
             </td>
           );

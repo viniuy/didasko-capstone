@@ -22,6 +22,7 @@ export async function GET(request: Request, { params }: { params }) {
     const courseCode = searchParams.get("courseCode");
     const courseSection = searchParams.get("courseSection");
     const groupId = searchParams.get("groupId");
+    const studentIdsParam = searchParams.get("studentIds");
 
     if (!date) {
       return NextResponse.json({ error: "Date is required" }, { status: 400 });
@@ -47,10 +48,16 @@ export async function GET(request: Request, { params }: { params }) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
+    // Parse studentIds if provided
+    const studentIds = studentIdsParam
+      ? studentIdsParam.split(",").filter((id) => id.trim())
+      : undefined;
+
     const grades = await getGrades(course.slug, {
       date,
       criteriaId: criteriaId || undefined,
       groupId: groupId || undefined,
+      studentIds: studentIds,
     });
 
     return NextResponse.json(grades);
