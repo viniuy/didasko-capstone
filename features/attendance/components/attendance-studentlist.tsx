@@ -313,6 +313,52 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     [selectedDate]
   );
 
+  // Global key for tracking active RFID sessions across all courses
+  const GLOBAL_RFID_SESSION_KEY = "attendance:global:activeRfidSession";
+
+  // Helper function to check if there's an active RFID session globally
+  const checkGlobalActiveSession = useCallback(() => {
+    try {
+      const activeSession = localStorage.getItem(GLOBAL_RFID_SESSION_KEY);
+      if (activeSession) {
+        const session = JSON.parse(activeSession) as {
+          courseSlug: string;
+          date: string;
+          startedAt: string;
+        };
+        // Check if it's a different course/date
+        if (
+          session.courseSlug !== courseSlug ||
+          session.date !== selectedDateStr
+        ) {
+          return session;
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }, [courseSlug, selectedDateStr]);
+
+  // Helper function to set global active session
+  const setGlobalActiveSession = useCallback(() => {
+    if (attendanceStartTime && selectedDateStr) {
+      localStorage.setItem(
+        GLOBAL_RFID_SESSION_KEY,
+        JSON.stringify({
+          courseSlug,
+          date: selectedDateStr,
+          startedAt: attendanceStartTime.toISOString(),
+        })
+      );
+    }
+  }, [attendanceStartTime, courseSlug, selectedDateStr]);
+
+  // Helper function to clear global active session
+  const clearGlobalActiveSession = useCallback(() => {
+    localStorage.removeItem(GLOBAL_RFID_SESSION_KEY);
+  }, []);
+
   const attendanceDateSet = useMemo(() => {
     return new Set(attendanceDates.map((d) => format(d, "yyyy-MM-dd")));
   }, [attendanceDates]);
@@ -555,12 +601,28 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         });
       }
 
+      // Restore scanned statuses from localStorage (for unsaved scans)
+      let scannedStatuses: { [studentId: string]: AttendanceStatus } = {};
+      try {
+        const savedScannedStatuses = localStorage.getItem(
+          getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
+        );
+        if (savedScannedStatuses) {
+          scannedStatuses = JSON.parse(savedScannedStatuses);
+        }
+      } catch (e) {
+        console.error("Error loading scanned statuses:", e);
+      }
+
       setStudentList((prevStudents) =>
         prevStudents.map((student) => {
           const record = attendanceMap.get(student.id);
+          // Prioritize database record, but keep scanned status if no DB record yet
+          const status =
+            record?.status || scannedStatuses[student.id] || "NOT_SET";
           return {
             ...student,
-            status: record?.status || "NOT_SET",
+            status: status as AttendanceStatusWithNotSet,
             attendanceRecords: record
               ? [
                   {
@@ -578,7 +640,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       );
       setUnsavedChanges({});
     }
-  }, [attendanceData, selectedDateStr, courseInfo?.id, studentList.length]);
+  }, [
+    attendanceData,
+    selectedDateStr,
+    courseInfo?.id,
+    studentList.length,
+    courseSlug,
+  ]);
 
   useEffect(() => {
     if (attendanceStatsData) {
@@ -638,8 +706,119 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Restore persisted times and session state
+  // Restore persisted RFID student list (timeInMap) when date or course changes
   useEffect(() => {
+    if (!selectedDateStr || !courseSlug) return;
+
+    try {
+      const savedTimeInMap = localStorage.getItem(
+        getStorageKey(`rfidTimeInMap:${selectedDateStr}`)
+      );
+      if (savedTimeInMap) {
+        const timeInMap = JSON.parse(savedTimeInMap) as {
+          [studentId: string]: string;
+        };
+        setLocalTimeInMap(timeInMap);
+      }
+    } catch (e) {
+      console.error("Error restoring RFID time-in map:", e);
+    }
+  }, [selectedDateStr, courseSlug]);
+
+  // Persist RFID student list (timeInMap) whenever it changes
+  useEffect(() => {
+    if (
+      !selectedDateStr ||
+      !courseSlug ||
+      Object.keys(localTimeInMap).length === 0
+    )
+      return;
+
+    try {
+      localStorage.setItem(
+        getStorageKey(`rfidTimeInMap:${selectedDateStr}`),
+        JSON.stringify(localTimeInMap)
+      );
+    } catch (e) {
+      console.error("Error saving RFID time-in map:", e);
+    }
+  }, [localTimeInMap, selectedDateStr, courseSlug]);
+
+  // Restore scanned student statuses after studentList is populated
+  const hasRestoredScannedStatusesRef = useRef(false);
+  useEffect(() => {
+    if (!selectedDateStr || !courseSlug || studentList.length === 0) return;
+    if (hasRestoredScannedStatusesRef.current) return;
+
+    try {
+      const savedScannedStatuses = localStorage.getItem(
+        getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
+      );
+      if (savedScannedStatuses) {
+        const scannedStatuses = JSON.parse(savedScannedStatuses) as {
+          [studentId: string]: AttendanceStatus;
+        };
+        // Apply scanned statuses to student list (only if no DB record exists)
+        setStudentList((prev) =>
+          prev.map((s) => {
+            // Only apply scanned status if student doesn't have a DB record
+            // (DB records are handled by the attendance data merge effect)
+            if (scannedStatuses[s.id] && s.status === "NOT_SET") {
+              return { ...s, status: scannedStatuses[s.id] };
+            }
+            return s;
+          })
+        );
+        hasRestoredScannedStatusesRef.current = true;
+      } else {
+        hasRestoredScannedStatusesRef.current = true;
+      }
+    } catch (e) {
+      console.error("Error restoring scanned statuses:", e);
+      hasRestoredScannedStatusesRef.current = true;
+    }
+  }, [selectedDateStr, courseSlug, studentList.length]);
+
+  // Reset restoration flag when date or course changes
+  useEffect(() => {
+    hasRestoredScannedStatusesRef.current = false;
+  }, [selectedDateStr, courseSlug]);
+
+  // Persist scanned student statuses whenever they change
+  useEffect(() => {
+    if (!selectedDateStr || !courseSlug) return;
+
+    // Get all scanned students (those with status PRESENT, LATE, or EXCUSED and have time-in)
+    const scannedStatuses: { [studentId: string]: AttendanceStatus } = {};
+    studentList.forEach((student) => {
+      if (
+        (student.status === "PRESENT" ||
+          student.status === "LATE" ||
+          student.status === "EXCUSED") &&
+        localTimeInMap[student.id]
+      ) {
+        scannedStatuses[student.id] = student.status;
+      }
+    });
+
+    if (Object.keys(scannedStatuses).length > 0) {
+      try {
+        localStorage.setItem(
+          getStorageKey(`rfidScannedStatuses:${selectedDateStr}`),
+          JSON.stringify(scannedStatuses)
+        );
+      } catch (e) {
+        console.error("Error saving scanned statuses:", e);
+      }
+    }
+  }, [studentList, localTimeInMap, selectedDateStr, courseSlug]);
+
+  // Restore persisted times and session state (only once on mount)
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    // Only restore once per courseSlug change
+    if (hasRestoredRef.current) return;
+
     try {
       const savedTimeIn = localStorage.getItem(getStorageKey("timeIn"));
       const savedTimeOut = localStorage.getItem(getStorageKey("timeOut"));
@@ -657,71 +836,145 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         const session = JSON.parse(savedSession) as {
           startedAt: string;
           isInGrace: boolean;
+          graceMinutes?: number;
         };
         const startedAt = new Date(session.startedAt);
         if (!isNaN(startedAt.getTime())) {
-          setAttendanceStartTime(startedAt);
-          setShowTimeoutModal(true);
-          setIsInGracePeriod(session.isInGrace || false);
+          // Check if there's a conflicting global session BEFORE setting state
+          const currentSelectedDateStr = selectedDate
+            ? format(selectedDate, "yyyy-MM-dd")
+            : null;
+          const globalSession = (() => {
+            try {
+              const activeSession = localStorage.getItem(
+                GLOBAL_RFID_SESSION_KEY
+              );
+              if (activeSession) {
+                const sess = JSON.parse(activeSession) as {
+                  courseSlug: string;
+                  date: string;
+                  startedAt: string;
+                };
+                if (
+                  sess.courseSlug !== courseSlug ||
+                  sess.date !== currentSelectedDateStr
+                ) {
+                  return sess;
+                }
+              }
+              return null;
+            } catch (e) {
+              return null;
+            }
+          })();
 
-          if (timeIn && timeOut) {
-            const today = new Date();
-            const [hIn, mIn] = timeIn.split(":").map(Number);
-            const [hOut, mOut] = timeOut.split(":").map(Number);
-            const tIn = new Date(
-              today.getFullYear(),
-              today.getMonth(),
-              today.getDate(),
-              hIn,
-              mIn,
-              0,
-              0
+          if (globalSession && globalSession.courseSlug !== courseSlug) {
+            // Another course has an active session, don't restore this one
+            localStorage.removeItem(getStorageKey("session"));
+            toast.error(
+              `Another RFID attendance session is active for ${globalSession.courseSlug}. This session was cleared.`,
+              {
+                id: "error-toast",
+                duration: 5000,
+              }
             );
-            const tOut = new Date(
-              today.getFullYear(),
-              today.getMonth(),
-              today.getDate(),
-              hOut,
-              mOut,
-              0,
-              0
-            );
-            const totalMs = tOut.getTime() - tIn.getTime();
-            const elapsedMs = Date.now() - startedAt.getTime();
-            const remainingMs = Math.max(0, totalMs - elapsedMs);
+          } else {
+            // Restore this session
+            setAttendanceStartTime(startedAt);
+            setShowTimeoutModal(true);
 
-            if (remainingMs > 0) {
-              const timeout = setTimeout(() => {
-                handleAttendanceTimeout();
-              }, remainingMs);
-              setTimeoutTimer(timeout);
+            // Restore grace minutes first
+            const restoredGraceMinutes = session.graceMinutes || graceMinutes;
+            if (session.graceMinutes) {
+              setGraceMinutes(session.graceMinutes);
+            }
 
-              const graceRemainingMs = remainingMs + gracePeriod * 60 * 1000;
+            // Recalculate grace period status based on current time
+            const now = Date.now();
+            const startedAtMs = startedAt.getTime();
+            const elapsedMs = now - startedAtMs;
+            const gracePeriodMs = restoredGraceMinutes * 60 * 1000;
+            const isStillInGrace = elapsedMs < gracePeriodMs;
+            const remainingGraceMs = Math.max(0, gracePeriodMs - elapsedMs);
+
+            setIsInGracePeriod(isStillInGrace);
+
+            // Set up grace period timer if still in grace period
+            if (isStillInGrace && remainingGraceMs > 0) {
               const grace = setTimeout(() => {
-                handleGracePeriodEnd();
-              }, graceRemainingMs);
+                setIsInGracePeriod(false);
+                toast.success(
+                  "Grace period ended. Late arrivals will be marked as LATE"
+                );
+              }, remainingGraceMs);
               setGracePeriodTimer(grace);
             } else {
-              const pastByMs = Math.abs(remainingMs);
-              if (pastByMs < gracePeriod * 60 * 1000) {
-                setIsInGracePeriod(true);
-                const leftMs = gracePeriod * 60 * 1000 - pastByMs;
-                const grace = setTimeout(() => {
-                  handleGracePeriodEnd();
-                }, leftMs);
-                setGracePeriodTimer(grace);
-              } else {
-                setIsInGracePeriod(false);
+              setIsInGracePeriod(false);
+            }
+
+            // Set global active session when restoring (use current values)
+            if (currentSelectedDateStr) {
+              localStorage.setItem(
+                GLOBAL_RFID_SESSION_KEY,
+                JSON.stringify({
+                  courseSlug,
+                  date: currentSelectedDateStr,
+                  startedAt: startedAt.toISOString(),
+                })
+              );
+            }
+
+            // Use saved timeIn/timeOut values for timer calculations
+            const savedTimeInValue = savedTimeIn || timeIn;
+            const savedTimeOutValue = savedTimeOut || timeOut;
+
+            if (savedTimeInValue && savedTimeOutValue) {
+              const today = new Date();
+              const [hIn, mIn] = savedTimeInValue.split(":").map(Number);
+              const [hOut, mOut] = savedTimeOutValue.split(":").map(Number);
+              const tIn = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                hIn,
+                mIn,
+                0,
+                0
+              );
+              const tOut = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate(),
+                hOut,
+                mOut,
+                0,
+                0
+              );
+              const totalMs = tOut.getTime() - tIn.getTime();
+              const elapsedMsForTimeout = Date.now() - startedAt.getTime();
+              const remainingMs = Math.max(0, totalMs - elapsedMsForTimeout);
+
+              if (remainingMs > 0) {
+                const timeout = setTimeout(() => {
+                  handleAttendanceTimeout();
+                }, remainingMs);
+                setTimeoutTimer(timeout);
               }
             }
           }
         }
       }
+      hasRestoredRef.current = true;
     } catch (e) {
       // ignore
     } finally {
       setRestoredFromStorage(true);
     }
+  }, [courseSlug]); // Only depend on courseSlug, reset ref when it changes
+
+  // Reset restoration flag when courseSlug changes
+  useEffect(() => {
+    hasRestoredRef.current = false;
   }, [courseSlug]);
 
   const getAttendanceForDate = (student: Student, date: Date | undefined) => {
@@ -823,12 +1076,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // 1. IMMEDIATELY update local studentList array
-      setStudentList((prev) =>
-        prev.map((s) => {
+    setStudentList((prev) =>
+      prev.map((s) => {
         if (studentIds.includes(s.id)) {
-            const existingRecordIndex = s.attendanceRecords.findIndex(
-              (r) => r.date === dateStr
-            );
+          const existingRecordIndex = s.attendanceRecords.findIndex(
+            (r) => r.date === dateStr
+          );
           const newRecord: AttendanceRecord = {
             id:
               existingRecordIndex >= 0
@@ -841,20 +1094,20 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             reason: reason.trim(),
           };
 
-            return {
-              ...s,
+          return {
+            ...s,
             status: "EXCUSED",
-              attendanceRecords:
-                existingRecordIndex >= 0
-                  ? s.attendanceRecords.map((r, idx) =>
+            attendanceRecords:
+              existingRecordIndex >= 0
+                ? s.attendanceRecords.map((r, idx) =>
                     idx === existingRecordIndex ? newRecord : r
-                    )
+                  )
                 : [...s.attendanceRecords, newRecord],
-            };
-          }
-          return s;
-        })
-      );
+          };
+        }
+        return s;
+      })
+    );
 
     // 2. Save to database
     setSavingStudents(new Set(studentIds));
@@ -964,10 +1217,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 : crypto.randomUUID(),
             studentId: s.id,
             courseId: courseSlug,
-      status: newStatus,
+            status: newStatus,
             date: dateStr,
-      reason: reason ?? null,
-    };
+            reason: reason ?? null,
+          };
 
           return {
             ...s,
@@ -1009,8 +1262,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
       if (updatesToSave.length === 0) {
         setSavingStudents(new Set());
-          return;
-        }
+        return;
+      }
 
       // Mark all students as saving
       const savingIds = new Set(updatesToSave.map((u) => u.studentId));
@@ -1529,6 +1782,18 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         setIsInGracePeriod(false);
         pendingSavesRef.current.clear();
         setCurrentPage(1);
+        // Clear global active session
+        clearGlobalActiveSession();
+        // Clear RFID time-in map and scanned statuses for this date
+        try {
+          localStorage.removeItem(getStorageKey(`rfidTimeInMap:${dateStr}`));
+          localStorage.removeItem(
+            getStorageKey(`rfidScannedStatuses:${dateStr}`)
+          );
+          setLocalTimeInMap({});
+        } catch (e) {
+          console.error("Error clearing RFID data:", e);
+        }
         setShowTimeSetupModal(true);
       }
 
@@ -1615,11 +1880,39 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       const m = Math.floor(remainingMs / 60000);
       const s = Math.floor((remainingMs % 60000) / 1000);
       setGraceCountdown(`${m}:${s.toString().padStart(2, "0")}`);
+
+      // Update grace period status and persist session
+      const isCurrentlyInGrace = remainingMs > 0;
+      if (isCurrentlyInGrace !== isInGracePeriod) {
+        setIsInGracePeriod(isCurrentlyInGrace);
+      }
+
+      // Persist current session state
+      if (selectedDateStr) {
+        try {
+          localStorage.setItem(
+            getStorageKey("session"),
+            JSON.stringify({
+              startedAt: attendanceStartTime.toISOString(),
+              isInGrace: isCurrentlyInGrace,
+              graceMinutes: graceMinutes,
+            })
+          );
+        } catch (e) {
+          // Ignore storage errors
+        }
+      }
     };
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [attendanceStartTime, graceMinutes]);
+  }, [
+    attendanceStartTime,
+    graceMinutes,
+    isInGracePeriod,
+    selectedDateStr,
+    courseSlug,
+  ]);
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -1669,10 +1962,49 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       return;
     }
 
+    // Check if there's already an active RFID session in another course/date
+    const activeSession = checkGlobalActiveSession();
+    if (activeSession) {
+      toast.dismiss("error-toast");
+      toast.error(
+        `There is already an active RFID attendance session for ${
+          activeSession.courseSlug
+        } on ${format(
+          new Date(activeSession.date),
+          "MMMM d, yyyy"
+        )}. Please end that session first.`,
+        {
+          id: "error-toast",
+          duration: 5000,
+        }
+      );
+      return;
+    }
+
     setShowTimeSetupModal(true);
   };
 
   const confirmAttendanceStart = async () => {
+    // Double-check if there's already an active session (in case user opened multiple tabs)
+    const activeSession = checkGlobalActiveSession();
+    if (activeSession) {
+      toast.dismiss("error-toast");
+      toast.error(
+        `There is already an active RFID attendance session for ${
+          activeSession.courseSlug
+        } on ${format(
+          new Date(activeSession.date),
+          "MMMM d, yyyy"
+        )}. Please end that session first.`,
+        {
+          id: "error-toast",
+          duration: 5000,
+        }
+      );
+      setShowTimeSetupModal(false);
+      return;
+    }
+
     try {
       const started = new Date();
       setAttendanceStartTime(started);
@@ -1688,6 +2020,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           graceMinutes: graceMinutes,
         })
       );
+
+      // Set global active session
+      setGlobalActiveSession();
 
       const grace = setTimeout(() => {
         setIsInGracePeriod(false);
@@ -1862,8 +2197,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           return;
         }
 
-        const status: AttendanceStatus = isInGracePeriod ? "PRESENT" : "LATE";
-        const now = new Date();
+        // Recalculate grace period status at the time of scan
+        const now = Date.now();
+        const startedAtMs = attendanceStartTime.getTime();
+        const elapsedMs = now - startedAtMs;
+        const gracePeriodMs = graceMinutes * 60 * 1000;
+        const isCurrentlyInGrace = elapsedMs < gracePeriodMs;
+
+        const status: AttendanceStatus = isCurrentlyInGrace
+          ? "PRESENT"
+          : "LATE";
+        const nowDate = new Date();
 
         // Use startTransition for non-blocking updates
         startTransition(() => {
@@ -1872,11 +2216,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           );
           setLocalTimeInMap((prev) => ({
             ...prev,
-            [student!.id]: now.toISOString(),
+            [student!.id]: nowDate.toISOString(),
           }));
           setPendingAttendanceUpdates((prev) => ({
             ...prev,
-            [student!.id]: { status, timestamp: now, rfid },
+            [student!.id]: { status, timestamp: nowDate, rfid },
           }));
         });
 
@@ -1984,7 +2328,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           setIsScanning(false);
         }
       } else {
-      setIsScanning(false);
+        setIsScanning(false);
       }
     }, 100); // Short timeout - RFID scanners send data very quickly
   };
@@ -2118,6 +2462,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
     try {
       localStorage.removeItem(getStorageKey("session"));
+      // Clear global active session
+      clearGlobalActiveSession();
     } catch {}
 
     if (timeoutTimer) {
@@ -2170,7 +2516,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // 1. IMMEDIATELY update local studentList array
-      setStudentList((prev) =>
+    setStudentList((prev) =>
       prev.map((student) => {
         const existingRecordIndex = student.attendanceRecords.findIndex(
           (r) => r.date === dateStr
@@ -2180,11 +2526,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             existingRecordIndex >= 0
               ? student.attendanceRecords[existingRecordIndex].id
               : crypto.randomUUID(),
-              studentId: student.id,
-              courseId: courseSlug,
-              status: "PRESENT",
-              date: dateStr,
-              reason: null,
+          studentId: student.id,
+          courseId: courseSlug,
+          status: "PRESENT",
+          date: dateStr,
+          reason: null,
         };
 
         return {
@@ -2228,7 +2574,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             (r) => r.date === dateStr
           );
           return {
-          ...student,
+            ...student,
             status: record?.status || "NOT_SET",
           };
         })
@@ -2263,7 +2609,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     // 1. IMMEDIATELY update local studentList array
-      setStudentList((prev) =>
+    setStudentList((prev) =>
       prev.map((student) => {
         if (student.status === "LATE") {
           const existingRecordIndex = student.attendanceRecords.findIndex(
@@ -2274,11 +2620,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               existingRecordIndex >= 0
                 ? student.attendanceRecords[existingRecordIndex].id
                 : crypto.randomUUID(),
-                    studentId: student.id,
+            studentId: student.id,
             courseId: courseSlug,
-                    status: "PRESENT",
-                    date: dateStr,
-                    reason: null,
+            status: "PRESENT",
+            date: dateStr,
+            reason: null,
           };
 
           return {
@@ -3397,24 +3743,24 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   <div className="flex-1">
                     <label className="text-base font-semibold text-gray-900 block mb-1">
                       Grace Period
-                </label>
+                    </label>
                     <p className="text-sm text-gray-600 mb-3">
-                      Students arriving within this time will be marked as LATE
+                      Students arriving after this time will be marked as LATE
                       instead of ABSENT
                     </p>
                     <div className="space-y-2">
                       <div className="flex items-center gap-4">
-                <Input
-                  type="number"
-                  min={1}
+                        <Input
+                          type="number"
+                          min={1}
                           max={45}
                           step={1}
-                  value={graceMinutes}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
+                          value={graceMinutes}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
                             setGracePeriodError(""); // Clear error on change
-                    if (isNaN(v) || v <= 0) {
-                      setGraceMinutes(1);
+                            if (isNaN(v) || v <= 0) {
+                              setGraceMinutes(1);
                               setGracePeriodError(
                                 "Grace period must be at least 1 minute"
                               );
@@ -3423,17 +3769,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                               setGracePeriodError(
                                 "Grace period cannot exceed 45 minutes"
                               );
-                    } else {
+                            } else {
                               setGraceMinutes(Math.floor(v)); // Ensure it's a whole number
-                    }
-                  }}
+                            }
+                          }}
                           className={`w-24 text-center text-lg font-semibold ${
                             gracePeriodError
                               ? "border-red-500 focus:border-red-500 focus:ring-red-500"
                               : ""
                           }`}
-                  required
-                />
+                          required
+                        />
                         <span className="text-base text-gray-700 font-medium">
                           {graceMinutes === 1 ? "minute" : "minutes"}
                         </span>
@@ -3445,7 +3791,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       )}
                       <p className="text-xs text-gray-500">
                         Maximum: 45 minutes
-                </p>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -3654,12 +4000,21 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                           minute: "2-digit",
                         })
                       : "--:--";
+                    const borderColor =
+                      s.status === "PRESENT"
+                        ? "border-green-600"
+                        : s.status === "LATE"
+                        ? "border-yellow-600"
+                        : "border-red-600";
+                    const borderborderColor = "border-[#124A69]";
                     return (
                       <div
                         key={s.id}
-                        className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex items-center gap-4"
+                        className={`bg-white border-2 ${borderborderColor} rounded-xl shadow-sm p-4 flex items-center gap-4`}
                       >
-                        <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#F4C430] flex items-center justify-center">
+                        <div
+                          className={`w-14 h-14 rounded-full overflow-hidden border-2 ${borderColor} flex items-center justify-center`}
+                        >
                           {s.image ? (
                             <img
                               src={s.image}

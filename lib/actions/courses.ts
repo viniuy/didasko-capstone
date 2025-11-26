@@ -55,7 +55,14 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
       if (!faculty) return { success: false, error: "Faculty not found" };
     }
 
-    const slug = data.code.toLowerCase().replace(/\s+/g, "-");
+    // Generate slug: code-academicyear-section
+    const normalizedCode = data.code.toLowerCase().replace(/\s+/g, "-");
+    const normalizedAcademicYear = data.academicYear
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/\//g, "-"); // Replace slashes with dashes
+    const normalizedSection = data.section.toLowerCase().replace(/\s+/g, "-");
+    const slug = `${normalizedCode}-${normalizedAcademicYear}-${normalizedSection}`;
 
     // Check for duplicate slug before creating
     const existingSlug = await prisma.course.findUnique({

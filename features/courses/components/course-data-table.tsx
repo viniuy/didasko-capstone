@@ -95,6 +95,7 @@ import { saveAs } from "file-saver";
 import axiosInstance from "@/lib/axios";
 import axios from "@/lib/axios";
 import AnimatedContent from "@/components/ui/AnimatedContent";
+import { checkActiveRfidSession } from "@/lib/utils/rfid-session";
 
 interface CourseStats {
   passingRate: number;
@@ -366,6 +367,22 @@ const CourseCard = ({
       {/* Card Content - Clickable */}
       <div
         onClick={() => {
+          // Check if there's an active RFID session for this course
+          // Academic heads can always access (view-only)
+          if (userRole !== "ACADEMIC_HEAD") {
+            const activeSession = checkActiveRfidSession(course.slug);
+            if (activeSession) {
+              toast.error(
+                `Cannot access course: RFID attendance is currently active for this course. Please wait until the attendance session ends.`,
+                {
+                  id: `rfid-block-${course.slug}`,
+                  duration: 5000,
+                }
+              );
+              return;
+            }
+          }
+
           if (onNavigate) {
             onNavigate(course.slug);
           } else {
@@ -2557,6 +2574,22 @@ export function CourseDataTable({
 
   // Handle course navigation with fade out
   const handleCourseNavigate = (slug: string) => {
+    // Check if there's an active RFID session for this course
+    // Academic heads can always access (view-only)
+    if (userRole !== "ACADEMIC_HEAD") {
+      const activeSession = checkActiveRfidSession(slug);
+      if (activeSession) {
+        toast.error(
+          `Cannot access course: RFID attendance is currently active for this course. Please wait until the attendance session ends.`,
+          {
+            id: `rfid-block-${slug}`,
+            duration: 5000,
+          }
+        );
+        return;
+      }
+    }
+
     setIsRedirecting(true);
     setShowRedirectingMessage(true);
     router.push(`/main/course/${slug}`);

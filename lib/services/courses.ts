@@ -3,10 +3,19 @@ import { Prisma } from "@prisma/client";
 import { unstable_cache, revalidateTag } from "next/cache";
 
 // Helper function to generate slug
-export function generateSlug(code: string, section: string): string {
-  return `${code.toLowerCase().replace(/\s+/g, "-")}-${section
+// Format: code-academicyear-section
+export function generateSlug(
+  code: string,
+  academicYear: string,
+  section: string
+): string {
+  const normalizedCode = code.toLowerCase().replace(/\s+/g, "-");
+  const normalizedAcademicYear = academicYear
     .toLowerCase()
-    .replace(/\s+/g, "-")}`;
+    .replace(/\s+/g, "-")
+    .replace(/\//g, "-"); // Replace slashes with dashes (e.g., "2024-2025" or "2024/2025")
+  const normalizedSection = section.toLowerCase().replace(/\s+/g, "-");
+  return `${normalizedCode}-${normalizedAcademicYear}-${normalizedSection}`;
 }
 
 // Get course by slug with basic info (cached)
@@ -762,7 +771,7 @@ export async function createCourse(data: {
   facultyId?: string | null;
   schedules?: Array<{ day: string; fromTime: string; toTime: string }>;
 }) {
-  const baseSlug = generateSlug(data.code, data.section);
+  const baseSlug = generateSlug(data.code, data.academicYear, data.section);
   let slug = baseSlug;
   let counter = 1;
 
@@ -849,7 +858,7 @@ export async function updateCourse(
 ) {
   const newSlug =
     data.code && data.section && data.academicYear
-      ? generateSlug(data.code, data.section)
+      ? generateSlug(data.code, data.academicYear, data.section)
       : undefined;
 
   if (newSlug) {

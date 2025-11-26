@@ -38,10 +38,20 @@ interface ImportResult {
   }>;
 }
 
-// Helper function to generate unique slug
-function generateSlug(code: string, section: string): string {
-  const timestamp = Date.now();
-  return `${code.toLowerCase()}-${section.toLowerCase()}-${timestamp}`;
+// Helper function to generate slug
+// Format: code-academicyear-section
+function generateSlug(
+  code: string,
+  academicYear: string,
+  section: string
+): string {
+  const normalizedCode = code.toLowerCase().replace(/\s+/g, "-");
+  const normalizedAcademicYear = academicYear
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/\//g, "-"); // Replace slashes with dashes
+  const normalizedSection = section.toLowerCase().replace(/\s+/g, "-");
+  return `${normalizedCode}-${normalizedAcademicYear}-${normalizedSection}`;
 }
 
 // Helper function to validate and normalize status
@@ -81,7 +91,6 @@ function normalizeSemester(semester: string): string {
 
   return semester.trim();
 }
-
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -210,8 +219,8 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Generate unique slug
-        const slug = generateSlug(code, section);
+        // Generate slug: code-academicyear-section
+        const slug = generateSlug(code, academicYear, section);
 
         // Create the course (WITHOUT schedules)
         const newCourse = await prisma.course.create({

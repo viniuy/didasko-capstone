@@ -9,6 +9,8 @@ import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import { CourseDashboardSkeleton } from "@/shared/components/skeletons/course-skeletons";
+import { CourseAccessGuard } from "@/features/courses/components/course-access-guard";
+import { UserRole } from "@/lib/permission";
 
 // Separate async component for course dashboard content
 async function CourseDashboardContent({ courseSlug }: { courseSlug: string }) {
@@ -40,6 +42,7 @@ export default async function CourseDashboardPage({
   }
 
   const { course_slug } = await params;
+  const userRole = (session.user.role || "FACULTY") as UserRole;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
@@ -50,9 +53,11 @@ export default async function CourseDashboardPage({
         <div className="flex flex-col flex-grow px-4">
           {/* Course Dashboard Component with Suspense */}
           <div className="mb-4 overflow-y-auto">
-            <Suspense fallback={<CourseDashboardSkeleton />}>
-              <CourseDashboardContent courseSlug={course_slug} />
-            </Suspense>
+            <CourseAccessGuard courseSlug={course_slug} userRole={userRole}>
+              <Suspense fallback={<CourseDashboardSkeleton />}>
+                <CourseDashboardContent courseSlug={course_slug} />
+              </Suspense>
+            </CourseAccessGuard>
           </div>
         </div>
         {/* Right Sidebar */}

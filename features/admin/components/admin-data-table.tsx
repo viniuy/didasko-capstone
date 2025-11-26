@@ -214,8 +214,6 @@ export function AdminDataTable({
   const [tableData, setTableData] = useState<User[]>(initialUsers || []);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
@@ -1045,16 +1043,6 @@ export function AdminDataTable({
                   </DropdownMenuItem>
                 )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="flex items-center gap-2 text-red-600"
-                onClick={() => {
-                  setUserToDelete(row.original);
-                  setIsDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
@@ -1422,26 +1410,6 @@ export function AdminDataTable({
           onClose={() => setEditingUser(null)}
         />
       )}
-
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {userToDelete?.name}? This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-4 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={showExportPreview} onOpenChange={setShowExportPreview}>
         <DialogContent className="w-[90vw] max-w-[1200px] p-4 sm:p-6">

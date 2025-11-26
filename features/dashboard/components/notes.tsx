@@ -424,10 +424,10 @@ export default function Notes() {
 
             <div>
               <Label className="text-sm font-medium mb-2 block">
-                Description <span className="text-gray-400">(optional)</span>
+                Details <span className="text-gray-400">(optional)</span>
               </Label>
               <Textarea
-                placeholder="Add your description"
+                placeholder="Add your details"
                 className="resize-none min-h-[100px] max-h-[100px] overflow-y-auto w-full break-words rounded-lg"
                 value={editData.description || ""}
                 onChange={(e) => {
@@ -488,10 +488,10 @@ export default function Notes() {
 
             <div>
               <Label className="text-sm font-medium mb-2 block">
-                Description <span className="text-gray-400">(optional)</span>
+                Details <span className="text-gray-400">(optional)</span>
               </Label>
               <Textarea
-                placeholder="Add your description"
+                placeholder="Add your details"
                 className="resize-none min-h-[100px] max-h-[200px] overflow-y-auto w-full break-words whitespace-pre-wrap rounded-lg"
                 value={newNote.description || ""}
                 onChange={(e) => {
