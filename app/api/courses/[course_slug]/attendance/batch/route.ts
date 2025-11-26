@@ -46,36 +46,84 @@ export async function POST(request: Request, { params }) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const u of recordsToProcess) {
-        const existing = await tx.attendance.findFirst({
-          where: {
-            studentId: u.studentId,
-            courseId: course.id,
-            date: {
-              gte: utcDate,
-              lt: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000),
-            },
-          },
-        });
+    // Get all student IDs to process
+    const studentIds = recordsToProcess.map((r) => r.studentId);
 
-        if (existing) {
-          await tx.attendance.update({
-            where: { id: existing.id },
-            data: { status: u.status as any },
-          });
-        } else {
-          await tx.attendance.create({
-            data: {
-              studentId: u.studentId,
-              courseId: course.id,
-              date: utcDate,
-              status: u.status as any,
-            },
+    // Fetch all existing records in one query (before transaction to avoid timeout)
+    const existingRecords = await prisma.attendance.findMany({
+      where: {
+        studentId: { in: studentIds },
+        courseId: course.id,
+        date: {
+          gte: utcDate,
+          lt: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+
+    // Create a map for quick lookup
+    const existingMap = new Map(existingRecords.map((r) => [r.studentId, r]));
+
+    // Separate records into updates and creates
+    const toUpdate: Array<{ id: string; status: string }> = [];
+    const toCreate: Array<{
+      studentId: string;
+      courseId: string;
+      date: Date;
+      status: string;
+    }> = [];
+
+    for (const record of recordsToProcess) {
+      const existing = existingMap.get(record.studentId);
+      if (existing) {
+        toUpdate.push({
+          id: existing.id,
+          status: record.status,
+        });
+      } else {
+        toCreate.push({
+          studentId: record.studentId,
+          courseId: course.id,
+          date: utcDate,
+          status: record.status,
+        });
+      }
+    }
+
+    // Use transaction with timeout and batch operations
+    await prisma.$transaction(
+      async (tx) => {
+        // Batch update existing records
+        if (toUpdate.length > 0) {
+          // Use Promise.all for parallel updates (more efficient than sequential)
+          await Promise.all(
+            toUpdate.map((record) =>
+              tx.attendance.update({
+                where: { id: record.id },
+                data: { status: record.status as any },
+              })
+            )
+          );
+        }
+
+        // Batch create new records
+        if (toCreate.length > 0) {
+          await tx.attendance.createMany({
+            data: toCreate.map((record) => ({
+              studentId: record.studentId,
+              courseId: record.courseId,
+              date: record.date,
+              status: record.status as any,
+            })),
+            skipDuplicates: true,
           });
         }
+      },
+      {
+        maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)
+        timeout: 20000, // Maximum time the transaction can run (20 seconds)
       }
-    });
+    );
 
     return NextResponse.json({ ok: true });
   } catch (error) {

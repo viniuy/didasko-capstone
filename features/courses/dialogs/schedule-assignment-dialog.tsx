@@ -25,7 +25,9 @@ import {
   useCreateCourse,
   useImportCoursesWithSchedulesArray,
   useAssignSchedules,
+  useActiveCourses,
 } from "@/lib/hooks/queries";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 
 const DAYS = [
@@ -101,17 +103,30 @@ export function ScheduleAssignmentDialog({
   const [isCanceling, setIsCanceling] = useState(false);
 
   // React Query mutations
+  const { data: session } = useSession();
   const createCourseMutation = useCreateCourse();
   const importCoursesMutation = useImportCoursesWithSchedulesArray();
   const assignSchedulesMutation = useAssignSchedules();
+
+  const currentCourse = courses[currentIndex];
+  const progress = ((currentIndex + 1) / courses.length) * 100;
+
+  // Fetch existing active courses for overlap validation
+  const { data: existingCoursesData } = useActiveCourses({
+    filters: currentCourse?.facultyId
+      ? { facultyId: currentCourse.facultyId }
+      : session?.user?.id
+      ? { facultyId: session.user.id }
+      : undefined,
+    refetchOnMount: true,
+  });
+
+  const existingCourses = existingCoursesData?.courses || [];
 
   const isSubmitting =
     createCourseMutation.isPending ||
     importCoursesMutation.isPending ||
     assignSchedulesMutation.isPending;
-
-  const currentCourse = courses[currentIndex];
-  const progress = ((currentIndex + 1) / courses.length) * 100;
 
   // Initialize schedules based on mode
   useEffect(() => {
@@ -178,7 +193,31 @@ export function ScheduleAssignmentDialog({
     return start1 < end2 && start2 < end1;
   };
 
+  // Normalize day name for comparison (handles both full and short names)
+  const normalizeDayName = (day: string): string => {
+    const dayMap: Record<string, string> = {
+      Mon: "Monday",
+      Tue: "Tuesday",
+      Wed: "Wednesday",
+      Thu: "Thursday",
+      Fri: "Friday",
+      Sat: "Saturday",
+      Sun: "Sunday",
+      Monday: "Monday",
+      Tuesday: "Tuesday",
+      Wednesday: "Wednesday",
+      Thursday: "Thursday",
+      Friday: "Friday",
+      Saturday: "Saturday",
+      Sunday: "Sunday",
+    };
+    return dayMap[day] || day;
+  };
+
   const validateCurrentSchedules = () => {
+    // Use a single toast ID to prevent multiple toasts
+    const toastId = "schedule-validation-error";
+
     const filledSchedules = currentSchedules.filter(
       (s) => s.day || s.fromTime || s.toTime
     );
@@ -188,7 +227,9 @@ export function ScheduleAssignmentDialog({
     );
 
     if (completeSchedules.length === 0) {
-      toast.error("At least one complete schedule is required to proceed");
+      toast.error("At least one complete schedule is required to proceed", {
+        id: toastId,
+      });
       return false;
     }
 
@@ -201,7 +242,8 @@ export function ScheduleAssignmentDialog({
         toast.error(
           `Schedule ${
             i + 1
-          }: Please complete all fields (day, start time, end time)`
+          }: Please complete all fields (day, start time, end time)`,
+          { id: toastId }
         );
         return false;
       }
@@ -218,26 +260,31 @@ export function ScheduleAssignmentDialog({
 
       if (fromMinutes < MIN_TIME || fromMinutes > MAX_TIME) {
         toast.error(
-          `Schedule ${i + 1}: Start time must be between 7:00 AM and 8:00 PM`
+          `Schedule ${i + 1}: Start time must be between 7:00 AM and 8:00 PM`,
+          { id: toastId }
         );
         return false;
       }
 
       if (toMinutes < MIN_TIME || toMinutes > MAX_TIME) {
         toast.error(
-          `Schedule ${i + 1}: End time must be between 7:00 AM and 8:00 PM`
+          `Schedule ${i + 1}: End time must be between 7:00 AM and 8:00 PM`,
+          { id: toastId }
         );
         return false;
       }
 
       if (fromMinutes >= toMinutes) {
-        toast.error(`Schedule ${i + 1}: End time must be after start time`);
+        toast.error(`Schedule ${i + 1}: End time must be after start time`, {
+          id: toastId,
+        });
         return false;
       }
 
       if (toMinutes - fromMinutes < 30) {
         toast.error(
-          `Schedule ${i + 1}: Class duration must be at least 30 minutes`
+          `Schedule ${i + 1}: Class duration must be at least 30 minutes`,
+          { id: toastId }
         );
         return false;
       }
@@ -253,9 +300,48 @@ export function ScheduleAssignmentDialog({
           toast.error(
             `Schedules ${i + 1} and ${
               j + 1
-            } overlap on ${dayLabel}. Please adjust the times.`
+            } overlap on ${dayLabel}. Please adjust the times.`,
+            { id: toastId }
           );
           return false;
+        }
+      }
+    }
+
+    // Check for overlaps with existing active courses (excluding current course if editing)
+    const currentCourseId = mode === "edit" ? currentCourse?.id : null;
+    for (const existingCourse of existingCourses) {
+      // Skip the current course if editing
+      if (currentCourseId && existingCourse.id === currentCourseId) {
+        continue;
+      }
+
+      // Skip if course doesn't have schedules
+      if (!existingCourse.schedules || existingCourse.schedules.length === 0) {
+        continue;
+      }
+
+      // Check each new schedule against existing course schedules
+      for (const newSchedule of completeSchedules) {
+        for (const existingSchedule of existingCourse.schedules) {
+          const normalizedNewDay = normalizeDayName(newSchedule.day);
+          const normalizedExistingDay = normalizeDayName(existingSchedule.day);
+
+          if (normalizedNewDay === normalizedExistingDay) {
+            const overlapSchedule: Schedule = {
+              day: normalizedExistingDay,
+              fromTime: existingSchedule.fromTime,
+              toTime: existingSchedule.toTime,
+            };
+
+            if (checkTimeOverlap(newSchedule, overlapSchedule)) {
+              toast.error(
+                `Schedule overlaps with existing course "${existingCourse.code} - ${existingCourse.section}" on ${normalizedNewDay} (${existingSchedule.fromTime} - ${existingSchedule.toTime}). Please adjust the time.`,
+                { id: toastId }
+              );
+              return false;
+            }
+          }
         }
       }
     }

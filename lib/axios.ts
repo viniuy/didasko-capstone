@@ -13,19 +13,28 @@ const axiosInstance = axios.create({
 // Add request interceptor
 axiosInstance.interceptors.request.use(
   (config) => {
-    console.log("Making request:", {
-      url: config.url,
-      method: config.method,
-      params: config.params,
-      data: config.data,
-    });
+    // Only log in development
+    if (process.env.NODE_ENV === "development") {
+      console.log("Making request:", {
+        url: config.url,
+        method: config.method,
+      });
+    }
     return config;
   },
   (error) => {
+    // Ignore cancellation errors
+    if (
+      error.name === "CanceledError" ||
+      error.code === "ERR_CANCELED" ||
+      error.message === "canceled"
+    ) {
+      return Promise.reject(error);
+    }
     console.error("Request interceptor error:", {
       message: error.message,
-      config: error.config,
-      stack: error.stack,
+      url: error.config?.url,
+      method: error.config?.method,
     });
     return Promise.reject(error);
   }
@@ -34,14 +43,27 @@ axiosInstance.interceptors.request.use(
 // Add response interceptor
 axiosInstance.interceptors.response.use(
   (response) => {
-    console.log("Response received:", {
-      url: response.config.url,
-      status: response.status,
-      data: response.data,
-    });
+    // Only log in development
+    if (process.env.NODE_ENV === "development") {
+      console.log("Response received:", {
+        url: response.config.url,
+        status: response.status,
+      });
+    }
     return response;
   },
   (error) => {
+    // Ignore cancellation errors (these are expected when React Query cancels requests)
+    if (
+      error.name === "CanceledError" ||
+      error.code === "ERR_CANCELED" ||
+      error.message === "canceled" ||
+      error.config?.signal?.aborted
+    ) {
+      // Silently ignore cancelled requests - they're expected behavior
+      return Promise.reject(error);
+    }
+
     // Handle common errors here
     if (error.response) {
       // The request was made and the server responded with a status code
@@ -53,26 +75,27 @@ axiosInstance.interceptors.response.use(
         data: error.response?.data,
         url: error.config?.url,
         method: error.config?.method,
-        params: error.config?.params,
-        headers: error.config?.headers,
-        stack: error.stack,
       });
     } else if (error.request) {
       // The request was made but no response was received
-      console.error("Request error:", {
-        message: "No response received from server",
-        request: error.request,
-        url: error.config?.url,
-        method: error.config?.method,
-        params: error.config?.params,
-        stack: error.stack,
-      });
+      // Only log if it's not a timeout (timeouts are handled by the calling code)
+      if (
+        error.code !== "ECONNABORTED" &&
+        !error.message?.includes("timeout")
+      ) {
+        console.error("Request error:", {
+          message: error.message || "No response received from server",
+          url: error.config?.url,
+          method: error.config?.method,
+          code: error.code,
+        });
+      }
     } else {
       // Something happened in setting up the request that triggered an Error
       console.error("Error:", {
         message: error.message,
-        stack: error.stack,
-        config: error.config,
+        url: error.config?.url,
+        method: error.config?.method,
       });
     }
     return Promise.reject(error);

@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { CourseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
-
+import { checkScheduleOverlap } from "@/lib/utils/schedule-utils";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -37,11 +37,101 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Get courses before update for logging
-    const coursesBefore = await prisma.course.findMany({
+    // Get courses before update for logging and validation
+    const coursesToUpdate = await prisma.course.findMany({
       where: { id: { in: courseIds } },
-      select: { id: true, code: true, title: true, status: true },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        section: true,
+        status: true,
+        facultyId: true,
+        semester: true,
+        academicYear: true,
+        schedules: {
+          select: {
+            day: true,
+            fromTime: true,
+            toTime: true,
+          },
+        },
+      },
     });
+
+    // Validate schedule conflicts when unarchiving (activating) courses
+    if (status === "ACTIVE") {
+      const scheduleConflicts: Array<{
+        courseId: string;
+        courseCode: string;
+        courseSection: string;
+        error: string;
+      }> = [];
+
+      for (const course of coursesToUpdate) {
+        if (!course.facultyId) {
+          scheduleConflicts.push({
+            courseId: course.id,
+            courseCode: course.code,
+            courseSection: course.section || "",
+            error: "Course has no assigned faculty",
+          });
+          continue;
+        }
+
+        // Skip if course has no schedules
+        if (!course.schedules || course.schedules.length === 0) {
+          continue;
+        }
+
+        // Check for schedule conflicts with existing active courses
+        // Exclude courses that are being unarchived in the same batch
+        const excludeCourseIds = coursesToUpdate
+          .filter((c) => c.id !== course.id)
+          .map((c) => c.id);
+
+        const overlapError = await checkScheduleOverlap(
+          course.schedules.map((s) => ({
+            day: s.day,
+            fromTime: s.fromTime,
+            toTime: s.toTime,
+          })),
+          course.facultyId,
+          excludeCourseIds,
+          course.semester,
+          course.academicYear
+        );
+
+        if (overlapError) {
+          scheduleConflicts.push({
+            courseId: course.id,
+            courseCode: course.code,
+            courseSection: course.section || "",
+            error: overlapError,
+          });
+        }
+      }
+
+      // If there are schedule conflicts, return error with details
+      if (scheduleConflicts.length > 0) {
+        const conflictMessages = scheduleConflicts.map(
+          (conflict) => `${conflict.courseCode}: ${conflict.error}`
+        );
+
+        return NextResponse.json(
+          {
+            error: "Schedule conflicts detected",
+            conflicts: scheduleConflicts,
+            message: `Cannot unarchive ${
+              scheduleConflicts.length
+            } course(s) due to schedule conflicts: ${conflictMessages.join(
+              "; "
+            )}`,
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Update all courses with the new status
     const result = await prisma.course.updateMany({
@@ -77,7 +167,7 @@ export async function PATCH(request: NextRequest) {
         } ${result.count} course(s)`,
         status: "SUCCESS",
         before: {
-          courses: coursesBefore.map((c) => ({
+          courses: coursesToUpdate.map((c) => ({
             id: c.id,
             code: c.code,
             title: c.title,
@@ -85,7 +175,7 @@ export async function PATCH(request: NextRequest) {
           })),
         },
         after: {
-          courses: coursesBefore.map((c) => ({
+          courses: coursesToUpdate.map((c) => ({
             id: c.id,
             code: c.code,
             title: c.title,

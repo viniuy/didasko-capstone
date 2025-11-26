@@ -76,40 +76,62 @@ export default function WeeklySchedule({
 
     const fullDayName = dayMap[dayName];
 
-    // Get courses that have schedules on this day
-    const coursesForDay = Object.values(groupedByCourse)
-      .filter((group) =>
-        group.schedules.some(
-          (s) => s.day.toLowerCase() === fullDayName.toLowerCase()
-        )
-      )
-      .map((group) => {
-        // Get the schedule for this specific day
-        const daySchedule = group.schedules.find(
-          (s) => s.day.toLowerCase() === fullDayName.toLowerCase()
+    // Get all schedules for this day, including multiple schedules per course
+    const schedulesForDay: Array<{
+      course: ScheduleWithCourse["course"];
+      schedule: ScheduleWithCourse;
+      allDays: string[];
+    }> = [];
+
+    Object.values(groupedByCourse).forEach((group) => {
+      // Get all schedules for this course on this specific day
+      const daySchedules = group.schedules.filter(
+        (s) => s.day.toLowerCase() === fullDayName.toLowerCase()
+      );
+
+      // Get all days this course appears on
+      const allDays = group.schedules.map((s) => {
+        const dayAbbr = Object.keys(dayMap).find(
+          (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
         );
-        return {
-          ...group,
-          daySchedule, // The specific schedule for this day
-          allDays: group.schedules.map((s) => {
-            const dayAbbr = Object.keys(dayMap).find(
-              (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
-            );
-            return dayAbbr || s.day.substring(0, 3);
-          }),
-        };
-      })
-      .sort((a, b) => {
-        if (!a.daySchedule || !b.daySchedule) return 0;
-        return a.daySchedule.fromTime.localeCompare(b.daySchedule.fromTime);
+        return dayAbbr || s.day.substring(0, 3);
       });
 
-    return coursesForDay;
+      // Add each schedule for this day
+      daySchedules.forEach((schedule) => {
+        schedulesForDay.push({
+          course: group.course,
+          schedule,
+          allDays: [...new Set(allDays)], // Remove duplicates
+        });
+      });
+    });
+
+    // Sort by time
+    schedulesForDay.sort((a, b) =>
+      a.schedule.fromTime.localeCompare(b.schedule.fromTime)
+    );
+
+    return schedulesForDay;
   };
 
   const formatTime = (time: string) => {
+    if (!time) return "";
+
+    // Check if time already has AM/PM
+    if (time.includes("AM") || time.includes("PM")) {
+      // Already formatted, return as is (but clean up any double spaces or extra AM/PM)
+      return time.trim().replace(/\s+/g, " ");
+    }
+
+    // Parse 24-hour format (HH:MM)
     const [hours, minutes] = time.split(":");
-    const hour = parseInt(hours);
+    const hour = parseInt(hours, 10);
+
+    if (isNaN(hour) || isNaN(parseInt(minutes, 10))) {
+      return time; // Return original if parsing fails
+    }
+
     const period = hour >= 12 ? "PM" : "AM";
     const formattedHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
     return `${formattedHour}:${minutes} ${period}`;
@@ -200,12 +222,18 @@ export default function WeeklySchedule({
                 {day}
               </div>
               <div className="space-y-1 sm:space-y-2">
-                {getSchedulesForDay(day).map((courseGroup) => {
-                  if (!courseGroup.daySchedule) return null;
-                  const hasMultipleDays = courseGroup.allDays.length > 1;
+                {getSchedulesForDay(day).map((item, index) => {
+                  const hasMultipleDays = item.allDays.length > 1;
+                  // Check if this course has multiple schedules on this day
+                  const schedulesForThisCourse = getSchedulesForDay(day).filter(
+                    (s) => s.course.id === item.course.id
+                  );
+                  const hasMultipleSchedulesToday =
+                    schedulesForThisCourse.length > 1;
+
                   return (
                     <div
-                      key={courseGroup.course.id}
+                      key={`${item.course.id}-${item.schedule.id}-${index}`}
                       className="group perspective"
                     >
                       <div className="preserve-3d">
@@ -213,15 +241,15 @@ export default function WeeklySchedule({
                         <div className="backface-hidden">
                           <div className="bg-[#FAEDCB] rounded-lg p-1.5 sm:p-2 text-[#124A69] shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center relative">
                             <div className="font-bold text-[10px] sm:text-xs md:text-sm">
-                              {courseGroup.course.code}
+                              {item.course.code}
                             </div>
                             <div className="text-[9px] sm:text-[10px] md:text-xs mt-0.5 sm:mt-1">
-                              {formatTime(courseGroup.daySchedule.fromTime)} -{" "}
-                              {formatTime(courseGroup.daySchedule.toTime)}
+                              {formatTime(item.schedule.fromTime)} -{" "}
+                              {formatTime(item.schedule.toTime)}
                             </div>
                             {hasMultipleDays && (
                               <div className="absolute top-1 right-1 flex gap-0.5">
-                                {courseGroup.allDays.map((d, idx) => (
+                                {item.allDays.map((d, idx) => (
                                   <span
                                     key={idx}
                                     className={`text-[7px] px-0.5 py-0.5 rounded ${
@@ -236,6 +264,12 @@ export default function WeeklySchedule({
                                 ))}
                               </div>
                             )}
+                            {hasMultipleSchedulesToday && (
+                              <div className="absolute bottom-1 left-1 text-[7px] text-[#124A69] opacity-75">
+                                {schedulesForThisCourse.indexOf(item) + 1}/
+                                {schedulesForThisCourse.length}
+                              </div>
+                            )}
                           </div>
                         </div>
                         {/* Back of card */}
@@ -243,13 +277,18 @@ export default function WeeklySchedule({
                           <div className="bg-[#124A69] rounded-lg p-1.5 sm:p-2 text-white shadow-sm text-center h-[70px] sm:h-[75px] md:h-[80px] flex flex-col justify-center">
                             <div className="text-[9px] sm:text-[10px] md:text-xs space-y-0.5 sm:space-y-1">
                               <div className="font-semibold">
-                                {courseGroup.course.code}
+                                {item.course.code}
                               </div>
-                              <div>Section: {courseGroup.course.section}</div>
-                              <div>Room: {courseGroup.course.room}</div>
+                              <div>Section: {item.course.section}</div>
+                              <div>Room: {item.course.room}</div>
                               {hasMultipleDays && (
                                 <div className="text-[8px] mt-1 opacity-75">
-                                  Days: {courseGroup.allDays.join(", ")}
+                                  Days: {item.allDays.join(", ")}
+                                </div>
+                              )}
+                              {hasMultipleSchedulesToday && (
+                                <div className="text-[8px] mt-1 opacity-75">
+                                  {schedulesForThisCourse.length} sessions today
                                 </div>
                               )}
                             </div>

@@ -81,65 +81,65 @@ export default function Rightsidebar() {
         <div className="flex-grow overflow-y-auto grid grid-rows-2 gap-4 h-[calc(100vh-32px)]">
           {isCourseDashboard ? (
             <>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseAnalytics courseSlug={courseSlug} />
               </div>
             </>
           ) : /* Attendance List Page */
           isAttendanceList ? (
             <>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseShortcut />
               </div>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <AttendanceLeaderboard />
               </div>
             </>
           ) : isClassAttendance ? (
             <>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <AttendanceLeaderboard courseSlug={courseSlug} />
               </div>
             </>
           ) : isGradingClassRecord ? (
             <>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <GradingLeaderboard courseSlug={courseSlug} />
               </div>
             </>
           ) : isGradingList ? (
             <>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseShortcut />
               </div>
-              <div className="h-[calc(50vh-20px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <GradingLeaderboard />
               </div>
             </>
           ) : isGroupReporting ? (
             <>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <GroupQuickAccess />
               </div>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <CourseShortcut excludeCourseSlug={courseSlug} />
               </div>
             </>
           ) : (
             <>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <UpcomingEvents />
               </div>
-              <div className="h-[calc(50vh-25px)]">
+              <div className="h-[calc(50vh-30px)]">
                 <Notes />
               </div>
             </>

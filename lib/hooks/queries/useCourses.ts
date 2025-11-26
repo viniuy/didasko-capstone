@@ -50,6 +50,24 @@ export function useCourses(filters?: {
         );
         return data;
       } catch (error: any) {
+        // Ignore cancellation errors (they're expected when query key changes)
+        if (
+          error.name === "CanceledError" ||
+          error.code === "ERR_CANCELED" ||
+          error.message === "canceled" ||
+          signal?.aborted
+        ) {
+          // Return empty data structure to prevent error from being thrown
+          return {
+            courses: [],
+            pagination: {
+              total: 0,
+              page: 1,
+              limit: 0,
+              totalPages: 0,
+            },
+          };
+        }
         // Handle Prisma connection errors (P1017)
         if (
           error.response?.data?.error?.includes("P1017") ||
@@ -520,13 +538,8 @@ export function useBulkArchiveCourses() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
-      // Invalidate all course stats queries
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.courses.all, "stats"],
-      });
+      // Component handles refetching manually before showing success toast
+      // No need to invalidate here to avoid race conditions
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to archive courses");

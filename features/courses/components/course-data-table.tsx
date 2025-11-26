@@ -53,6 +53,7 @@ import {
   useBulkArchiveCourses,
   useArchivedCourses,
 } from "@/lib/hooks/queries";
+import { CourseResponse } from "@/shared/types/course";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/queries/queryKeys";
 import {
@@ -592,7 +593,11 @@ export function CourseDataTable({
 
   // React Query hooks
   const queryClient = useQueryClient();
-  const { data: coursesData, isLoading: isLoadingCourses } = useCourses();
+  const {
+    data: coursesData,
+    isLoading: isLoadingCourses,
+    refetch: refetchCourses,
+  } = useCourses();
   const { data: facultyData } = useFaculty();
   const bulkArchiveMutation = useBulkArchiveCourses();
 
@@ -708,17 +713,18 @@ export function CourseDataTable({
     async (skipStats = false) => {
       try {
         setIsRefreshing(true);
-        // Invalidate and refetch courses query to get latest data
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.courses.lists(),
-        });
+        // Invalidate all course-related queries to ensure fresh data
+        // Invalidating the parent key will invalidate all child queries (lists, archived, active, etc.)
         await queryClient.invalidateQueries({
           queryKey: queryKeys.courses.all,
         });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.stats.all,
+        });
 
-        // Refetch courses query
+        // Refetch all course queries to get fresh data
         await queryClient.refetchQueries({
-          queryKey: queryKeys.courses.lists(),
+          queryKey: queryKeys.courses.all,
         });
 
         // Stats will be refetched automatically via useCoursesStatsBatch when courseSlugs change
@@ -982,12 +988,21 @@ export function CourseDataTable({
   };
 
   const handleArchiveCourses = async (courseIds: string[]) => {
+    // Validate input
+    if (!courseIds || courseIds.length === 0) {
+      toast.error("No courses selected for archiving");
+      return;
+    }
+
+    // Remove duplicates
+    const uniqueCourseIds = Array.from(new Set(courseIds));
+
     // Close the dialog immediately
     setShowSettingsDialog(false);
 
     // Show loading toast
     const loadingToast = toast.loading(
-      `Archiving ${courseIds.length} course(s)...`,
+      `Archiving ${uniqueCourseIds.length} course(s)...`,
       {
         style: {
           background: "#fff",
@@ -1003,70 +1018,144 @@ export function CourseDataTable({
 
     try {
       setIsLoading(true);
-      // Filter courses to only include those owned by current user
+
+      // Filter courses to only include those owned by current user and are not already archived
       const coursesToArchive = tableData
         .filter(
           (course) =>
-            courseIds.includes(course.id) && course.facultyId === userId
+            uniqueCourseIds.includes(course.id) &&
+            course.facultyId === userId &&
+            course.status !== "ARCHIVED"
         )
         .map((course) => course.id);
 
+      // Find courses that couldn't be archived
+      const invalidCourses = uniqueCourseIds.filter(
+        (id) => !coursesToArchive.includes(id)
+      );
+      const invalidCourseDetails = tableData.filter((course) =>
+        invalidCourses.includes(course.id)
+      );
+
       if (coursesToArchive.length === 0) {
-        toast.error("You can only archive your own courses", {
-          id: loadingToast,
-        });
+        if (invalidCourses.length > 0) {
+          const reasons: string[] = [];
+          const notOwned = invalidCourseDetails.filter(
+            (c) => c.facultyId !== userId
+          );
+          const alreadyArchived = invalidCourseDetails.filter(
+            (c) => c.status === "ARCHIVED"
+          );
+
+          if (notOwned.length > 0) {
+            reasons.push(`${notOwned.length} course(s) not owned by you`);
+          }
+          if (alreadyArchived.length > 0) {
+            reasons.push(
+              `${alreadyArchived.length} course(s) already archived`
+            );
+          }
+
+          toast.error(
+            `Cannot archive selected courses: ${reasons.join(", ")}`,
+            {
+              id: loadingToast,
+            }
+          );
+        } else {
+          toast.error("No valid courses found to archive", {
+            id: loadingToast,
+          });
+        }
         return;
       }
 
-      if (coursesToArchive.length < courseIds.length) {
-        toast.error(
-          `Only archiving ${coursesToArchive.length} of ${courseIds.length} courses (you can only archive your own courses)`,
+      // If some courses couldn't be archived, show a warning but continue
+      if (invalidCourses.length > 0) {
+        const reasons: string[] = [];
+        const notOwned = invalidCourseDetails.filter(
+          (c) => c.facultyId !== userId
+        );
+        const alreadyArchived = invalidCourseDetails.filter(
+          (c) => c.status === "ARCHIVED"
+        );
+
+        if (notOwned.length > 0) {
+          reasons.push(`${notOwned.length} course(s) not owned by you`);
+        }
+        if (alreadyArchived.length > 0) {
+          reasons.push(`${alreadyArchived.length} course(s) already archived`);
+        }
+
+        toast.loading(
+          `Archiving ${coursesToArchive.length} course(s). ${reasons.join(
+            ", "
+          )} will be skipped.`,
           { id: loadingToast }
         );
       }
 
-      // Optimistically update the local state
-      setTableData((prevData) =>
-        prevData.map((course) =>
-          coursesToArchive.includes(course.id)
-            ? { ...course, status: "ARCHIVED" as CourseStatus }
-            : course
-        )
-      );
-
+      // Perform bulk archive operation
       await bulkArchiveMutation.mutateAsync({
         courseIds: coursesToArchive,
         status: "ARCHIVED",
       });
 
-      // Update loading toast to success
-      toast.success(
-        `Successfully archived ${coursesToArchive.length} course(s)`,
-        {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#124A69",
-            secondary: "#fff",
-          },
-        }
-      );
+      // Refetch the courses query directly using the hook's refetch method
+      // This ensures the data is updated and the component re-renders
+      try {
+        const { data: refetchedData } = await refetchCourses();
 
-      // Refresh table data to ensure consistency
-      await refreshTableData(true);
+        // Wait a bit to ensure React has processed the data update
+        // This allows the useEffect to sync the new data to tableData
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        if (refetchedData) {
+          console.log(
+            "Courses refetched successfully:",
+            refetchedData.courses.length
+          );
+        }
+      } catch (refetchError) {
+        // Log but don't fail - the query will retry automatically
+        console.warn("Error refetching courses after archive:", refetchError);
+      }
+
+      // Update loading toast to success
+      const successMessage =
+        invalidCourses.length > 0
+          ? `Successfully archived ${coursesToArchive.length} of ${uniqueCourseIds.length} course(s)`
+          : `Successfully archived ${coursesToArchive.length} course(s)`;
+
+      toast.success(successMessage, {
+        id: loadingToast,
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+        iconTheme: {
+          primary: "#124A69",
+          secondary: "#fff",
+        },
+      });
+
       if (onCourseAdded) onCourseAdded();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error archiving courses:", error);
+
+      // Extract error message
+      const errorMessage =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to archive courses. Please try again.";
+
       // Update loading toast to error
-      toast.error("Failed to archive courses", {
+      toast.error(errorMessage, {
         id: loadingToast,
         style: {
           background: "#fff",
@@ -1082,21 +1171,27 @@ export function CourseDataTable({
           secondary: "#fff",
         },
       });
-      // Revert optimistic update on error
-      await refreshTableData(true);
-      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleUnarchiveCourses = async (courseIds: string[]) => {
+    // Validate input
+    if (!courseIds || courseIds.length === 0) {
+      toast.error("No courses selected for unarchiving");
+      return;
+    }
+
+    // Remove duplicates
+    const uniqueCourseIds = Array.from(new Set(courseIds));
+
     // Close the dialog immediately
     setShowSettingsDialog(false);
 
     // Show loading toast
     const loadingToast = toast.loading(
-      `Unarchiving ${courseIds.length} course(s)...`,
+      `Unarchiving ${uniqueCourseIds.length} course(s)...`,
       {
         style: {
           background: "#fff",
@@ -1114,7 +1209,6 @@ export function CourseDataTable({
       setIsLoading(true);
 
       // Fetch archived courses to verify ownership
-      // Filter courses to only include those owned by current user
       const archivedCoursesResponse = await fetch(
         `/api/courses/archived?facultyId=${userId}`
       );
@@ -1122,69 +1216,199 @@ export function CourseDataTable({
         ? await archivedCoursesResponse.json()
         : [];
 
-      const coursesToUnarchive = archivedCoursesData
-        .filter(
-          (course: any) =>
-            courseIds.includes(course.id) && course.facultyId === userId
-        )
-        .map((course: any) => course.id);
+      // Filter courses to only include those owned by current user and are actually archived
+      // Keep the full course objects for optimistic update
+      const coursesToUnarchiveData = archivedCoursesData.filter(
+        (course: any) =>
+          uniqueCourseIds.includes(course.id) &&
+          course.facultyId === userId &&
+          course.status === "ARCHIVED"
+      );
+      const coursesToUnarchive = coursesToUnarchiveData.map(
+        (course: any) => course.id
+      );
+
+      // Find courses that couldn't be unarchived
+      const invalidCourses = uniqueCourseIds.filter(
+        (id) => !coursesToUnarchive.includes(id)
+      );
+      const invalidCourseDetails = archivedCoursesData.filter((course: any) =>
+        invalidCourses.includes(course.id)
+      );
 
       if (coursesToUnarchive.length === 0) {
-        toast.error("You can only unarchive your own courses", {
-          id: loadingToast,
-        });
+        if (invalidCourses.length > 0) {
+          const reasons: string[] = [];
+          const notOwned = invalidCourseDetails.filter(
+            (c: any) => c.facultyId !== userId
+          );
+          const notArchived = invalidCourseDetails.filter(
+            (c: any) => c.status !== "ARCHIVED"
+          );
+
+          if (notOwned.length > 0) {
+            reasons.push(`${notOwned.length} course(s) not owned by you`);
+          }
+          if (notArchived.length > 0) {
+            reasons.push(`${notArchived.length} course(s) not archived`);
+          }
+
+          toast.error(
+            `Cannot unarchive selected courses: ${reasons.join(", ")}`,
+            {
+              id: loadingToast,
+            }
+          );
+        } else {
+          toast.error("No valid archived courses found to unarchive", {
+            id: loadingToast,
+          });
+        }
         return;
       }
 
-      if (coursesToUnarchive.length < courseIds.length) {
+      // Check if unarchiving would exceed the active course limit
+      const currentActiveCount = tableData.filter(
+        (c) =>
+          c.facultyId === userId &&
+          (c.status === "ACTIVE" || c.status === "INACTIVE")
+      ).length;
+      const remainingSlots = MAX_ACTIVE_COURSES - currentActiveCount;
+
+      if (coursesToUnarchive.length > remainingSlots) {
         toast.error(
-          `Only unarchiving ${coursesToUnarchive.length} of ${courseIds.length} courses (you can only unarchive your own courses)`,
+          `Cannot unarchive ${coursesToUnarchive.length} course(s). You can only activate ${remainingSlots} more course(s) (maximum ${MAX_ACTIVE_COURSES} active courses allowed).`,
+          { id: loadingToast }
+        );
+        return;
+      }
+
+      // If some courses couldn't be unarchived, show a warning but continue
+      if (invalidCourses.length > 0) {
+        const reasons: string[] = [];
+        const notOwned = invalidCourseDetails.filter(
+          (c: any) => c.facultyId !== userId
+        );
+        const notArchived = invalidCourseDetails.filter(
+          (c: any) => c.status !== "ARCHIVED"
+        );
+
+        if (notOwned.length > 0) {
+          reasons.push(`${notOwned.length} course(s) not owned by you`);
+        }
+        if (notArchived.length > 0) {
+          reasons.push(`${notArchived.length} course(s) not archived`);
+        }
+
+        toast.loading(
+          `Unarchiving ${coursesToUnarchive.length} course(s). ${reasons.join(
+            ", "
+          )} will be skipped.`,
           { id: loadingToast }
         );
       }
 
-      // Optimistically update the local state
-      setTableData((prevData) =>
-        prevData.map((course) =>
-          coursesToUnarchive.includes(course.id)
-            ? { ...course, status: "ACTIVE" as CourseStatus }
-            : course
-        )
-      );
-
+      // Perform bulk unarchive operation
       await bulkArchiveMutation.mutateAsync({
         courseIds: coursesToUnarchive,
         status: "ACTIVE",
       });
 
-      // Update loading toast to success
-      toast.success(
-        `Successfully unarchived ${coursesToUnarchive.length} course(s)`,
-        {
-          id: loadingToast,
-          style: {
-            background: "#fff",
-            color: "#124A69",
-            border: "1px solid #e5e7eb",
-            boxShadow:
-              "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-          },
-          iconTheme: {
-            primary: "#124A69",
-            secondary: "#fff",
-          },
-        }
-      );
+      // Refetch the courses query directly using the hook's refetch method
+      // This ensures the data is updated and the component re-renders
+      try {
+        const { data: refetchedData } = await refetchCourses();
 
-      // Refresh table data to ensure consistency
-      await refreshTableData(true);
+        // Wait a bit to ensure React has processed the data update
+        // This allows the useEffect to sync the new data to tableData
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        if (refetchedData) {
+          console.log(
+            "Courses refetched successfully:",
+            refetchedData.courses.length
+          );
+        }
+      } catch (refetchError) {
+        // Log but don't fail - the query will retry automatically
+        console.warn("Error refetching courses after unarchive:", refetchError);
+      }
+
+      // Update loading toast to success
+      const successMessage =
+        invalidCourses.length > 0
+          ? `Successfully unarchived ${coursesToUnarchive.length} of ${uniqueCourseIds.length} course(s)`
+          : `Successfully unarchived ${coursesToUnarchive.length} course(s)`;
+
+      toast.success(successMessage, {
+        id: loadingToast,
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+          boxShadow:
+            "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+          borderRadius: "0.5rem",
+          padding: "1rem",
+        },
+        iconTheme: {
+          primary: "#124A69",
+          secondary: "#fff",
+        },
+      });
+
       if (onCourseAdded) onCourseAdded();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error unarchiving courses:", error);
+
+      // Handle schedule conflicts
+      if (error?.response?.status === 400 && error?.response?.data?.conflicts) {
+        const conflicts = error?.response?.data?.conflicts || [];
+        const conflictMessages = conflicts.map((conflict: any) => {
+          const courseLabel = conflict.courseSection
+            ? `${conflict.courseCode} - ${conflict.courseSection}`
+            : conflict.courseCode;
+          return `${courseLabel}: ${conflict.error}`;
+        });
+
+        toast.error(
+          `Cannot unarchive ${
+            conflicts.length
+          } course(s) due to schedule conflicts:\n${conflictMessages.join(
+            "\n"
+          )}`,
+          {
+            id: loadingToast,
+            duration: 10000, // Show longer for multiple conflicts
+            style: {
+              background: "#fff",
+              color: "#dc2626",
+              border: "1px solid #e5e7eb",
+              boxShadow:
+                "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+              borderRadius: "0.5rem",
+              padding: "1rem",
+              whiteSpace: "pre-line", // Allow line breaks
+              maxWidth: "500px",
+            },
+            iconTheme: {
+              primary: "#dc2626",
+              secondary: "#fff",
+            },
+          }
+        );
+        return;
+      }
+
+      // Extract error message for other errors
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to unarchive courses. Please try again.";
+
       // Update loading toast to error
-      toast.error("Failed to unarchive courses", {
+      toast.error(errorMessage, {
         id: loadingToast,
         style: {
           background: "#fff",
@@ -1200,9 +1424,6 @@ export function CourseDataTable({
           secondary: "#fff",
         },
       });
-      // Revert optimistic update on error
-      await refreshTableData(true);
-      throw error;
     } finally {
       setIsLoading(false);
     }
