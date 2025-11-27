@@ -288,6 +288,7 @@ export async function getAssessmentScores(courseSlug: string) {
         studentId: true,
         criteriaId: true,
         value: true,
+        scores: true, // Include raw rubric scores
       },
     }),
   ]);
@@ -308,7 +309,9 @@ export async function getAssessmentScores(courseSlug: string) {
     scoresMap[key] = {
       studentId: grade.studentId,
       assessmentId: `criteria:${grade.criteriaId}`,
-      score: grade.value,
+      score: grade.value, // Keep percentage for backward compatibility
+      rawScores: grade.scores, // Add raw rubric scores
+      criteriaId: grade.criteriaId, // Add for lookup
     };
   });
 

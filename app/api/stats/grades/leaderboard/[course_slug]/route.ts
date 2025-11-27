@@ -24,7 +24,81 @@ function isTermConfigValid(termConfig: any): boolean {
   );
 }
 
-// Helper: Compute term grade from assessment scores
+// Helper: Transmute score using new formula
+// Formula: raw_score * (base/100) + ((100 - base)/100) * max_score
+function transmuteScore(
+  rawScore: number | null,
+  maxScore: number,
+  base: number
+): number | null {
+  // If base is 0, no transmutation (raw score stays the same)
+  if (base === 0 || rawScore === null) return rawScore;
+
+  // New formula: (raw_score / max_score) * (base% of max_score) + (remaining% of max_score)
+  // Simplified: raw_score * (base/100) + ((100 - base)/100) * max_score
+  const basePercentage = base / 100;
+  const remainingPercentage = (100 - base) / 100;
+  const transmuted = rawScore * basePercentage + remainingPercentage * maxScore;
+
+  return transmuted;
+}
+
+// Helper: Get effective score (handles linked criteria)
+function getEffectiveScore(
+  studentId: string,
+  assessment: any,
+  assessmentScores: Record<string, any>
+): number | null {
+  if (assessment.linkedCriteriaId) {
+    // Get score from linked criteria
+    const criteriaKey = `${studentId}:criteria:${assessment.linkedCriteriaId}`;
+    const criteriaData = assessmentScores[criteriaKey];
+    if (!criteriaData) return null;
+
+    // If we have rawScores and criteria metadata, calculate true score
+    // Otherwise, use the percentage value and convert to score
+    if (criteriaData.rawScores && criteriaData.criteriaMeta) {
+      const rawScores = Array.isArray(criteriaData.rawScores)
+        ? criteriaData.rawScores
+        : null;
+      const rubrics = criteriaData.criteriaMeta.rubrics || [];
+      const scoringRange = criteriaData.criteriaMeta.scoringRange || 5;
+
+      if (rawScores && rubrics.length > 0) {
+        // Calculate weighted percentage
+        const validScores = rawScores.slice(0, rubrics.length);
+        const weightedScores = validScores.map(
+          (score: number, index: number) => {
+            const weight = rubrics[index]?.percentage || 0;
+            return (score / scoringRange) * weight;
+          }
+        );
+        const weightedPercentage = weightedScores.reduce(
+          (sum: number, val: number) => sum + val,
+          0
+        );
+
+        // Convert percentage to actual score
+        const trueScore = (weightedPercentage / 100) * assessment.maxScore;
+        return Math.round(trueScore * 100) / 100;
+      }
+    }
+
+    // Fallback: use percentage value and convert to score
+    const percentage = criteriaData.score;
+    if (percentage === null) return null;
+    return Math.round((percentage / 100) * assessment.maxScore * 100) / 100;
+  }
+
+  // Regular assessment score
+  const key = `${studentId}:${assessment.id}`;
+  const scoreData = assessmentScores[key];
+  return scoreData?.score !== null && scoreData?.score !== undefined
+    ? scoreData.score
+    : null;
+}
+
+// Helper: Compute term grade from assessment scores (matching class-record.tsx logic)
 function computeTermGradeFromScores(
   termConfig: any,
   assessmentScores: Record<string, any>,
@@ -45,66 +119,126 @@ function computeTermGradeFromScores(
     (a: any) => a.type === "EXAM" && a.enabled
   );
 
-  // Calculate PT average percentage
-  const ptPercentages: number[] = [];
+  // Apply transmutation to raw scores before calculating percentages (per-assessment)
+  // Match class-record.tsx logic exactly
+  let ptPercentages: number[] = [];
   ptAssessments.forEach((pt: any) => {
-    const key = `${studentId}:${pt.id}`;
-    const scoreData = assessmentScores[key];
-    if (
-      scoreData?.score !== null &&
-      scoreData?.score !== undefined &&
-      pt.maxScore > 0
-    ) {
-      const percentage = (scoreData.score / pt.maxScore) * 100;
-      ptPercentages.push(percentage);
+    const rawScore = getEffectiveScore(studentId, pt, assessmentScores);
+    // For linked assessments, if no score exists, treat as 0 for computation
+    const scoreForComputation =
+      rawScore === null && pt.linkedCriteriaId ? 0 : rawScore;
+    // Apply transmutation using assessment's own transmutationBase
+    const transmutedScore = transmuteScore(
+      scoreForComputation,
+      pt.maxScore,
+      pt.transmutationBase ?? 0
+    );
+    if (transmutedScore !== null && pt.maxScore > 0) {
+      const pct = Math.max(
+        0,
+        Math.min(100, (transmutedScore / pt.maxScore) * 100)
+      );
+      ptPercentages.push(pct);
     }
   });
-  const ptAvg =
-    ptPercentages.length > 0
-      ? ptPercentages.reduce((a, b) => a + b, 0) / ptAssessments.length
-      : 0;
 
-  // Calculate Quiz average percentage
-  const quizPercentages: number[] = [];
+  let quizPercentages: number[] = [];
   quizAssessments.forEach((quiz: any) => {
-    const key = `${studentId}:${quiz.id}`;
-    const scoreData = assessmentScores[key];
-    if (
-      scoreData?.score !== null &&
-      scoreData?.score !== undefined &&
-      quiz.maxScore > 0
-    ) {
-      const percentage = (scoreData.score / quiz.maxScore) * 100;
-      quizPercentages.push(percentage);
+    const rawScore = getEffectiveScore(studentId, quiz, assessmentScores);
+    // For linked assessments, if no score exists, treat as 0 for computation
+    const scoreForComputation =
+      rawScore === null && quiz.linkedCriteriaId ? 0 : rawScore;
+    // Apply transmutation using assessment's own transmutationBase
+    const transmutedScore = transmuteScore(
+      scoreForComputation,
+      quiz.maxScore,
+      quiz.transmutationBase ?? 0
+    );
+    if (transmutedScore !== null && quiz.maxScore > 0) {
+      const pct = Math.max(
+        0,
+        Math.min(100, (transmutedScore / quiz.maxScore) * 100)
+      );
+      quizPercentages.push(pct);
     }
   });
-  const quizAvg =
-    quizPercentages.length > 0
-      ? quizPercentages.reduce((a, b) => a + b, 0) / quizAssessments.length
-      : 0;
 
-  // Calculate Exam percentage
   let examPercentage: number | null = null;
   if (examAssessment) {
-    const key = `${studentId}:${examAssessment.id}`;
-    const scoreData = assessmentScores[key];
-    if (
-      scoreData?.score !== null &&
-      scoreData?.score !== undefined &&
-      examAssessment.maxScore > 0
-    ) {
-      examPercentage = (scoreData.score / examAssessment.maxScore) * 100;
+    const rawExamScore = getEffectiveScore(
+      studentId,
+      examAssessment,
+      assessmentScores
+    );
+    // For linked assessments, if no score exists, treat as 0 for computation
+    const scoreForComputation =
+      rawExamScore === null && examAssessment.linkedCriteriaId
+        ? 0
+        : rawExamScore;
+    // Apply transmutation using assessment's own transmutationBase
+    const transmutedExamScore = transmuteScore(
+      scoreForComputation,
+      examAssessment.maxScore,
+      examAssessment.transmutationBase ?? 0
+    );
+    if (transmutedExamScore !== null && examAssessment.maxScore > 0) {
+      examPercentage = Math.max(
+        0,
+        Math.min(100, (transmutedExamScore / examAssessment.maxScore) * 100)
+      );
     }
   }
 
   // If no exam score, can't compute term grade
   if (examPercentage === null) return null;
 
-  // Calculate weighted total
-  const ptWeighted = (ptAvg / 100) * termConfig.ptWeight;
-  const quizWeighted = (quizAvg / 100) * termConfig.quizWeight;
-  const examWeighted = (examPercentage / 100) * termConfig.examWeight;
-  const totalPercentage = ptWeighted + quizWeighted + examWeighted;
+  // CRITICAL FIX: Divide by actual number of scores, not total assessments
+  // If a student has scores for 2 out of 3 PT assessments, divide by 2, not 3
+  const ptAvg =
+    ptPercentages.length > 0
+      ? ptPercentages.reduce((a, b) => a + b, 0) / ptPercentages.length
+      : null;
+  const quizAvg =
+    quizPercentages.length > 0
+      ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
+      : null;
+
+  // Calculate weighted scores independently:
+  // PT weighted is calculated if ALL PT assessments have scores
+  // Quiz weighted is calculated if ALL Quiz assessments have scores
+  // Exam weighted is calculated if Exam has a score
+  const hasAllPTScores =
+    ptAssessments.length === 0 ||
+    (ptPercentages.length === ptAssessments.length && ptAvg !== null);
+  const hasAllQuizScores =
+    quizAssessments.length === 0 ||
+    (quizPercentages.length === quizAssessments.length && quizAvg !== null);
+  const hasExamScore = !examAssessment || examPercentage !== null;
+
+  const ptWeighted =
+    hasAllPTScores && ptAvg !== null
+      ? (ptAvg / 100) * termConfig.ptWeight
+      : null;
+  const quizWeighted =
+    hasAllQuizScores && quizAvg !== null
+      ? (quizAvg / 100) * termConfig.quizWeight
+      : null;
+  const examWeighted =
+    hasExamScore && examPercentage !== null
+      ? (examPercentage / 100) * termConfig.examWeight
+      : null;
+
+  // Only calculate total if we have all required scores
+  const hasRequiredPTScores = ptAssessments.length === 0 || ptWeighted !== null;
+  const hasRequiredQuizScores =
+    quizAssessments.length === 0 || quizWeighted !== null;
+  const hasRequiredExamScore = !examAssessment || examWeighted !== null;
+
+  // Calculate total only if all required components are present
+  const totalPercentage =
+    hasRequiredPTScores && hasRequiredQuizScores && hasRequiredExamScore
+      ? (ptWeighted ?? 0) + (quizWeighted ?? 0) + (examWeighted ?? 0)
+      : null;
 
   return totalPercentage;
 }
@@ -156,6 +290,17 @@ export async function GET(
             },
             assessments: {
               orderBy: [{ type: "asc" }, { order: "asc" }],
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                maxScore: true,
+                date: true,
+                enabled: true,
+                order: true,
+                linkedCriteriaId: true,
+                transmutationBase: true,
+              },
             },
           },
           orderBy: {
@@ -169,8 +314,72 @@ export async function GET(
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    // Get assessment scores for computing grades
-    const assessmentScores = await getAssessmentScores(courseSlug);
+    // Get assessment scores for computing grades (with criteria metadata)
+    const assessmentScoresResult = await getAssessmentScores(courseSlug);
+    const assessmentScores = assessmentScoresResult || {};
+
+    // Fetch criteria metadata for linked assessments
+    const criteriaMetadata: Record<string, any> = {};
+    const criteriaIds = new Set<string>();
+    course.termConfigs.forEach((tc: any) => {
+      tc.assessments.forEach((a: any) => {
+        if (a.linkedCriteriaId) {
+          criteriaIds.add(a.linkedCriteriaId);
+        }
+      });
+    });
+
+    if (criteriaIds.size > 0) {
+      const criteria = await prisma.criteria.findMany({
+        where: { id: { in: Array.from(criteriaIds) } },
+        select: {
+          id: true,
+          scoringRange: true,
+          rubrics: {
+            select: {
+              id: true,
+              name: true,
+              percentage: true,
+            },
+            orderBy: { createdAt: "asc" },
+          },
+        },
+      });
+
+      criteria.forEach((c: any) => {
+        criteriaMetadata[c.id] = {
+          scoringRange: Number(c.scoringRange) || 5,
+          rubrics: c.rubrics.map((r: any) => ({
+            percentage: r.percentage,
+          })),
+        };
+      });
+
+      // Update assessmentScores with criteria metadata and raw scores
+      const criteriaScores = await prisma.grade.findMany({
+        where: {
+          courseId: course.id,
+          criteriaId: { in: Array.from(criteriaIds) },
+        },
+        select: {
+          studentId: true,
+          criteriaId: true,
+          value: true,
+          scores: true,
+        },
+      });
+
+      criteriaScores.forEach((grade: any) => {
+        const key = `${grade.studentId}:criteria:${grade.criteriaId}`;
+        if (assessmentScores[key]) {
+          assessmentScores[key] = {
+            ...assessmentScores[key],
+            rawScores: grade.scores,
+            criteriaMeta: criteriaMetadata[grade.criteriaId],
+          };
+        }
+      });
+    }
 
     // Map to track each student's performance across terms
     const studentPerformanceMap = new Map<

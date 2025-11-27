@@ -208,17 +208,13 @@ function transmuteScore(
   // If base is 0, no transmutation (raw score stays the same)
   if (base === 0 || rawScore === null) return rawScore;
 
-  // Calculate base threshold: base% of max score
-  const baseThreshold = (base / 100) * maxScore;
+  // New formula: (raw_score / max_score) * (base% of max_score) + (remaining% of max_score)
+  // Simplified: raw_score * (base/100) + ((100 - base)/100) * max_score
+  const basePercentage = base / 100;
+  const remainingPercentage = (100 - base) / 100;
+  const transmuted = rawScore * basePercentage + remainingPercentage * maxScore;
 
-  // Only apply transmutation if raw score is below the base threshold
-  if (rawScore < baseThreshold) {
-    // Set score to base threshold (not adding, just setting to minimum)
-    return baseThreshold;
-  }
-
-  // If raw score is at or above threshold, no transmutation
-  return rawScore;
+  return transmuted;
 }
 
 function getNumericGrade(totalPercent: number): string {
