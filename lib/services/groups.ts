@@ -197,7 +197,13 @@ export async function deleteGroup(groupId: string) {
 // Batched: Get course with groups, students, and meta
 // Note: Not cached to ensure fresh data after saves
 export async function getCourseWithGroupsData(courseSlug: string) {
-  const [course, groups, students, meta] = await Promise.all([
+  // Get today's date for attendance
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const [course, groups, courseForStudents, meta] = await Promise.all([
     prisma.course.findUnique({
       where: { slug: courseSlug },
       include: {
@@ -216,36 +222,57 @@ export async function getCourseWithGroupsData(courseSlug: string) {
       },
     }),
     getGroups(courseSlug),
-    prisma.course
-      .findUnique({
-        where: { slug: courseSlug },
-        select: { id: true },
-      })
-      .then((c) =>
-        c
-          ? prisma.student.findMany({
-              where: {
-                coursesEnrolled: {
-                  some: { id: c.id },
-                },
-              },
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                middleInitial: true,
-                image: true,
-              },
-            })
-          : []
-      ),
+    prisma.course.findUnique({
+      where: { slug: courseSlug },
+      select: { id: true },
+    }),
     getGroupMeta(courseSlug),
   ]);
+
+  // Fetch students with attendance for today
+  const students = courseForStudents
+    ? await prisma.student.findMany({
+        where: {
+          coursesEnrolled: {
+            some: { id: courseForStudents.id },
+          },
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          middleInitial: true,
+          image: true,
+          attendance: {
+            where: {
+              courseId: courseForStudents.id,
+              date: {
+                gte: today,
+                lt: tomorrow,
+              },
+            },
+            select: { id: true, status: true, date: true, courseId: true },
+            orderBy: { date: "desc" },
+            take: 1,
+          },
+        },
+      })
+    : [];
+
+  // Map students to include attendance status
+  const studentsWithStatus = students.map((student) => ({
+    id: student.id,
+    firstName: student.firstName,
+    lastName: student.lastName,
+    middleInitial: student.middleInitial,
+    image: student.image,
+    status: student.attendance[0]?.status || ("NOT_SET" as const),
+  }));
 
   return {
     course,
     groups,
-    students,
+    students: studentsWithStatus,
     meta,
   };
 }

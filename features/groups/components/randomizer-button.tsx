@@ -36,7 +36,7 @@ export function WheelRandomizer({
   onGroupsCreated,
 }: RandomizerShakeProps) {
   const [open, setOpen] = useState(false);
-  const [groupSize, setGroupSize] = useState(4);
+  const [groupSize, setGroupSize] = useState(4); // Minimum is 2, but default to 4
   const [isShaking, setIsShaking] = useState(false);
   const [studentsWithGroups, setStudentsWithGroups] = useState<
     StudentWithGroup[]
@@ -44,6 +44,7 @@ export function WheelRandomizer({
   const [assignedGroups, setAssignedGroups] = useState<StudentWithGroup[][]>(
     []
   );
+  const [groupNames, setGroupNames] = useState<Record<number, string>>({});
   const [isCreating, setIsCreating] = useState(false);
   const [currentAssigning, setCurrentAssigning] = useState(-1);
 
@@ -55,9 +56,18 @@ export function WheelRandomizer({
     if (open) {
       setStudentsWithGroups(availableStudents.map((s) => ({ ...s })));
       setAssignedGroups([]);
+      setGroupNames({});
       setCurrentAssigning(-1);
+
+      // Ensure groupSize is within valid range
+      const maxGroupSize = Math.floor(availableStudents.length / 2);
+      if (groupSize > maxGroupSize && maxGroupSize >= 2) {
+        setGroupSize(maxGroupSize);
+      } else if (groupSize < 2) {
+        setGroupSize(2);
+      }
     }
-  }, [open]);
+  }, [open, availableStudents.length]);
 
   const shuffleAndAssign = async () => {
     if (availableStudents.length < groupSize) {
@@ -86,19 +96,53 @@ export function WheelRandomizer({
       }
     }
 
-    // Handle remaining students
+    // Handle remaining students - ensure no group has only 1 member
     if (currentGroup.length > 0) {
-      if (currentGroup.length === 1 && groups.length > 0) {
-        // Add single remaining student to last group
-        groups[groups.length - 1].push({
-          ...currentGroup[0],
-          groupNumber: groups.length,
-        });
-      } else {
-        // Make a smaller final group
+      if (currentGroup.length === 1) {
+        // Always add single remaining student to last group to avoid 1-member groups
+        if (groups.length > 0) {
+          groups[groups.length - 1].push({
+            ...currentGroup[0],
+            groupNumber: groups.length,
+          });
+        } else {
+          // If this would be the only group with 1 member, we need at least 2 students
+          toast.error(
+            "Cannot create groups: Need at least 2 students per group"
+          );
+          setIsShaking(false);
+          return;
+        }
+      } else if (currentGroup.length >= 2) {
+        // Make a smaller final group (only if it has at least 2 members)
         groups.push(
           currentGroup.map((s) => ({ ...s, groupNumber: groups.length + 1 }))
         );
+      }
+    }
+
+    // Final validation: Ensure no group has only 1 member
+    const hasSingleMemberGroup = groups.some((group) => group.length === 1);
+    if (hasSingleMemberGroup) {
+      // Redistribute: Find the single-member group and merge with another group
+      const singleGroupIndex = groups.findIndex((g) => g.length === 1);
+      if (singleGroupIndex !== -1 && groups.length > 1) {
+        const singleStudent = groups[singleGroupIndex][0];
+        // Remove the single-member group
+        groups.splice(singleGroupIndex, 1);
+        // Add the student to the last group
+        if (groups.length > 0) {
+          groups[groups.length - 1].push({
+            ...singleStudent,
+            groupNumber: groups.length,
+          });
+        }
+      } else {
+        toast.error(
+          "Cannot create groups: Would result in a group with only 1 member"
+        );
+        setIsShaking(false);
+        return;
       }
     }
 
@@ -115,6 +159,13 @@ export function WheelRandomizer({
 
     setCurrentAssigning(-1);
     setAssignedGroups(groups);
+
+    // Initialize group names with default values
+    const defaultNames: Record<number, string> = {};
+    groups.forEach((_, idx) => {
+      defaultNames[idx] = `Random Group ${idx + 1}`;
+    });
+    setGroupNames(defaultNames);
   };
 
   // React Query hook
@@ -132,9 +183,9 @@ export function WheelRandomizer({
             courseSlug: courseCode,
             groupData: {
               groupNumber: i + 1,
-            groupName: `Random Group ${i + 1}`,
-            studentIds: group.map((s) => s.id),
-            leaderId: group[0].id,
+              groupName: groupNames[i] || `Random Group ${i + 1}`,
+              studentIds: group.map((s) => s.id),
+              leaderId: group[0].id,
             },
           })
         )
@@ -158,7 +209,15 @@ export function WheelRandomizer({
   const reset = () => {
     setStudentsWithGroups(availableStudents.map((s) => ({ ...s })));
     setAssignedGroups([]);
+    setGroupNames({});
     setCurrentAssigning(-1);
+  };
+
+  const handleGroupNameChange = (groupIndex: number, name: string) => {
+    setGroupNames((prev) => ({
+      ...prev,
+      [groupIndex]: name,
+    }));
   };
 
   return (
@@ -166,12 +225,12 @@ export function WheelRandomizer({
       <button
         onClick={() => setOpen(true)}
         disabled={availableStudents.length < 2}
-        className="relative flex flex-col items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-        style={{ width: "7rem", height: "7rem" }}
+        className="relative flex flex-col items-center justify-center gap-2 rounded-full bg-white hover:bg-gray-50 border-2 border-[#124A69] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+        style={{ width: "8.75rem", height: "8.75rem" }}
       >
         <div className="relative flex items-center justify-center">
           <svg
-            className="h-16 w-16 sm:h-20 sm:w-20 text-gray-400 opacity-70"
+            className="h-20 w-20 text-gray-400 opacity-70"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.5"
@@ -181,11 +240,11 @@ export function WheelRandomizer({
             <path d="M12 2 L12 12 L18 16" />
           </svg>
           <Shuffle
-            className="h-8 w-8 sm:h-10 sm:w-10 text-white absolute"
+            className="h-10 w-10 text-[#124A69] absolute"
             strokeWidth={2.5}
           />
         </div>
-        <span className="mt-2 text-xs font-semibold text-gray-600 text-center px-2">
+        <span className="text-xs font-semibold text-[#124A69] text-center px-2">
           Randomizer
         </span>
       </button>
@@ -206,17 +265,50 @@ export function WheelRandomizer({
                 Students per group:
               </label>
               <Input
-                type="number"
-                min={2}
-                max={10}
+                type="text"
                 value={groupSize}
-                onChange={(e) => setGroupSize(Number(e.target.value))}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow empty string for editing
+                  if (value === "") {
+                    setGroupSize(0);
+                    return;
+                  }
+                  // Only allow numeric input
+                  if (!/^\d+$/.test(value)) {
+                    return;
+                  }
+                  const numValue = Number(value);
+                  const maxGroupSize = Math.floor(availableStudents.length / 2);
+                  // Only allow values between 2 and maxGroupSize
+                  if (numValue >= 2 && numValue <= maxGroupSize) {
+                    setGroupSize(numValue);
+                  } else if (numValue > maxGroupSize) {
+                    // If exceeds max, set to max
+                    setGroupSize(maxGroupSize);
+                  }
+                  // If 0 or 1, don't update (prevent invalid values)
+                }}
+                onBlur={(e) => {
+                  // If empty or invalid on blur, set to valid value
+                  const value = e.target.value;
+                  const maxGroupSize = Math.floor(availableStudents.length / 2);
+                  if (value === "" || Number(value) < 2) {
+                    setGroupSize(2);
+                  } else if (Number(value) > maxGroupSize) {
+                    setGroupSize(maxGroupSize);
+                  }
+                }}
                 className="w-20"
                 disabled={assignedGroups.length > 0}
+                placeholder="2"
               />
               <span className="text-xs sm:text-sm text-gray-600">
                 {availableStudents.length} students → ~
-                {Math.floor(availableStudents.length / groupSize)} groups
+                {groupSize >= 2
+                  ? Math.floor(availableStudents.length / groupSize)
+                  : 0}{" "}
+                groups
               </span>
             </div>
 
@@ -285,17 +377,28 @@ export function WheelRandomizer({
                   <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
                   Groups Created: {assignedGroups.length}
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 max-h-[150px] sm:max-h-[200px] overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 max-h-[250px] sm:max-h-[300px] overflow-y-auto">
                   {assignedGroups.map((group, idx) => (
                     <div
                       key={idx}
                       className="bg-white rounded-lg p-2.5 sm:p-3 border-2 border-gray-200 shadow-sm hover:border-[#124A69]/30 transition-colors"
                     >
-                      <div className="font-semibold text-xs sm:text-sm mb-2 text-[#124A69] flex items-center gap-2">
-                        <div className="w-5 h-5 sm:w-6 sm:h-6 bg-[#124A69] text-white rounded-full flex items-center justify-center text-xs">
-                          {idx + 1}
+                      <div className="mb-2">
+                        <div className="font-semibold text-xs sm:text-sm mb-1.5 text-[#124A69] flex items-center gap-2">
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-[#124A69] text-white rounded-full flex items-center justify-center text-xs">
+                            {idx + 1}
+                          </div>
+                          Group Name
                         </div>
-                        Group {idx + 1}
+                        <Input
+                          value={groupNames[idx] || `Random Group ${idx + 1}`}
+                          onChange={(e) =>
+                            handleGroupNameChange(idx, e.target.value)
+                          }
+                          placeholder={`Random Group ${idx + 1}`}
+                          className="text-xs sm:text-sm h-8 sm:h-9 border-gray-300 focus:border-[#124A69] focus:ring-[#124A69]"
+                          disabled={isCreating}
+                        />
                       </div>
                       <div className="space-y-1">
                         {group.map((s, sIdx) => (

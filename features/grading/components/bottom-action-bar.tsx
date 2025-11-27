@@ -29,7 +29,7 @@ export function BottomActionBar({
   return (
     <div className="flex justify-between mt-3 sticky bottom-0 bg-white py-3 border-t">
       <div className="flex items-center text-sm text-gray-500">
-        Criteria:{" "}
+        Rubric:{" "}
         <span className="font-medium text-[#124A69] ml-1">
           {activeReport?.name}
         </span>

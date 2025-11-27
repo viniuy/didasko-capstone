@@ -153,29 +153,29 @@ export default function WeeklySchedule({
         course: ScheduleWithCourse["course"];
         schedules: ScheduleWithCourse[];
       }) => {
-        // Get all schedules for this course on this specific day
+      // Get all schedules for this course on this specific day
         // Compare abbreviated day names directly (database stores "Mon", "Tue", etc.)
-        const daySchedules = group.schedules.filter(
+      const daySchedules = group.schedules.filter(
           (s: ScheduleWithCourse) =>
             s.day.toLowerCase() === dayName.toLowerCase()
-        );
+      );
 
-        // Get all days this course appears on
+      // Get all days this course appears on
         const allDays = group.schedules.map((s: ScheduleWithCourse) => {
-          const dayAbbr = Object.keys(dayMap).find(
-            (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
-          );
-          return dayAbbr || s.day.substring(0, 3);
-        });
+        const dayAbbr = Object.keys(dayMap).find(
+          (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
+        );
+        return dayAbbr || s.day.substring(0, 3);
+      });
 
-        // Add each schedule for this day
+      // Add each schedule for this day
         daySchedules.forEach((schedule: ScheduleWithCourse) => {
-          schedulesForDay.push({
-            course: group.course,
-            schedule,
+        schedulesForDay.push({
+          course: group.course,
+          schedule,
             allDays: [...new Set(allDays)] as string[], // Remove duplicates
-          });
         });
+      });
       }
     );
 

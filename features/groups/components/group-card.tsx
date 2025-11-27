@@ -71,7 +71,7 @@ export function GroupCard({
 
   return (
     <>
-      <Card className="w-full sm:w-65 h-72 sm:h-80 p-4 sm:p-6 flex flex-col items-center shadow-lg relative mx-auto max-w-[280px] sm:max-w-none">
+      <Card className="w-full sm:w-65 min-h-[280px] sm:min-h-[320px] p-4 sm:p-6 flex flex-col items-center shadow-lg relative mx-auto max-w-[280px] sm:max-w-none">
         {isDeleting && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-lg z-10 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">
@@ -117,8 +117,22 @@ export function GroupCard({
             &nbsp;
           </div>
         )}
+        {group.leader && (
+          <div className="mt-2 sm:mt-3 px-2">
+            <p className="text-xs sm:text-sm text-gray-600 text-center">
+              Leader:
+            </p>
+            <p className="text-sm sm:text-base font-semibold text-[#124A69] text-center">
+              {group.leader.firstName}
+              {group.leader.middleInitial
+                ? ` ${group.leader.middleInitial}.`
+                : ""}{" "}
+              {group.leader.lastName}
+            </p>
+          </div>
+        )}
         <Button
-          className="w-full bg-[#124A69] text-white font-semibold rounded mt-5 sm:mt-7 text-sm sm:text-base py-5 sm:py-auto touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-[#124A69] text-white font-semibold rounded mt-auto text-sm sm:text-base py-5 sm:py-auto touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleViewGroup}
           disabled={isRedirecting || isDisabled || isDeleting}
         >

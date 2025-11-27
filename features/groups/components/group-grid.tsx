@@ -58,7 +58,7 @@ export function GroupGrid({
   const [redirectingGroupId, setRedirectingGroupId] = useState<string | null>(
     null
   );
-  const itemsPerPage = 10;
+  const itemsPerPage = 4;
   const totalPages = Math.ceil((groups.length + 1) / itemsPerPage);
 
   if (isLoading) {
@@ -123,7 +123,7 @@ export function GroupGrid({
 
   return (
     <div className="flex flex-col gap-8 px-2 sm:px-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 items-start justify-center min-h-[400px] sm:min-h-[610px]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 items-start justify-center">
         {currentGroups.map((group) => (
           <GroupCard
             key={group.id}
@@ -141,7 +141,7 @@ export function GroupGrid({
         {currentPage === totalPages &&
           !hasSearchQuery &&
           ungroupedStudentCount > 0 && (
-            <div className="flex flex-col gap-2 sm:ml-9 mt-3">
+            <div className="flex flex-col gap-2 sm:gap-6 items-center justify-center sm:ml-9 mt-3">
               <AddGroupModal
                 courseCode={courseCode}
                 excludedStudentIds={excludedStudentIds}
@@ -152,6 +152,14 @@ export function GroupGrid({
                 students={students}
                 groupMeta={groupMeta}
               />
+              {ungroupedStudentCount > 4 && (
+                <WheelRandomizer
+                  students={students}
+                  excludedStudentIds={excludedStudentIds}
+                  courseCode={courseCode}
+                  onGroupsCreated={onGroupAdded}
+                />
+              )}
             </div>
           )}
       </div>

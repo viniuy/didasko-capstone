@@ -36,7 +36,7 @@ export default async function GroupGradingPage({
     code: groupsData.course.code,
     title: groupsData.course.title,
     section: groupsData.course.section,
-    description: groupsData.course.description,
+    description: (groupsData.course as any).description || null,
   };
 
   const mappedGroups = (groupsData.groups || []).map((g: any) => ({
@@ -69,15 +69,30 @@ export default async function GroupGradingPage({
     middleInitial: s.middleInitial ?? undefined,
     image: s.image ?? undefined,
     name: `${s.firstName} ${s.lastName}`, // Add name field for GroupGrid compatibility
-    status: "NOT_SET" as const,
+    status: s.status || ("NOT_SET" as const), // Use fetched attendance status
   }));
 
-  const mappedMeta = groupsData.meta || {
-    names: [],
-    numbers: [],
-    usedNames: [],
-    usedNumbers: [],
-  };
+  const mappedMeta = groupsData.meta
+    ? {
+        names: (groupsData.meta.names || []).filter(
+          (n): n is string => n !== null
+        ),
+        numbers: (groupsData.meta.numbers || []).map((n) =>
+          typeof n === "string" ? parseInt(n, 10) : n
+        ),
+        usedNames: (groupsData.meta.usedNames || []).filter(
+          (n): n is string => n !== null
+        ),
+        usedNumbers: (groupsData.meta.usedNumbers || []).map((n) =>
+          typeof n === "string" ? parseInt(n, 10) : n
+        ),
+      }
+    : {
+        names: [],
+        numbers: [],
+        usedNames: [],
+        usedNumbers: [],
+      };
 
   return (
     <GroupManagementPageClient

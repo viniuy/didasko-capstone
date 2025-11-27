@@ -95,51 +95,51 @@ export default function Header() {
           <BreakGlassCompact />
           {/* Temp Admin Button */}
           {!isChecking && isTempAdmin && (
-            <Button
-              onClick={() => !showPromoteDialog && setShowPromoteDialog(true)}
-              className={`
-                relative overflow-hidden
-                bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600
-                hover:from-yellow-500 hover:via-yellow-600 hover:to-yellow-700
-                text-white font-semibold
-                shadow-[0_0_15px_rgba(234,179,8,0.5)]
-                hover:shadow-[0_0_25px_rgba(234,179,8,0.7)]
-                flex items-center gap-1 sm:gap-2
+              <Button
+                onClick={() => !showPromoteDialog && setShowPromoteDialog(true)}
+                className={`
+                  relative overflow-hidden
+                  bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600
+                  hover:from-yellow-500 hover:via-yellow-600 hover:to-yellow-700
+                  text-white font-semibold
+                  shadow-[0_0_15px_rgba(234,179,8,0.5)]
+                  hover:shadow-[0_0_25px_rgba(234,179,8,0.7)]
+                  flex items-center gap-1 sm:gap-2
                 z-50
-                transition-all duration-300
-                transform hover:scale-105
-                text-xs sm:text-sm
-                px-2 sm:px-3 py-1.5 sm:py-2
-                min-h-[44px] sm:min-h-0
-                ${
-                  showPromoteDialog
-                    ? "opacity-75 cursor-not-allowed pointer-events-none"
-                    : "animate-pulse"
-                }
-              `}
-              size="sm"
-              disabled={showPromoteDialog}
-              onMouseEnter={(e) => {
-                if (showPromoteDialog) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }
-              }}
-            >
-              {/* Shimmer effect */}
-              {!showPromoteDialog && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-              )}
+                  transition-all duration-300
+                  transform hover:scale-105
+                  text-xs sm:text-sm
+                  px-2 sm:px-3 py-1.5 sm:py-2
+                  min-h-[44px] sm:min-h-0
+                  ${
+                    showPromoteDialog
+                      ? "opacity-75 cursor-not-allowed pointer-events-none"
+                      : "animate-pulse"
+                  }
+                `}
+                size="sm"
+                disabled={showPromoteDialog}
+                onMouseEnter={(e) => {
+                  if (showPromoteDialog) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }}
+              >
+                {/* Shimmer effect */}
+                {!showPromoteDialog && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                )}
 
-              {/* Glow effect */}
-              <div className="absolute inset-0 rounded-md bg-yellow-400/50 blur-xl animate-pulse opacity-50" />
+                {/* Glow effect */}
+                <div className="absolute inset-0 rounded-md bg-yellow-400/50 blur-xl animate-pulse opacity-50" />
 
-              <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 relative z-10 animate-[bounce_2s_infinite]" />
-              <span className="hidden sm:inline relative z-10">
-                Temporary Admin
-              </span>
-              <span className="sm:hidden relative z-10">Temp</span>
-            </Button>
+                <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 relative z-10 animate-[bounce_2s_infinite]" />
+                <span className="hidden sm:inline relative z-10">
+                  Temporary Admin
+                </span>
+                <span className="sm:hidden relative z-10">Temp</span>
+              </Button>
           )}
         </div>
 

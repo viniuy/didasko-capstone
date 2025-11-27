@@ -191,23 +191,28 @@ export function AddGroupModal({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button
-          className="relative flex flex-col items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+          className="relative flex flex-col items-center justify-center gap-2 rounded-full bg-white hover:bg-gray-50 border-2 border-[#124A69] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           style={{ width: "8.75rem", height: "8.75rem" }}
           disabled={isValidationNeeded}
         >
           {isValidationNeeded ? (
-            <Loader2 className="h-20 w-20 text-gray-400 animate-spin" />
+            <Loader2 className="h-20 w-20 text-[#124A69] animate-spin" />
           ) : (
-            <div className="relative flex items-center justify-center">
-              <Users
-                className="h-20 w-20 text-gray-400 opacity-70"
-                strokeWidth={1.5}
-              />
-              <Plus
-                className="h-10 w-10 text-white absolute"
-                strokeWidth={2.5}
-              />
-            </div>
+            <>
+              <div className="relative flex items-center justify-center">
+                <Users
+                  className="h-20 w-20 text-gray-400 opacity-70"
+                  strokeWidth={1.5}
+                />
+                <Plus
+                  className="h-10 w-10 text-[#124A69] absolute"
+                  strokeWidth={2.5}
+                />
+              </div>
+              <span className="text-xs font-semibold text-[#124A69] text-center px-2">
+                Add Group
+              </span>
+            </>
           )}
         </button>
       </DialogTrigger>

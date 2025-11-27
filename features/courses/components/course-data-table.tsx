@@ -2453,57 +2453,57 @@ export function CourseDataTable({
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       try {
-        // For edit mode, ensure comprehensive invalidation and refetch
-        if (scheduleDialogMode === "edit") {
-          // Invalidate all course-related queries
-          await queryClient.invalidateQueries({
-            queryKey: queryKeys.courses.all,
-          });
-          await queryClient.invalidateQueries({
-            queryKey: queryKeys.stats.all,
-          });
+      // For edit mode, ensure comprehensive invalidation and refetch
+      if (scheduleDialogMode === "edit") {
+        // Invalidate all course-related queries
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.courses.all,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.stats.all,
+        });
 
-          // Invalidate specific course queries
-          await queryClient.invalidateQueries({
-            predicate: (query) => {
-              const key = query.queryKey;
-              return (
-                Array.isArray(key) && key.length >= 1 && key[0] === "courses"
-              );
-            },
-          });
+        // Invalidate specific course queries
+        await queryClient.invalidateQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) && key.length >= 1 && key[0] === "courses"
+            );
+          },
+        });
 
-          // Force refetch all course queries
-          await queryClient.refetchQueries({
-            queryKey: queryKeys.courses.all,
-          });
+        // Force refetch all course queries
+        await queryClient.refetchQueries({
+          queryKey: queryKeys.courses.all,
+        });
 
-          // Force refetch active courses to ensure UI updates immediately
-          await queryClient.refetchQueries({
-            predicate: (query) => {
-              const key = query.queryKey;
-              return (
-                Array.isArray(key) &&
-                key.length >= 2 &&
-                key[0] === "courses" &&
-                (key[1] === "list" || key[1] === "active")
-              );
-            },
-          });
-        } else {
-          // For create/import mode, use the standard refresh
-          await refreshTableData(false);
-        }
+        // Force refetch active courses to ensure UI updates immediately
+        await queryClient.refetchQueries({
+          predicate: (query) => {
+            const key = query.queryKey;
+            return (
+              Array.isArray(key) &&
+              key.length >= 2 &&
+              key[0] === "courses" &&
+              (key[1] === "list" || key[1] === "active")
+            );
+          },
+        });
+      } else {
+        // For create/import mode, use the standard refresh
+        await refreshTableData(false);
+      }
 
-        if (onCourseAdded) onCourseAdded();
+      if (onCourseAdded) onCourseAdded();
 
-        // Reset all state
-        setImportedCoursesForSchedule([]);
-        setShowScheduleAssignment(false);
-        setSelectedFile(null);
-        setPreviewData([]);
-        setIsValidFile(false);
-        setPreImportValidationErrors([]);
+      // Reset all state
+      setImportedCoursesForSchedule([]);
+      setShowScheduleAssignment(false);
+      setSelectedFile(null);
+      setPreviewData([]);
+      setIsValidFile(false);
+      setPreImportValidationErrors([]);
       } finally {
         // Clear editing states after everything is complete
         setIsEditingSchedule(false);
@@ -2511,9 +2511,9 @@ export function CourseDataTable({
           setIsEditingCourse(false);
         }
 
-        // Ensure loading states are cleared
-        setIsLoading(false);
-        setIsRefreshing(false);
+      // Ensure loading states are cleared
+      setIsLoading(false);
+      setIsRefreshing(false);
       }
     },
     [
@@ -3657,7 +3657,7 @@ export function CourseDataTable({
                   } finally {
                     setIsEditingCourse(false);
                     setIsLoading(false);
-                    setEditingCourse(null);
+                  setEditingCourse(null);
                   }
                 }}
                 onClose={() => {
