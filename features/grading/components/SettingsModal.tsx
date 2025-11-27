@@ -35,12 +35,21 @@ import {
 import type { Term, Assessment, TermConfig } from "../types/ClassRecordTable";
 import type { CriteriaOption } from "../types/ClassRecordTable";
 
+interface StudentScore {
+  studentId: string;
+  assessmentId: string;
+  score: number | null;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   termConfigs: Record<string, TermConfig>;
   onSave: (configs: Record<string, TermConfig>) => Promise<void>;
   availableCriteria: CriteriaOption[];
+  assessmentScores?: Map<string, StudentScore> | Record<string, StudentScore>;
+  onClearScores?: (assessmentId: string, studentIds: string[]) => Promise<void>;
+  courseSlug?: string;
 }
 
 const getTutorialSteps = (savedTerms: Set<Term>): TutorialStep[] => {
@@ -164,6 +173,9 @@ export function SettingsModal({
   termConfigs: initialConfigs,
   onSave,
   availableCriteria,
+  assessmentScores = new Map(),
+  onClearScores,
+  courseSlug,
 }: SettingsModalProps) {
   const [activeTerm, setActiveTerm] = useState<Term>("PRELIM");
   const [termConfigs, setTermConfigs] = useState(initialConfigs);
@@ -175,6 +187,39 @@ export function SettingsModal({
   const [isClosing, setIsClosing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const initialConfigsRef = useRef(initialConfigs);
+
+  // Validation dialogs state
+  const [showDeleteAssessmentDialog, setShowDeleteAssessmentDialog] =
+    useState(false);
+  const [pendingDeleteAssessment, setPendingDeleteAssessment] = useState<{
+    type: "PT" | "QUIZ";
+    id: string;
+  } | null>(null);
+  const [showMaxScoreDialog, setShowMaxScoreDialog] = useState(false);
+  const [pendingMaxScoreChange, setPendingMaxScoreChange] = useState<{
+    assessmentId: string;
+    oldMaxScore: number;
+    newMaxScore: number;
+    affectedScores: Array<{ studentId: string; score: number }>;
+  } | null>(null);
+  const [showDisableAssessmentDialog, setShowDisableAssessmentDialog] =
+    useState(false);
+  const [pendingDisableAssessment, setPendingDisableAssessment] = useState<{
+    assessmentId: string;
+    assessmentName: string;
+  } | null>(null);
+
+  // Convert assessmentScores to Map if it's a Record
+  const scoresMap = React.useMemo(() => {
+    if (assessmentScores instanceof Map) {
+      return assessmentScores;
+    }
+    const map = new Map<string, StudentScore>();
+    Object.entries(assessmentScores).forEach(([key, value]) => {
+      map.set(key, value);
+    });
+    return map;
+  }, [assessmentScores]);
 
   useEffect(() => {
     if (isOpen) {
@@ -321,11 +366,70 @@ export function SettingsModal({
     });
   };
 
+  // Helper function to check if assessment has existing scores
+  const hasAssessmentScores = (assessmentId: string): boolean => {
+    for (const [key, score] of scoresMap.entries()) {
+      // Key format is "studentId:assessmentId" for regular assessments
+      // or "studentId:criteria:criteriaId" for linked criteria
+      // We need to check if the assessmentId matches (not criteria scores)
+      if (key.includes(":criteria:")) {
+        // Skip criteria scores - they're linked to criteria, not assessments directly
+        continue;
+      }
+      const parts = key.split(":");
+      if (
+        parts.length === 2 &&
+        parts[1] === assessmentId &&
+        score.score !== null
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Helper function to get scores for an assessment
+  const getAssessmentScores = (
+    assessmentId: string
+  ): Array<{ studentId: string; score: number }> => {
+    const scores: Array<{ studentId: string; score: number }> = [];
+    for (const [key, scoreData] of scoresMap.entries()) {
+      // Key format is "studentId:assessmentId" for regular assessments
+      // Skip criteria scores as they're handled separately
+      if (key.includes(":criteria:")) {
+        continue;
+      }
+      const parts = key.split(":");
+      if (
+        parts.length === 2 &&
+        parts[1] === assessmentId &&
+        scoreData.score !== null
+      ) {
+        scores.push({
+          studentId: scoreData.studentId,
+          score: scoreData.score,
+        });
+      }
+    }
+    return scores;
+  };
+
+  // Helper function to check if scores exceed new maxScore
+  const getScoresExceedingMax = (
+    assessmentId: string,
+    newMaxScore: number
+  ): Array<{ studentId: string; score: number }> => {
+    return getAssessmentScores(assessmentId).filter(
+      (s) => s.score > newMaxScore
+    );
+  };
+
   const updateAssessment = (
     type: "PT" | "QUIZ" | "EXAM",
     id: string,
     updates: Partial<Assessment>
   ) => {
+    // Allow updates immediately - validation will happen on save
     const assessments = config.assessments.map((a) =>
       a.id === id ? { ...a, ...updates } : a
     );
@@ -345,11 +449,21 @@ export function SettingsModal({
     const maxOrder =
       existing.length > 0 ? Math.max(...existing.map((a) => a.order)) : -1;
 
-    const prefix = type;
+    // Use "Q" prefix for quizzes, "PT" for PT/Lab
+    const prefix = type === "QUIZ" ? "Q" : type;
     const existingNumbers = existing
       .map((a) => {
-        const match = a.name.match(new RegExp(`^${prefix}(\\d+)$`));
-        return match ? parseInt(match[1]) : 0;
+        // Match both "Q1" and "QUIZ1" for quizzes, "PT1" for PT
+        const patterns =
+          type === "QUIZ"
+            ? [new RegExp(`^Q(\\d+)$`), new RegExp(`^QUIZ(\\d+)$`)]
+            : [new RegExp(`^${prefix}(\\d+)$`)];
+
+        for (const pattern of patterns) {
+          const match = a.name.match(pattern);
+          if (match) return parseInt(match[1]);
+        }
+        return 0;
       })
       .filter((n) => n > 0);
 
@@ -358,7 +472,7 @@ export function SettingsModal({
 
     const newAssessment: Assessment = {
       id: `temp-${Math.random().toString(36).substr(2, 9)}`,
-      name: `${type}${nextNumber}`,
+      name: `${prefix}${nextNumber}`,
       type,
       maxScore: 0,
       date: null,
@@ -378,9 +492,82 @@ export function SettingsModal({
       toast.error(`You must have at least one ${type} assessment.`);
       return;
     }
+
+    // Allow deletion immediately - validation will happen on save
     updateConfig({
       assessments: config.assessments.filter((a) => a.id !== id),
     });
+  };
+
+  // Handle confirmation dialogs
+  const handleConfirmDeleteAssessment = async () => {
+    setShowDeleteAssessmentDialog(false);
+    setPendingDeleteAssessment(null);
+
+    // Re-validate to check for other issues
+    const scoreValidation = validateScoreIssues(activeTerm);
+
+    // If there are more issues, show next dialog
+    if (scoreValidation.maxScoreIssues.length > 0) {
+      setPendingMaxScoreChange({
+        assessmentId: scoreValidation.maxScoreIssues[0].id,
+        oldMaxScore: scoreValidation.maxScoreIssues[0].oldMaxScore,
+        newMaxScore: scoreValidation.maxScoreIssues[0].newMaxScore,
+        affectedScores: scoreValidation.maxScoreIssues[0].affectedScores,
+      });
+      setShowMaxScoreDialog(true);
+    } else if (scoreValidation.disabledAssessments.length > 0) {
+      setPendingDisableAssessment({
+        assessmentId: scoreValidation.disabledAssessments[0].id,
+        assessmentName: scoreValidation.disabledAssessments[0].name,
+      });
+      setShowDisableAssessmentDialog(true);
+    } else {
+      // No more issues, proceed with save
+      await performSave(activeTerm);
+    }
+  };
+
+  const handleConfirmMaxScoreChange = async (keepScores: boolean) => {
+    setShowMaxScoreDialog(false);
+
+    if (!pendingMaxScoreChange) return;
+
+    const { assessmentId, affectedScores, newMaxScore, oldMaxScore } =
+      pendingMaxScoreChange;
+    const isReduced = newMaxScore < oldMaxScore;
+
+    // If maxScore was reduced and user confirmed, clear the exceeding scores
+    const clearScoresForAssessment =
+      isReduced && !keepScores
+        ? {
+            assessmentId,
+            studentIds: affectedScores.map((s) => s.studentId),
+          }
+        : undefined;
+
+    // Re-validate to check for other issues
+    const scoreValidation = validateScoreIssues(activeTerm);
+
+    // If there are more issues, show next dialog
+    if (scoreValidation.disabledAssessments.length > 0) {
+      setPendingDisableAssessment({
+        assessmentId: scoreValidation.disabledAssessments[0].id,
+        assessmentName: scoreValidation.disabledAssessments[0].name,
+      });
+      setShowDisableAssessmentDialog(true);
+    } else {
+      // No more issues, proceed with save
+      setPendingMaxScoreChange(null);
+      await performSave(activeTerm, clearScoresForAssessment);
+    }
+  };
+
+  const handleConfirmDisableAssessment = async () => {
+    setShowDisableAssessmentDialog(false);
+    // No more issues after this, proceed with save
+    setPendingDisableAssessment(null);
+    await performSave(activeTerm);
   };
 
   const getTotalWeight = () => {
@@ -389,6 +576,129 @@ export function SettingsModal({
 
   const totalWeight = getTotalWeight();
   const isValidWeight = totalWeight === 100;
+
+  // Validate score-related issues before saving
+  const validateScoreIssues = (
+    term: Term
+  ): {
+    hasIssues: boolean;
+    deletedAssessments: Array<{ id: string; name: string; type: string }>;
+    maxScoreIssues: Array<{
+      id: string;
+      name: string;
+      oldMaxScore: number;
+      newMaxScore: number;
+      affectedScores: Array<{ studentId: string; score: number }>;
+    }>;
+    disabledAssessments: Array<{ id: string; name: string }>;
+  } => {
+    const cfg = termConfigs[term];
+    const initialCfg = initialConfigsRef.current[term];
+
+    if (!cfg || !initialCfg) {
+      return {
+        hasIssues: false,
+        deletedAssessments: [],
+        maxScoreIssues: [],
+        disabledAssessments: [],
+      };
+    }
+
+    const deletedAssessments: Array<{
+      id: string;
+      name: string;
+      type: string;
+    }> = [];
+    const maxScoreIssues: Array<{
+      id: string;
+      name: string;
+      oldMaxScore: number;
+      newMaxScore: number;
+      affectedScores: Array<{ studentId: string; score: number }>;
+    }> = [];
+    const disabledAssessments: Array<{ id: string; name: string }> = [];
+
+    // Find deleted assessments (in initial but not in current)
+    initialCfg.assessments.forEach((initialAssessment) => {
+      const stillExists = cfg.assessments.some(
+        (a) => a.id === initialAssessment.id
+      );
+      if (!stillExists && hasAssessmentScores(initialAssessment.id)) {
+        deletedAssessments.push({
+          id: initialAssessment.id,
+          name: initialAssessment.name,
+          type: initialAssessment.type,
+        });
+      }
+    });
+
+    // Find maxScore changes and disabled assessments
+    cfg.assessments.forEach((assessment) => {
+      const initialAssessment = initialCfg.assessments.find(
+        (a) => a.id === assessment.id
+      );
+
+      if (initialAssessment) {
+        // Check for maxScore change
+        if (
+          assessment.maxScore !== initialAssessment.maxScore &&
+          hasAssessmentScores(assessment.id)
+        ) {
+          const exceedingScores = getScoresExceedingMax(
+            assessment.id,
+            assessment.maxScore
+          );
+
+          if (assessment.maxScore < initialAssessment.maxScore) {
+            // MaxScore reduced - warn user that exceeding scores will be deleted
+            if (exceedingScores.length > 0) {
+              maxScoreIssues.push({
+                id: assessment.id,
+                name: assessment.name,
+                oldMaxScore: initialAssessment.maxScore,
+                newMaxScore: assessment.maxScore,
+                affectedScores: exceedingScores,
+              });
+            }
+          } else if (assessment.maxScore > initialAssessment.maxScore) {
+            // MaxScore increased - ask if user wants to keep existing scores
+            const existingScores = getAssessmentScores(assessment.id);
+            if (existingScores.length > 0) {
+              maxScoreIssues.push({
+                id: assessment.id,
+                name: assessment.name,
+                oldMaxScore: initialAssessment.maxScore,
+                newMaxScore: assessment.maxScore,
+                affectedScores: existingScores,
+              });
+            }
+          }
+        }
+
+        // Check for disabling
+        if (
+          !assessment.enabled &&
+          initialAssessment.enabled &&
+          hasAssessmentScores(assessment.id)
+        ) {
+          disabledAssessments.push({
+            id: assessment.id,
+            name: assessment.name,
+          });
+        }
+      }
+    });
+
+    return {
+      hasIssues:
+        deletedAssessments.length > 0 ||
+        maxScoreIssues.length > 0 ||
+        disabledAssessments.length > 0,
+      deletedAssessments,
+      maxScoreIssues,
+      disabledAssessments,
+    };
+  };
 
   const validateTerm = (term: Term): string[] => {
     const errors: string[] = [];
@@ -530,9 +840,74 @@ export function SettingsModal({
     // Remove errors for this term
     setValidationErrors((prev) => prev.filter((e) => !e.startsWith(term)));
 
+    // Validate score-related issues
+    const scoreValidation = validateScoreIssues(term);
+
+    if (scoreValidation.hasIssues) {
+      // Set pending issues for the confirmation dialog
+      setPendingDeleteAssessment(
+        scoreValidation.deletedAssessments.length > 0
+          ? {
+              type: scoreValidation.deletedAssessments[0].type as "PT" | "QUIZ",
+              id: scoreValidation.deletedAssessments[0].id,
+            }
+          : null
+      );
+      setPendingMaxScoreChange(
+        scoreValidation.maxScoreIssues.length > 0
+          ? {
+              assessmentId: scoreValidation.maxScoreIssues[0].id,
+              oldMaxScore: scoreValidation.maxScoreIssues[0].oldMaxScore,
+              newMaxScore: scoreValidation.maxScoreIssues[0].newMaxScore,
+              affectedScores: scoreValidation.maxScoreIssues[0].affectedScores,
+            }
+          : null
+      );
+      setPendingDisableAssessment(
+        scoreValidation.disabledAssessments.length > 0
+          ? {
+              assessmentId: scoreValidation.disabledAssessments[0].id,
+              assessmentName: scoreValidation.disabledAssessments[0].name,
+            }
+          : null
+      );
+
+      // Show appropriate dialog based on the first issue
+      if (scoreValidation.deletedAssessments.length > 0) {
+        setShowDeleteAssessmentDialog(true);
+      } else if (scoreValidation.maxScoreIssues.length > 0) {
+        setShowMaxScoreDialog(true);
+      } else if (scoreValidation.disabledAssessments.length > 0) {
+        setShowDisableAssessmentDialog(true);
+      }
+      return;
+    }
+
+    // No score issues, proceed with save
+    await performSave(term);
+  };
+
+  const performSave = async (
+    term: Term,
+    clearScoresForAssessment?: {
+      assessmentId: string;
+      studentIds: string[];
+    }
+  ) => {
     setIsSaving(true);
 
     try {
+      // Clear scores if user confirmed deletion (for reduced maxScore)
+      if (clearScoresForAssessment && onClearScores) {
+        await onClearScores(
+          clearScoresForAssessment.assessmentId,
+          clearScoresForAssessment.studentIds
+        );
+        toast.success(
+          `Cleared ${clearScoresForAssessment.studentIds.length} score(s) that exceeded the new max score.`
+        );
+      }
+
       // Save only this term's config
       const updatedConfigs = {
         ...termConfigs,
@@ -1425,7 +1800,12 @@ export function SettingsModal({
             <button
               onClick={() => handleSaveTerm(activeTerm)}
               data-tutorial="term-save-button"
-              disabled={isSaving || !hasUnsavedChanges(activeTerm)}
+              disabled={
+                isSaving ||
+                (!hasUnsavedChanges(activeTerm) &&
+                  activeTerm !== "PRELIM" &&
+                  savedTerms.has(activeTerm))
+              }
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#124A69] text-white hover:bg-[#0D3A54] text-xs sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -1470,6 +1850,179 @@ export function SettingsModal({
               >
                 <Save className="w-4 h-4 mr-2" />
                 {isClosing ? "Save & Close" : "Save & Continue"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Assessment with Scores Dialog */}
+        <Dialog
+          open={showDeleteAssessmentDialog}
+          onOpenChange={setShowDeleteAssessmentDialog}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                Delete Assessment with Existing Grades
+              </DialogTitle>
+              <DialogDescription>
+                This assessment has existing student grades. Deleting it will
+                permanently remove all associated grades. This action cannot be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteAssessmentDialog(false);
+                  setPendingDeleteAssessment(null);
+                }}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDeleteAssessment}
+                className="w-full sm:w-auto"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Assessment & Grades
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Max Score Change Dialog */}
+        <Dialog open={showMaxScoreDialog} onOpenChange={setShowMaxScoreDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500" />
+                Change Max Score
+              </DialogTitle>
+              <DialogDescription>
+                {pendingMaxScoreChange && (
+                  <div className="space-y-2">
+                    {pendingMaxScoreChange.newMaxScore <
+                    pendingMaxScoreChange.oldMaxScore ? (
+                      <>
+                        <p>
+                          You are reducing the max score from{" "}
+                          <strong>{pendingMaxScoreChange.oldMaxScore}</strong>{" "}
+                          to{" "}
+                          <strong>{pendingMaxScoreChange.newMaxScore}</strong>.
+                        </p>
+                        <p className="text-red-600 font-medium">
+                          {pendingMaxScoreChange.affectedScores.length}{" "}
+                          student(s) have scores that exceed the new max score.
+                          If you proceed, these scores will be permanently
+                          deleted.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>
+                          You are increasing the max score from{" "}
+                          <strong>{pendingMaxScoreChange.oldMaxScore}</strong>{" "}
+                          to{" "}
+                          <strong>{pendingMaxScoreChange.newMaxScore}</strong>.
+                        </p>
+                        <p>
+                          This assessment has{" "}
+                          {pendingMaxScoreChange.affectedScores.length} existing
+                          grade(s). Would you like to keep them?
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowMaxScoreDialog(false);
+                  setPendingMaxScoreChange(null);
+                }}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              {pendingMaxScoreChange &&
+              pendingMaxScoreChange.newMaxScore <
+                pendingMaxScoreChange.oldMaxScore ? (
+                // MaxScore reduced - show "Proceed & Delete" button (only option)
+                <Button
+                  variant="destructive"
+                  onClick={() => handleConfirmMaxScoreChange(false)}
+                  className="w-full sm:w-auto"
+                >
+                  Proceed & Delete Scores
+                </Button>
+              ) : (
+                // MaxScore increased - show both options
+                <>
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleConfirmMaxScoreChange(false)}
+                    className="w-full sm:w-auto"
+                  >
+                    Delete Existing Scores
+                  </Button>
+                  <Button
+                    onClick={() => handleConfirmMaxScoreChange(true)}
+                    className="w-full sm:w-auto bg-[#124A69] hover:bg-[#0D3A54]"
+                  >
+                    Keep Existing Scores
+                  </Button>
+                </>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Disable Assessment with Scores Dialog */}
+        <Dialog
+          open={showDisableAssessmentDialog}
+          onOpenChange={setShowDisableAssessmentDialog}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500" />
+                Disable Assessment with Existing Grades
+              </DialogTitle>
+              <DialogDescription>
+                {pendingDisableAssessment && (
+                  <>
+                    The assessment "{pendingDisableAssessment.assessmentName}"
+                    has existing student grades. Disabling it will exclude it
+                    from grade calculations, but the grades will be preserved.
+                    You can re-enable it later.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDisableAssessmentDialog(false);
+                  setPendingDisableAssessment(null);
+                }}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDisableAssessment}
+                className="w-full sm:w-auto bg-[#124A69] hover:bg-[#0D3A54]"
+              >
+                Disable Assessment
               </Button>
             </DialogFooter>
           </DialogContent>

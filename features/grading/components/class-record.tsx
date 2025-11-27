@@ -281,7 +281,7 @@ export function ClassRecordTable({
         },
         {
           id: "q1",
-          name: "QUIZ1",
+          name: "Q1",
           type: "QUIZ",
           maxScore: 20,
           date: null,
@@ -1135,6 +1135,33 @@ export function ClassRecordTable({
       s.middleInitial ? ` ${s.middleInitial}.` : ""
     }`;
 
+  const handleClearScores = async (
+    assessmentId: string,
+    studentIds: string[]
+  ) => {
+    try {
+      // Clear scores from state
+      const updated = new Map(scores);
+      studentIds.forEach((studentId) => {
+        const key = `${studentId}:${assessmentId}`;
+        updated.delete(key);
+      });
+      setScores(updated);
+
+      // Clear scores from backend
+      const scoresToDelete = studentIds.map((studentId) => ({
+        studentId,
+        assessmentId,
+        score: null,
+      }));
+
+      await gradingService.saveAssessmentScoresBulk(courseSlug, scoresToDelete);
+    } catch (error: any) {
+      console.error("Failed to clear scores:", error);
+      throw error;
+    }
+  };
+
   const handleSaveSettings = async (configs: Record<string, TermConfig>) => {
     try {
       const payload = { termConfigs: configs };
@@ -1953,6 +1980,9 @@ export function ClassRecordTable({
           termConfigs={termConfigs}
           onSave={handleSaveSettings}
           availableCriteria={availableCriteria}
+          assessmentScores={scores}
+          onClearScores={handleClearScores}
+          courseSlug={courseSlug}
         />
 
         <PasteGradesModal
@@ -2872,6 +2902,9 @@ export function ClassRecordTable({
         termConfigs={termConfigs}
         onSave={handleSaveSettings}
         availableCriteria={availableCriteria}
+        assessmentScores={scores}
+        onClearScores={handleClearScores}
+        courseSlug={courseSlug}
       />
 
       <PasteGradesModal
