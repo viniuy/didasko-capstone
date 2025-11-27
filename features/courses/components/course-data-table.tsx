@@ -2491,6 +2491,12 @@ export function CourseDataTable({
       setIsValidFile(false);
       setPreImportValidationErrors([]);
 
+      // Clear editing states after everything is complete
+      setIsEditingSchedule(false);
+      if (scheduleDialogMode === "create") {
+        setIsEditingCourse(false);
+      }
+
       // Ensure loading states are cleared
       setIsLoading(false);
       setIsRefreshing(false);
@@ -3248,12 +3254,12 @@ export function CourseDataTable({
               open={showScheduleAssignment}
               onOpenChange={(open) => {
                 setShowScheduleAssignment(open);
-                // Only call handleScheduleAssignmentComplete if dialog was closed after successful completion
-                // The dialog will call onComplete() itself when saving, not when canceling
-                if (!open) {
+                // Only clear state if dialog is being closed AND we're not in the middle of creating/editing
+                // The dialog closes itself before calling onComplete, so we need to keep loading state
+                // until onComplete finishes (which happens after the mutation completes)
+                if (!open && !isEditingSchedule) {
+                  // Only clear if we're not currently processing (user canceled)
                   setPendingCourseData(null);
-                  setIsEditingSchedule(false);
-                  // If we were creating a course, also clear course editing state
                   if (scheduleDialogMode === "create") {
                     setIsEditingCourse(false);
                   }
@@ -3264,13 +3270,10 @@ export function CourseDataTable({
                   ? [pendingCourseData]
                   : importedCoursesForSchedule
               }
-              onComplete={(importResults) => {
-                setIsEditingSchedule(false);
-                // If we were creating a course, also clear course editing state
-                if (scheduleDialogMode === "create") {
-                  setIsEditingCourse(false);
-                }
-                handleScheduleAssignmentComplete(importResults);
+              onComplete={async (importResults) => {
+                // Keep loading state true during course creation
+                // Loading states will be cleared in handleScheduleAssignmentComplete after everything is done
+                await handleScheduleAssignmentComplete(importResults);
               }}
               mode={scheduleDialogMode}
               maxActiveCourses={MAX_ACTIVE_COURSES}

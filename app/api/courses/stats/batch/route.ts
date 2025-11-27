@@ -8,19 +8,26 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30; // Maximum execution time
 
-type TermConfigWithGrades = {
-  courseId: string;
-  term: string;
-  termGrades: Array<{
-    studentId: string;
-    remarks: string | null;
-  }>;
-};
+// Limit the number of courses processed at once to prevent timeouts
+const MAX_COURSES_PER_BATCH = 50;
 
-type AttendanceRecord = {
-  courseId: string;
-  status: string;
-};
+// Helper function for query timeouts
+async function queryWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  let timeoutHandle: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutHandle = setTimeout(
+      () => reject(new Error(`Query timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() =>
+    clearTimeout(timeoutHandle)
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,21 +46,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch all courses with their students in a single query
-    const courses = await prisma.course.findMany({
-      where: {
-        slug: {
-          in: courseSlugs,
-        },
-      },
-      include: {
-        students: {
-          select: {
-            id: true,
+    // Limit the number of courses to prevent timeouts
+    const limitedSlugs = courseSlugs.slice(0, MAX_COURSES_PER_BATCH);
+
+    if (courseSlugs.length > MAX_COURSES_PER_BATCH) {
+      console.warn(
+        `Batch stats request exceeded limit: ${courseSlugs.length} courses requested, processing first ${MAX_COURSES_PER_BATCH}`
+      );
+    }
+
+    // Fetch all courses with student count (using _count for efficiency)
+    const courses = await queryWithTimeout(
+      prisma.course.findMany({
+        where: {
+          slug: {
+            in: limitedSlugs,
           },
         },
-      },
-    });
+        select: {
+          id: true,
+          slug: true,
+          _count: {
+            select: {
+              students: true,
+            },
+          },
+        },
+      }),
+      10000 // 10 second timeout
+    );
 
     if (courses.length === 0) {
       return NextResponse.json({ stats: [] });
@@ -61,59 +82,120 @@ export async function POST(req: NextRequest) {
 
     const courseIds = courses.map((c) => c.id);
 
-    // Batch query: Get all term configs and attendance records in parallel
-    const [termConfigs, attendanceRecords] = await Promise.all([
-      prisma.termConfiguration.findMany({
-        where: {
-          courseId: {
-            in: courseIds,
-          },
-        },
-        select: {
-          courseId: true,
-          term: true,
-          termGrades: {
-            select: {
-              studentId: true,
-              remarks: true,
+    // Use database aggregations instead of loading all records
+    // This is much more efficient for large datasets
+    const [finalsTermConfigs, attendanceTotal, attendancePresentOrLate] =
+      await Promise.all([
+        // Only get FINALS term configs with grade counts (aggregated)
+        queryWithTimeout(
+          prisma.termConfiguration.findMany({
+            where: {
+              courseId: {
+                in: courseIds,
+              },
+              term: {
+                in: ["FINALS", "Finals"],
+              },
             },
-          },
-        },
-      }),
-      prisma.attendance.findMany({
-        where: {
-          courseId: {
-            in: courseIds,
-          },
-        },
-        select: {
-          courseId: true,
-          status: true,
-        },
-      }),
-    ]);
+            select: {
+              courseId: true,
+              termGrades: {
+                select: {
+                  studentId: true,
+                  remarks: true,
+                },
+                // Limit to prevent excessive data loading (reasonable limit for stats)
+                take: 5000,
+              },
+            },
+          }),
+          15000 // 15 second timeout
+        ),
+        // Get total attendance count per course
+        queryWithTimeout(
+          prisma.attendance.groupBy({
+            by: ["courseId"],
+            where: {
+              courseId: {
+                in: courseIds,
+              },
+            },
+            _count: {
+              id: true,
+            },
+          }),
+          15000 // 15 second timeout
+        ),
+        // Get present/late attendance count per course
+        queryWithTimeout(
+          prisma.attendance.groupBy({
+            by: ["courseId"],
+            where: {
+              courseId: {
+                in: courseIds,
+              },
+              status: {
+                in: ["PRESENT", "LATE"],
+              },
+            },
+            _count: {
+              id: true,
+            },
+          }),
+          15000 // 15 second timeout
+        ),
+      ]);
 
-    // Group term configs and attendance by courseId
-    const termConfigsByCourse = new Map<string, TermConfigWithGrades[]>();
-    const attendanceByCourse = new Map<string, AttendanceRecord[]>();
+    // Group finals configs by courseId
+    const finalsByCourse = new Map<
+      string,
+      { totalGrades: number; passingGrades: number }
+    >();
 
-    termConfigs.forEach((config: TermConfigWithGrades) => {
-      if (!termConfigsByCourse.has(config.courseId)) {
-        termConfigsByCourse.set(config.courseId, []);
-      }
-      termConfigsByCourse.get(config.courseId)!.push(config);
+    finalsTermConfigs.forEach((config) => {
+      const existing = finalsByCourse.get(config.courseId) || {
+        totalGrades: 0,
+        passingGrades: 0,
+      };
+
+      // Count passing students from term grades
+      const passingCount = config.termGrades.filter(
+        (g) => g.remarks === "PASSED"
+      ).length;
+
+      finalsByCourse.set(config.courseId, {
+        totalGrades: existing.totalGrades + config.termGrades.length,
+        passingGrades: existing.passingGrades + passingCount,
+      });
     });
 
-    attendanceRecords.forEach((record: AttendanceRecord) => {
-      if (!attendanceByCourse.has(record.courseId)) {
-        attendanceByCourse.set(record.courseId, []);
-      }
-      attendanceByCourse.get(record.courseId)!.push(record);
+    // Group attendance stats by courseId
+    const attendanceByCourse = new Map<
+      string,
+      { total: number; presentOrLate: number }
+    >();
+
+    attendanceTotal.forEach((stat) => {
+      attendanceByCourse.set(stat.courseId, {
+        total: stat._count.id,
+        presentOrLate: 0, // Will be set below
+      });
+    });
+
+    attendancePresentOrLate.forEach((stat) => {
+      const existing = attendanceByCourse.get(stat.courseId) || {
+        total: 0,
+        presentOrLate: 0,
+      };
+      attendanceByCourse.set(stat.courseId, {
+        ...existing,
+        presentOrLate: stat._count.id,
+      });
     });
 
     // Calculate stats for each course
     const stats = courses.map((course) => {
-      const totalStudents = course.students.length;
+      const totalStudents = course._count.students;
 
       if (totalStudents === 0) {
         return {
@@ -126,46 +208,29 @@ export async function POST(req: NextRequest) {
         };
       }
 
-      const courseTermConfigs = termConfigsByCourse.get(course.id) || [];
-      const courseAttendance = attendanceByCourse.get(course.id) || [];
+      const finalsData = finalsByCourse.get(course.id) || {
+        totalGrades: 0,
+        passingGrades: 0,
+      };
 
-      // Only use FINALS term for passing rate calculation
-      const finalsConfig = courseTermConfigs.find(
-        (config: TermConfigWithGrades) =>
-          config.term === "FINALS" || config.term === "Finals"
-      );
-
-      const studentsWithGrades = new Set<string>();
-      const passingStudents = new Set<string>();
-
-      // Only count students with FINALS term grades for passing rate
-      if (finalsConfig) {
-        finalsConfig.termGrades.forEach(
-          (grade: { studentId: string; remarks: string | null }) => {
-            studentsWithGrades.add(grade.studentId);
-            if (grade.remarks === "PASSED") {
-              passingStudents.add(grade.studentId);
-            }
-          }
-        );
-      }
+      const attendanceData = attendanceByCourse.get(course.id) || {
+        total: 0,
+        presentOrLate: 0,
+      };
 
       const passingRate =
-        studentsWithGrades.size > 0
-          ? Math.round((passingStudents.size / studentsWithGrades.size) * 100)
+        finalsData.totalGrades > 0
+          ? Math.round(
+              (finalsData.passingGrades / finalsData.totalGrades) * 100
+            )
           : 0;
 
       const attendanceRate =
-        courseAttendance.length === 0
-          ? 0
-          : Math.round(
-              (courseAttendance.filter(
-                (record: AttendanceRecord) =>
-                  record.status === "PRESENT" || record.status === "LATE"
-              ).length /
-                courseAttendance.length) *
-                100
-            );
+        attendanceData.total > 0
+          ? Math.round(
+              (attendanceData.presentOrLate / attendanceData.total) * 100
+            )
+          : 0;
 
       return {
         slug: course.slug,

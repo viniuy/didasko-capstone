@@ -376,16 +376,26 @@ export function ScheduleAssignmentDialog({
         const courseData = currentCourse;
         const schedulesToAdd = schedules[0] || [];
 
-        await createCourseMutation.mutateAsync({
-          ...courseData,
-          schedules: schedulesToAdd.map((s) => ({
-            day: s.day.slice(0, 3), // Convert to short form
-            fromTime: s.fromTime,
-            toTime: s.toTime,
-          })),
-        } as any);
+        // Show loading toast
+        const loadingToast = toast.loading("Creating course...");
 
-        // Success toast is handled by the mutation
+        try {
+          await createCourseMutation.mutateAsync({
+            ...courseData,
+            schedules: schedulesToAdd.map((s) => ({
+              day: s.day.slice(0, 3), // Convert to short form
+              fromTime: s.fromTime,
+              toTime: s.toTime,
+            })),
+          } as any);
+
+          // Dismiss loading toast (success toast is handled by the mutation)
+          toast.dismiss(loadingToast);
+        } catch (error) {
+          // Dismiss loading toast on error (error toast is handled by the mutation)
+          toast.dismiss(loadingToast);
+          throw error;
+        }
       } else if (mode === "import") {
         // Check if limit is reached before importing
         const coursesToImport = courses.filter(

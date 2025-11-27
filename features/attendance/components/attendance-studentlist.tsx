@@ -2707,7 +2707,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           isSelected={selectedStudents.includes(student.id)}
           onSelect={isSelecting ? handleSelectStudent : undefined}
           isSelecting={isSelecting}
-          disableStatusChange={isSelecting || savingStudents.has(student.id)}
+          disableStatusChange={
+            isSelecting ||
+            savingStudents.has(student.id) ||
+            !!attendanceStartTime
+          }
           isSavingRfidAttendance={isSavingRfidAttendance}
           isLoading={savingStudents.has(student.id) || isDateLoading}
         />
@@ -2722,6 +2726,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     isDateLoading,
     isInitialLoad,
     savingStudents,
+    attendanceStartTime,
   ]);
 
   if (isLoading) {

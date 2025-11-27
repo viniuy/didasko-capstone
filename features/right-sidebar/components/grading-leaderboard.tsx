@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trophy, Medal, Award, TrendingUp, Loader2 } from "lucide-react";
+import { Trophy, Medal, Award, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { statsService } from "@/lib/services/client";
@@ -107,27 +107,9 @@ const StudentRankCard = ({ student }: { student: StudentGrade }) => {
               <div className="text-lg font-bold text-white">
                 {student.currentGrade.toFixed(1)}
               </div>
-              {student.improvement !== 0 && (
-                <div
-                  className={`text-xs flex items-center gap-1 ${
-                    student.isImproving ? "text-green-400" : "text-red-400"
-                  }`}
-                  title={
-                    student.isImproving
-                      ? `Improved by ${Math.abs(student.improvement).toFixed(
-                          1
-                        )}% compared to previous terms`
-                      : `Declined by ${Math.abs(student.improvement).toFixed(
-                          1
-                        )}% compared to previous terms`
-                  }
-                >
-                  <TrendingUp
-                    className={`h-3 w-3 ${
-                      !student.isImproving && "rotate-180"
-                    }`}
-                  />
-                  {Math.abs(student.improvement).toFixed(1)}%
+              {student.numericGrade && (
+                <div className="text-xs text-white/70">
+                  {student.numericGrade}
                 </div>
               )}
             </div>
@@ -209,7 +191,7 @@ export default function GradingLeaderboard({
 }: GradingLeaderboardProps) {
   const { data: session, status } = useSession();
   const [gradeCounts, setGradeCounts] = useState<GradeCount[]>([]);
-  const [mostImproved, setMostImproved] = useState<StudentGrade[]>([]);
+  const [studentRankings, setStudentRankings] = useState<StudentGrade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTerm, setSelectedTerm] = useState<
     "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
@@ -287,17 +269,20 @@ export default function GradingLeaderboard({
 
         setGradeCounts(counts);
 
-        // Sort by improvement for most improved
-        const improved = [...data]
-          .filter((s) => s.improvement !== 0)
-          .sort((a, b) => b.improvement - a.improvement);
-        setMostImproved(improved.slice(0, 10));
+        // Sort by current grade (highest to lowest) for student rankings
+        const rankings = [...data]
+          .sort((a, b) => b.currentGrade - a.currentGrade)
+          .map((student, index) => ({
+            ...student,
+            rank: index + 1,
+          }));
+        setStudentRankings(rankings);
       } catch (error) {
         console.error("Error fetching leaderboard:", error);
         // Only clear data if not in silent mode (initial load)
         if (!silent) {
           setGradeCounts([]);
-          setMostImproved([]);
+          setStudentRankings([]);
         }
       } finally {
         if (!silent) {
@@ -359,7 +344,7 @@ export default function GradingLeaderboard({
     );
   }
 
-  if (gradeCounts.length === 0 && mostImproved.length === 0) {
+  if (gradeCounts.length === 0 && studentRankings.length === 0) {
     return (
       <Card className="bg-[#124A69] border-white/20 h-full flex flex-col">
         <CardHeader className="pb-3">
@@ -396,10 +381,10 @@ export default function GradingLeaderboard({
               Grade Count
             </TabsTrigger>
             <TabsTrigger
-              value="improved"
+              value="rankings"
               className="data-[state=active]:bg-white/20 text-white"
             >
-              Most Improved
+              Student Ranking
             </TabsTrigger>
           </TabsList>
 
@@ -433,27 +418,26 @@ export default function GradingLeaderboard({
           </TabsContent>
 
           <TabsContent
-            value="improved"
+            value="rankings"
             className="flex-1 overflow-y-auto mt-3 space-y-2"
           >
-            {mostImproved.length === 0 ? (
+            {studentRankings.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-white/70">
-                  No improvement data available
+                  No student rankings available
                 </p>
                 <p className="text-xs text-white/50 mt-2">
-                  Improvement is calculated from MIDTERM to FINALS
+                  Rankings are based on final grades
                 </p>
               </div>
             ) : (
               <>
                 <div className="mb-2 px-1">
                   <p className="text-xs text-white/60 italic">
-                    Ranked by improvement: compares current term vs average of
-                    previous terms
+                    Ranked by final grade (highest to lowest)
                   </p>
                 </div>
-                {mostImproved.map((student) => (
+                {studentRankings.map((student) => (
                   <StudentRankCard key={student.id} student={student} />
                 ))}
               </>

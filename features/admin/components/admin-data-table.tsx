@@ -264,8 +264,11 @@ export function AdminDataTable({
   useEffect(() => {
     if (currentUserBreakGlass) {
       setIsCurrentUserTempAdmin(!!currentUserBreakGlass.isActive);
-      setCurrentUserRole(session?.user?.role as Role);
+    } else {
+      // If break-glass status is not available yet or is null, assume not temp admin
+      setIsCurrentUserTempAdmin(false);
     }
+    setCurrentUserRole(session?.user?.role as Role);
   }, [currentUserBreakGlass, session?.user?.role]);
 
   // Check if a user is a temporary admin
@@ -902,6 +905,7 @@ export function AdminDataTable({
           const isTargetAdminOrHead =
             row.original.role === "ADMIN" ||
             row.original.role === "ACADEMIC_HEAD";
+          // Always disable for temp admins viewing ADMIN/ACADEMIC_HEAD users
           const isDisabledForTempAdmin =
             isCurrentUserTempAdmin && isTargetAdminOrHead;
 
@@ -916,6 +920,13 @@ export function AdminDataTable({
                 ) {
                   toast.error(
                     "Temporary admins cannot assign Admin or Academic Head roles"
+                  );
+                  return;
+                }
+                // Also prevent if trying to change an existing ADMIN/ACADEMIC_HEAD user
+                if (isDisabledForTempAdmin) {
+                  toast.error(
+                    "Temporary admins cannot modify Admin or Academic Head roles"
                   );
                   return;
                 }
@@ -1015,13 +1026,20 @@ export function AdminDataTable({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                className="flex items-center gap-2"
-                onClick={() => setEditingUser(row.original)}
-              >
-                <Pencil className="h-4 w-4" />
-                Edit User
-              </DropdownMenuItem>
+              {/* Hide Edit User for ADMIN/ACADEMIC_HEAD when current user is temp admin */}
+              {!(
+                isCurrentUserTempAdmin &&
+                (row.original.role === "ADMIN" ||
+                  row.original.role === "ACADEMIC_HEAD")
+              ) && (
+                <DropdownMenuItem
+                  className="flex items-center gap-2"
+                  onClick={() => setEditingUser(row.original)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit User
+                </DropdownMenuItem>
+              )}
               {/* Show promotion option only for permanent admins viewing temporary admins */}
               {!isCurrentUserTempAdmin &&
                 currentUserRole === "ADMIN" &&
@@ -1054,6 +1072,8 @@ export function AdminDataTable({
       handleRoleChange,
       handleStatusChange,
       imageMap,
+      isCurrentUserTempAdmin,
+      currentUserRole,
     ]
   );
 
