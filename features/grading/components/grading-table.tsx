@@ -1268,6 +1268,25 @@ export function GradingTable({
     [savePendingScores] // Add savePendingScores to dependencies
   );
 
+  // Helper function to handle numeric keydown (from class-record.tsx)
+  const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const allowed = [
+      "Backspace",
+      "Delete",
+      "ArrowLeft",
+      "ArrowRight",
+      "Tab",
+      "Home",
+      "End",
+    ];
+    if (/^[0-9]$/.test(e.key)) return;
+    if (allowed.includes(e.key)) return;
+    e.preventDefault();
+  };
+
+  // Helper function to sanitize digits (from class-record.tsx)
+  const sanitizeDigits = (value: string) => value.replace(/[^0-9]/g, "");
+
   // Memoized calculateTotal to prevent recreation on every render
   // Must be defined before handleScoreChange which uses it
   const calculateTotal = useCallback(
@@ -1306,51 +1325,92 @@ export function GradingTable({
   );
 
   // Memoized handleScoreChange to prevent unnecessary re-renders of child components
+  // Updated to handle text input with number validation (from class-record.tsx pattern)
   const handleScoreChange = useCallback(
-    async (studentId: string, rubricIndex: number, value: number | "") => {
-      // If value is empty (Select Grade), delete the grades
-      if (value === "") {
-        try {
-          setIsLoading(true);
-          const formattedDate = selectedDate?.toISOString().split("T")[0];
+    async (
+      studentId: string,
+      rubricIndex: number,
+      inputValue: string,
+      maxScore: number
+    ) => {
+      // If value is empty, set to 0
+      if (inputValue === "") {
+        setScores((prev) => {
+          const rubricCount = activeReport?.rubrics.length || 0;
+          const studentScores =
+            prev[studentId]?.scores || new Array(rubricCount).fill(0);
+          const newScores = [...studentScores];
+          newScores[rubricIndex] = 0;
 
-          // Delete grades for this student (Note: service doesn't support studentId filter yet, so we'll need to handle this differently)
-          // For now, we'll delete all grades for the criteria/date and recreate without this student
-          // This is a limitation - the service should support studentId filter
-          if (activeReport?.id && formattedDate) {
-            await deleteGradesMutation.mutateAsync({
-              courseSlug,
-              criteriaId: activeReport.id,
-              date: formattedDate,
-            });
-          }
+          // Calculate total including all rubrics
+          const total = calculateTotal(newScores);
 
-          // Update local state
-          setScores((prev) => {
-            const newScores = { ...prev };
-            delete newScores[studentId];
-            return newScores;
-          });
+          const updatedScore: GradingScore = {
+            studentId,
+            scores: newScores,
+            total,
+            reportingScore: isRecitationCriteria ? null : total,
+            recitationScore: isRecitationCriteria ? total : null,
+          };
 
-          toast.success("Grades deleted successfully");
-        } catch (error: any) {
-          console.error("Error deleting grades:", error);
-          toast.error(
-            error.response?.data?.message || "Failed to delete grades"
-          );
-        } finally {
-          setIsLoading(false);
-        }
+          // Queue for auto-save
+          queueScoreForSaving(studentId, newScores, total);
+
+          return {
+            ...prev,
+            [studentId]: updatedScore,
+          };
+        });
         return;
       }
 
-      // Otherwise, update the grade as normal
+      // Sanitize and validate the input
+      const digits = sanitizeDigits(inputValue);
+      if (digits === "") {
+        // If no valid digits, set to 0
+        setScores((prev) => {
+          const rubricCount = activeReport?.rubrics.length || 0;
+          const studentScores =
+            prev[studentId]?.scores || new Array(rubricCount).fill(0);
+          const newScores = [...studentScores];
+          newScores[rubricIndex] = 0;
+
+          const total = calculateTotal(newScores);
+          const updatedScore: GradingScore = {
+            studentId,
+            scores: newScores,
+            total,
+            reportingScore: isRecitationCriteria ? null : total,
+            recitationScore: isRecitationCriteria ? total : null,
+          };
+
+          queueScoreForSaving(studentId, newScores, total);
+
+          return {
+            ...prev,
+            [studentId]: updatedScore,
+          };
+        });
+        return;
+      }
+
+      const num = Number(digits);
+
+      // Validate: score must be non-negative and not exceed max
+      let finalValue = num;
+      if (num < 0) {
+        finalValue = 0;
+      } else if (num > maxScore) {
+        finalValue = maxScore;
+      }
+
+      // Update the grade
       setScores((prev) => {
         const rubricCount = activeReport?.rubrics.length || 0;
         const studentScores =
           prev[studentId]?.scores || new Array(rubricCount).fill(0);
         const newScores = [...studentScores];
-        newScores[rubricIndex] = value;
+        newScores[rubricIndex] = finalValue;
 
         // Calculate total including all rubrics
         const total = calculateTotal(newScores);
@@ -1373,14 +1433,10 @@ export function GradingTable({
       });
     },
     [
-      activeReport?.id,
       activeReport?.rubrics.length,
-      selectedDate,
-      courseSlug,
       isRecitationCriteria,
       calculateTotal,
       queueScoreForSaving,
-      deleteGradesMutation,
     ]
   );
 
@@ -2240,7 +2296,8 @@ export function GradingTable({
     handleScoreChange: (
       studentId: string,
       rubricIndex: number,
-      value: number | ""
+      inputValue: string,
+      maxScore: number
     ) => void;
     paginatedStudents: Student[];
     isLoading: boolean;
@@ -2317,13 +2374,15 @@ export function GradingTable({
                         </div>
                       ) : (
                         <input
-                          type="number"
-                          min="1"
-                          max={Number(activeReport?.scoringRange) || 5}
+                          type="text"
                           className="w-full border rounded px-2 py-1 text-center disabled:opacity-50 disabled:cursor-not-allowed"
                           value={groupValue || ""}
                           onChange={(e) => {
                             const inputValue = e.target.value;
+                            const maxScore =
+                              Number(activeReport?.scoringRange) || 5;
+                            const digits = sanitizeDigits(inputValue);
+
                             if (inputValue === "") {
                               setScores((prev) => {
                                 const updated = { ...prev };
@@ -2346,44 +2405,41 @@ export function GradingTable({
                                 });
                                 return updated;
                               });
-                            } else {
-                              const numValue = parseInt(inputValue);
-                              if (
-                                !isNaN(numValue) &&
-                                numValue >= 1 &&
-                                numValue <= Number(activeReport?.scoringRange)
-                              ) {
-                                setScores((prev) => {
-                                  const updated = { ...prev };
-                                  students.forEach((student) => {
-                                    const studentScores =
-                                      updated[student.id]?.scores ||
-                                      new Array(rubricDetails.length).fill(0);
-                                    // Set the group rubric score for all students
-                                    studentScores[rubricIdx] = numValue;
-                                    const total = calculateTotal(studentScores);
-                                    updated[student.id] = {
-                                      ...updated[student.id],
-                                      scores: studentScores,
-                                      total,
-                                    };
-                                    // Queue for auto-save for each student
-                                    queueScoreForSaving(
-                                      student.id,
-                                      studentScores,
-                                      total
-                                    );
-                                  });
-                                  return updated;
-                                });
+                            } else if (digits !== "") {
+                              const numValue = Number(digits);
+                              let finalValue = numValue;
+                              if (numValue < 1) {
+                                finalValue = 1;
+                              } else if (numValue > maxScore) {
+                                finalValue = maxScore;
                               }
+
+                              setScores((prev) => {
+                                const updated = { ...prev };
+                                students.forEach((student) => {
+                                  const studentScores =
+                                    updated[student.id]?.scores ||
+                                    new Array(rubricDetails.length).fill(0);
+                                  // Set the group rubric score for all students
+                                  studentScores[rubricIdx] = finalValue;
+                                  const total = calculateTotal(studentScores);
+                                  updated[student.id] = {
+                                    ...updated[student.id],
+                                    scores: studentScores,
+                                    total,
+                                  };
+                                  // Queue for auto-save for each student
+                                  queueScoreForSaving(
+                                    student.id,
+                                    studentScores,
+                                    total
+                                  );
+                                });
+                                return updated;
+                              });
                             }
                           }}
-                          onKeyDown={(e) => {
-                            if (["e", "E", "+", "-", "."].includes(e.key)) {
-                              e.preventDefault();
-                            }
-                          }}
+                          onKeyDown={handleNumericKeyDown}
                           placeholder="—"
                           disabled={isLoading}
                         />
@@ -2417,31 +2473,21 @@ export function GradingTable({
                     </div>
                   ) : (
                     <input
-                      type="number"
-                      min="1"
-                      max={Number(activeReport?.scoringRange) || 5}
+                      type="text"
                       className="w-full border rounded px-2 py-1 text-center disabled:opacity-50 disabled:cursor-not-allowed"
                       value={value || ""}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        if (inputValue === "") {
-                          handleScoreChange(student.id, rubricIdx, 0);
-                        } else {
-                          const numValue = parseInt(inputValue);
-                          if (
-                            !isNaN(numValue) &&
-                            numValue >= 1 &&
-                            numValue <= Number(activeReport?.scoringRange)
-                          ) {
-                            handleScoreChange(student.id, rubricIdx, numValue);
-                          }
-                        }
+                        const maxScore =
+                          Number(activeReport?.scoringRange) || 5;
+                        handleScoreChange(
+                          student.id,
+                          rubricIdx,
+                          inputValue,
+                          maxScore
+                        );
                       }}
-                      onKeyDown={(e) => {
-                        if (["e", "E", "+", "-", "."].includes(e.key)) {
-                          e.preventDefault();
-                        }
-                      }}
+                      onKeyDown={handleNumericKeyDown}
                       placeholder="—"
                       disabled={isLoading}
                     />
@@ -2576,9 +2622,67 @@ export function GradingTable({
     });
   };
 
+  // Helper function to check if there are changes
+  const hasEditChanges = useCallback(() => {
+    if (!editingReport) return false;
+
+    // Check if name changed
+    if (editingReport.name !== newReport.name) return true;
+
+    // Check if scoring range changed
+    if (editingReport.scoringRange !== newReport.scoringRange) return true;
+
+    // Check if passing score changed
+    if (editingReport.passingScore !== newReport.passingScore) return true;
+
+    // Check if number of rubrics changed
+    if (editingReport.rubrics.length !== newReport.rubricDetails.length)
+      return true;
+
+    // Check if rubric details changed
+    for (let i = 0; i < editingReport.rubrics.length; i++) {
+      const oldRubric = editingReport.rubrics[i];
+      const newRubric = newReport.rubricDetails[i];
+
+      if (!newRubric) return true; // New rubric added
+
+      // Check name (skip Participation in group view)
+      if (
+        !(
+          isGroupView &&
+          i === newReport.rubricDetails.length - 1 &&
+          newRubric.name === "Participation"
+        )
+      ) {
+        if (oldRubric.name !== newRubric.name) return true;
+      }
+
+      // Check percentage/weight
+      if (oldRubric.percentage !== newRubric.weight) return true;
+    }
+
+    return false;
+  }, [editingReport, newReport, isGroupView]);
+
   // Add function to handle save edit
   const handleSaveEdit = async () => {
     if (!editingReport) return;
+
+    // Check if there are any changes
+    if (!hasEditChanges()) {
+      toast.dismiss("no-changes-to-save");
+      toast("No changes to save", {
+        id: "no-changes-to-save",
+        duration: 3000,
+        icon: "ℹ️",
+        style: {
+          background: "#fff",
+          color: "#124A69",
+          border: "1px solid #e5e7eb",
+        },
+      });
+      return;
+    }
 
     // Validate report name
     const nameError = validateReportName(newReport.name);
@@ -3812,8 +3916,9 @@ export function GradingTable({
                 setScores({});
                 students.forEach((student) => {
                   // Reset each rubric score individually
+                  const maxScore = Number(activeReport?.scoringRange) || 5;
                   rubricDetails.forEach((_, index) => {
-                    handleScoreChange(student.id, index, 0);
+                    handleScoreChange(student.id, index, "", maxScore);
                   });
                 });
                 setShowResetConfirmation(false);
@@ -4153,7 +4258,8 @@ export function GradingTable({
       <Dialog
         open={showSaveEditConfirmation}
         onOpenChange={(newOpen) => {
-          if (!newOpen) {
+          // Prevent closing the dialog while saving
+          if (!newOpen && !isSavingEdit) {
             setShowSaveEditConfirmation(false);
           }
         }}

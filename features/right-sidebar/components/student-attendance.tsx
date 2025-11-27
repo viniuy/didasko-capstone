@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { checkActiveRfidSession } from "@/lib/utils/rfid-session";
 
 interface StudentAttendance {
   studentId: string;
@@ -199,8 +200,49 @@ export default function AttendanceLeaderboard({
 }: AttendanceLeaderboardProps = {}) {
   const { data: session, status } = useSession();
   const [sortBy, setSortBy] = useState<SortOption>("absents");
+  const [hasActiveRfidSession, setHasActiveRfidSession] = useState(false);
 
   const isSingleCourse = !!courseSlug;
+
+  // Check for active RFID session
+  useEffect(() => {
+    if (!courseSlug) {
+      setHasActiveRfidSession(false);
+      return;
+    }
+
+    const checkSession = () => {
+      const activeSession = checkActiveRfidSession(courseSlug);
+      setHasActiveRfidSession(!!activeSession);
+    };
+
+    // Initial check
+    checkSession();
+
+    // Set up periodic checks (every 1 second)
+    const interval = setInterval(checkSession, 1000);
+
+    // Listen for storage changes (cross-tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "attendance:global:activeRfidSession" || e.key === null) {
+        checkSession();
+      }
+    };
+
+    // Listen for custom events (same-tab)
+    const handleCustomChange = () => {
+      checkSession();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("rfid-session-changed", handleCustomChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("rfid-session-changed", handleCustomChange);
+    };
+  }, [courseSlug]);
 
   // React Query hooks
   const { data: courseData } = useCourse(courseSlug || "");
@@ -325,8 +367,12 @@ export default function AttendanceLeaderboard({
           <Select
             value={sortBy}
             onValueChange={(value) => setSortBy(value as SortOption)}
+            disabled={hasActiveRfidSession}
           >
-            <SelectTrigger className="w-full bg-white/10 border-white/20 text-white flex items-center justify-between">
+            <SelectTrigger
+              className="w-full bg-white/10 border-white/20 text-white flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={hasActiveRfidSession}
+            >
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent className="bg-[#0f3d58] border-white/20 text-white">
@@ -336,6 +382,11 @@ export default function AttendanceLeaderboard({
               <SelectItem value="excused">Most Excused</SelectItem>
             </SelectContent>
           </Select>
+          {hasActiveRfidSession && (
+            <p className="text-xs text-yellow-400 italic">
+              Sort disabled: RFID attendance is active
+            </p>
+          )}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">

@@ -168,7 +168,7 @@ export function useCreateCriteria() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.groups.byCourse(variables.courseSlug),
       });
-      toast.success("Criteria created successfully");
+      // Toast is handled by the component for more specific messaging
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to create criteria");
@@ -224,7 +224,7 @@ export function useUpdateCriteria() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.groups.byCourse(variables.courseSlug),
       });
-      toast.success("Criteria updated successfully");
+      // Toast is handled by the component for more specific messaging
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error || "Failed to update criteria");

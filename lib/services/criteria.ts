@@ -121,10 +121,19 @@ export async function getGroupCriteria(courseSlug: string) {
 export async function getCriteriaLinks(courseSlug: string) {
   const course = await prisma.course.findUnique({
     where: { slug: courseSlug },
-    select: { id: true },
+    select: { id: true, status: true },
   });
 
   if (!course) return null;
+
+  // Only return criteria if the course is ACTIVE
+  if (course.status !== "ACTIVE") {
+    return {
+      recitations: [],
+      groupReportings: [],
+      individualReportings: [],
+    };
+  }
 
   // Batch query all three types in parallel
   const [recitations, groupReportings, individualReportings] =

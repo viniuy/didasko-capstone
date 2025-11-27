@@ -351,12 +351,16 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           startedAt: attendanceStartTime.toISOString(),
         })
       );
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new Event("rfid-session-changed"));
     }
   }, [attendanceStartTime, courseSlug, selectedDateStr]);
 
   // Helper function to clear global active session
   const clearGlobalActiveSession = useCallback(() => {
     localStorage.removeItem(GLOBAL_RFID_SESSION_KEY);
+    // Dispatch custom event to notify other components
+    window.dispatchEvent(new Event("rfid-session-changed"));
   }, []);
 
   const attendanceDateSet = useMemo(() => {
@@ -922,6 +926,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   startedAt: startedAt.toISOString(),
                 })
               );
+              // Dispatch custom event to notify other components
+              window.dispatchEvent(new Event("rfid-session-changed"));
             }
 
             // Use saved timeIn/timeOut values for timer calculations

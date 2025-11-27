@@ -47,12 +47,15 @@ const CourseCard = ({
   course,
   type,
   onNavigate,
+  isDisabled,
+  isRedirecting,
 }: {
   course: Course;
   type: "attendance" | "recitation" | "quiz" | "class-record" | "reporting";
   onNavigate: () => void;
+  isDisabled: boolean;
+  isRedirecting: boolean;
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const href =
@@ -68,8 +71,8 @@ const CourseCard = ({
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (isDisabled || isRedirecting) return;
     onNavigate();
-    setIsLoading(true);
     router.push(href);
   };
 
@@ -99,19 +102,25 @@ const CourseCard = ({
             <Button
               onClick={handleClick}
               variant="secondary"
-              className="bg-[#FAEDCB] text-black text-sm min-w-[120px] cursor-pointer"
-              disabled={isLoading}
+              className="bg-[#FAEDCB] text-black text-sm min-w-[120px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isRedirecting || isDisabled}
             >
-              {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {type === "attendance"
-                ? "View Attendance"
-                : type === "recitation"
-                ? "View Recitation"
-                : type === "quiz"
-                ? "View Quiz"
-                : type === "reporting"
-                ? "View Reporting"
-                : "View Class Record"}
+              {isRedirecting ? (
+                <span className="flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Redirecting...
+                </span>
+              ) : type === "attendance" ? (
+                "View Attendance"
+              ) : type === "recitation" ? (
+                "View Recitation"
+              ) : type === "quiz" ? (
+                "View Quiz"
+              ) : type === "reporting" ? (
+                "View Reporting"
+              ) : (
+                "View Class Record"
+              )}
             </Button>
           </div>
         </CardContent>
@@ -146,6 +155,7 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isNavigating, setIsNavigating] = useState(false);
   const [showRedirectSpinner, setShowRedirectSpinner] = useState(false);
+  const [redirectingSlug, setRedirectingSlug] = useState<string | null>(null);
   const itemsPerPage = 3;
 
   // React Query hook with initialData
@@ -251,7 +261,9 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
     );
   }
 
-  const handleNavigate = () => {
+  const handleNavigate = (slug: string) => {
+    if (redirectingSlug) return;
+    setRedirectingSlug(slug);
     setIsNavigating(true);
     // After fade-out completes, show loading spinner
     setTimeout(() => {
@@ -288,7 +300,11 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
               key={course.id}
               course={course}
               type={type}
-              onNavigate={handleNavigate}
+              onNavigate={() => handleNavigate(course.slug)}
+              isDisabled={
+                redirectingSlug !== null && redirectingSlug !== course.slug
+              }
+              isRedirecting={redirectingSlug === course.slug}
             />
           ))}
         </div>

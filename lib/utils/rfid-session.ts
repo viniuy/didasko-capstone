@@ -27,6 +27,15 @@ export function checkActiveRfidSession(
     const activeSession = localStorage.getItem(GLOBAL_RFID_SESSION_KEY);
     if (activeSession) {
       const session = JSON.parse(activeSession) as ActiveRfidSession;
+      // Debug logging
+      if (process.env.NODE_ENV === "development") {
+        console.log("checkActiveRfidSession:", {
+          courseSlug,
+          sessionCourseSlug: session.courseSlug,
+          match: session.courseSlug === courseSlug,
+          session,
+        });
+      }
       if (session.courseSlug === courseSlug) {
         return session;
       }

@@ -40,7 +40,8 @@ interface GradingTableRowProps {
   handleScoreChange: (
     studentId: string,
     rubricIdx: number,
-    value: number
+    inputValue: string,
+    maxScore: number
   ) => void;
   idx: number;
   onImageUpload: (index: number, file: File) => void;
@@ -182,30 +183,32 @@ const GradingTableRow: React.FC<GradingTableRowProps> = ({
                 </div>
               ) : (
                 <input
-                  type="number"
-                  min="1"
-                  max={Number(activeReport.scoringRange) || 5}
+                  type="text"
                   className="w-full rounded border border-gray-300 px-2 py-1 text-center disabled:opacity-50 disabled:cursor-not-allowed"
                   value={value || ""}
                   onChange={(e) => {
                     const inputValue = e.target.value;
-                    if (inputValue === "") {
-                      handleScoreChange(student.id, rubricIdx, 0);
-                    } else {
-                      const numValue = parseInt(inputValue);
-                      if (
-                        !isNaN(numValue) &&
-                        numValue >= 1 &&
-                        numValue <= Number(activeReport.scoringRange)
-                      ) {
-                        handleScoreChange(student.id, rubricIdx, numValue);
-                      }
-                    }
+                    const maxScore = Number(activeReport.scoringRange) || 5;
+                    handleScoreChange(
+                      student.id,
+                      rubricIdx,
+                      inputValue,
+                      maxScore
+                    );
                   }}
                   onKeyDown={(e) => {
-                    if (["e", "E", "+", "-", "."].includes(e.key)) {
-                      e.preventDefault();
-                    }
+                    const allowed = [
+                      "Backspace",
+                      "Delete",
+                      "ArrowLeft",
+                      "ArrowRight",
+                      "Tab",
+                      "Home",
+                      "End",
+                    ];
+                    if (/^[0-9]$/.test(e.key)) return;
+                    if (allowed.includes(e.key)) return;
+                    e.preventDefault();
                   }}
                   placeholder="—"
                   disabled={isLoading}

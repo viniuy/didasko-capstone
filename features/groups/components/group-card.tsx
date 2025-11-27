@@ -1,4 +1,4 @@
-import React, { startTransition } from "react";
+import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Group } from "@/shared/types/groups";
@@ -22,14 +22,19 @@ interface GroupCardProps {
   courseCode: string;
   courseSection: string;
   onGroupDeleted?: () => void;
+  isRedirecting?: boolean;
+  isDisabled?: boolean;
+  onNavigate?: () => void;
 }
 
 export function GroupCard({
   group,
   courseCode,
   onGroupDeleted,
+  isRedirecting = false,
+  isDisabled = false,
+  onNavigate,
 }: GroupCardProps) {
-  const [isViewing, setIsViewing] = React.useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
   const router = useRouter();
 
@@ -55,11 +60,11 @@ export function GroupCard({
 
   const handleViewGroup = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (isDisabled || isRedirecting) return;
+    if (onNavigate) {
+      onNavigate();
+    }
     router.push(`/main/grading/reporting/${courseCode}/group/${group.id}`);
-    // Update state after navigation starts
-    startTransition(() => {
-      setIsViewing(true);
-    });
   };
 
   const isDeleting = deleteGroupMutation.isPending;
@@ -71,16 +76,14 @@ export function GroupCard({
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-lg z-10 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-[#124A69]" />
-              <p className="text-sm text-[#124A69] font-medium">
-                Disbanding...
-              </p>
+              <p className="text-sm text-[#124A69] font-medium">Deleting...</p>
             </div>
           </div>
         )}
         <button
           onClick={() => setShowConfirmDialog(true)}
           className="absolute top-2 right-2 p-1.5 sm:p-1 rounded-full hover:bg-red-100 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Disband group"
+          title="Delete group"
           disabled={isDeleting}
         >
           <Trash2 className="h-5 w-5 sm:h-4 sm:w-4 text-red-500" />
@@ -115,14 +118,14 @@ export function GroupCard({
           </div>
         )}
         <Button
-          className="w-full bg-[#124A69] text-white font-semibold rounded mt-5 sm:mt-7 text-sm sm:text-base py-5 sm:py-auto touch-manipulation"
+          className="w-full bg-[#124A69] text-white font-semibold rounded mt-5 sm:mt-7 text-sm sm:text-base py-5 sm:py-auto touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleViewGroup}
-          disabled={isViewing || isDeleting}
+          disabled={isRedirecting || isDisabled || isDeleting}
         >
-          {isViewing ? (
+          {isRedirecting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Loading...
+              Redirecting...
             </>
           ) : (
             "View group"
@@ -134,11 +137,11 @@ export function GroupCard({
         <AlertDialogContent className="max-w-[90vw] sm:max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base sm:text-lg">
-              Are you sure you want to disband this group?
+              Are you sure you want to delete this group?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm">
               This action cannot be undone. This will permanently delete the
-              group and remove all student associations.
+              group but you can still link their grades to class record.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col sm:flex-row gap-2">
@@ -150,7 +153,7 @@ export function GroupCard({
               className="bg-[#124A69] hover:bg-gray-600 text-white w-full sm:w-auto"
               disabled={deleteGroupMutation.isPending}
             >
-              {deleteGroupMutation.isPending ? "Deleting..." : "Disband Group"}
+              {deleteGroupMutation.isPending ? "Deleting..." : "Delete Group"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

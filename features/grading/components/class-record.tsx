@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { gradingService } from "@/lib/services/client";
 import React from "react";
+import { saveAs } from "file-saver";
 import {
   Search,
   Loader2,
@@ -25,6 +26,7 @@ import {
 import { SettingsModal } from "./SettingsModal";
 // Dynamic imports for heavy libraries (code-split)
 import PasteGradesModal from "./paste-grades";
+import ExcelJS from "exceljs";
 import {
   Dialog,
   DialogContent,
@@ -1234,11 +1236,38 @@ export function ClassRecordTable({
     const finalsGrade = computeTermGrade(studentId, "FINALS");
     if (!prelimGrade || !midtermGrade || !preFinalsGrade || !finalsGrade)
       return null;
+
+    // Check if any term grade is invalid (has "-" or is NaN)
+    const prelimNum = parseFloat(prelimGrade.numericGrade);
+    const midtermNum = parseFloat(midtermGrade.numericGrade);
+    const preFinalsNum = parseFloat(preFinalsGrade.numericGrade);
+    const finalsNum = parseFloat(finalsGrade.numericGrade);
+
+    // If any term grade is invalid (NaN or "-"), return null
+    if (
+      isNaN(prelimNum) ||
+      isNaN(midtermNum) ||
+      isNaN(preFinalsNum) ||
+      isNaN(finalsNum) ||
+      prelimGrade.numericGrade === "-" ||
+      midtermGrade.numericGrade === "-" ||
+      preFinalsGrade.numericGrade === "-" ||
+      finalsGrade.numericGrade === "-"
+    ) {
+      return null;
+    }
+
     const finalWeighted =
-      parseFloat(prelimGrade.numericGrade) * TERM_WEIGHTS.PRELIM +
-      parseFloat(midtermGrade.numericGrade) * TERM_WEIGHTS.MIDTERM +
-      parseFloat(preFinalsGrade.numericGrade) * TERM_WEIGHTS.PREFINALS +
-      parseFloat(finalsGrade.numericGrade) * TERM_WEIGHTS.FINALS;
+      prelimNum * TERM_WEIGHTS.PRELIM +
+      midtermNum * TERM_WEIGHTS.MIDTERM +
+      preFinalsNum * TERM_WEIGHTS.PREFINALS +
+      finalsNum * TERM_WEIGHTS.FINALS;
+
+    // Double-check the result is valid
+    if (isNaN(finalWeighted)) {
+      return null;
+    }
+
     return {
       grade: finalWeighted.toFixed(2),
       remarks: finalWeighted <= 3.0 ? "PASSED" : "FAILED",
@@ -1298,18 +1327,12 @@ export function ClassRecordTable({
     try {
       toast.loading("Preparing export...");
 
-      // Dynamically import heavy libraries
-      const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
-        import("exceljs"),
-        import("file-saver"),
-      ]);
-
       toast.loading("Generating Excel file...");
 
       if (exportType === "summary") {
-        await exportSummary(term, ExcelJS, saveAs);
+        await exportSummary(term);
       } else {
-        await exportDetails(term, ExcelJS, saveAs);
+        await exportDetails(term);
       }
 
       toast.dismiss();
@@ -1322,11 +1345,7 @@ export function ClassRecordTable({
     }
   };
 
-  const exportSummary = async (
-    term: Term | "SUMMARY",
-    ExcelJS: any,
-    saveAs: any
-  ) => {
+  const exportSummary = async (term: Term | "SUMMARY") => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Class Record");
 
@@ -1378,12 +1397,37 @@ export function ClassRecordTable({
     // Student Rows Start Row 5
     // -----------------------
     filtered.forEach((student) => {
-      const prelim = computeTermGrade(student.id, "PRELIM")?.totalPercent ?? "";
+      // Get term grades and ensure valid values
+      const prelimGrade = computeTermGrade(student.id, "PRELIM");
+      const midtermGrade = computeTermGrade(student.id, "MIDTERM");
+      const prefinalGrade = computeTermGrade(student.id, "PREFINALS");
+      const finalsGrade = computeTermGrade(student.id, "FINALS");
+
+      // Sanitize values: only export if valid (not "-", not NaN)
+      const prelim =
+        prelimGrade?.totalPercent &&
+        prelimGrade.totalPercent !== "-" &&
+        !isNaN(parseFloat(prelimGrade.totalPercent))
+          ? prelimGrade.totalPercent
+          : "";
       const midterm =
-        computeTermGrade(student.id, "MIDTERM")?.totalPercent ?? "";
+        midtermGrade?.totalPercent &&
+        midtermGrade.totalPercent !== "-" &&
+        !isNaN(parseFloat(midtermGrade.totalPercent))
+          ? midtermGrade.totalPercent
+          : "";
       const prefinal =
-        computeTermGrade(student.id, "PREFINALS")?.totalPercent ?? "";
-      const finals = computeTermGrade(student.id, "FINALS")?.totalPercent ?? "";
+        prefinalGrade?.totalPercent &&
+        prefinalGrade.totalPercent !== "-" &&
+        !isNaN(parseFloat(prefinalGrade.totalPercent))
+          ? prefinalGrade.totalPercent
+          : "";
+      const finals =
+        finalsGrade?.totalPercent &&
+        finalsGrade.totalPercent !== "-" &&
+        !isNaN(parseFloat(finalsGrade.totalPercent))
+          ? finalsGrade.totalPercent
+          : "";
 
       const fullName = studentName(student);
       const formattedName = fullName
@@ -1437,16 +1481,24 @@ export function ClassRecordTable({
     saveAs(new Blob([buffer]), fileName);
   };
 
-  const exportDetails = async (
-    term: Term | "SUMMARY",
-    ExcelJS: any,
-    saveAs: any
-  ) => {
+  const exportDetails = async (term: Term | "SUMMARY") => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Class Record");
 
     // Get term config for the selected term
-    const termToExport = term === "SUMMARY" ? activeTerm : term;
+    // If term is "SUMMARY", use activeTerm, but if activeTerm is also "SUMMARY",
+    // default to the first available term (usually "PRELIM")
+    let termToExport: Term;
+    if (term === "SUMMARY") {
+      termToExport =
+        activeTerm === "SUMMARY"
+          ? (Object.keys(termConfigs).find((t) => t !== "SUMMARY") as Term) ||
+            "PRELIM"
+          : (activeTerm as Term);
+    } else {
+      termToExport = term;
+    }
+
     const config = termConfigs[termToExport];
     if (!config) {
       throw new Error(`No configuration found for ${termToExport}`);
@@ -1567,7 +1619,13 @@ export function ClassRecordTable({
         );
       });
 
-      rowData.push(termGrade?.ptWeighted ?? "");
+      // Ensure weighted values are valid
+      const ptWeighted = termGrade?.ptWeighted;
+      rowData.push(
+        ptWeighted && ptWeighted !== "-" && !isNaN(parseFloat(ptWeighted))
+          ? ptWeighted
+          : ""
+      );
 
       // Quiz scores
       quizzes.forEach((quiz) => {
@@ -1591,7 +1649,13 @@ export function ClassRecordTable({
         );
       });
 
-      rowData.push(termGrade?.quizWeighted ?? "");
+      // Ensure weighted values are valid
+      const quizWeighted = termGrade?.quizWeighted;
+      rowData.push(
+        quizWeighted && quizWeighted !== "-" && !isNaN(parseFloat(quizWeighted))
+          ? quizWeighted
+          : ""
+      );
 
       // Exam score
       if (exam) {
@@ -1613,12 +1677,28 @@ export function ClassRecordTable({
         rowData.push(
           showTransmuted ? `${rawScore} (${transmutedScore})` : rawScore ?? ""
         );
-        rowData.push(termGrade?.examWeighted ?? "");
+        // Ensure weighted values are valid
+        const examWeighted = termGrade?.examWeighted;
+        rowData.push(
+          examWeighted &&
+            examWeighted !== "-" &&
+            !isNaN(parseFloat(examWeighted))
+            ? examWeighted
+            : ""
+        );
       }
 
+      // Ensure we export valid values (not NaN, handle "-" properly)
+      const totalPercent = termGrade?.totalPercent;
+      const numericGrade = termGrade?.numericGrade;
+
       rowData.push(
-        termGrade?.totalPercent ?? "",
-        termGrade?.numericGrade ?? ""
+        totalPercent && totalPercent !== "-" && !isNaN(parseFloat(totalPercent))
+          ? totalPercent
+          : "",
+        numericGrade && numericGrade !== "-" && numericGrade !== "(error)"
+          ? numericGrade
+          : ""
       );
 
       const row = ws.addRow(rowData);
@@ -1882,14 +1962,25 @@ export function ClassRecordTable({
                         type="text"
                         className={`w-14 h-8 text-center border rounded text-sm font-medium ${
                           selectedStudentId === student.id
-                            ? finalGrade && parseFloat(finalGrade.grade) > 3.0
+                            ? finalGrade &&
+                              finalGrade.grade &&
+                              !isNaN(parseFloat(finalGrade.grade)) &&
+                              parseFloat(finalGrade.grade) > 3.0
                               ? "border-white text-red-500 bg-transparent"
                               : "border-white text-white bg-transparent"
-                            : finalGrade && parseFloat(finalGrade.grade) > 3.0
+                            : finalGrade &&
+                              finalGrade.grade &&
+                              !isNaN(parseFloat(finalGrade.grade)) &&
+                              parseFloat(finalGrade.grade) > 3.0
                             ? "text-red-500 border-gray-200"
                             : "border-gray-200"
                         }`}
-                        value={finalGrade?.grade || "-"}
+                        value={
+                          finalGrade?.grade &&
+                          !isNaN(parseFloat(finalGrade.grade))
+                            ? finalGrade.grade
+                            : "-"
+                        }
                         readOnly
                         onClick={(e) => e.stopPropagation()}
                       />

@@ -5,8 +5,14 @@ import { Trophy, Medal, Award, TrendingUp, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { statsService } from "@/lib/services/client";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface StudentGrade {
   id: string;
@@ -18,6 +24,12 @@ interface StudentGrade {
   rank: number;
   improvement: number; // Percentage improvement from midterm to final
   isImproving: boolean;
+  termGrades?: {
+    PRELIM: string | null;
+    MIDTERM: string | null;
+    PREFINALS: string | null;
+    FINALS: string | null;
+  };
 }
 
 interface GradeCount {
@@ -131,19 +143,11 @@ const StudentRankCard = ({ student }: { student: StudentGrade }) => {
 };
 
 const LoadingSkeleton = () => (
-  <div className="space-y-3">
-    {[...Array(5)].map((_, i) => (
-      <div key={i} className="bg-white/10 rounded-lg p-3">
-        <div className="flex items-start gap-3">
-          <Skeleton className="h-8 w-8 rounded-full bg-white/20" />
-          <div className="flex-1">
-            <Skeleton className="h-4 w-3/4 bg-white/20 mb-2" />
-            <Skeleton className="h-3 w-1/2 bg-white/20 mb-2" />
-            <Skeleton className="h-2 w-full bg-white/20" />
-          </div>
-        </div>
-      </div>
-    ))}
+  <div className="flex items-center justify-center h-full">
+    <div className="flex flex-col items-center gap-3">
+      <Loader2 className="h-8 w-8 text-white/60 animate-spin" />
+      <p className="text-sm text-white/60">Loading grades...</p>
+    </div>
   </div>
 );
 
@@ -207,6 +211,9 @@ export default function GradingLeaderboard({
   const [gradeCounts, setGradeCounts] = useState<GradeCount[]>([]);
   const [mostImproved, setMostImproved] = useState<StudentGrade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedTerm, setSelectedTerm] = useState<
+    "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
+  >("FINAL");
 
   const fetchLeaderboard = useCallback(
     async (silent = false) => {
@@ -223,7 +230,7 @@ export default function GradingLeaderboard({
         );
         const data = Array.isArray(leaderboardData) ? leaderboardData : [];
 
-        // Calculate grade counts
+        // Calculate grade counts based on selected term
         const gradeCountMap = new Map<string, number>();
         const gradeOrder = [
           "1.00",
@@ -239,27 +246,37 @@ export default function GradingLeaderboard({
         ];
 
         data.forEach((student) => {
-          const numericGrade =
-            student.numericGrade ||
-            (() => {
-              // Fallback: calculate from currentGrade if numericGrade not provided
-              const percent = student.currentGrade;
-              if (percent >= 97.5) return "1.00";
-              if (percent >= 94.5) return "1.25";
-              if (percent >= 91.5) return "1.50";
-              if (percent >= 86.5) return "1.75";
-              if (percent >= 81.5) return "2.00";
-              if (percent >= 76.0) return "2.25";
-              if (percent >= 70.5) return "2.50";
-              if (percent >= 65.0) return "2.75";
-              if (percent >= 59.5) return "3.00";
-              return "5.00";
-            })();
+          let numericGrade: string | null = null;
 
-          gradeCountMap.set(
-            numericGrade,
-            (gradeCountMap.get(numericGrade) || 0) + 1
-          );
+          if (selectedTerm === "FINAL") {
+            // Use final grade
+            numericGrade =
+              student.numericGrade ||
+              (() => {
+                // Fallback: calculate from currentGrade if numericGrade not provided
+                const percent = student.currentGrade;
+                if (percent >= 97.5) return "1.00";
+                if (percent >= 94.5) return "1.25";
+                if (percent >= 91.5) return "1.50";
+                if (percent >= 86.5) return "1.75";
+                if (percent >= 81.5) return "2.00";
+                if (percent >= 76.0) return "2.25";
+                if (percent >= 70.5) return "2.50";
+                if (percent >= 65.0) return "2.75";
+                if (percent >= 59.5) return "3.00";
+                return "5.00";
+              })();
+          } else {
+            // Use term-specific grade
+            numericGrade = student.termGrades?.[selectedTerm] || null;
+          }
+
+          if (numericGrade) {
+            gradeCountMap.set(
+              numericGrade,
+              (gradeCountMap.get(numericGrade) || 0) + 1
+            );
+          }
         });
 
         // Create grade count array in order - show all grades even with 0 count
@@ -288,7 +305,7 @@ export default function GradingLeaderboard({
         }
       }
     },
-    [session?.user?.id, courseSlug]
+    [session?.user?.id, courseSlug, selectedTerm]
   );
 
   useEffect(() => {
@@ -387,6 +404,25 @@ export default function GradingLeaderboard({
           </TabsList>
 
           <TabsContent value="grades" className="flex-1 overflow-y-auto mt-3">
+            <div className="mb-3">
+              <Select
+                value={selectedTerm}
+                onValueChange={(
+                  value: "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
+                ) => setSelectedTerm(value)}
+              >
+                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+                  <SelectValue placeholder="Select term" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FINAL">Final Grade</SelectItem>
+                  <SelectItem value="PRELIM">Prelim</SelectItem>
+                  <SelectItem value="MIDTERM">Midterm</SelectItem>
+                  <SelectItem value="PREFINALS">Pre-Finals</SelectItem>
+                  <SelectItem value="FINALS">Finals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {gradeCounts.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-white/70">No grades available yet</p>

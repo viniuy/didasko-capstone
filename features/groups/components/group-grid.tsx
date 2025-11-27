@@ -55,6 +55,9 @@ export function GroupGrid({
   hasSearchQuery = false,
 }: GroupGridProps) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [redirectingGroupId, setRedirectingGroupId] = useState<string | null>(
+    null
+  );
   const itemsPerPage = 10;
   const totalPages = Math.ceil((groups.length + 1) / itemsPerPage);
 
@@ -128,6 +131,11 @@ export function GroupGrid({
             courseCode={courseCode}
             courseSection={courseSection}
             onGroupDeleted={onGroupAdded}
+            isRedirecting={redirectingGroupId === group.id}
+            isDisabled={
+              redirectingGroupId !== null && redirectingGroupId !== group.id
+            }
+            onNavigate={() => setRedirectingGroupId(group.id)}
           />
         ))}
         {currentPage === totalPages &&

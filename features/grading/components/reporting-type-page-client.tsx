@@ -6,9 +6,9 @@ import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import Link from "next/link";
 import { ArrowLeft, User, Users, Loader2 } from "lucide-react";
-import React, { useState, startTransition } from "react";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface Course {
   id: string;
@@ -30,9 +30,10 @@ export function ReportingTypePageClient({
   courseSlug,
 }: ReportingTypePageClientProps) {
   const [open, setOpen] = React.useState(false);
-  const [isIndividualRedirecting, setIsIndividualRedirecting] =
-    React.useState(false);
-  const [isGroupRedirecting, setIsGroupRedirecting] = React.useState(false);
+  const [redirectingType, setRedirectingType] = React.useState<
+    "individual" | "group" | null
+  >(null);
+  const router = useRouter();
 
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
@@ -44,10 +45,13 @@ export function ReportingTypePageClient({
           <div className="flex flex-col flex-grow px-4">
             <div className="flex-1 overflow-y-auto pb-6">
               <div className="mb-6 flex items-center mt-2 gap-4">
-                <Button asChild variant="ghost" size="icon">
-                  <Link href="/main/grading/reporting">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => router.push("/main/grading/reporting")}
+                  disabled={redirectingType !== null}
+                >
+                  <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
                   <h1 className="text-2xl font-semibold text-[#124A69]">
@@ -77,31 +81,29 @@ export function ReportingTypePageClient({
                         className={`
     w-full cursor-pointer transition-colors
     ${
-      isIndividualRedirecting
+      redirectingType !== null
         ? "bg-gray-400 text-gray-200 cursor-not-allowed hover:bg-gray-400"
         : "bg-[#124A69] hover:bg-gray-800 text-white"
     }
   `}
-                        disabled={isIndividualRedirecting}
-                        asChild
+                        disabled={redirectingType !== null}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (redirectingType !== null) return;
+                          setRedirectingType("individual");
+                          router.push(
+                            `/main/grading/reporting/${courseSlug}/individual`
+                          );
+                        }}
                       >
-                        <Link
-                          href={`/main/grading/reporting/${courseSlug}/individual`}
-                          onClick={() => {
-                            startTransition(() => {
-                              setIsIndividualRedirecting(true);
-                            });
-                          }}
-                        >
-                          {isIndividualRedirecting ? (
-                            <span className="flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Redirecting...
-                            </span>
-                          ) : (
-                            "Select Student"
-                          )}
-                        </Link>
+                        {redirectingType === "individual" ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Redirecting...
+                          </span>
+                        ) : (
+                          "Select Student"
+                        )}
                       </Button>
                     </div>
                   </Card>
@@ -123,31 +125,29 @@ export function ReportingTypePageClient({
                         className={`
     w-full cursor-pointer transition-colors
     ${
-      isGroupRedirecting
+      redirectingType !== null
         ? "bg-gray-400 text-gray-200 cursor-not-allowed hover:bg-gray-400"
         : "bg-[#124A69] hover:bg-gray-800 text-white"
     }
   `}
-                        disabled={isGroupRedirecting}
-                        asChild
+                        disabled={redirectingType !== null}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (redirectingType !== null) return;
+                          setRedirectingType("group");
+                          router.push(
+                            `/main/grading/reporting/${courseSlug}/group/`
+                          );
+                        }}
                       >
-                        <Link
-                          href={`/main/grading/reporting/${courseSlug}/group/`}
-                          onClick={() => {
-                            startTransition(() => {
-                              setIsGroupRedirecting(true);
-                            });
-                          }}
-                        >
-                          {isGroupRedirecting ? (
-                            <span className="flex items-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Redirecting...
-                            </span>
-                          ) : (
-                            "Select Group"
-                          )}
-                        </Link>
+                        {redirectingType === "group" ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Redirecting...
+                          </span>
+                        ) : (
+                          "Select Group"
+                        )}
                       </Button>
                     </div>
                   </Card>

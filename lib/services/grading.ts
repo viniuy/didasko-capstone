@@ -536,6 +536,7 @@ export async function getClassRecordData(courseSlug: string) {
     where: { slug: courseSlug },
     select: {
       id: true,
+      status: true,
       termConfigs: {
         include: {
           assessments: {
@@ -550,6 +551,7 @@ export async function getClassRecordData(courseSlug: string) {
   if (!course) return null;
 
   // Batch remaining queries in parallel (students, assessment scores, criteria links)
+  // Note: criteriaLinks will be empty if course is not ACTIVE (handled by getCriteriaLinks)
   const [students, assessmentScoresResult, criteriaLinks] = await Promise.all([
     // Students
     prisma.student.findMany({

@@ -109,7 +109,6 @@ function computeTermGradeFromScores(
   return totalPercentage;
 }
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -248,15 +247,97 @@ export async function GET(
       return termGrade ? termGrade.grade : null;
     };
 
+    // Term weights for final grade calculation (matching class-record.tsx)
+    const TERM_WEIGHTS = {
+      PRELIM: 0.2,
+      MIDTERM: 0.2,
+      PREFINALS: 0.2,
+      FINALS: 0.4,
+    } as const;
+
+    // Helper: Convert percentage to numeric grade (matching class-record.tsx)
+    const getNumericGradeFromPercent = (totalPercent: number): string => {
+      if (totalPercent >= 97.5) return "1.00";
+      if (totalPercent >= 94.5) return "1.25";
+      if (totalPercent >= 91.5) return "1.50";
+      if (totalPercent >= 86.5) return "1.75";
+      if (totalPercent >= 81.5) return "2.00";
+      if (totalPercent >= 76.0) return "2.25";
+      if (totalPercent >= 70.5) return "2.50";
+      if (totalPercent >= 65.0) return "2.75";
+      if (totalPercent >= 59.5) return "3.00";
+      return "5.00";
+    };
+
+    // Helper: Convert numeric grade string to number
+    const numericGradeToNumber = (numericGrade: string): number => {
+      const num = parseFloat(numericGrade);
+      return isNaN(num) ? 0 : num;
+    };
+
     // Calculate leaderboard data for each student
     const leaderboard = Array.from(studentPerformanceMap.values())
       .map((student) => {
-        // Current grade is the average of all term grades
-        const currentGrade =
-          student.termGrades.length > 0
-            ? student.termGrades.reduce((sum, tg) => sum + tg.grade, 0) /
-              student.termGrades.length
-            : 0;
+        const prelimGrade = getTermGrade(student.termGrades, "PRELIM");
+        const midtermGrade = getTermGrade(student.termGrades, "MIDTERM");
+        const prefinalGrade = getTermGrade(student.termGrades, "PREFINALS");
+        const finalGrade = getTermGrade(student.termGrades, "FINALS");
+
+        // Calculate numeric grades for each term (for per-term counting)
+        const prelimNumeric =
+          prelimGrade !== null ? getNumericGradeFromPercent(prelimGrade) : null;
+        const midtermNumeric =
+          midtermGrade !== null
+            ? getNumericGradeFromPercent(midtermGrade)
+            : null;
+        const prefinalNumeric =
+          prefinalGrade !== null
+            ? getNumericGradeFromPercent(prefinalGrade)
+            : null;
+        const finalNumeric =
+          finalGrade !== null ? getNumericGradeFromPercent(finalGrade) : null;
+
+        // Calculate final grade using weighted formula (matching computeFinalGrade)
+        // Only calculate if all 4 term grades are available
+        let currentGrade = 0;
+        let numericGrade: string | null = null;
+
+        if (
+          prelimGrade !== null &&
+          midtermGrade !== null &&
+          prefinalGrade !== null &&
+          finalGrade !== null
+        ) {
+          // Step 1: Convert each term's percentage to numeric grade
+          const prelimNum = numericGradeToNumber(prelimNumeric!);
+          const midtermNum = numericGradeToNumber(midtermNumeric!);
+          const preFinalsNum = numericGradeToNumber(prefinalNumeric!);
+          const finalsNum = numericGradeToNumber(finalNumeric!);
+
+          // Step 2: Calculate weighted final numeric grade (matching computeFinalGrade logic)
+          const finalWeightedNumeric =
+            prelimNum * TERM_WEIGHTS.PRELIM +
+            midtermNum * TERM_WEIGHTS.MIDTERM +
+            preFinalsNum * TERM_WEIGHTS.PREFINALS +
+            finalsNum * TERM_WEIGHTS.FINALS;
+
+          // Step 3: Store numeric grade for counting (this is what gets counted in the leaderboard)
+          numericGrade = finalWeightedNumeric.toFixed(2);
+
+          // Step 4: Calculate weighted percentage for display (used in GradeBar)
+          // This is the weighted average of term percentages
+          const finalWeightedPercent =
+            prelimGrade * TERM_WEIGHTS.PRELIM +
+            midtermGrade * TERM_WEIGHTS.MIDTERM +
+            prefinalGrade * TERM_WEIGHTS.PREFINALS +
+            finalGrade * TERM_WEIGHTS.FINALS;
+
+          currentGrade = finalWeightedPercent;
+        } else {
+          // If not all term grades are available, still include student for per-term counting
+          // but set currentGrade to 0 so they don't appear in final grade leaderboard
+          currentGrade = 0;
+        }
 
         // Calculate improvement: Compare current term vs average of all previous terms
         // - MIDTERM vs PRELIM
@@ -264,11 +345,6 @@ export async function GET(
         // - FINALS vs average of (PRELIM + MIDTERM + PREFINALS)
         let improvement = 0;
         let isImproving = false;
-
-        const prelimGrade = getTermGrade(student.termGrades, "PRELIM");
-        const midtermGrade = getTermGrade(student.termGrades, "MIDTERM");
-        const prefinalGrade = getTermGrade(student.termGrades, "PREFINALS");
-        const finalGrade = getTermGrade(student.termGrades, "FINALS");
 
         // Sort term grades by term order to get proper progression
         const termOrder = ["PRELIM", "MIDTERM", "PREFINALS", "FINALS"];
@@ -299,34 +375,34 @@ export async function GET(
           }
         }
 
-        // Calculate numeric grade from percentage
-        const getNumericGrade = (totalPercent: number): string => {
-          if (totalPercent >= 97.5) return "1.00";
-          if (totalPercent >= 94.5) return "1.25";
-          if (totalPercent >= 91.5) return "1.50";
-          if (totalPercent >= 86.5) return "1.75";
-          if (totalPercent >= 81.5) return "2.00";
-          if (totalPercent >= 76.0) return "2.25";
-          if (totalPercent >= 70.5) return "2.50";
-          if (totalPercent >= 65.0) return "2.75";
-          if (totalPercent >= 59.5) return "3.00";
-          return "5.00";
-        };
-
         return {
           id: `${student.studentId}-${courseSlug}`,
           studentId: student.studentId,
           studentName: student.studentName,
           studentNumber: student.studentNumber,
-          currentGrade,
-          numericGrade: getNumericGrade(currentGrade),
+          currentGrade, // This is now the weighted percentage (0-100) for display (0 if not all terms available)
+          numericGrade: numericGrade || undefined, // This is the final numeric grade string (e.g., "2.50") for counting
           improvement,
           isImproving,
           rank: 0, // Will be set after sorting
+          // Add term-specific numeric grades for per-term counting
+          termGrades: {
+            PRELIM: prelimNumeric,
+            MIDTERM: midtermNumeric,
+            PREFINALS: prefinalNumeric,
+            FINALS: finalNumeric,
+          },
         };
       })
-      .filter((student) => student.currentGrade > 0) // Only include students with grades
-      .sort((a, b) => b.currentGrade - a.currentGrade);
+      .filter(
+        (student): student is NonNullable<typeof student> => student !== null
+      ) // Include all students (they may have term grades even if not final grade)
+      .sort((a, b) => {
+        // Sort by final grade if available, otherwise by 0
+        const aGrade = a.currentGrade > 0 ? a.currentGrade : 0;
+        const bGrade = b.currentGrade > 0 ? b.currentGrade : 0;
+        return bGrade - aGrade;
+      });
 
     // Assign ranks
     leaderboard.forEach((student, index) => {

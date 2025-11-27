@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { checkActiveRfidSession } from "@/lib/utils/rfid-session";
 import toast from "react-hot-toast";
@@ -24,18 +24,32 @@ export function CourseAccessGuard({
   const router = useRouter();
   const [isBlocked, setIsBlocked] = useState(false);
   const [hasChecked, setHasChecked] = useState(false);
+  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasRedirectedRef = useRef(false);
 
-  useEffect(() => {
+  const checkAndBlock = () => {
     // Academic heads can always access
     if (userRole === "ACADEMIC_HEAD") {
-      setHasChecked(true);
-      return;
+      return false;
     }
 
     // Check for active RFID session
     const activeSession = checkActiveRfidSession(courseSlug);
-    if (activeSession) {
+
+    // Debug logging
+    if (process.env.NODE_ENV === "development") {
+      console.log("CourseAccessGuard check:", {
+        courseSlug,
+        activeSession,
+        isBlocked,
+        hasRedirected: hasRedirectedRef.current,
+        userRole,
+      });
+    }
+
+    if (activeSession && !hasRedirectedRef.current) {
       setIsBlocked(true);
+      hasRedirectedRef.current = true;
       toast.error(
         `Cannot access course: RFID attendance is currently active for this course. Please wait until the attendance session ends.`,
         {
@@ -47,8 +61,55 @@ export function CourseAccessGuard({
       setTimeout(() => {
         router.push("/main/course");
       }, 2000);
+      return true;
     }
+    return false;
+  };
+
+  useEffect(() => {
+    // Academic heads can always access
+    if (userRole === "ACADEMIC_HEAD") {
+      setHasChecked(true);
+      return;
+    }
+
+    // Initial check
+    const wasBlocked = checkAndBlock();
     setHasChecked(true);
+
+    // Set up periodic checks (every 1 second) to catch sessions that start after mount
+    checkIntervalRef.current = setInterval(() => {
+      checkAndBlock();
+    }, 1000);
+
+    // Listen for storage changes (when session is created/removed in another tab/window)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key === "attendance:global:activeRfidSession" ||
+        e.key === null // null means all keys changed
+      ) {
+        checkAndBlock();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    // Also listen for custom events (for same-tab changes)
+    const handleCustomStorageChange = () => {
+      checkAndBlock();
+    };
+    window.addEventListener("rfid-session-changed", handleCustomStorageChange);
+
+    return () => {
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener(
+        "rfid-session-changed",
+        handleCustomStorageChange
+      );
+    };
   }, [courseSlug, userRole, router]);
 
   // Show loading state while checking
