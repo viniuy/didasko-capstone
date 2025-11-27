@@ -98,39 +98,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch logs - if no pagination params, return all logs
+    // Fetch logs - always enforce pagination to prevent connection pool exhaustion
+    // Default to page 1 if not specified, with a maximum limit of 1000 records
     const shouldPaginate = searchParams.has("p") || searchParams.has("page");
+    const defaultPageSize = 100;
+    const maxPageSize = 1000;
+    const requestedPageSize = shouldPaginate ? pageSize : defaultPageSize;
+    const effectivePageSize = Math.min(requestedPageSize, maxPageSize);
+    const effectiveSkip = shouldPaginate ? skip : 0;
 
     let logs;
     let totalCount;
     let totalPages = 0;
 
-    if (shouldPaginate) {
-      [logs, totalCount] = await Promise.all([
-        prisma.auditLog.findMany({
-          where,
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-          skip,
-          take: pageSize,
-        }),
-        prisma.auditLog.count({ where }),
-      ]);
-
-      totalPages = Math.ceil(totalCount / pageSize);
-    } else {
-      // Return all logs without pagination
-      logs = await prisma.auditLog.findMany({
+    // Always use pagination to prevent loading all records
+    [logs, totalCount] = await Promise.all([
+      prisma.auditLog.findMany({
         where,
         include: {
           user: {
@@ -144,15 +127,21 @@ export async function GET(request: NextRequest) {
         orderBy: {
           createdAt: "desc",
         },
-      });
-      totalCount = logs.length;
-    }
+        skip: effectiveSkip,
+        take: effectivePageSize,
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+
+    totalPages = Math.ceil(totalCount / effectivePageSize);
 
     return NextResponse.json({
       logs,
       currentPage: shouldPaginate ? page : 1,
-      totalPages: shouldPaginate ? totalPages : 1,
+      totalPages,
       totalCount,
+      pageSize: effectivePageSize,
+      hasMore: effectiveSkip + effectivePageSize < totalCount,
     });
   } catch (error: any) {
     console.error("Error fetching audit logs:", error);

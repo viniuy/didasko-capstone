@@ -28,11 +28,22 @@ const getProviders = () => {
     }
   }
 
+  // Ensure NEXTAUTH_URL is set for proper redirect URI construction
+  // NextAuth automatically constructs: ${NEXTAUTH_URL}/api/auth/callback/azure-ad
+  // This must match exactly with Azure AD app registration redirect URI
+  if (!process.env.NEXTAUTH_URL) {
+    console.warn(
+      "NEXTAUTH_URL is not set. Azure AD OAuth may fail. Set it in Vercel environment variables."
+    );
+  }
+
   return [
     AzureADProvider({
       clientId: process.env.AZURE_AD_CLIENT_ID!,
       clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
       tenantId: "common",
+      // redirectUri is automatically constructed by NextAuth from NEXTAUTH_URL
+      // Ensure NEXTAUTH_URL matches Azure AD app registration redirect URI exactly
       authorization: {
         params: {
           scope: "openid profile email offline_access",
@@ -120,82 +131,120 @@ const handler = NextAuth({
         user.role = dbUser.role;
         user.name = dbUser.name;
 
-        // Link Azure AD account
+        // Link Azure AD account with idempotency protection and transaction
         if (account?.provider === "azure-ad" && account.providerAccountId) {
-          // Check if account exists with this provider and providerAccountId (unique constraint)
-          const existingAccount = await prisma.account.findUnique({
-            where: {
-              provider_providerAccountId: {
-                provider: "azure-ad",
-                providerAccountId: account.providerAccountId,
-              },
-            },
-          });
+          // Use transaction to prevent race conditions and ensure atomicity
+          await prisma.$transaction(
+            async (tx) => {
+              // Check if account exists with this provider and providerAccountId (unique constraint)
+              // This acts as an idempotency check - if already processed, skip
+              const existingAccount = await tx.account.findUnique({
+                where: {
+                  provider_providerAccountId: {
+                    provider: "azure-ad",
+                    providerAccountId: account.providerAccountId,
+                  },
+                },
+                select: {
+                  userId: true,
+                  access_token: true,
+                },
+              });
 
-          if (existingAccount) {
-            // Account already exists - update it if userId is different or tokens need refresh
-            if (existingAccount.userId !== dbUser.id) {
-              // Account is linked to a different user - update to current user
-              await prisma.account.update({
-                where: {
-                  provider_providerAccountId: {
-                    provider: "azure-ad",
-                    providerAccountId: account.providerAccountId,
-                  },
-                },
-                data: {
-                  userId: dbUser.id,
-                  access_token: account.access_token,
-                  refresh_token: account.refresh_token,
-                  expires_at: account.expires_at,
-                  token_type: account.token_type,
-                  scope: account.scope,
-                  id_token: account.id_token,
-                  session_state: account.session_state,
-                },
-              });
-              console.info(
-                `Updated Azure AD account link for ${user.email} (was linked to different user)`
-              );
-            } else {
-              // Same user - just update tokens
-              await prisma.account.update({
-                where: {
-                  provider_providerAccountId: {
-                    provider: "azure-ad",
-                    providerAccountId: account.providerAccountId,
-                  },
-                },
-                data: {
-                  access_token: account.access_token,
-                  refresh_token: account.refresh_token,
-                  expires_at: account.expires_at,
-                  token_type: account.token_type,
-                  scope: account.scope,
-                  id_token: account.id_token,
-                  session_state: account.session_state,
-                },
-              });
+              if (existingAccount) {
+                // Account already exists - check if this is a duplicate callback
+                // If tokens are recent (within last 5 seconds), this might be a duplicate
+                // Only update if userId changed or if tokens are significantly different
+                if (existingAccount.userId !== dbUser.id) {
+                  // Account is linked to a different user - update to current user
+                  await tx.account.update({
+                    where: {
+                      provider_providerAccountId: {
+                        provider: "azure-ad",
+                        providerAccountId: account.providerAccountId,
+                      },
+                    },
+                    data: {
+                      userId: dbUser.id,
+                      access_token: account.access_token,
+                      refresh_token: account.refresh_token,
+                      expires_at: account.expires_at,
+                      token_type: account.token_type,
+                      scope: account.scope,
+                      id_token: account.id_token,
+                      session_state: account.session_state,
+                    },
+                  });
+                  console.info(
+                    `Updated Azure AD account link for ${user.email} (was linked to different user)`
+                  );
+                } else if (
+                  existingAccount.access_token !== account.access_token
+                ) {
+                  // Same user, but tokens changed - update tokens
+                  await tx.account.update({
+                    where: {
+                      provider_providerAccountId: {
+                        provider: "azure-ad",
+                        providerAccountId: account.providerAccountId,
+                      },
+                    },
+                    data: {
+                      access_token: account.access_token,
+                      refresh_token: account.refresh_token,
+                      expires_at: account.expires_at,
+                      token_type: account.token_type,
+                      scope: account.scope,
+                      id_token: account.id_token,
+                      session_state: account.session_state,
+                    },
+                  });
+                } else {
+                  // Duplicate callback - tokens are the same, skip update
+                  console.info(
+                    `Skipping duplicate Azure AD callback for ${user.email} (tokens unchanged)`
+                  );
+                }
+              } else {
+                // Account doesn't exist - create it (idempotent via unique constraint)
+                try {
+                  await tx.account.create({
+                    data: {
+                      userId: dbUser.id,
+                      type: "oauth",
+                      provider: "azure-ad",
+                      providerAccountId: account.providerAccountId,
+                      access_token: account.access_token,
+                      refresh_token: account.refresh_token,
+                      expires_at: account.expires_at,
+                      token_type: account.token_type,
+                      scope: account.scope,
+                      id_token: account.id_token,
+                      session_state: account.session_state,
+                    },
+                  });
+                  console.info(`Linked Azure AD account for ${user.email}`);
+                } catch (createError: any) {
+                  // If account was created between check and create (race condition),
+                  // the unique constraint will prevent duplicate
+                  if (
+                    createError.code === "P2002" &&
+                    createError.meta?.target?.includes("providerAccountId")
+                  ) {
+                    console.info(
+                      `Azure AD account already exists for ${user.email} (race condition handled)`
+                    );
+                  } else {
+                    throw createError;
+                  }
+                }
+              }
+            },
+            {
+              maxWait: 5000, // Maximum time to wait for a transaction slot (5 seconds)
+              timeout: 10000, // Maximum time the transaction can run (10 seconds)
             }
-          } else {
-            // Account doesn't exist - create it
-            await prisma.account.create({
-              data: {
-                userId: dbUser.id,
-                type: "oauth",
-                provider: "azure-ad",
-                providerAccountId: account.providerAccountId,
-                access_token: account.access_token,
-                refresh_token: account.refresh_token,
-                expires_at: account.expires_at,
-                token_type: account.token_type,
-                scope: account.scope,
-                id_token: account.id_token,
-                session_state: account.session_state,
-              },
-            });
-            console.info(`Linked Azure AD account for ${user.email}`);
-          }
+          );
         }
 
         console.info(`Sign-in success for ${user.email}`);

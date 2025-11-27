@@ -109,7 +109,6 @@ function computeTermGradeFromScores(
   return totalPercentage;
 }
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -142,17 +141,38 @@ export async function GET(request: Request) {
 async function getLeaderboardData(facultyId: string, limit: number) {
   return unstable_cache(
     async (faculty: string, topLimit: number) => {
+      // Add timeout protection wrapper to prevent hanging queries
+      const queryWithTimeout = async <T>(
+        promise: Promise<T>,
+        timeoutMs: number = 25000
+      ): Promise<T> => {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Query timeout")), timeoutMs)
+        );
+        return Promise.race([promise, timeout]);
+      };
+
+      // Constants for query limits to prevent connection pool exhaustion
+      const MAX_COURSES = 50; // Max active courses per faculty
+      const MAX_TERM_GRADES = 10000; // Max term grades to load
+      const MAX_TERM_CONFIGS = 100; // Max term configs per faculty
+      const BATCH_SIZE = 5; // Batch size for parallel assessment score queries
+
       // Get course IDs for the faculty (optimized query)
-    const courses = await prisma.course.findMany({
-      where: {
-          facultyId: faculty,
-        status: "ACTIVE",
-      },
+      const courses = await queryWithTimeout(
+        prisma.course.findMany({
+          where: {
+            facultyId: faculty,
+            status: "ACTIVE",
+          },
           select: {
             id: true,
-          slug: true,
-        },
-      });
+            slug: true,
+          },
+          take: MAX_COURSES, // Limit to prevent excessive queries
+        }),
+        20000 // 20 second timeout for course query
+      );
 
       const courseIds = courses.map((c) => c.id);
       if (courseIds.length === 0) {
@@ -160,73 +180,97 @@ async function getLeaderboardData(facultyId: string, limit: number) {
       }
 
       // Get all term grades with student info in a single query (database aggregation)
-      const termGrades = await prisma.termGrade.findMany({
-        where: {
-          termConfig: {
-            courseId: { in: courseIds },
+      // Add limit to prevent loading excessive data (max 10,000 records)
+      // This is reasonable for a faculty with many courses and students
+      const termGrades = await queryWithTimeout(
+        prisma.termGrade.findMany({
+          where: {
+            termConfig: {
+              courseId: { in: courseIds },
+            },
+            totalPercentage: { not: null },
           },
-          totalPercentage: { not: null },
-        },
-        select: {
-          studentId: true,
-          totalPercentage: true,
-          termConfig: {
-            select: {
-              term: true,
+          select: {
+            studentId: true,
+            totalPercentage: true,
+            termConfig: {
+              select: {
+                term: true,
+              },
+            },
+            student: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                studentId: true,
+              },
             },
           },
-                student: {
-                  select: {
-                    id: true,
-                    firstName: true,
-                    lastName: true,
-                    studentId: true,
-          },
-        },
-      },
-    });
+          take: MAX_TERM_GRADES, // Limit to prevent connection pool exhaustion
+        }),
+        20000 // 20 second timeout for term grades query
+      );
 
       // Get assessment scores for computing missing term grades
-    const allAssessmentScores: Record<string, Record<string, any>> = {};
-    await Promise.all(
-      courses.map(async (course) => {
-        const scores = await getAssessmentScores(course.slug);
-        if (scores) {
-          allAssessmentScores[course.slug] = scores;
-        }
-      })
-    );
+      // Limit concurrent queries to prevent connection pool exhaustion
+      // Process courses in batches to avoid overwhelming the database
+      const allAssessmentScores: Record<string, Record<string, any>> = {};
+      for (let i = 0; i < courses.length; i += BATCH_SIZE) {
+        const batch = courses.slice(i, i + BATCH_SIZE);
+        await Promise.all(
+          batch.map(async (course) => {
+            try {
+              const scores = await getAssessmentScores(course.slug);
+              if (scores) {
+                allAssessmentScores[course.slug] = scores;
+              }
+            } catch (error) {
+              console.error(
+                `Error fetching assessment scores for course ${course.slug}:`,
+                error
+              );
+              // Continue with other courses even if one fails
+            }
+          })
+        );
+      }
 
       // Get term configs for computing grades (only what we need)
-      const termConfigs = await prisma.termConfiguration.findMany({
-        where: {
-          courseId: { in: courseIds },
-        },
-        include: {
-          assessments: {
-            where: { enabled: true },
-            orderBy: [{ type: "asc" }, { order: "asc" }],
+      // Add reasonable limit to prevent excessive data loading
+      const termConfigs = await queryWithTimeout(
+        prisma.termConfiguration.findMany({
+          where: {
+            courseId: { in: courseIds },
           },
-          course: {
-            select: { slug: true },
+          include: {
+            assessments: {
+              where: { enabled: true },
+              orderBy: [{ type: "asc" }, { order: "asc" }],
+            },
+            course: {
+              select: { slug: true },
+            },
           },
-        },
-      });
+          take: MAX_TERM_CONFIGS, // Limit to prevent excessive data loading
+        }),
+        20000 // 20 second timeout for term configs query
+      );
 
       // Build student performance map using database data (O(n) instead of O(n³))
-    const studentPerformanceMap = new Map<
-      string,
-      {
-        studentId: string;
-        studentName: string;
-        studentNumber: string;
-        totalGrades: number[];
-        prelimsGrades: number[];
-        midtermGrades: number[];
-        prefinalsGrades: number[];
-        finalsGrades: number[];
-      }
-    >();
+      const studentPerformanceMap = new Map<
+        string,
+        {
+          studentId: string;
+          studentName: string;
+          studentNumber: string;
+          totalGrades: number[];
+          prelimsGrades: number[];
+          midtermGrades: number[];
+          prefinalsGrades: number[];
+          finalsGrades: number[];
+        }
+      >();
 
       // Process term grades from database (already computed)
       termGrades.forEach((tg) => {
@@ -260,7 +304,7 @@ async function getLeaderboardData(facultyId: string, limit: number) {
           studentData.prefinalsGrades.push(grade);
         } else if (term === "FINALS") {
           studentData.finalsGrades.push(grade);
-          }
+        }
       });
 
       // Compute missing term grades from assessment scores (only for valid configs)
@@ -298,10 +342,10 @@ async function getLeaderboardData(facultyId: string, limit: number) {
           if (hasGrade) continue;
 
           const grade = computeTermGradeFromScores(
-              termConfig,
-              courseAssessmentScores,
+            termConfig,
+            courseAssessmentScores,
             student.id
-            );
+          );
 
           if (grade !== null) {
             const studentKey = student.id;
@@ -335,110 +379,110 @@ async function getLeaderboardData(facultyId: string, limit: number) {
         }
       }
 
-    // Calculate averages and improvements
-    const leaderboard = Array.from(studentPerformanceMap.values())
-      .map((student) => {
-        // Calculate current grade (average of all term grades)
-        const currentGrade =
-          student.totalGrades.length > 0
-            ? student.totalGrades.reduce((a, b) => a + b, 0) /
-              student.totalGrades.length
-            : 0;
+      // Calculate averages and improvements
+      const leaderboard = Array.from(studentPerformanceMap.values())
+        .map((student) => {
+          // Calculate current grade (average of all term grades)
+          const currentGrade =
+            student.totalGrades.length > 0
+              ? student.totalGrades.reduce((a, b) => a + b, 0) /
+                student.totalGrades.length
+              : 0;
 
-        // Calculate improvement: Compare latest term vs average of all previous terms
-        // Build term progression array
-        const termProgression: { term: string; avg: number }[] = [];
-        if (student.prelimsGrades.length > 0) {
-          termProgression.push({
-            term: "PRELIM",
-            avg:
-              student.prelimsGrades.reduce((a, b) => a + b, 0) /
-              student.prelimsGrades.length,
-          });
-        }
-        if (student.midtermGrades.length > 0) {
-          termProgression.push({
-            term: "MIDTERM",
-            avg:
-              student.midtermGrades.reduce((a, b) => a + b, 0) /
-              student.midtermGrades.length,
-          });
-        }
-        if (student.prefinalsGrades.length > 0) {
-          termProgression.push({
-            term: "PREFINALS",
-            avg:
-              student.prefinalsGrades.reduce((a, b) => a + b, 0) /
-              student.prefinalsGrades.length,
-          });
-        }
-        if (student.finalsGrades.length > 0) {
-          termProgression.push({
-            term: "FINALS",
-            avg:
-              student.finalsGrades.reduce((a, b) => a + b, 0) /
-              student.finalsGrades.length,
-          });
-        }
-
-        let improvement = 0;
-        let isImproving = false;
-
-        // Compare latest term vs average of all previous terms
-        if (termProgression.length >= 2) {
-          const latestTerm = termProgression[termProgression.length - 1];
-          const previousTerms = termProgression.slice(0, -1);
-
-          if (previousTerms.length > 0) {
-            const avgPrevious =
-              previousTerms.reduce((sum, t) => sum + t.avg, 0) /
-              previousTerms.length;
-            const absoluteImprovement = latestTerm.avg - avgPrevious;
-
-            if (avgPrevious > 0) {
-              improvement = (absoluteImprovement / avgPrevious) * 100;
-            } else if (absoluteImprovement > 0) {
-              improvement = absoluteImprovement * 10; // Cap at reasonable value
-            }
-
-            isImproving = absoluteImprovement > 0;
+          // Calculate improvement: Compare latest term vs average of all previous terms
+          // Build term progression array
+          const termProgression: { term: string; avg: number }[] = [];
+          if (student.prelimsGrades.length > 0) {
+            termProgression.push({
+              term: "PRELIM",
+              avg:
+                student.prelimsGrades.reduce((a, b) => a + b, 0) /
+                student.prelimsGrades.length,
+            });
           }
-        }
+          if (student.midtermGrades.length > 0) {
+            termProgression.push({
+              term: "MIDTERM",
+              avg:
+                student.midtermGrades.reduce((a, b) => a + b, 0) /
+                student.midtermGrades.length,
+            });
+          }
+          if (student.prefinalsGrades.length > 0) {
+            termProgression.push({
+              term: "PREFINALS",
+              avg:
+                student.prefinalsGrades.reduce((a, b) => a + b, 0) /
+                student.prefinalsGrades.length,
+            });
+          }
+          if (student.finalsGrades.length > 0) {
+            termProgression.push({
+              term: "FINALS",
+              avg:
+                student.finalsGrades.reduce((a, b) => a + b, 0) /
+                student.finalsGrades.length,
+            });
+          }
 
-        // Calculate numeric grade from percentage
-        const getNumericGrade = (totalPercent: number): string => {
-          if (totalPercent >= 97.5) return "1.00";
-          if (totalPercent >= 94.5) return "1.25";
-          if (totalPercent >= 91.5) return "1.50";
-          if (totalPercent >= 86.5) return "1.75";
-          if (totalPercent >= 81.5) return "2.00";
-          if (totalPercent >= 76.0) return "2.25";
-          if (totalPercent >= 70.5) return "2.50";
-          if (totalPercent >= 65.0) return "2.75";
-          if (totalPercent >= 59.5) return "3.00";
-          return "5.00";
-        };
+          let improvement = 0;
+          let isImproving = false;
 
-        return {
-          id: `${student.studentId}-aggregate`,
-          studentId: student.studentId,
-          studentName: student.studentName,
-          studentNumber: student.studentNumber,
-          currentGrade,
-          numericGrade: getNumericGrade(currentGrade),
-          improvement,
-          isImproving,
-          rank: 0, // Will be set after sorting
-        };
-      })
-      .filter((student) => student.currentGrade > 0) // Only include students with grades
+          // Compare latest term vs average of all previous terms
+          if (termProgression.length >= 2) {
+            const latestTerm = termProgression[termProgression.length - 1];
+            const previousTerms = termProgression.slice(0, -1);
+
+            if (previousTerms.length > 0) {
+              const avgPrevious =
+                previousTerms.reduce((sum, t) => sum + t.avg, 0) /
+                previousTerms.length;
+              const absoluteImprovement = latestTerm.avg - avgPrevious;
+
+              if (avgPrevious > 0) {
+                improvement = (absoluteImprovement / avgPrevious) * 100;
+              } else if (absoluteImprovement > 0) {
+                improvement = absoluteImprovement * 10; // Cap at reasonable value
+              }
+
+              isImproving = absoluteImprovement > 0;
+            }
+          }
+
+          // Calculate numeric grade from percentage
+          const getNumericGrade = (totalPercent: number): string => {
+            if (totalPercent >= 97.5) return "1.00";
+            if (totalPercent >= 94.5) return "1.25";
+            if (totalPercent >= 91.5) return "1.50";
+            if (totalPercent >= 86.5) return "1.75";
+            if (totalPercent >= 81.5) return "2.00";
+            if (totalPercent >= 76.0) return "2.25";
+            if (totalPercent >= 70.5) return "2.50";
+            if (totalPercent >= 65.0) return "2.75";
+            if (totalPercent >= 59.5) return "3.00";
+            return "5.00";
+          };
+
+          return {
+            id: `${student.studentId}-aggregate`,
+            studentId: student.studentId,
+            studentName: student.studentName,
+            studentNumber: student.studentNumber,
+            currentGrade,
+            numericGrade: getNumericGrade(currentGrade),
+            improvement,
+            isImproving,
+            rank: 0, // Will be set after sorting
+          };
+        })
+        .filter((student) => student.currentGrade > 0) // Only include students with grades
         .sort((a, b) => b.currentGrade - a.currentGrade)
         .slice(0, topLimit); // Apply pagination
 
-    // Assign ranks
-    leaderboard.forEach((student, index) => {
-      student.rank = index + 1;
-    });
+      // Assign ranks
+      leaderboard.forEach((student, index) => {
+        student.rank = index + 1;
+      });
 
       return leaderboard;
     },
