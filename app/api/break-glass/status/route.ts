@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { getBreakGlassSession, isBreakGlassActive } from "@/lib/breakGlass";
 import { requireAdmin, handleAuthError } from "@/lib/authz";
 import { withLogging } from "@/lib/withLogging";
-
+import { prisma } from "@/lib/prisma";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -27,7 +27,6 @@ export const GET = withLogging(
 
       if (session.user.role === "ACADEMIC_HEAD") {
         // Academic Head can see all active break-glass sessions
-        const { prisma } = await import("@/lib/prisma");
         const activeSessions = await prisma.breakGlassSession.findMany({
           include: {
             user: {

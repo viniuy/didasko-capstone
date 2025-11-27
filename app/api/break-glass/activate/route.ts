@@ -5,7 +5,7 @@ import { activateBreakGlass } from "@/lib/breakGlass";
 import { requireAdmin, requirePermission, handleAuthError } from "@/lib/authz";
 import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
-
+import { prisma } from "@/lib/prisma";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -48,7 +48,6 @@ export const POST = withLogging(
       }
 
       // Verify the selected user is a Faculty member
-      const { prisma } = await import("@/lib/prisma");
       const facultyUser = await prisma.user.findUnique({
         where: { id: facultyUserId },
         select: { id: true, role: true, name: true, email: true },

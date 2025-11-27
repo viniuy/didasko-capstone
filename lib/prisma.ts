@@ -27,12 +27,6 @@ if (!global.prisma) {
 // This is critical for connection pool management
 if (!global.prisma) {
   global.prisma = prisma;
-
-  // Ensure connection is established on initialization
-  // This prevents "Engine is not yet connected" errors
-  prisma.$connect().catch((error) => {
-    console.error("Failed to connect to database:", error);
-  });
 }
 
 // Ensure connections are properly managed

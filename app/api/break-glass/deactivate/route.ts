@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { deactivateBreakGlass } from "@/lib/breakGlass";
 import { requireAdmin, handleAuthError } from "@/lib/authz";
 import { withLogging } from "@/lib/withLogging";
-
+import { prisma } from "@/lib/prisma";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -37,7 +37,6 @@ export const POST = withLogging(
         await deactivateBreakGlass(userId, session.user.id);
       } else if (session.user.role === "ACADEMIC_HEAD") {
         // Academic Head can deactivate any break-glass session they activated
-        const { prisma } = await import("@/lib/prisma");
         const sessionData = await prisma.breakGlassSession.findUnique({
           where: { userId },
         });

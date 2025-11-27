@@ -595,6 +595,8 @@ export function CourseDataTable({
   const [scheduleDialogMode, setScheduleDialogMode] = useState<
     "create" | "edit" | "import"
   >("import");
+  const [isEditingCourse, setIsEditingCourse] = useState(false);
+  const [isEditingSchedule, setIsEditingSchedule] = useState(false);
 
   // Import/Export State
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -1004,6 +1006,7 @@ export function CourseDataTable({
   // Course action handlers
   const handleEditCourse = (course: Course) => {
     setEditingCourse(course);
+    setIsEditingCourse(true);
   };
 
   const handleAddSchedule = (course: Course) => {
@@ -1011,6 +1014,7 @@ export function CourseDataTable({
     setImportedCoursesForSchedule([course]);
     setScheduleDialogMode("edit");
     setShowScheduleAssignment(true);
+    setIsEditingSchedule(true);
   };
 
   const handleViewDetails = (course: Course) => {
@@ -2709,10 +2713,25 @@ export function CourseDataTable({
       )}
 
       <div
-        className={`flex flex-col flex-grow transition-opacity duration-200 ${
+        className={`flex flex-col flex-grow transition-opacity duration-200 relative ${
           isRedirecting ? "opacity-0" : "opacity-100"
         }`}
       >
+        {/* Loading Overlay for Course/Schedule Operations */}
+        {(isEditingCourse || isEditingSchedule) && (
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69]"></div>
+              <p className="text-sm font-medium text-[#124A69]">
+                {isEditingCourse && isEditingSchedule
+                  ? "Creating course and schedules..."
+                  : isEditingCourse
+                  ? "Saving course..."
+                  : "Saving schedules..."}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[500px] md:min-h-[590px] overflow-x-visible">
           <h1 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
             Course Management Dashboard
@@ -2812,10 +2831,12 @@ export function CourseDataTable({
                         // Store course data and open schedule dialog
                         // Course is NOT created yet - waiting for schedules
                         if (courseData) {
+                          setIsEditingCourse(true);
                           setPendingCourseData(courseData);
                           setImportedCoursesForSchedule([courseData]);
                           setScheduleDialogMode("create");
                           setShowScheduleAssignment(true);
+                          setIsEditingSchedule(true);
                         }
                       }}
                       faculties={faculties}
@@ -3098,10 +3119,12 @@ export function CourseDataTable({
                           mode="add"
                           onSuccess={async (courseData) => {
                             if (courseData) {
+                              setIsEditingCourse(true);
                               setPendingCourseData(courseData);
                               setImportedCoursesForSchedule([courseData]);
                               setScheduleDialogMode("create");
                               setShowScheduleAssignment(true);
+                              setIsEditingSchedule(true);
                             }
                           }}
                           faculties={faculties}
@@ -3229,6 +3252,11 @@ export function CourseDataTable({
                 // The dialog will call onComplete() itself when saving, not when canceling
                 if (!open) {
                   setPendingCourseData(null);
+                  setIsEditingSchedule(false);
+                  // If we were creating a course, also clear course editing state
+                  if (scheduleDialogMode === "create") {
+                    setIsEditingCourse(false);
+                  }
                 }
               }}
               courses={
@@ -3236,7 +3264,14 @@ export function CourseDataTable({
                   ? [pendingCourseData]
                   : importedCoursesForSchedule
               }
-              onComplete={handleScheduleAssignmentComplete}
+              onComplete={(importResults) => {
+                setIsEditingSchedule(false);
+                // If we were creating a course, also clear course editing state
+                if (scheduleDialogMode === "create") {
+                  setIsEditingCourse(false);
+                }
+                handleScheduleAssignmentComplete(importResults);
+              }}
               mode={scheduleDialogMode}
               maxActiveCourses={MAX_ACTIVE_COURSES}
               currentActiveCount={activeCoursesCount}
@@ -3573,14 +3608,23 @@ export function CourseDataTable({
                 mode="edit"
                 course={editingCourse}
                 onSuccess={() => {
+                  setIsEditingCourse(false);
                   refreshTableData(true);
                   setEditingCourse(null);
+                }}
+                onClose={() => {
+                  setIsEditingCourse(false);
                 }}
                 faculties={faculties}
                 userId={userId}
                 userRole={userRole}
                 open={!!editingCourse}
-                onOpenChange={(open) => !open && setEditingCourse(null)}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    setIsEditingCourse(false);
+                    setEditingCourse(null);
+                  }
+                }}
               />
             )}
           </div>
