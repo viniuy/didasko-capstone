@@ -2,7 +2,7 @@
 import { useSession } from "next-auth/react";
 import { CourseSchedule } from "@prisma/client";
 import { ScheduleResponse } from "@/shared/types/schedule";
-import { useFacultySchedules } from "@/lib/hooks/queries";
+import { useFacultySchedules, useActiveCourses } from "@/lib/hooks/queries";
 
 const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -35,32 +35,99 @@ export default function WeeklySchedule({
     weekday: "short",
   });
 
-  // React Query hook
+  // Fetch all courses for the faculty member
+  const {
+    data: coursesData,
+    isLoading: coursesLoading,
+    error: coursesError,
+  } = useActiveCourses({
+    filters: { facultyId: teacherInfo?.id },
+  });
+
+  // Fetch all schedules for the faculty member
   const {
     data: schedulesData,
-    isLoading: loading,
+    isLoading: schedulesLoading,
     error: queryError,
-  } = useFacultySchedules(teacherInfo?.id, { limit: 100 });
+  } = useFacultySchedules(teacherInfo?.id, { limit: 1000 });
+
+  const loading = coursesLoading || schedulesLoading;
+  const error =
+    queryError || coursesError
+      ? queryError instanceof Error
+        ? queryError.message
+        : coursesError instanceof Error
+        ? coursesError.message
+        : "Failed to load data"
+      : null;
 
   const schedules = (schedulesData?.schedules || []) as ScheduleWithCourse[];
-  const error = queryError
-    ? queryError instanceof Error
-      ? queryError.message
-      : "Failed to load schedules"
-    : null;
+  const allCourses = (coursesData?.courses || []) as Array<{
+    id: string;
+    code: string;
+    title: string;
+    room: string;
+    semester: string;
+    section: string;
+  }>;
 
-  // Group schedules by course ID
-  const groupedByCourse = schedules.reduce((acc, schedule) => {
+  // Create a map of course IDs to schedules
+  const schedulesByCourseId = schedules.reduce((acc, schedule) => {
     const courseId = schedule.course.id;
     if (!acc[courseId]) {
-      acc[courseId] = {
-        course: schedule.course,
-        schedules: [],
-      };
+      acc[courseId] = [];
     }
-    acc[courseId].schedules.push(schedule);
+    acc[courseId].push(schedule);
     return acc;
-  }, {} as Record<string, { course: ScheduleWithCourse["course"]; schedules: ScheduleWithCourse[] }>);
+  }, {} as Record<string, ScheduleWithCourse[]>);
+
+  // Group by course ID, including courses without schedules
+  const groupedByCourse = allCourses.reduce(
+    (
+      acc: Record<
+        string,
+        {
+          course: ScheduleWithCourse["course"];
+          schedules: ScheduleWithCourse[];
+        }
+      >,
+      course: {
+        id: string;
+        code: string;
+        title: string;
+        room: string;
+        semester: string;
+        section: string;
+      }
+    ) => {
+      const courseId = course.id;
+      const courseSchedules = schedulesByCourseId[courseId] || [];
+
+      // Only include courses that have at least one schedule
+      // (since the weekly schedule is meant to show scheduled classes)
+      if (courseSchedules.length > 0) {
+        acc[courseId] = {
+          course: {
+            id: course.id,
+            code: course.code,
+            title: course.title,
+            room: course.room,
+            semester: course.semester,
+            section: course.section,
+          },
+          schedules: courseSchedules,
+        };
+      }
+      return acc;
+    },
+    {} as Record<
+      string,
+      {
+        course: ScheduleWithCourse["course"];
+        schedules: ScheduleWithCourse[];
+      }
+    >
+  );
 
   const getSchedulesForDay = (dayName: string) => {
     // Map abbreviated day names to full day names for comparison
@@ -74,8 +141,6 @@ export default function WeeklySchedule({
       Sat: "Saturday",
     };
 
-    const fullDayName = dayMap[dayName];
-
     // Get all schedules for this day, including multiple schedules per course
     const schedulesForDay: Array<{
       course: ScheduleWithCourse["course"];
@@ -83,29 +148,36 @@ export default function WeeklySchedule({
       allDays: string[];
     }> = [];
 
-    Object.values(groupedByCourse).forEach((group) => {
-      // Get all schedules for this course on this specific day
-      const daySchedules = group.schedules.filter(
-        (s) => s.day.toLowerCase() === fullDayName.toLowerCase()
-      );
-
-      // Get all days this course appears on
-      const allDays = group.schedules.map((s) => {
-        const dayAbbr = Object.keys(dayMap).find(
-          (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
+    Object.values(groupedByCourse).forEach(
+      (group: {
+        course: ScheduleWithCourse["course"];
+        schedules: ScheduleWithCourse[];
+      }) => {
+        // Get all schedules for this course on this specific day
+        // Compare abbreviated day names directly (database stores "Mon", "Tue", etc.)
+        const daySchedules = group.schedules.filter(
+          (s: ScheduleWithCourse) =>
+            s.day.toLowerCase() === dayName.toLowerCase()
         );
-        return dayAbbr || s.day.substring(0, 3);
-      });
 
-      // Add each schedule for this day
-      daySchedules.forEach((schedule) => {
-        schedulesForDay.push({
-          course: group.course,
-          schedule,
-          allDays: [...new Set(allDays)], // Remove duplicates
+        // Get all days this course appears on
+        const allDays = group.schedules.map((s: ScheduleWithCourse) => {
+          const dayAbbr = Object.keys(dayMap).find(
+            (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
+          );
+          return dayAbbr || s.day.substring(0, 3);
         });
-      });
-    });
+
+        // Add each schedule for this day
+        daySchedules.forEach((schedule: ScheduleWithCourse) => {
+          schedulesForDay.push({
+            course: group.course,
+            schedule,
+            allDays: [...new Set(allDays)] as string[], // Remove duplicates
+          });
+        });
+      }
+    );
 
     // Sort by time
     schedulesForDay.sort((a, b) =>

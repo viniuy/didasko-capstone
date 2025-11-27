@@ -420,9 +420,9 @@ export function BreakGlassCompact() {
                     Manual Deactivation Required
                   </p>
                   <p>
-                    The promoted faculty member will remain as Admin until you
-                    manually deactivate the break-glass override. The role will
-                    be automatically restored to Faculty upon deactivation.
+                    The promoted faculty member will remain an Admin until
+                    either the Admin or Academic Head manually deactivates the
+                    break-glass override, or until the temporary Admin logs out.
                   </p>
                 </div>
               </div>

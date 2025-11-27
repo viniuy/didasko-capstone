@@ -87,15 +87,6 @@ export default function Header() {
           />
           {/* Break-Glass Compact - Accessible everywhere for Academic Head */}
           <BreakGlassCompact />
-        </div>
-
-        {/* Center Section - Flexible space */}
-        <div className="flex-1 flex items-center justify-center">
-          {/* Add center content here if needed */}
-        </div>
-
-        {/* Right Section */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Temp Admin Button */}
           {!isChecking && isTempAdmin && (
             <Button
@@ -144,6 +135,16 @@ export default function Header() {
               <span className="sm:hidden relative z-10">Temp</span>
             </Button>
           )}
+        </div>
+
+        {/* Center Section - Flexible space */}
+        <div className="flex-1 flex items-center justify-center">
+          {/* Add center content here if needed */}
+        </div>
+
+        {/* Right Section */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          {/* Add right-side content here */}
         </div>
       </div>
 

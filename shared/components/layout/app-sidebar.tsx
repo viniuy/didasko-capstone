@@ -35,6 +35,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSession, signOut } from "next-auth/react";
+import { useBreakGlassStatus } from "@/lib/hooks/queries";
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -252,6 +253,15 @@ export function AppSidebar() {
   const isAcademicHead = session?.user?.role === "ACADEMIC_HEAD";
   const isFaculty = session?.user?.role === "FACULTY";
 
+  // Check if user is a temporary admin (has active break-glass session)
+  const { data: breakGlassStatus } = useBreakGlassStatus(session?.user?.id);
+  const isTempAdmin =
+    session?.user?.role !== "ACADEMIC_HEAD" &&
+    session?.user?.role === "ADMIN" &&
+    !!breakGlassStatus?.isActive &&
+    (breakGlassStatus?.session?.user?.id === session?.user?.id ||
+      (breakGlassStatus?.isActive && !breakGlassStatus?.session?.user?.id));
+
   // For admins, show menu items based on selectedRole if available
   let items = adminItems;
   if (isAcademicHead) {
@@ -260,6 +270,11 @@ export function AppSidebar() {
     items = facultyItems;
   } else if (isAdmin && selectedRole === "ADMIN") {
     items = adminItems;
+  }
+
+  // Filter out "Students" for temporary admin
+  if (isTempAdmin) {
+    items = items.filter((item) => item.title !== "Students");
   }
 
   const handleRoleSwitch = async (newRole: "ADMIN" | "FACULTY") => {
@@ -288,6 +303,22 @@ export function AppSidebar() {
     try {
       const loadingToast = toast.loading("Logging out...");
 
+      // If user is a temporary admin, clear selectedRole from session before logout
+      // This prevents them from switching to faculty view after break-glass deactivation
+      if (isTempAdmin) {
+        try {
+          await update({
+            selectedRole: undefined,
+          });
+        } catch (error) {
+          console.error("Error clearing selectedRole:", error);
+          // Continue with logout even if clearing fails
+        }
+      }
+
+      // Clear the selected role from localStorage
+      localStorage.removeItem("admin_selected_role");
+
       // Log logout before clearing session
       try {
         await fetch("/api/auth/logout", {
@@ -297,9 +328,6 @@ export function AppSidebar() {
         console.error("Logout logging error:", error);
         // Continue with logout even if logging fails
       }
-
-      // Clear the selected role from localStorage
-      localStorage.removeItem("admin_selected_role");
 
       // First, clean up our session
       await fetch("/api/auth/session", {
@@ -599,7 +627,7 @@ export function AppSidebar() {
                     : "Are you sure you want to logout?"}
                 </AlertDialogTitle>
                 <AlertDialogDescription className="text-gray-600">
-                  {isAdmin
+                  {isAdmin && !isTempAdmin
                     ? selectedRole === "FACULTY"
                       ? "You can switch back to Admin view or logout completely."
                       : "You can switch to Faculty view or logout completely."
@@ -613,7 +641,7 @@ export function AppSidebar() {
                 >
                   Cancel
                 </AlertDialogCancel>
-                {isAdmin && (
+                {isAdmin && !isTempAdmin && (
                   <AlertDialogAction
                     onClick={() => {
                       const newRole =
