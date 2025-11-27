@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Lightbulb,
 } from "lucide-react";
+import CustomTutorial, { TutorialStep } from "@/components/ui/CustomTutorial";
 
 interface PasteGradesModalProps {
   isOpen: boolean;
@@ -30,205 +31,40 @@ interface PasteGradesModalProps {
   ) => void;
 }
 
-interface TutorialStep {
-  target: string;
-  title: string;
-  content: string;
-  position: "top" | "bottom" | "left" | "right";
-  highlightPadding?: number;
-}
-
 const tutorialSteps: TutorialStep[] = [
   {
     target: "[data-tutorial='column-select']",
     title: "Step 1: Select a Column",
     content:
       "First, choose which column you want to paste grades into. This could be a PT, Quiz, or Exam.",
-    position: "bottom",
-    highlightPadding: 8,
+    placement: "bottom",
+    spotlightPadding: 8,
   },
   {
     target: "[data-tutorial='paste-area']",
     title: "Step 2: Paste Your Grades",
     content:
       "Copy grades from Excel (one per line) and paste them here. Make sure they're in the same order as your students!",
-    position: "top",
-    highlightPadding: 8,
+    placement: "top",
+    spotlightPadding: 8,
   },
   {
     target: "[data-tutorial='parse-button']",
     title: "Step 3: Validate Grades",
     content:
       "Click this button to check if your grades are valid. It will show you any errors before pasting.",
-    position: "top",
-    highlightPadding: 8,
+    placement: "top",
+    spotlightPadding: 8,
   },
   {
     target: "[data-tutorial='instructions']",
     title: "Pro Tips!",
     content:
       "You can use 'absent', 'abs', or '-' for students who were absent. The system will handle it automatically!",
-    position: "bottom",
-    highlightPadding: 8,
+    placement: "bottom",
+    spotlightPadding: 8,
   },
 ];
-
-function Tutorial({
-  isActive,
-  currentStep,
-  onNext,
-  onSkip,
-  totalSteps,
-}: {
-  isActive: boolean;
-  currentStep: number;
-  onNext: () => void;
-  onSkip: () => void;
-  totalSteps: number;
-}) {
-  const [highlightBox, setHighlightBox] = useState<DOMRect | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const step = tutorialSteps[currentStep];
-
-  useEffect(() => {
-    if (!isActive || !step) return;
-
-    const updatePosition = () => {
-      const element = document.querySelector(step.target);
-      if (element) {
-        const rect = element.getBoundingClientRect();
-        setHighlightBox(rect);
-
-        const padding = step.highlightPadding || 8;
-        let top = 0;
-        let left = 0;
-
-        switch (step.position) {
-          case "bottom":
-            top = rect.bottom + padding + 10;
-            left = rect.left + rect.width / 2;
-            break;
-          case "top":
-            top = rect.top - padding - 200;
-            left = rect.left + rect.width / 2;
-            break;
-          case "left":
-            top = rect.top + rect.height / 2;
-            left = rect.left - padding - 10;
-            break;
-          case "right":
-            top = rect.top + rect.height / 2;
-            left = rect.right + padding + 10;
-            break;
-        }
-
-        setTooltipPosition({ top, left });
-      }
-    };
-
-    updatePosition();
-    const timer = setTimeout(updatePosition, 100);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [isActive, currentStep, step]);
-
-  if (!isActive || !step || !highlightBox) return null;
-
-  const padding = step.highlightPadding || 8;
-
-  return (
-    <>
-      {/* Dark Overlay with Cutout */}
-      <div className="fixed inset-0 z-[100] pointer-events-none">
-        <svg className="w-full h-full">
-          <defs>
-            <mask id="tutorial-mask">
-              <rect x="0" y="0" width="100%" height="100%" fill="white" />
-              <rect
-                x={highlightBox.left - padding}
-                y={highlightBox.top - padding}
-                width={highlightBox.width + padding * 2}
-                height={highlightBox.height + padding * 2}
-                rx="8"
-                fill="black"
-              />
-            </mask>
-          </defs>
-          <rect
-            x="0"
-            y="0"
-            width="100%"
-            height="100%"
-            fill="rgba(0, 0, 0, 0.75)"
-            mask="url(#tutorial-mask)"
-          />
-        </svg>
-      </div>
-
-      {/* Highlight Border */}
-      <div
-        className="fixed z-[101] border-4 border-blue-500 rounded-lg pointer-events-none animate-pulse"
-        style={{
-          top: highlightBox.top - padding,
-          left: highlightBox.left - padding,
-          width: highlightBox.width + padding * 2,
-          height: highlightBox.height + padding * 2,
-        }}
-      />
-
-      {/* Tooltip */}
-      <div
-        className="fixed z-[102] pointer-events-auto"
-        style={{
-          top: tooltipPosition.top,
-          left: tooltipPosition.left,
-          transform:
-            step.position === "bottom" || step.position === "top"
-              ? "translateX(-50%)"
-              : step.position === "right"
-              ? "translateX(0)"
-              : "translateX(-100%)",
-        }}
-      >
-        <div className="bg-white rounded-lg shadow-2xl p-5 max-w-sm border-2 border-blue-500">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-              <Lightbulb className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-gray-900 mb-1">{step.title}</h3>
-              <p className="text-sm text-gray-600">{step.content}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <span className="text-xs text-gray-500 font-medium">
-              {currentStep + 1} of {totalSteps}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onSkip}
-                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-              >
-                Skip Tour
-              </button>
-              <button
-                onClick={onNext}
-                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
-              >
-                {currentStep === totalSteps - 1 ? "Got it!" : "Next"}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
 
 export function PasteGradesModal({
   isOpen,
@@ -251,7 +87,6 @@ export function PasteGradesModal({
 
   // Tutorial state
   const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -428,19 +263,13 @@ export function PasteGradesModal({
     setTimeout(() => onClose(), 500);
   };
 
-  const handleNextTutorialStep = () => {
-    if (tutorialStep === tutorialSteps.length - 1) {
-      setShowTutorial(false);
-      setTutorialStep(0);
-      localStorage.setItem("didasko-paste-grades-tutorial", "completed");
-    } else {
-      setTutorialStep(tutorialStep + 1);
-    }
+  const handleTutorialComplete = () => {
+    setShowTutorial(false);
+    localStorage.setItem("didasko-paste-grades-tutorial", "completed");
   };
 
-  const handleSkipTutorial = () => {
+  const handleTutorialSkip = () => {
     setShowTutorial(false);
-    setTutorialStep(0);
     localStorage.setItem("didasko-paste-grades-tutorial", "completed");
   };
 
@@ -450,12 +279,15 @@ export function PasteGradesModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] sm:max-w-3xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col relative">
         {/* Tutorial Overlay */}
-        <Tutorial
-          isActive={showTutorial}
-          currentStep={tutorialStep}
-          onNext={handleNextTutorialStep}
-          onSkip={handleSkipTutorial}
-          totalSteps={tutorialSteps.length}
+        <CustomTutorial
+          steps={tutorialSteps}
+          run={showTutorial}
+          onComplete={handleTutorialComplete}
+          onSkip={handleTutorialSkip}
+          continuous={true}
+          showProgress={true}
+          showSkipButton={true}
+          spotlightPadding={8}
         />
 
         {/* Notification */}
@@ -497,7 +329,6 @@ export function PasteGradesModal({
             <button
               onClick={() => {
                 setShowTutorial(true);
-                setTutorialStep(0);
               }}
               className="p-2 hover:bg-[#124A69]/10 rounded-lg transition-colors text-[#124A69]"
               title="Show Tutorial"

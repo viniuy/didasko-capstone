@@ -46,8 +46,11 @@ export async function POST(
     const termConfigs = body.termConfigs;
 
     try {
-      await saveTermConfigs(course_slug, termConfigs);
-      return NextResponse.json({ success: true });
+      const result = await saveTermConfigs(course_slug, termConfigs);
+      return NextResponse.json({
+        success: true,
+        termConfigs: result.termConfigs,
+      });
     } catch (error: any) {
       if (error.message.includes("Weights must total")) {
         return NextResponse.json({ error: error.message }, { status: 400 });

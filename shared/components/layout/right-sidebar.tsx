@@ -50,8 +50,8 @@ export default function Rightsidebar() {
     pathname.startsWith("/main/attendance/class/") && courseSlug;
   const isGradingClassRecord =
     pathname.startsWith("/main/grading/class-record/") && courseSlug;
-  const isGradingList =
-    pathname === "/main/grading" || pathname === "/main/grading/class-record";
+  const isGradingList = pathname === "/main/grading";
+  const isGradingClassRecordList = pathname === "/main/grading/class-record";
   const isCourseDashboard = pathname.startsWith("/main/course/") && courseSlug;
   const isGroupReporting =
     pathname.startsWith("/main/grading/reporting/") &&
@@ -114,6 +114,15 @@ export default function Rightsidebar() {
               </div>
               <div className="h-[calc(50vh-30px)]">
                 <GradingLeaderboard courseSlug={courseSlug} />
+              </div>
+            </>
+          ) : isGradingClassRecordList ? (
+            <>
+              <div className="h-[calc(50vh-30px)]">
+                <UpcomingEvents />
+              </div>
+              <div className="h-[calc(50vh-30px)]">
+                <Notes />
               </div>
             </>
           ) : isGradingList ? (

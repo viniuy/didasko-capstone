@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from "react";
+import React from "react";
 import { toast } from "react-hot-toast";
+import CustomTutorial, { TutorialStep } from "@/components/ui/CustomTutorial";
 import {
   Popover,
   PopoverContent,
@@ -26,6 +28,7 @@ import {
   AlertCircle,
   CalendarIcon,
   ArrowRight,
+  ArrowLeft,
   Lightbulb,
   Info,
 } from "lucide-react";
@@ -40,224 +43,120 @@ interface SettingsModalProps {
   availableCriteria: CriteriaOption[];
 }
 
-interface TutorialStep {
-  target: string;
-  title: string;
-  content: string;
-  position: "top" | "bottom" | "left" | "right";
-  highlightPadding?: number;
-}
+const getTutorialSteps = (savedTerms: Set<Term>): TutorialStep[] => {
+  const baseSteps: TutorialStep[] = [
+    {
+      target: "[data-tutorial='term-tabs-settings']",
+      title: "Step 1: Select a Term",
+      content:
+        "Choose which term you want to configure. Each term (PRELIM, MIDTERM, PREFINALS, FINALS) can have different weights and assessments. Start with PRELIM to get started!",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='weight-distribution']",
+      title: "Step 2: Set Grade Weight Distribution",
+      content:
+        "Adjust the percentage weights for PT/Lab, Quizzes, and Exam. They MUST add up to exactly 100%! Try entering values now - the total will update in real-time. This determines how much each category contributes to the final grade.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='pt-section']",
+      title: "Step 3: Configure PT/Lab Assessments",
+      content:
+        "Add, edit, or remove PT/Lab assessments. You can add up to 6 PT/Lab assessments. Let's explore the different fields you can configure.",
+      placement: "top",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='pt-name']",
+      title: "Step 3a: Assessment Name",
+      content:
+        "Enter the name for your PT/Lab assessment (e.g., PT1, Lab1). This name will appear in the grade table. Maximum 5 characters.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='pt-max-score']",
+      title: "Step 3b: Max Score",
+      content:
+        "Set the maximum score for this assessment (0-200). If you link this to existing criteria (Recitation, Group Reporting, Individual Reporting), the max score will be automatically calculated and this field will be disabled.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='pt-base-scoring']",
+      title: "Step 3c: Base Scoring (Transmutation)",
+      content:
+        "Set the transmutation base score (0-75). This is used for base scoring calculations. Only PT/Lab and Quizzes support base scoring - the Exam does not.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='quiz-section']",
+      title: "Step 4: Configure Quiz Assessments",
+      content:
+        "Same as PT/Lab - add multiple quizzes (up to 6), set max scores, schedule dates, and link to existing criteria. You can also set transmutation base scoring for quizzes. Each quiz can be enabled or disabled independently.",
+      placement: "top",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='quiz-name']",
+      title: "Step 4a: Quiz Name",
+      content:
+        "Enter the name for your quiz assessment (e.g., Q1, Quiz1). This name will appear in the grade table. Maximum 5 characters.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='quiz-max-score']",
+      title: "Step 4b: Quiz Max Score",
+      content:
+        "Set the maximum score for this quiz (0-200). If linked to criteria, the max score will be auto-calculated and this field will be disabled.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='quiz-base-scoring']",
+      title: "Step 4c: Quiz Base Scoring",
+      content:
+        "Set the transmutation base score for this quiz (0-75). This is used for base scoring calculations in the grade computation.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='exam-section']",
+      title: "Step 5: Configure Final Exam",
+      content:
+        "Set up your final exam. This is REQUIRED and must be enabled for each term. Unlike PT/Lab and Quizzes, the Exam cannot have transmutation base scoring. You can link it to criteria and set the max score.",
+      placement: "top",
+      spotlightPadding: 8,
+    },
+    {
+      target: "[data-tutorial='term-save-button']",
+      title: "Step 6: Save Your Configuration",
+      content:
+        "Click here to save this term's configuration. The system will validate all settings before saving. If there are errors, they'll be shown at the top. Remember to save before switching to another term! Once saved, you'll be able to access this term in the main class record.",
+      placement: "top",
+      spotlightPadding: 8,
+    },
+  ];
 
-const tutorialSteps: TutorialStep[] = [
-  {
-    target: "[data-tutorial='term-tabs-settings']",
-    title: "Step 1: Select a Term",
-    content:
-      "Choose which term you want to configure. Each term can have different weights and assessments.",
-    position: "bottom",
-    highlightPadding: 8,
-  },
-  {
-    target: "[data-tutorial='weight-distribution']",
-    title: "Step 2: Set Grade Weights",
-    content:
-      "Adjust the percentage weights for PT/Lab, Quizzes, and Exam. They must add up to 100%!",
-    position: "bottom",
-    highlightPadding: 8,
-  },
-  {
-    target: "[data-tutorial='pt-section']",
-    title: "Step 3: Configure PT/Lab",
-    content:
-      "Add, edit, or remove PT/Lab assessments. Set max scores and dates. You can also link to existing grades!",
-    position: "top",
-    highlightPadding: 8,
-  },
-  {
-    target: "[data-tutorial='quiz-section']",
-    title: "Step 4: Configure Quizzes",
-    content:
-      "Same as PT/Lab - add multiple quizzes, set max scores, and schedule dates.",
-    position: "top",
-    highlightPadding: 8,
-  },
-  {
-    target: "[data-tutorial='exam-section']",
-    title: "Step 5: Configure Exam",
-    content:
-      "Set up your final exam. This is required and must be enabled for each term.",
-    position: "top",
-    highlightPadding: 8,
-  },
-  {
-    target: "[data-tutorial='term-save-button']",
-    title: "Step 6: Save Your Changes",
-    content:
-      "Click here to save this term's configuration. Remember to save before switching to another term!",
-    position: "top",
-    highlightPadding: 8,
-  },
-];
+  // Add conditional steps after PRELIM is saved
+  if (savedTerms.has("PRELIM")) {
+    baseSteps.push({
+      target: "[data-tutorial='term-tabs-settings']",
+      title: "Step 7: Accessing Saved Terms",
+      content:
+        "Great! You've saved PRELIM. Now you can access the PRELIM tab in the main class record to start entering grades. To access MIDTERM, PREFINALS, and FINALS, you need to save their configurations first. Each term must be saved individually.",
+      placement: "bottom",
+      spotlightPadding: 8,
+    });
+  }
 
-function Tutorial({
-  isActive,
-  currentStep,
-  onNext,
-  onSkip,
-  totalSteps,
-}: {
-  isActive: boolean;
-  currentStep: number;
-  onNext: () => void;
-  onSkip: () => void;
-  totalSteps: number;
-}) {
-  const [highlightBox, setHighlightBox] = useState<DOMRect | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const step = tutorialSteps[currentStep];
-
-  useEffect(() => {
-    if (!isActive || !step) return;
-
-    const updatePosition = () => {
-      const element = document.querySelector(step.target);
-      if (element) {
-        const rect = element.getBoundingClientRect();
-        setHighlightBox(rect);
-
-        const padding = step.highlightPadding || 8;
-        let top = 0;
-        let left = 0;
-
-        switch (step.position) {
-          case "bottom":
-            top = rect.bottom + padding + 10;
-            left = rect.left + rect.width / 2;
-            break;
-          case "top":
-            top = rect.top - padding - 200;
-            left = rect.left + rect.width / 2;
-            break;
-          case "left":
-            top = rect.top + rect.height / 2;
-            left = rect.left - padding - 10;
-            break;
-          case "right":
-            top = rect.top + rect.height / 2;
-            left = rect.right + padding + 10;
-            break;
-        }
-
-        setTooltipPosition({ top, left });
-      }
-    };
-
-    updatePosition();
-    const timer = setTimeout(updatePosition, 100);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [isActive, currentStep, step]);
-
-  if (!isActive || !step || !highlightBox) return null;
-
-  const padding = step.highlightPadding || 8;
-
-  return (
-    <>
-      {/* Dark Overlay with Cutout */}
-      <div className="fixed inset-0 z-[100] pointer-events-none">
-        <svg className="w-full h-full">
-          <defs>
-            <mask id="settings-tutorial-mask">
-              <rect x="0" y="0" width="100%" height="100%" fill="white" />
-              <rect
-                x={highlightBox.left - padding}
-                y={highlightBox.top - padding}
-                width={highlightBox.width + padding * 2}
-                height={highlightBox.height + padding * 2}
-                rx="8"
-                fill="black"
-              />
-            </mask>
-          </defs>
-          <rect
-            x="0"
-            y="0"
-            width="100%"
-            height="100%"
-            fill="rgba(0, 0, 0, 0.75)"
-            mask="url(#settings-tutorial-mask)"
-          />
-        </svg>
-      </div>
-
-      {/* Highlight Border */}
-      <div
-        className="fixed z-[101] border-4 border-blue-500 rounded-lg pointer-events-none animate-pulse"
-        style={{
-          top: highlightBox.top - padding,
-          left: highlightBox.left - padding,
-          width: highlightBox.width + padding * 2,
-          height: highlightBox.height + padding * 2,
-        }}
-      />
-
-      {/* Tooltip */}
-      <div
-        className="fixed z-[102] pointer-events-auto"
-        style={{
-          top: tooltipPosition.top,
-          left: tooltipPosition.left,
-          transform:
-            step.position === "bottom" || step.position === "top"
-              ? "translateX(-50%)"
-              : step.position === "right"
-              ? "translateX(0)"
-              : "translateX(-100%)",
-        }}
-      >
-        <div className="bg-white rounded-lg shadow-2xl p-5 max-w-sm border-2 border-blue-500">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-              <Lightbulb className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-gray-900 mb-1">{step.title}</h3>
-              <p className="text-sm text-gray-600">{step.content}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <span className="text-xs text-gray-500 font-medium">
-              {currentStep + 1} of {totalSteps}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onSkip}
-                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-              >
-                Skip Tour
-              </button>
-              <button
-                onClick={onNext}
-                className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
-              >
-                {currentStep === tutorialSteps.length - 1 ? "Got it!" : "Next"}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+  return baseSteps;
+};
 
 export function SettingsModal({
   isOpen,
@@ -270,7 +169,6 @@ export function SettingsModal({
   const [termConfigs, setTermConfigs] = useState(initialConfigs);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0);
   const [savedTerms, setSavedTerms] = useState<Set<Term>>(new Set());
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingTerm, setPendingTerm] = useState<Term | null>(null);
@@ -382,6 +280,32 @@ export function SettingsModal({
 
   const clamp = (value: number, min: number, max: number) => {
     return Math.min(Math.max(value, min), max);
+  };
+
+  // Helper function to validate and sanitize numeric input
+  const handleNumericInput = (
+    value: string,
+    min: number,
+    max: number,
+    callback: (value: number) => void
+  ) => {
+    // Remove any non-numeric characters
+    const numericValue = value.replace(/[^0-9]/g, "");
+
+    // If no numeric characters remain, set to min (usually 0)
+    if (numericValue === "") {
+      callback(min);
+      return;
+    }
+
+    // Convert to number and clamp to min/max
+    const numValue = parseInt(numericValue, 10);
+    if (isNaN(numValue)) {
+      callback(min);
+      return;
+    }
+    const clampedValue = clamp(numValue, min, max);
+    callback(clampedValue);
   };
 
   const updateConfig = (updates: Partial<TermConfig>) => {
@@ -632,19 +556,18 @@ export function SettingsModal({
     }
   };
 
-  const handleNextTutorialStep = () => {
-    if (tutorialStep === tutorialSteps.length - 1) {
-      setShowTutorial(false);
-      setTutorialStep(0);
-      localStorage.setItem("didasko-settings-tutorial", "completed");
-    } else {
-      setTutorialStep(tutorialStep + 1);
-    }
+  const tutorialSteps = React.useMemo(
+    () => getTutorialSteps(savedTerms),
+    [savedTerms]
+  );
+
+  const handleTutorialComplete = () => {
+    setShowTutorial(false);
+    localStorage.setItem("didasko-settings-tutorial", "completed");
   };
 
-  const handleSkipTutorial = () => {
+  const handleTutorialSkip = () => {
     setShowTutorial(false);
-    setTutorialStep(0);
     localStorage.setItem("didasko-settings-tutorial", "completed");
   };
 
@@ -674,12 +597,15 @@ export function SettingsModal({
         )}
 
         {/* Tutorial Overlay */}
-        <Tutorial
-          isActive={showTutorial}
-          currentStep={tutorialStep}
-          onNext={handleNextTutorialStep}
-          onSkip={handleSkipTutorial}
-          totalSteps={tutorialSteps.length}
+        <CustomTutorial
+          steps={tutorialSteps}
+          run={showTutorial}
+          onComplete={handleTutorialComplete}
+          onSkip={handleTutorialSkip}
+          continuous={true}
+          showProgress={true}
+          showSkipButton={true}
+          spotlightPadding={8}
         />
 
         {/* Header */}
@@ -696,7 +622,6 @@ export function SettingsModal({
             <button
               onClick={() => {
                 setShowTutorial(true);
-                setTutorialStep(0);
               }}
               className="p-2 hover:bg-[#124A69]/10 rounded-lg transition-colors text-[#124A69]"
               title="Show Tutorial"
@@ -791,12 +716,12 @@ export function SettingsModal({
                     PT/Lab:
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={config.ptWeight}
                     onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      const value = clamp(raw, 0, 100);
-                      updateConfig({ ptWeight: value });
+                      handleNumericInput(e.target.value, 0, 100, (value) => {
+                        updateConfig({ ptWeight: value });
+                      });
                     }}
                     onKeyDown={(e) => {
                       if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
@@ -816,12 +741,12 @@ export function SettingsModal({
                     Quizzes:
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={config.quizWeight}
                     onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      const value = clamp(raw, 0, 100);
-                      updateConfig({ quizWeight: value });
+                      handleNumericInput(e.target.value, 0, 100, (value) => {
+                        updateConfig({ quizWeight: value });
+                      });
                     }}
                     onKeyDown={(e) => {
                       if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
@@ -841,12 +766,12 @@ export function SettingsModal({
                     Exam:
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={config.examWeight}
                     onChange={(e) => {
-                      const raw = Number(e.target.value);
-                      const value = clamp(raw, 0, 100);
-                      updateConfig({ examWeight: value });
+                      handleNumericInput(e.target.value, 0, 100, (value) => {
+                        updateConfig({ examWeight: value });
+                      });
                     }}
                     onKeyDown={(e) => {
                       if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
@@ -932,18 +857,27 @@ export function SettingsModal({
                       className="w-28 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       placeholder="Name"
                       maxLength={5}
+                      data-tutorial="pt-name"
                     />
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">Max Score:</span>
                       <div className="relative flex items-center gap-1">
                         <input
-                          type="number"
+                          type="text"
                           value={pt.maxScore}
-                          onChange={(e) =>
-                            updateAssessment("PT", pt.id, {
-                              maxScore: Number(e.target.value),
-                            })
-                          }
+                          onChange={(e) => {
+                            if (pt.linkedCriteriaId) return;
+                            handleNumericInput(
+                              e.target.value,
+                              0,
+                              200,
+                              (value) => {
+                                updateAssessment("PT", pt.id, {
+                                  maxScore: value,
+                                });
+                              }
+                            );
+                          }}
                           onKeyDown={(e) => {
                             if (
                               [".", ",", "e", "E", "+", "-"].includes(e.key)
@@ -960,6 +894,7 @@ export function SettingsModal({
                           placeholder="Max"
                           min="0"
                           max="200"
+                          data-tutorial="pt-max-score"
                         />
                         {pt.linkedCriteriaId && (
                           <div className="group relative cursor-help">
@@ -976,13 +911,13 @@ export function SettingsModal({
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-600">Base</span>
                       <input
-                        type="number"
+                        type="text"
                         value={pt.transmutationBase ?? 0}
                         onChange={(e) => {
-                          const raw = Number(e.target.value);
-                          const value = clamp(raw, 0, 75);
-                          updateAssessment("PT", pt.id, {
-                            transmutationBase: value,
+                          handleNumericInput(e.target.value, 0, 75, (value) => {
+                            updateAssessment("PT", pt.id, {
+                              transmutationBase: value,
+                            });
                           });
                         }}
                         onKeyDown={(e) => {
@@ -993,6 +928,7 @@ export function SettingsModal({
                         min="0"
                         max="75"
                         className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-xs"
+                        data-tutorial="pt-base-scoring"
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
@@ -1158,18 +1094,27 @@ export function SettingsModal({
                       className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       placeholder="Name"
                       maxLength={5}
+                      data-tutorial="quiz-name"
                     />
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-600">Max Score:</span>
                       <div className="relative flex items-center gap-1">
                         <input
-                          type="number"
+                          type="text"
                           value={quiz.maxScore}
-                          onChange={(e) =>
-                            updateAssessment("QUIZ", quiz.id, {
-                              maxScore: Number(e.target.value),
-                            })
-                          }
+                          onChange={(e) => {
+                            if (quiz.linkedCriteriaId) return;
+                            handleNumericInput(
+                              e.target.value,
+                              0,
+                              200,
+                              (value) => {
+                                updateAssessment("QUIZ", quiz.id, {
+                                  maxScore: value,
+                                });
+                              }
+                            );
+                          }}
                           onKeyDown={(e) => {
                             if (
                               [".", ",", "e", "E", "+", "-"].includes(e.key)
@@ -1186,6 +1131,7 @@ export function SettingsModal({
                           placeholder="Max"
                           min="0"
                           max="200"
+                          data-tutorial="quiz-max-score"
                         />
                         {quiz.linkedCriteriaId && (
                           <div className="group relative cursor-help">
@@ -1202,13 +1148,13 @@ export function SettingsModal({
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-gray-600">Base</span>
                       <input
-                        type="number"
+                        type="text"
                         value={quiz.transmutationBase ?? 0}
                         onChange={(e) => {
-                          const raw = Number(e.target.value);
-                          const value = clamp(raw, 0, 75);
-                          updateAssessment("QUIZ", quiz.id, {
-                            transmutationBase: value,
+                          handleNumericInput(e.target.value, 0, 75, (value) => {
+                            updateAssessment("QUIZ", quiz.id, {
+                              transmutationBase: value,
+                            });
                           });
                         }}
                         onKeyDown={(e) => {
@@ -1219,6 +1165,7 @@ export function SettingsModal({
                         min="0"
                         max="75"
                         className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-xs"
+                        data-tutorial="quiz-base-scoring"
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
@@ -1373,13 +1320,21 @@ export function SettingsModal({
                     <span className="text-xs text-gray-600">Max Score:</span>
                     <div className="relative flex items-center gap-1">
                       <input
-                        type="number"
+                        type="text"
                         value={exam.maxScore}
-                        onChange={(e) =>
-                          updateAssessment("EXAM", exam.id, {
-                            maxScore: Number(e.target.value),
-                          })
-                        }
+                        onChange={(e) => {
+                          if (exam.linkedCriteriaId) return;
+                          handleNumericInput(
+                            e.target.value,
+                            0,
+                            200,
+                            (value) => {
+                              updateAssessment("EXAM", exam.id, {
+                                maxScore: value,
+                              });
+                            }
+                          );
+                        }}
                         onKeyDown={(e) => {
                           if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
                             e.preventDefault();

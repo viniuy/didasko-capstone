@@ -202,7 +202,30 @@ export async function saveTermConfigs(
           }
         );
 
-        await Promise.all(assessmentPromises);
+        const savedAssessments = await Promise.all(assessmentPromises);
+
+        // Return updated term config with real assessment IDs
+        return {
+          term,
+          termConfig: {
+            id: termConfig.id,
+            term: termConfig.term,
+            ptWeight: termConfig.ptWeight,
+            quizWeight: termConfig.quizWeight,
+            examWeight: termConfig.examWeight,
+            assessments: savedAssessments.map((a: any) => ({
+              id: a.id,
+              name: a.name,
+              type: a.type,
+              maxScore: a.maxScore,
+              date: a.date ? a.date.toISOString().split("T")[0] : null,
+              enabled: a.enabled,
+              order: a.order,
+              linkedCriteriaId: a.linkedCriteriaId ?? null,
+              transmutationBase: a.transmutationBase ?? 0,
+            })),
+          },
+        };
       } catch (error: any) {
         // Check if error is due to missing column (migration not run)
         if (
@@ -220,9 +243,15 @@ export async function saveTermConfigs(
     }
   );
 
-  await Promise.all(termConfigPromises);
+  const savedTermConfigs = await Promise.all(termConfigPromises);
 
-  return { success: true };
+  // Build the return object with updated term configs
+  const updatedTermConfigs: Record<string, any> = {};
+  savedTermConfigs.forEach((result: any) => {
+    updatedTermConfigs[result.term] = result.termConfig;
+  });
+
+  return { success: true, termConfigs: updatedTermConfigs };
 }
 
 // Get assessment scores for a course (batched query)
