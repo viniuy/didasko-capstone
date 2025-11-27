@@ -330,23 +330,59 @@ function AuditLogsTableComponent({
   const logs = paginatedLogs;
 
   // All possible actions based on audit logging requirements
-  const allPossibleActions = [
-    "BreakGlass Activated",
-    "BreakGlass Deactivate",
-    "BreakGlass Promote",
-    "Course Activated",
-    "Course Archived",
-    "Course Create",
-    "Course Import",
-    "Course Export",
-    "User Login",
-    "User Logout",
-    "User Failed Login",
-    "Student Register",
-    "Student Import",
-    "Student RFID Assigned",
-    "Student RFID Reassigned",
-  ];
+  const allPossibleActions = useMemo(() => {
+    const allActions = [
+      "BreakGlass Activated",
+      "BreakGlass Deactivate",
+      "BreakGlass Promote",
+      "Course Activated",
+      "Course Archived",
+      "Course Create",
+      "Course Import",
+      "Course Export",
+      "User Login",
+      "User Logout",
+      "User Failed Login",
+      "Student Register",
+      "Student Import",
+      "Student RFID Assigned",
+      "Student RFID Reassigned",
+    ];
+
+    // Filter actions for ACADEMIC_HEAD - only show actions relevant to their allowed modules
+    if (isAcademicHead) {
+      // ACADEMIC_HEAD can see: Course Management, Class Management, Faculty, Attendance, Enrollment
+      // Relevant actions:
+      // - Course-related: Course Activated, Course Archived, Course Create, Course Import, Course Export
+      // - Student/Enrollment-related: Student Register, Student Import
+      // - Exclude: Security actions (BreakGlass), User login actions
+      return allActions.filter((action) => {
+        const actionLower = action.toLowerCase();
+        // Include Course-related actions
+        if (actionLower.includes("course")) return true;
+        // Include Student enrollment-related actions
+        if (
+          actionLower.includes("student register") ||
+          actionLower.includes("student import")
+        )
+          return true;
+        // Exclude Security/BreakGlass actions
+        if (actionLower.includes("breakglass")) return false;
+        // Exclude User login/logout actions
+        if (
+          actionLower.includes("user login") ||
+          actionLower.includes("user logout") ||
+          actionLower.includes("user failed")
+        )
+          return false;
+        // Exclude RFID actions (not part of enrollment management)
+        if (actionLower.includes("rfid")) return false;
+        return false;
+      });
+    }
+
+    return allActions;
+  }, [isAcademicHead]);
 
   // All possible modules - filter for ACADEMIC_HEAD
   const allPossibleModules = useMemo(() => {

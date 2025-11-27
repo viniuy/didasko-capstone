@@ -26,6 +26,8 @@ import {
   CheckCircle2,
   XCircle,
   User,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
@@ -84,6 +86,7 @@ export function BreakGlassCompact() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [reason, setReason] = useState("");
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>("");
+  const [visibleCodes, setVisibleCodes] = useState<Set<string>>(new Set());
 
   // React Query hooks
   const { data: status, isLoading } = useBreakGlassStatus();
@@ -149,35 +152,54 @@ export function BreakGlassCompact() {
 
   const isActive = status?.isActive || false;
   const sessionData = status?.session;
+  const hasActiveSessions =
+    isActive && status?.sessions && status.sessions.length > 0;
 
   return (
     <>
       <div className="group relative">
-        {/* Hidden rectangle that expands on hover */}
+        {/* Hidden rectangle that expands on hover or always visible if active */}
         <div
           className={cn(
-            "w-1 h-6 rounded transition-all duration-300 cursor-pointer",
-            isActive
-              ? "bg-green-400 group-hover:w-48 group-hover:bg-green-300"
-              : "bg-gray-300 group-hover:w-48 group-hover:bg-gray-200"
+            "h-6 rounded transition-all duration-300 cursor-pointer",
+            hasActiveSessions
+              ? "w-48 bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700"
+              : "w-1 bg-white group-hover:w-48"
           )}
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => {
+            // Only open if closed, don't toggle if already open
+            if (!isExpanded) {
+              setIsExpanded(true);
+            }
+          }}
         >
-          {/* Hover reveal text */}
-          <div className="absolute left-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap text-[10px] px-2 py-1 flex items-center gap-1.5 h-full">
+          {/* Hover reveal text - always visible if active, otherwise on hover */}
+          <div
+            className={cn(
+              "absolute left-0 top-0 whitespace-nowrap text-[10px] px-2 py-1 flex items-center gap-1.5 h-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-md z-10 transition-opacity duration-300",
+              hasActiveSessions
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100"
+            )}
+          >
             <ShieldAlert className="w-3 h-3" />
-            <span className="font-medium text-gray-700">
+            <span className="font-medium text-gray-700 dark:text-gray-200">
               Secret Break-Glass Override
             </span>
             {isActive && (
-              <span className="text-green-600 font-semibold">• Active</span>
+              <span className="text-green-600 dark:text-green-400 font-semibold">
+                • Active
+              </span>
             )}
           </div>
         </div>
 
         {/* Expanded controls */}
         {isExpanded && (
-          <div className="absolute right-0 top-8 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 z-50 min-w-[250px] max-w-[300px]">
+          <div
+            className="absolute left-0 top-8 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-2 z-50 min-w-[250px] max-w-[300px]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="space-y-2">
               {isActive && status?.sessions && status.sessions.length > 0 ? (
                 <div className="text-xs text-gray-600 dark:text-gray-300 space-y-2">
@@ -204,11 +226,35 @@ export function BreakGlassCompact() {
                       )}
                       {session.promotionCodePlain && (
                         <div className="mt-2 p-2 bg-[#124A69]/10 dark:bg-[#124A69]/20 border border-[#124A69]/30 rounded">
-                          <div className="text-[9px] font-semibold text-[#124A69] dark:text-[#4da6d1] mb-1">
-                            Secret Code:
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="text-[9px] font-semibold text-[#124A69] dark:text-[#4da6d1]">
+                              Secret Code:
+                            </div>
+                            <Button
+                              onClick={() => {
+                                const newVisibleCodes = new Set(visibleCodes);
+                                if (newVisibleCodes.has(session.id)) {
+                                  newVisibleCodes.delete(session.id);
+                                } else {
+                                  newVisibleCodes.add(session.id);
+                                }
+                                setVisibleCodes(newVisibleCodes);
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="h-4 w-4 p-0 text-[#124A69] hover:bg-[#124A69]/10 dark:hover:bg-[#124A69]/30"
+                            >
+                              {visibleCodes.has(session.id) ? (
+                                <EyeOff className="w-3 h-3" />
+                              ) : (
+                                <Eye className="w-3 h-3" />
+                              )}
+                            </Button>
                           </div>
                           <div className="font-mono text-[10px] text-gray-900 dark:text-gray-100 break-all">
-                            {session.promotionCodePlain}
+                            {visibleCodes.has(session.id)
+                              ? session.promotionCodePlain
+                              : "•".repeat(session.promotionCodePlain.length)}
                           </div>
                           <Button
                             onClick={() => {
@@ -230,9 +276,19 @@ export function BreakGlassCompact() {
                         variant="ghost"
                         size="sm"
                         className="h-6 text-[10px] text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-1"
+                        disabled={deactivateMutation.isPending}
                       >
-                        <XCircle className="w-3 h-3 mr-1" />
-                        Deactivate
+                        {deactivateMutation.isPending ? (
+                          <>
+                            <span className="animate-spin mr-1">⏳</span>
+                            Deactivating...
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Deactivate
+                          </>
+                        )}
                       </Button>
                     </div>
                   ))}
@@ -381,6 +437,7 @@ export function BreakGlassCompact() {
                 setReason("");
                 setSelectedFacultyId("");
               }}
+              disabled={activateMutation.isPending}
             >
               Cancel
             </Button>

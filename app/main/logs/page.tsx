@@ -8,7 +8,6 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
-import { BreakGlassCompact } from "@/features/admin/components/break-glass-compact";
 
 interface PageProps {
   searchParams: Promise<{
@@ -132,8 +131,6 @@ export default async function LogsPage({ searchParams }: PageProps) {
       );
       // Return empty state
       logs = [];
-      totalCount = 0;
-      totalPages = 0;
       isLoading = true;
     } else {
       throw error;
@@ -149,12 +146,6 @@ export default async function LogsPage({ searchParams }: PageProps) {
         <div className="flex flex-col flex-grow px-2 sm:px-4 md:px-6 lg:px-8">
           <div className="space-y-2 md:space-y-6 lg:space-y-8">
             <div className="space-y-2">
-              <div className="flex items-center justify-between pl-2">
-                <div className="flex items-center">
-                  <BreakGlassCompact />
-                </div>
-              </div>
-
               <div className="grid gap-4 md:gap-6 lg:gap-8">
                 <AuditLogsTable
                   initialLogs={logs}
