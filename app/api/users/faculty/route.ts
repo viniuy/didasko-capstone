@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     }
 
     // Get faculty and academic head users
+    // Optimized: Use _count instead of loading all courses/students to reduce query time
     const users = await prisma.user.findMany({
       where: {
         role: {
@@ -34,11 +35,23 @@ export async function GET(request: Request) {
           where: {
             status: "ACTIVE",
           },
-          include: {
-            schedules: true,
-            students: {
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            section: true,
+            slug: true,
+            schedules: {
               select: {
                 id: true,
+                day: true,
+                fromTime: true,
+                toTime: true,
+              },
+            },
+            _count: {
+              select: {
+                students: true,
               },
             },
           },

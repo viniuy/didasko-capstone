@@ -27,8 +27,17 @@ export const GET = withLogging(
 
       if (session.user.role === "ACADEMIC_HEAD") {
         // Academic Head can see all active break-glass sessions
+        // Optimized: Use select instead of include for better performance
         const activeSessions = await prisma.breakGlassSession.findMany({
-          include: {
+          select: {
+            id: true,
+            userId: true,
+            reason: true,
+            activatedAt: true,
+            expiresAt: true,
+            activatedBy: true,
+            originalRole: true,
+            promotionCodePlain: true,
             user: {
               select: {
                 id: true,
@@ -37,6 +46,9 @@ export const GET = withLogging(
                 role: true,
               },
             },
+          },
+          orderBy: {
+            activatedAt: "desc",
           },
         });
 
