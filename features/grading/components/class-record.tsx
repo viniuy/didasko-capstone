@@ -433,6 +433,9 @@ export function ClassRecordTable({
   // Track which score inputs are currently being edited (focused)
   const [editingScores, setEditingScores] = useState<Set<string>>(new Set());
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [summarySelectedTerm, setSummarySelectedTerm] = useState<Term | "ALL">(
+    "ALL"
+  );
 
   const pendingScoresRef = useRef<
     Map<
@@ -1591,6 +1594,26 @@ export function ClassRecordTable({
                 className="pl-8 w-full sm:w-[200px] md:w-[240px] text-sm"
               />
             </div>
+            <Select
+              value={summarySelectedTerm}
+              onValueChange={(value: Term | "ALL") =>
+                setSummarySelectedTerm(value)
+              }
+            >
+              <SelectTrigger className="w-full sm:w-[140px] md:w-[160px] text-sm">
+                <SelectValue placeholder="Select term" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Terms</SelectItem>
+                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const)
+                  .filter((term) => termConfigs[term])
+                  .map((term) => (
+                    <SelectItem key={term} value={term}>
+                      {term}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
             <button
               onClick={() => setSettingsOpen(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
@@ -1638,8 +1661,13 @@ export function ClassRecordTable({
             <thead>
               <tr className="bg-gray-100">
                 <th className="w-[30%] border border-gray-300 px-4 py-2 text-left font-medium text-gray-700"></th>
-                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const).map(
-                  (term) => (
+                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const)
+                  .filter(
+                    (term) =>
+                      summarySelectedTerm === "ALL" ||
+                      summarySelectedTerm === term
+                  )
+                  .map((term) => (
                     <th
                       key={term}
                       className="w-[14%] border border-gray-300 px-2 py-2 text-center font-medium text-gray-700"
@@ -1647,29 +1675,40 @@ export function ClassRecordTable({
                     >
                       {term}
                     </th>
-                  )
+                  ))}
+                {summarySelectedTerm === "ALL" && (
+                  <th
+                    className="w-[14%] border border-gray-300 px-2 py-2 text-center font-medium text-gray-700"
+                    colSpan={2}
+                  >
+                    FINAL GRADE
+                  </th>
                 )}
-                <th
-                  className="w-[14%] border border-gray-300 px-2 py-2 text-center font-medium text-gray-700"
-                  colSpan={2}
-                >
-                  FINAL GRADE
-                </th>
               </tr>
               <tr className="bg-gray-50 text-xs">
                 <th className="border border-gray-300"></th>
-                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const).map(
-                  (term) => (
+                {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const)
+                  .filter(
+                    (term) =>
+                      summarySelectedTerm === "ALL" ||
+                      summarySelectedTerm === term
+                  )
+                  .map((term) => (
                     <React.Fragment key={term}>
                       <th className="border border-gray-300 px-2 py-1">
                         {TERM_WEIGHTS[term] * 100}%
                       </th>
                       <th className="border border-gray-300 px-2 py-1">EQV</th>
                     </React.Fragment>
-                  )
+                  ))}
+                {summarySelectedTerm === "ALL" && (
+                  <>
+                    <th className="border border-gray-300 px-2 py-1">GRADE</th>
+                    <th className="border border-gray-300 px-2 py-1">
+                      REMARKS
+                    </th>
+                  </>
                 )}
-                <th className="border border-gray-300 px-2 py-1">GRADE</th>
-                <th className="border border-gray-300 px-2 py-1">REMARKS</th>
               </tr>
             </thead>
             <tbody>
@@ -1734,112 +1773,120 @@ export function ClassRecordTable({
                         </span>
                       </div>
                     </td>
-                    {(
-                      ["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const
-                    ).map((term) => {
-                      const termGrade = computeTermGrade(student.id, term);
-                      const isSelected = selectedStudentId === student.id;
-                      return (
-                        <React.Fragment key={term}>
-                          <td
-                            className={`border py-3 text-center ${
-                              isSelected ? "border-white" : "border-gray-300"
-                            }`}
-                          >
-                            <input
-                              type="text"
-                              className={`w-14 h-8 text-center border rounded text-sm ${
-                                isSelected
-                                  ? "border-white text-white bg-transparent"
-                                  : "border-gray-200"
+                    {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const)
+                      .filter(
+                        (term) =>
+                          summarySelectedTerm === "ALL" ||
+                          summarySelectedTerm === term
+                      )
+                      .map((term) => {
+                        const termGrade = computeTermGrade(student.id, term);
+                        const isSelected = selectedStudentId === student.id;
+                        return (
+                          <React.Fragment key={term}>
+                            <td
+                              className={`border py-3 text-center ${
+                                isSelected ? "border-white" : "border-gray-300"
                               }`}
-                              value={termGrade?.totalPercent || "-"}
-                              readOnly
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                          <td
-                            className={`border py-3 text-center ${
-                              isSelected ? "border-white" : "border-gray-300"
-                            }`}
-                          >
-                            <input
-                              type="text"
-                              className={`w-14 h-8 text-center border rounded text-sm ${
-                                isSelected
-                                  ? termGrade?.numericGrade === "(error)"
-                                    ? "border-white text-white bg-red-500"
-                                    : "border-white text-white bg-transparent"
-                                  : termGrade?.numericGrade === "(error)"
-                                  ? "border-gray-200 bg-red-500 text-white"
-                                  : "border-gray-200"
+                            >
+                              <input
+                                type="text"
+                                className={`w-14 h-8 text-center border rounded text-sm ${
+                                  isSelected
+                                    ? "border-white text-white bg-transparent"
+                                    : "border-gray-200"
+                                }`}
+                                value={termGrade?.totalPercent || "-"}
+                                readOnly
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </td>
+                            <td
+                              className={`border py-3 text-center ${
+                                isSelected ? "border-white" : "border-gray-300"
                               }`}
-                              value={termGrade?.numericGrade || "-"}
-                              readOnly
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </td>
-                        </React.Fragment>
-                      );
-                    })}
-                    <td
-                      className={`border py-3 text-center ${
-                        selectedStudentId === student.id
-                          ? "border-white"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      <input
-                        type="text"
-                        className={`w-14 h-8 text-center border rounded text-sm font-medium ${
-                          selectedStudentId === student.id
-                            ? finalGrade &&
-                              finalGrade.grade &&
-                              !isNaN(parseFloat(finalGrade.grade)) &&
-                              parseFloat(finalGrade.grade) > 3.0
-                              ? "border-white text-red-500 bg-transparent"
-                              : "border-white text-white bg-transparent"
-                            : finalGrade &&
-                              finalGrade.grade &&
-                              !isNaN(parseFloat(finalGrade.grade)) &&
-                              parseFloat(finalGrade.grade) > 3.0
-                            ? "text-red-500 border-gray-200"
-                            : "border-gray-200"
-                        }`}
-                        value={
-                          finalGrade?.grade &&
-                          !isNaN(parseFloat(finalGrade.grade))
-                            ? finalGrade.grade
-                            : "-"
-                        }
-                        readOnly
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </td>
-                    <td
-                      className={`border py-3 text-center ${
-                        selectedStudentId === student.id
-                          ? "border-white"
-                          : "border-gray-300"
-                      }`}
-                    >
-                      <span
-                        className={`text-sm font-medium ${
-                          selectedStudentId === student.id
-                            ? finalGrade?.remarks === "PASSED"
-                              ? "text-green-600"
-                              : finalGrade?.remarks === "FAILED"
-                              ? "text-red-500"
-                              : "text-white"
-                            : finalGrade?.remarks === "PASSED"
-                            ? "text-green-600"
-                            : "text-red-500"
-                        }`}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {finalGrade?.remarks || "-"}
-                      </span>
-                    </td>
+                            >
+                              <input
+                                type="text"
+                                className={`w-14 h-8 text-center border rounded text-sm ${
+                                  isSelected
+                                    ? termGrade?.numericGrade === "(error)"
+                                      ? "border-white text-white bg-red-500"
+                                      : "border-white text-white bg-transparent"
+                                    : termGrade?.numericGrade === "(error)"
+                                    ? "border-gray-200 bg-red-500 text-white"
+                                    : "border-gray-200"
+                                }`}
+                                value={termGrade?.numericGrade || "-"}
+                                readOnly
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
+                    {summarySelectedTerm === "ALL" && (
+                      <>
+                        <td
+                          className={`border py-3 text-center ${
+                            selectedStudentId === student.id
+                              ? "border-white"
+                              : "border-gray-300"
+                          }`}
+                        >
+                          <input
+                            type="text"
+                            className={`w-14 h-8 text-center border rounded text-sm font-medium ${
+                              selectedStudentId === student.id
+                                ? finalGrade &&
+                                  finalGrade.grade &&
+                                  !isNaN(parseFloat(finalGrade.grade)) &&
+                                  parseFloat(finalGrade.grade) > 3.0
+                                  ? "border-white text-red-500 bg-transparent"
+                                  : "border-white text-white bg-transparent"
+                                : finalGrade &&
+                                  finalGrade.grade &&
+                                  !isNaN(parseFloat(finalGrade.grade)) &&
+                                  parseFloat(finalGrade.grade) > 3.0
+                                ? "text-red-500 border-gray-200"
+                                : "border-gray-200"
+                            }`}
+                            value={
+                              finalGrade?.grade &&
+                              !isNaN(parseFloat(finalGrade.grade))
+                                ? finalGrade.grade
+                                : "-"
+                            }
+                            readOnly
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
+                        <td
+                          className={`border py-3 text-center ${
+                            selectedStudentId === student.id
+                              ? "border-white"
+                              : "border-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`text-sm font-medium ${
+                              selectedStudentId === student.id
+                                ? finalGrade?.remarks === "PASSED"
+                                  ? "text-green-600"
+                                  : finalGrade?.remarks === "FAILED"
+                                  ? "text-red-500"
+                                  : "text-white"
+                                : finalGrade?.remarks === "PASSED"
+                                ? "text-green-600"
+                                : "text-red-500"
+                            }`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {finalGrade?.remarks || "-"}
+                          </span>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
