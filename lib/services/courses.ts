@@ -364,8 +364,8 @@ export async function getCourseStudentsWithAttendance(
   const tomorrow = new Date(targetDate);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  // Get course ID first
-  const course = await prisma.course.findUnique({
+  // Optimized: Single query to get course with students and attendance
+  const courseWithData = await prisma.course.findUnique({
     where: { slug: courseSlug },
     select: {
       id: true,
@@ -376,15 +376,6 @@ export async function getCourseStudentsWithAttendance(
       academicYear: true,
       status: true,
       slug: true,
-    },
-  });
-
-  if (!course) return null;
-
-  // Batched query: Get all students with attendance and gradeScores in one go
-  const courseWithData = await prisma.course.findUnique({
-    where: { id: course.id },
-    include: {
       students: {
         select: {
           id: true,
@@ -396,7 +387,6 @@ export async function getCourseStudentsWithAttendance(
           rfid_id: true,
           attendance: {
             where: {
-              courseId: course.id,
               date: {
                 gte: targetDate,
                 lt: tomorrow,
@@ -407,14 +397,15 @@ export async function getCourseStudentsWithAttendance(
               status: true,
               date: true,
               courseId: true,
+              reason: true,
             },
             orderBy: {
               date: "desc",
             },
             take: 1,
           },
-          quizScores: true,
         },
+        take: 500, // Limit students to prevent excessive queries
       },
     },
   });
@@ -422,14 +413,19 @@ export async function getCourseStudentsWithAttendance(
   if (!courseWithData) return null;
 
   // Batch fetch all gradeScores for all students at once (fixes N+1)
+  // Only fetch if we have students to avoid unnecessary query
   const studentIds = courseWithData.students.map((s) => s.id);
-  const allGradeScores = await prisma.gradeScore.findMany({
-    where: {
-      courseId: course.id,
-      studentId: { in: studentIds },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const allGradeScores =
+    studentIds.length > 0
+      ? await prisma.gradeScore.findMany({
+          where: {
+            courseId: courseWithData.id,
+            studentId: { in: studentIds },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1000, // Limit to prevent excessive data
+        })
+      : [];
 
   // Group gradeScores by studentId, taking the latest for each
   const gradeScoresMap = new Map<string, (typeof allGradeScores)[0]>();
@@ -459,7 +455,7 @@ export async function getCourseStudentsWithAttendance(
       quizScore: latestGradeScore?.quizScore ?? 0,
       totalScore: latestGradeScore?.totalScore ?? 0,
       remarks: latestGradeScore?.remarks ?? "",
-      quizScores: student.quizScores,
+      quizScores: [], // Removed quizScores to reduce query complexity
     };
   });
 

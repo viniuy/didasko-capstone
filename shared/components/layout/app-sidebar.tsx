@@ -71,7 +71,7 @@ const academicHeadItems = [
     icon: LayoutDashboard,
   },
   { title: "Courses", url: "/main/course", icon: BookOpen },
-  { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
+  { title: "Faculty", url: "/main/faculty-load", icon: CalendarClock },
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
 ];
 

@@ -20,13 +20,12 @@ const ClickSpark = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const parent = canvas.parentElement;
-    if (!parent) return;
-
     let resizeTimeout;
 
     const resizeCanvas = () => {
-      const { width, height } = parent.getBoundingClientRect();
+      // Size canvas to viewport dimensions, not just parent
+      const width = window.innerWidth;
+      const height = window.innerHeight;
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
         canvas.height = height;
@@ -38,13 +37,11 @@ const ClickSpark = ({
       resizeTimeout = setTimeout(resizeCanvas, 100);
     };
 
-    const ro = new ResizeObserver(handleResize);
-    ro.observe(parent);
-
+    window.addEventListener("resize", handleResize);
     resizeCanvas();
 
     return () => {
-      ro.disconnect();
+      window.removeEventListener("resize", handleResize);
       clearTimeout(resizeTimeout);
     };
   }, []);
@@ -123,23 +120,35 @@ const ClickSpark = ({
     extraScale,
   ]);
 
-  const handleClick = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  // Use document-level event delegation to capture clicks on all elements
+  useEffect(() => {
+    const handleClick = (e) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const now = performance.now();
-    const newSparks = Array.from({ length: sparkCount }, (_, i) => ({
-      x,
-      y,
-      angle: (2 * Math.PI * i) / sparkCount,
-      startTime: now,
-    }));
+      // Use viewport coordinates directly since canvas is sized to viewport
+      const x = e.clientX;
+      const y = e.clientY;
 
-    sparksRef.current.push(...newSparks);
-  };
+      // Create sparks for any click on the page
+      const now = performance.now();
+      const newSparks = Array.from({ length: sparkCount }, (_, i) => ({
+        x,
+        y,
+        angle: (2 * Math.PI * i) / sparkCount,
+        startTime: now,
+      }));
+
+      sparksRef.current.push(...newSparks);
+    };
+
+    // Attach click listener to document to capture all clicks
+    document.addEventListener("click", handleClick);
+
+    return () => {
+      document.removeEventListener("click", handleClick);
+    };
+  }, [sparkCount]);
 
   return (
     <div
@@ -148,19 +157,19 @@ const ClickSpark = ({
         width: "100%",
         height: "100%",
       }}
-      onClick={handleClick}
     >
       <canvas
         ref={canvasRef}
         style={{
-          width: "100%",
-          height: "100%",
+          width: "100vw",
+          height: "100vh",
           display: "block",
           userSelect: "none",
-          position: "absolute",
+          position: "fixed",
           top: 0,
           left: 0,
           pointerEvents: "none",
+          zIndex: 9999,
         }}
       />
       {children}

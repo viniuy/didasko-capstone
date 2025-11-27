@@ -341,8 +341,6 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -571,7 +569,5 @@ export async function POST_IMPORT(request: NextRequest) {
       { error: "Failed to import courses" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

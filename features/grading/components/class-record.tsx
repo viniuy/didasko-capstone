@@ -2210,7 +2210,7 @@ export function ClassRecordTable({
               onDisappearanceComplete={() => {}}
             >
               <p className="text-lg sm:text-xl text-gray-600 mb-8">
-                get started by saving your class record!
+                get started by setting up your class record!
               </p>
             </AnimatedContent>
             <div className="flex items-center justify-center mt-8">

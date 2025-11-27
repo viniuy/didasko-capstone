@@ -323,8 +323,19 @@ export function ScheduleAssignmentDialog({
     } else {
       // Close modal immediately before starting the operation
       onOpenChange(false);
+
+      // Show loading toast based on mode
+      let loadingToast;
+      if (mode === "edit") {
+        loadingToast = toast.loading("Updating schedules...");
+      } else if (mode === "import") {
+        loadingToast = toast.loading("Creating courses...");
+      } else {
+        loadingToast = toast.loading("Creating course...");
+      }
+
       // Then handle completion with loading toast
-      handleComplete(updatedSchedules);
+      handleComplete(updatedSchedules, loadingToast);
     }
   };
 
@@ -361,11 +372,15 @@ export function ScheduleAssignmentDialog({
     }
   };
 
-  const handleComplete = async (schedules: Record<number, Schedule[]>) => {
+  const handleComplete = async (
+    schedules: Record<number, Schedule[]>,
+    loadingToast?: string
+  ) => {
     try {
       if (mode === "create") {
         // Check if limit is reached before creating
         if (currentActiveCount >= maxActiveCourses) {
+          if (loadingToast) toast.dismiss(loadingToast);
           toast.error(
             `Maximum limit of ${maxActiveCourses} active courses reached. Please archive some courses before adding new ones.`
           );
@@ -376,8 +391,8 @@ export function ScheduleAssignmentDialog({
         const courseData = currentCourse;
         const schedulesToAdd = schedules[0] || [];
 
-        // Show loading toast
-        const loadingToast = toast.loading("Creating course...");
+        // Use provided loading toast or create new one
+        const toastId = loadingToast || toast.loading("Creating course...");
 
         try {
           await createCourseMutation.mutateAsync({
@@ -390,10 +405,10 @@ export function ScheduleAssignmentDialog({
           } as any);
 
           // Dismiss loading toast (success toast is handled by the mutation)
-          toast.dismiss(loadingToast);
+          toast.dismiss(toastId);
         } catch (error) {
           // Dismiss loading toast on error (error toast is handled by the mutation)
-          toast.dismiss(loadingToast);
+          toast.dismiss(toastId);
           throw error;
         }
       } else if (mode === "import") {
@@ -404,6 +419,7 @@ export function ScheduleAssignmentDialog({
         const remainingSlots = maxActiveCourses - currentActiveCount;
 
         if (coursesToImport.length > remainingSlots) {
+          if (loadingToast) toast.dismiss(loadingToast);
           toast.error(
             `Cannot import ${coursesToImport.length} course(s). You can only add ${remainingSlots} more active course(s) (maximum ${maxActiveCourses} active courses allowed).`
           );
@@ -427,47 +443,70 @@ export function ScheduleAssignmentDialog({
           })),
         }));
 
-        const response = await importCoursesMutation.mutateAsync(
-          coursesWithSchedules
-        );
+        // Use provided loading toast or create new one
+        const toastId = loadingToast || toast.loading("Creating courses...");
 
-        // Close dialog immediately after import
-        onOpenChange(false);
+        try {
+          const response = await importCoursesMutation.mutateAsync(
+            coursesWithSchedules
+          );
 
-        // Process import results
-        if (response?.results) {
-          const results = response.results;
-          // Pass results to onComplete callback
-          if (!isCanceling) {
-            onComplete(results);
+          // Dismiss loading toast (success toast is handled by the mutation)
+          toast.dismiss(toastId);
+
+          // Close dialog immediately after import
+          onOpenChange(false);
+
+          // Process import results
+          if (response?.results) {
+            const results = response.results;
+            // Pass results to onComplete callback
+            if (!isCanceling) {
+              onComplete(results);
+            }
+          } else {
+            // If no results, still call onComplete
+            if (!isCanceling) {
+              onComplete(null);
+            }
           }
-        } else {
-          // If no results, still call onComplete
-          if (!isCanceling) {
-            onComplete(null);
-          }
+        } catch (error) {
+          // Dismiss loading toast on error (error toast is handled by the mutation)
+          toast.dismiss(toastId);
+          throw error;
         }
       } else if (mode === "edit") {
         // Edit mode: Update schedules for existing course
         const courseSlug = currentCourse.slug;
         if (!courseSlug) {
+          if (loadingToast) toast.dismiss(loadingToast);
           throw new Error("Course slug is missing");
         }
 
         const schedulesToUpdate = schedules[0] || [];
 
-        await assignSchedulesMutation.mutateAsync({
-          courseSlug,
-          schedules: schedulesToUpdate.map((s) => ({
-            day: s.day.slice(0, 3), // Convert to short form
-            fromTime: s.fromTime,
-            toTime: s.toTime,
-          })),
-        });
+        // Use provided loading toast or create new one
+        const toastId = loadingToast || toast.loading("Updating schedules...");
 
-        // Success toast is handled by the mutation
-        // Close dialog for edit mode
-        onOpenChange(false);
+        try {
+          await assignSchedulesMutation.mutateAsync({
+            courseSlug,
+            schedules: schedulesToUpdate.map((s) => ({
+              day: s.day.slice(0, 3), // Convert to short form
+              fromTime: s.fromTime,
+              toTime: s.toTime,
+            })),
+          });
+
+          // Dismiss loading toast (success toast is handled by the mutation)
+          toast.dismiss(toastId);
+          // Close dialog for edit mode
+          onOpenChange(false);
+        } catch (error) {
+          // Dismiss loading toast on error (error toast is handled by the mutation)
+          toast.dismiss(toastId);
+          throw error;
+        }
       }
 
       // Only call onComplete if we're not canceling

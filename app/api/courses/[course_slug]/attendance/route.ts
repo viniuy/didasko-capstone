@@ -87,10 +87,14 @@ export async function POST(request: Request, context: { params }) {
         );
       }
 
+      // Limit attendance array size to prevent excessive queries
+      const MAX_ATTENDANCE_RECORDS = 500;
+      const safeAttendance = attendance.slice(0, MAX_ATTENDANCE_RECORDS);
+
       // Process attendance records efficiently in batch
       await prisma.$transaction(async (tx) => {
         // 1. Fetch all existing records for this date in one query
-        const studentIds = attendance.map((r: any) => r.studentId);
+        const studentIds = safeAttendance.map((r: any) => r.studentId);
         const existingRecords = await tx.attendance.findMany({
           where: {
             studentId: { in: studentIds },
@@ -100,6 +104,7 @@ export async function POST(request: Request, context: { params }) {
               lt: new Date(utcDate.getTime() + 24 * 60 * 60 * 1000),
             },
           },
+          take: MAX_ATTENDANCE_RECORDS, // Limit query results
         });
 
         // 2. Create a map of existing records by studentId for quick lookup
@@ -121,7 +126,7 @@ export async function POST(request: Request, context: { params }) {
           reason: string | null;
         }> = [];
 
-        for (const record of attendance) {
+        for (const record of safeAttendance) {
           const existing = existingMap.get(record.studentId);
           const status = record.status as
             | "PRESENT"
@@ -151,19 +156,23 @@ export async function POST(request: Request, context: { params }) {
         }
 
         // 4. Batch update existing records
+        // Limit concurrent updates to prevent connection pool exhaustion
         if (toUpdate.length > 0) {
-          // Prisma doesn't support batch update with different values, so we use Promise.all
-          await Promise.all(
-            toUpdate.map((update) =>
-              tx.attendance.update({
-                where: { id: update.id },
-                data: {
-                  status: update.status as any,
-                  reason: update.reason,
-                },
-              })
-            )
-          );
+          const BATCH_SIZE = 50;
+          for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+            const batch = toUpdate.slice(i, i + BATCH_SIZE);
+            await Promise.all(
+              batch.map((update) =>
+                tx.attendance.update({
+                  where: { id: update.id },
+                  data: {
+                    status: update.status as any,
+                    reason: update.reason,
+                  },
+                })
+              )
+            );
+          }
         }
 
         // 5. Batch create new records
@@ -177,7 +186,11 @@ export async function POST(request: Request, context: { params }) {
 
       return NextResponse.json({
         message: "Attendance saved successfully",
-        records: attendance.length,
+        records: safeAttendance.length,
+        totalReceived: attendance.length,
+        ...(attendance.length > MAX_ATTENDANCE_RECORDS && {
+          warning: `Only the first ${MAX_ATTENDANCE_RECORDS} records were processed`,
+        }),
       });
     } catch (error: any) {
       if (error.message?.includes("not found")) {

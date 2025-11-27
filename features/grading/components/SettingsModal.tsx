@@ -1239,19 +1239,30 @@ export function SettingsModal({
                       <div className="relative flex items-center gap-1">
                         <input
                           type="text"
-                          value={pt.maxScore}
+                          value={pt.maxScore === 0 ? "" : pt.maxScore}
                           onChange={(e) => {
                             if (pt.linkedCriteriaId) return;
-                            handleNumericInput(
-                              e.target.value,
-                              0,
-                              200,
-                              (value) => {
-                                updateAssessment("PT", pt.id, {
-                                  maxScore: value,
-                                });
-                              }
-                            );
+                            const value = e.target.value;
+                            // Allow empty string
+                            if (value === "") {
+                              updateAssessment("PT", pt.id, {
+                                maxScore: 0,
+                              });
+                              return;
+                            }
+                            handleNumericInput(value, 0, 200, (numValue) => {
+                              updateAssessment("PT", pt.id, {
+                                maxScore: numValue,
+                              });
+                            });
+                          }}
+                          onBlur={(e) => {
+                            // If empty on blur, set to 0
+                            if (e.target.value === "" && !pt.linkedCriteriaId) {
+                              updateAssessment("PT", pt.id, {
+                                maxScore: 0,
+                              });
+                            }
                           }}
                           onKeyDown={(e) => {
                             if (
@@ -1266,7 +1277,7 @@ export function SettingsModal({
                               ? "bg-gray-100 cursor-not-allowed text-gray-500"
                               : ""
                           }`}
-                          placeholder="Max"
+                          placeholder=""
                           min="0"
                           max="200"
                           data-tutorial="pt-max-score"
@@ -1287,13 +1298,33 @@ export function SettingsModal({
                       <span className="text-xs text-gray-600">Base</span>
                       <input
                         type="text"
-                        value={pt.transmutationBase ?? 0}
+                        value={
+                          pt.transmutationBase === 0
+                            ? ""
+                            : pt.transmutationBase ?? ""
+                        }
                         onChange={(e) => {
-                          handleNumericInput(e.target.value, 0, 75, (value) => {
+                          const value = e.target.value;
+                          // Allow empty string
+                          if (value === "") {
                             updateAssessment("PT", pt.id, {
-                              transmutationBase: value,
+                              transmutationBase: 0,
+                            });
+                            return;
+                          }
+                          handleNumericInput(value, 0, 75, (numValue) => {
+                            updateAssessment("PT", pt.id, {
+                              transmutationBase: numValue,
                             });
                           });
+                        }}
+                        onBlur={(e) => {
+                          // If empty on blur, set to 0
+                          if (e.target.value === "") {
+                            updateAssessment("PT", pt.id, {
+                              transmutationBase: 0,
+                            });
+                          }
                         }}
                         onKeyDown={(e) => {
                           if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
@@ -1307,7 +1338,6 @@ export function SettingsModal({
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
-                      <Calendar className="w-4 h-4 text-gray-400" />
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -1476,19 +1506,33 @@ export function SettingsModal({
                       <div className="relative flex items-center gap-1">
                         <input
                           type="text"
-                          value={quiz.maxScore}
+                          value={quiz.maxScore === 0 ? "" : quiz.maxScore}
                           onChange={(e) => {
                             if (quiz.linkedCriteriaId) return;
-                            handleNumericInput(
-                              e.target.value,
-                              0,
-                              200,
-                              (value) => {
-                                updateAssessment("QUIZ", quiz.id, {
-                                  maxScore: value,
-                                });
-                              }
-                            );
+                            const value = e.target.value;
+                            // Allow empty string
+                            if (value === "") {
+                              updateAssessment("QUIZ", quiz.id, {
+                                maxScore: 0,
+                              });
+                              return;
+                            }
+                            handleNumericInput(value, 0, 200, (numValue) => {
+                              updateAssessment("QUIZ", quiz.id, {
+                                maxScore: numValue,
+                              });
+                            });
+                          }}
+                          onBlur={(e) => {
+                            // If empty on blur, set to 0
+                            if (
+                              e.target.value === "" &&
+                              !quiz.linkedCriteriaId
+                            ) {
+                              updateAssessment("QUIZ", quiz.id, {
+                                maxScore: 0,
+                              });
+                            }
                           }}
                           onKeyDown={(e) => {
                             if (
@@ -1503,7 +1547,7 @@ export function SettingsModal({
                               ? "bg-gray-100 cursor-not-allowed text-gray-500"
                               : ""
                           }`}
-                          placeholder="Max"
+                          placeholder=""
                           min="0"
                           max="200"
                           data-tutorial="quiz-max-score"
@@ -1524,13 +1568,33 @@ export function SettingsModal({
                       <span className="text-xs text-gray-600">Base</span>
                       <input
                         type="text"
-                        value={quiz.transmutationBase ?? 0}
+                        value={
+                          quiz.transmutationBase === 0
+                            ? ""
+                            : quiz.transmutationBase ?? ""
+                        }
                         onChange={(e) => {
-                          handleNumericInput(e.target.value, 0, 75, (value) => {
+                          const value = e.target.value;
+                          // Allow empty string
+                          if (value === "") {
                             updateAssessment("QUIZ", quiz.id, {
-                              transmutationBase: value,
+                              transmutationBase: 0,
+                            });
+                            return;
+                          }
+                          handleNumericInput(value, 0, 75, (numValue) => {
+                            updateAssessment("QUIZ", quiz.id, {
+                              transmutationBase: numValue,
                             });
                           });
+                        }}
+                        onBlur={(e) => {
+                          // If empty on blur, set to 0
+                          if (e.target.value === "") {
+                            updateAssessment("QUIZ", quiz.id, {
+                              transmutationBase: 0,
+                            });
+                          }
                         }}
                         onKeyDown={(e) => {
                           if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
@@ -1544,7 +1608,6 @@ export function SettingsModal({
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
-                      <Calendar className="w-4 h-4 text-gray-400" />
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -1696,19 +1759,30 @@ export function SettingsModal({
                     <div className="relative flex items-center gap-1">
                       <input
                         type="text"
-                        value={exam.maxScore}
+                        value={exam.maxScore === 0 ? "" : exam.maxScore}
                         onChange={(e) => {
                           if (exam.linkedCriteriaId) return;
-                          handleNumericInput(
-                            e.target.value,
-                            0,
-                            200,
-                            (value) => {
-                              updateAssessment("EXAM", exam.id, {
-                                maxScore: value,
-                              });
-                            }
-                          );
+                          const value = e.target.value;
+                          // Allow empty string
+                          if (value === "") {
+                            updateAssessment("EXAM", exam.id, {
+                              maxScore: 0,
+                            });
+                            return;
+                          }
+                          handleNumericInput(value, 0, 200, (numValue) => {
+                            updateAssessment("EXAM", exam.id, {
+                              maxScore: numValue,
+                            });
+                          });
+                        }}
+                        onBlur={(e) => {
+                          // If empty on blur, set to 0
+                          if (e.target.value === "" && !exam.linkedCriteriaId) {
+                            updateAssessment("EXAM", exam.id, {
+                              maxScore: 0,
+                            });
+                          }
                         }}
                         onKeyDown={(e) => {
                           if ([".", ",", "e", "E", "+", "-"].includes(e.key)) {
@@ -1741,7 +1815,6 @@ export function SettingsModal({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-1">
-                    <Calendar className="w-4 h-4 text-gray-400" />
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button

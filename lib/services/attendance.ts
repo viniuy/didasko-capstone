@@ -19,6 +19,10 @@ export async function getAttendance(
 
   if (!course) return null;
 
+  // Add max limit to prevent excessive queries
+  const MAX_LIMIT = 1000;
+  const safeLimit = Math.min(limit, MAX_LIMIT);
+
   const [total, attendanceRecords] = await Promise.all([
     prisma.attendance.count({
       where: {
@@ -37,7 +41,15 @@ export async function getAttendance(
           lte: endDate,
         },
       },
-      include: {
+      select: {
+        id: true,
+        studentId: true,
+        courseId: true,
+        date: true,
+        status: true,
+        reason: true,
+        createdAt: true,
+        updatedAt: true,
         student: {
           select: {
             id: true,
@@ -58,7 +70,7 @@ export async function getAttendance(
         },
       },
       skip,
-      take: limit,
+      take: safeLimit,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     }),
   ]);
@@ -68,8 +80,8 @@ export async function getAttendance(
     pagination: {
       total,
       page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
     },
   };
 }
@@ -222,6 +234,7 @@ export async function getAttendanceDates(courseSlug: string) {
 
 // Get attendance stats for a course
 // Note: Not cached to ensure fresh data after saves
+// Optimized: Use database aggregation instead of fetching all records
 export async function getAttendanceStats(courseSlug: string) {
   const course = await prisma.course.findUnique({
     where: { slug: courseSlug },
@@ -230,23 +243,30 @@ export async function getAttendanceStats(courseSlug: string) {
 
   if (!course) return null;
 
-  const attendanceRecords = await prisma.attendance.findMany({
+  // Use groupBy for efficient aggregation instead of fetching all records
+  const statusCounts = await prisma.attendance.groupBy({
+    by: ["status"],
     where: { courseId: course.id },
+    _count: {
+      status: true,
+    },
   });
 
-  const totalRecords = attendanceRecords.length;
-  const totalPresent = attendanceRecords.filter(
-    (a) => a.status === "PRESENT"
-  ).length;
-  const totalAbsents = attendanceRecords.filter(
-    (a) => a.status === "ABSENT"
-  ).length;
-  const totalLate = attendanceRecords.filter(
-    (a) => a.status === "LATE"
-  ).length;
-  const totalExcused = attendanceRecords.filter(
-    (a) => a.status === "EXCUSED"
-  ).length;
+  // Convert to map for easy lookup
+  const countsMap = new Map(
+    statusCounts.map((item) => [item.status, item._count.status])
+  );
+
+  const totalRecords =
+    (countsMap.get("PRESENT") || 0) +
+    (countsMap.get("ABSENT") || 0) +
+    (countsMap.get("LATE") || 0) +
+    (countsMap.get("EXCUSED") || 0);
+
+  const totalPresent = countsMap.get("PRESENT") || 0;
+  const totalAbsents = countsMap.get("ABSENT") || 0;
+  const totalLate = countsMap.get("LATE") || 0;
+  const totalExcused = countsMap.get("EXCUSED") || 0;
 
   const attendanceRate =
     totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : 0;

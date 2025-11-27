@@ -19,38 +19,41 @@ export async function GET(request: Request, context: { params }) {
     const params = await Promise.resolve(context.params);
     const { course_slug } = params;
 
-    // Get the course with its students
+    // Get the course ID first (lightweight query)
     const course = await prisma.course.findUnique({
       where: { slug: course_slug },
-      include: {
-        students: {
-          select: {
-            id: true,
-          },
-        },
-      },
+      select: { id: true },
     });
 
     if (!course) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
     }
 
-    // Get the most recent attendance date for this course
-    const mostRecentAttendance = await prisma.attendance.findFirst({
-      where: {
-        courseId: course.id,
-      },
-      orderBy: {
-        date: "desc",
-      },
-      select: {
-        date: true,
-      },
-    });
+    // Get student count and most recent attendance date in parallel
+    const [studentCount, mostRecentAttendance] = await Promise.all([
+      prisma.student.count({
+        where: {
+          coursesEnrolled: {
+            some: { id: course.id },
+          },
+        },
+      }),
+      prisma.attendance.findFirst({
+        where: {
+          courseId: course.id,
+        },
+        orderBy: {
+          date: "desc",
+        },
+        select: {
+          date: true,
+        },
+      }),
+    ]);
 
     if (!mostRecentAttendance) {
       const stats: AttendanceStats = {
-        totalStudents: course.students.length,
+        totalStudents: studentCount,
         totalPresent: 0,
         totalAbsent: 0,
         totalLate: 0,
@@ -60,46 +63,27 @@ export async function GET(request: Request, context: { params }) {
       return NextResponse.json(stats);
     }
 
-    // Get all attendance records for the most recent date
-    const attendanceRecords = await prisma.attendance.findMany({
+    // Use groupBy for efficient aggregation instead of fetching all records
+    const statusCounts = await prisma.attendance.groupBy({
+      by: ["status"],
       where: {
         courseId: course.id,
         date: mostRecentAttendance.date,
       },
-      select: {
-        studentId: true,
+      _count: {
         status: true,
       },
     });
 
-    // Create a map of student IDs to their attendance status
-    const attendanceMap = new Map(
-      attendanceRecords.map((record) => [record.studentId, record.status])
+    // Convert to map for easy lookup
+    const countsMap = new Map(
+      statusCounts.map((item) => [item.status, item._count.status])
     );
 
-    // Count attendance statuses
-    let totalPresent = 0;
-    let totalAbsents = 0;
-    let totalLate = 0;
-
-    course.students.forEach((student: { id: string }) => {
-      const status = attendanceMap.get(student.id);
-      switch (status) {
-        case "PRESENT":
-          totalPresent++;
-          break;
-        case "ABSENT":
-          totalAbsents++;
-          break;
-        case "LATE":
-          totalLate++;
-          break;
-        default:
-          totalAbsents++; // Count NOT_SET as absent
-      }
-    });
-
-    const totalStudents = course.students.length;
+    const totalPresent = countsMap.get("PRESENT") || 0;
+    const totalAbsents = countsMap.get("ABSENT") || 0;
+    const totalLate = countsMap.get("LATE") || 0;
+    const totalStudents = studentCount;
     const attendanceRate =
       totalStudents > 0
         ? ((totalPresent + totalLate) / totalStudents) * 100

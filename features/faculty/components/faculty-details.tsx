@@ -43,7 +43,7 @@ export default function FacultyDetails({
 }: FacultyDetailsProps) {
   const [stats, setStats] = useState({
     totalStudents: 0,
-    totalClasses: 0,
+    totalCourses: 0,
     totalTeachingHours: 0,
   });
   const [isNavigating, setIsNavigating] = useState(false);
@@ -60,41 +60,50 @@ export default function FacultyDetails({
 
     // Calculate total unique students across all active courses
     const uniqueStudents = new Set();
-    let totalClasses = 0;
+    let totalCourses = 0;
     let totalTeachingHours = 0;
 
     activeCourses.forEach((course) => {
-      // Count students
-      course.students?.forEach((student) => {
-        uniqueStudents.add(student.id);
-      });
-      // Count classes (schedules)
-      totalClasses += course.schedules?.length || 0;
+      // Count students - ensure students array exists and has valid IDs
+      if (course.students && Array.isArray(course.students)) {
+        course.students.forEach((student) => {
+          if (student && student.id) {
+            uniqueStudents.add(student.id);
+          }
+        });
+      }
+      // Count courses
+      totalCourses += 1;
 
       // Calculate teaching hours per week
       course.schedules?.forEach((schedule) => {
         if (!schedule.fromTime || !schedule.toTime) return;
-        
+
         try {
           const fromParts = schedule.fromTime.split(":");
           const toParts = schedule.toTime.split(":");
-          
+
           if (fromParts.length !== 2 || toParts.length !== 2) return;
-          
+
           const fromHours = parseInt(fromParts[0], 10);
           const fromMinutes = parseInt(fromParts[1], 10);
           const toHours = parseInt(toParts[0], 10);
           const toMinutes = parseInt(toParts[1], 10);
-          
-          if (isNaN(fromHours) || isNaN(fromMinutes) || isNaN(toHours) || isNaN(toMinutes)) {
+
+          if (
+            isNaN(fromHours) ||
+            isNaN(fromMinutes) ||
+            isNaN(toHours) ||
+            isNaN(toMinutes)
+          ) {
             return;
           }
-          
+
           const fromTotalMinutes = fromHours * 60 + fromMinutes;
           const toTotalMinutes = toHours * 60 + toMinutes;
-          
+
           const durationHours = (toTotalMinutes - fromTotalMinutes) / 60;
-          
+
           if (durationHours > 0 && !isNaN(durationHours)) {
             totalTeachingHours += durationHours;
           }
@@ -107,7 +116,7 @@ export default function FacultyDetails({
 
     setStats({
       totalStudents: uniqueStudents.size,
-      totalClasses: totalClasses,
+      totalCourses: totalCourses,
       totalTeachingHours: Math.round(totalTeachingHours * 10) / 10, // Round to 1 decimal place
     });
   }, [faculty]);
@@ -197,9 +206,9 @@ export default function FacultyDetails({
               <GraduationCap size={24} />
             </div>
             <div className="text-2xl font-bold text-[#124A69]">
-              {stats.totalClasses}
+              {stats.totalCourses}
             </div>
-            <div className="text-sm text-gray-600">SECTIONS</div>
+            <div className="text-sm text-gray-600">COURSES</div>
           </div>
 
           <div className="bg-[#F8F9FA] rounded-lg p-4 text-center">

@@ -393,20 +393,25 @@ const CourseCard = ({
       >
         <div className="mb-2 sm:mb-3 md:mb-4">
           <h3
-            className={`font-bold group-hover:text-[#0C3246] transition-colors ${
+            className={`font-bold group-hover:text-[#0C3246] transition-colors flex items-center gap-1 ${
               itemsPerPage === 3
                 ? "text-sm sm:text-base"
                 : "text-base sm:text-lg"
             }`}
+            title={`${course.code} - ${course.section}`}
           >
-            {course.code} - {course.section}
+            <span className="truncate max-w-[120px] sm:max-w-[150px] md:max-w-[180px]">
+              {course.code}
+            </span>
+            <span className="flex-shrink-0">- {course.section}</span>
           </h3>
           <p
-            className={`opacity-80 mt-0.5 sm:mt-1 line-clamp-2 ${
+            className={`opacity-80 mt-0.5 sm:mt-1 truncate ${
               itemsPerPage === 3
                 ? "text-[9px] sm:text-[10px]"
                 : "text-[10px] sm:text-xs"
             }`}
+            title={course.title}
           >
             {course.title}
           </p>
@@ -1006,7 +1011,7 @@ export function CourseDataTable({
   // Course action handlers
   const handleEditCourse = (course: Course) => {
     setEditingCourse(course);
-    setIsEditingCourse(true);
+    // Don't set loading state here - only when user confirms
   };
 
   const handleAddSchedule = (course: Course) => {
@@ -1014,7 +1019,7 @@ export function CourseDataTable({
     setImportedCoursesForSchedule([course]);
     setScheduleDialogMode("edit");
     setShowScheduleAssignment(true);
-    setIsEditingSchedule(true);
+    // Don't set loading state here - only when user confirms
   };
 
   const handleViewDetails = (course: Course) => {
@@ -2384,6 +2389,14 @@ export function CourseDataTable({
 
   const handleScheduleAssignmentComplete = useCallback(
     async (importResults?: any) => {
+      // Set loading state when user confirms (for edit mode)
+      if (scheduleDialogMode === "edit") {
+        setIsEditingSchedule(true);
+      } else if (scheduleDialogMode === "create") {
+        setIsEditingCourse(true);
+        setIsEditingSchedule(true);
+      }
+
       // If import results are provided, show detailed status
       if (importResults && scheduleDialogMode === "import") {
         // Merge pre-import validation errors with API import results
@@ -2439,67 +2452,69 @@ export function CourseDataTable({
       // Small delay for visual feedback
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      // For edit mode, ensure comprehensive invalidation and refetch
-      if (scheduleDialogMode === "edit") {
-        // Invalidate all course-related queries
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.courses.all,
-        });
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.stats.all,
-        });
+      try {
+        // For edit mode, ensure comprehensive invalidation and refetch
+        if (scheduleDialogMode === "edit") {
+          // Invalidate all course-related queries
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.courses.all,
+          });
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.stats.all,
+          });
 
-        // Invalidate specific course queries
-        await queryClient.invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) && key.length >= 1 && key[0] === "courses"
-            );
-          },
-        });
+          // Invalidate specific course queries
+          await queryClient.invalidateQueries({
+            predicate: (query) => {
+              const key = query.queryKey;
+              return (
+                Array.isArray(key) && key.length >= 1 && key[0] === "courses"
+              );
+            },
+          });
 
-        // Force refetch all course queries
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.courses.all,
-        });
+          // Force refetch all course queries
+          await queryClient.refetchQueries({
+            queryKey: queryKeys.courses.all,
+          });
 
-        // Force refetch active courses to ensure UI updates immediately
-        await queryClient.refetchQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key.length >= 2 &&
-              key[0] === "courses" &&
-              (key[1] === "list" || key[1] === "active")
-            );
-          },
-        });
-      } else {
-        // For create/import mode, use the standard refresh
-        await refreshTableData(false);
+          // Force refetch active courses to ensure UI updates immediately
+          await queryClient.refetchQueries({
+            predicate: (query) => {
+              const key = query.queryKey;
+              return (
+                Array.isArray(key) &&
+                key.length >= 2 &&
+                key[0] === "courses" &&
+                (key[1] === "list" || key[1] === "active")
+              );
+            },
+          });
+        } else {
+          // For create/import mode, use the standard refresh
+          await refreshTableData(false);
+        }
+
+        if (onCourseAdded) onCourseAdded();
+
+        // Reset all state
+        setImportedCoursesForSchedule([]);
+        setShowScheduleAssignment(false);
+        setSelectedFile(null);
+        setPreviewData([]);
+        setIsValidFile(false);
+        setPreImportValidationErrors([]);
+      } finally {
+        // Clear editing states after everything is complete
+        setIsEditingSchedule(false);
+        if (scheduleDialogMode === "create") {
+          setIsEditingCourse(false);
+        }
+
+        // Ensure loading states are cleared
+        setIsLoading(false);
+        setIsRefreshing(false);
       }
-
-      if (onCourseAdded) onCourseAdded();
-
-      // Reset all state
-      setImportedCoursesForSchedule([]);
-      setShowScheduleAssignment(false);
-      setSelectedFile(null);
-      setPreviewData([]);
-      setIsValidFile(false);
-      setPreImportValidationErrors([]);
-
-      // Clear editing states after everything is complete
-      setIsEditingSchedule(false);
-      if (scheduleDialogMode === "create") {
-        setIsEditingCourse(false);
-      }
-
-      // Ensure loading states are cleared
-      setIsLoading(false);
-      setIsRefreshing(false);
     },
     [
       refreshTableData,
@@ -2754,16 +2769,27 @@ export function CourseDataTable({
                     placeholder="Search courses..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    disabled={isLoading}
-                    className="pl-9 h-10 sm:h-9 text-sm sm:text-base "
+                    disabled={isInitialLoading || isLoading || !hasLoadedOnce}
+                    className="pl-9 pr-9 h-10 sm:h-9 text-sm sm:text-base "
                   />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      disabled={isInitialLoading || isLoading || !hasLoadedOnce}
+                      className="absolute right-3 top-2.5 h-4 w-4 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
                   {/* Filter Button */}
                   <Button
                     variant="outline"
                     onClick={() => setIsFilterSheetOpen(true)}
-                    disabled={isLoading}
+                    disabled={isInitialLoading || isLoading || !hasLoadedOnce}
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
                   >
                     <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2782,7 +2808,7 @@ export function CourseDataTable({
                   <Button
                     variant="outline"
                     onClick={() => setShowSettingsDialog(true)}
-                    disabled={isLoading}
+                    disabled={isInitialLoading || isLoading || !hasLoadedOnce}
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                   >
                     <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2792,7 +2818,7 @@ export function CourseDataTable({
                     <Button
                       variant="outline"
                       onClick={() => setShowExportPreview(true)}
-                      disabled={isLoading}
+                      disabled={isInitialLoading || isLoading || !hasLoadedOnce}
                       className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                     >
                       <Download className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2811,7 +2837,12 @@ export function CourseDataTable({
                         }
                         setShowImportPreview(true);
                       }}
-                      disabled={hasReachedMaxActiveCourses || isLoading}
+                      disabled={
+                        hasReachedMaxActiveCourses ||
+                        isInitialLoading ||
+                        isLoading ||
+                        !hasLoadedOnce
+                      }
                       className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                       title={
                         hasReachedMaxActiveCourses
@@ -2837,18 +2868,22 @@ export function CourseDataTable({
                         // Store course data and open schedule dialog
                         // Course is NOT created yet - waiting for schedules
                         if (courseData) {
-                          setIsEditingCourse(true);
                           setPendingCourseData(courseData);
                           setImportedCoursesForSchedule([courseData]);
                           setScheduleDialogMode("create");
                           setShowScheduleAssignment(true);
-                          setIsEditingSchedule(true);
+                          // Don't set loading state here - only when user confirms
                         }
                       }}
                       faculties={faculties}
                       userId={userId}
                       userRole={userRole}
-                      disabled={hasReachedMaxActiveCourses || isLoading}
+                      disabled={
+                        hasReachedMaxActiveCourses ||
+                        isInitialLoading ||
+                        isLoading ||
+                        !hasLoadedOnce
+                      }
                     />
                   )}
                 </div>
@@ -2927,7 +2962,7 @@ export function CourseDataTable({
                             currentPage * itemsPerPage,
                             filteredCourses.length
                           )}{" "}
-                          of {filteredCourses.length} courses
+                          out of {filteredCourses.length} courses
                         </span>
 
                         <Pagination className="justify-end">
@@ -3610,10 +3645,20 @@ export function CourseDataTable({
               <CourseSheet
                 mode="edit"
                 course={editingCourse}
-                onSuccess={() => {
-                  setIsEditingCourse(false);
-                  refreshTableData(true);
-                  setEditingCourse(null);
+                onSuccess={async () => {
+                  // Set loading state when user confirms the edit
+                  setIsEditingCourse(true);
+                  setIsLoading(true);
+
+                  try {
+                    await refreshTableData(true);
+                  } catch (error) {
+                    toast.error("Failed to refresh course data");
+                  } finally {
+                    setIsEditingCourse(false);
+                    setIsLoading(false);
+                    setEditingCourse(null);
+                  }
                 }}
                 onClose={() => {
                   setIsEditingCourse(false);

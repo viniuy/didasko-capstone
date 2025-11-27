@@ -101,7 +101,5 @@ export async function POST(request: NextRequest) {
       { error: "Failed to assign schedules" },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

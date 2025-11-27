@@ -41,6 +41,8 @@ export async function GET(request: Request) {
             title: true,
             section: true,
             slug: true,
+            semester: true,
+            status: true,
             schedules: {
               select: {
                 id: true,
@@ -49,9 +51,9 @@ export async function GET(request: Request) {
                 toTime: true,
               },
             },
-            _count: {
+            students: {
               select: {
-                students: true,
+                id: true,
               },
             },
           },

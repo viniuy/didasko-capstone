@@ -179,12 +179,48 @@ export default function WeeklySchedule({
       }
     );
 
-    // Sort by time
-    schedulesForDay.sort((a, b) =>
-      a.schedule.fromTime.localeCompare(b.schedule.fromTime)
-    );
+    // Sort by time (convert to minutes for proper chronological sorting)
+    schedulesForDay.sort((a, b) => {
+      const timeA = timeToMinutes(a.schedule.fromTime);
+      const timeB = timeToMinutes(b.schedule.fromTime);
+      return timeA - timeB;
+    });
 
     return schedulesForDay;
+  };
+
+  // Convert time string to minutes since midnight for proper sorting
+  const timeToMinutes = (time: string): number => {
+    if (!time) return 0;
+
+    // Check if time already has AM/PM (12-hour format)
+    if (time.includes("AM") || time.includes("PM")) {
+      const match = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (match) {
+        let hour = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const period = match[3].toUpperCase();
+
+        if (period === "PM" && hour !== 12) {
+          hour += 12;
+        } else if (period === "AM" && hour === 12) {
+          hour = 0;
+        }
+
+        return hour * 60 + minutes;
+      }
+    }
+
+    // Parse 24-hour format (HH:MM)
+    const [hours, minutes] = time.split(":");
+    const hour = parseInt(hours, 10);
+    const min = parseInt(minutes, 10);
+
+    if (isNaN(hour) || isNaN(min)) {
+      return 0;
+    }
+
+    return hour * 60 + min;
   };
 
   const formatTime = (time: string) => {
@@ -214,7 +250,7 @@ export default function WeeklySchedule({
       <div className="bg-white rounded-lg shadow-sm p-4 min-h-[430px]">
         <div className="border-b pb-4 mb-4">
           <h2 className="text-base sm:text-lg md:text-xl font-bold text-center text-[#124A69]">
-            MY WEEKLY SCHEDULE
+            {isViewingOtherTeacher ? "WEEKLY SCHEDULE" : "MY WEEKLY SCHEDULE"}
           </h2>
         </div>
 
@@ -248,14 +284,14 @@ export default function WeeklySchedule({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm min-h-[430px]">
-      <div className="p-4 border-b">
+    <div className="bg-white rounded-lg shadow-sm min-h-[430px] max-h-[600px] flex flex-col">
+      <div className="p-4 border-b flex-shrink-0">
         <h2 className="text-base sm:text-lg md:text-xl font-bold text-center text-[#124A69]">
-          MY WEEKLY SCHEDULE
+          {isViewingOtherTeacher ? "WEEKLY SCHEDULE" : "MY WEEKLY SCHEDULE"}
         </h2>
       </div>
       {schedules.length === 0 ? (
-        <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center min-h-[400px]">
+        <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center min-h-[400px] flex-1">
           <div className="text-center space-y-4">
             <div className="text-4xl sm:text-5xl md:text-6xl text-[#124A69] opacity-20">
               <svg
@@ -284,7 +320,7 @@ export default function WeeklySchedule({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto">
+        <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto overflow-y-auto flex-1">
           {days.map((day) => (
             <div
               key={day}

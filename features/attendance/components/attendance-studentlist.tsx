@@ -250,6 +250,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const isSavingRfidAttendanceRef = useRef(false);
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [showTimeSetupModal, setShowTimeSetupModal] = useState(false);
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
+  const [showTimeoutConfirm, setShowTimeoutConfirm] = useState(false);
   const [graceMinutes, setGraceMinutes] = useState<number>(5);
   const [gracePeriodError, setGracePeriodError] = useState<string>("");
   const [restoredFromStorage, setRestoredFromStorage] = useState(false);
@@ -2062,6 +2064,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     await endAttendanceSession();
   };
 
+  const handleBackConfirm = () => {
+    // Close the RFID modal (minimize it)
+    setShowTimeoutModal(false);
+    setShowBackConfirm(false);
+  };
+
+  const handleTimeoutConfirm = async () => {
+    setShowTimeoutConfirm(false);
+    await handleDoneClick();
+  };
+
   const handleGracePeriodEnd = () => {
     try {
       localStorage.setItem(
@@ -2690,6 +2703,102 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     }
   };
 
+  const markAllExcusedAsPresent = async () => {
+    if (!selectedDate || !courseSlug) {
+      toast.error("Please select a date before marking attendance");
+      return;
+    }
+
+    const excusedStudents = studentList.filter((s) => s.status === "EXCUSED");
+    if (excusedStudents.length === 0) {
+      toast.dismiss("error-toast");
+      toast.error("No excused students to mark as present", {
+        id: "error-toast",
+      });
+      return;
+    }
+
+    setIsMarkingAll(true);
+    const dateStr = format(selectedDate, "yyyy-MM-dd");
+
+    // 1. IMMEDIATELY update local studentList array
+    setStudentList((prev) =>
+      prev.map((student) => {
+        if (student.status === "EXCUSED") {
+          const existingRecordIndex = student.attendanceRecords.findIndex(
+            (r) => r.date === dateStr
+          );
+          const newRecord: AttendanceRecord = {
+            id:
+              existingRecordIndex >= 0
+                ? student.attendanceRecords[existingRecordIndex].id
+                : crypto.randomUUID(),
+            studentId: student.id,
+            courseId: courseSlug,
+            status: "PRESENT",
+            date: dateStr,
+            reason: null,
+          };
+
+          return {
+            ...student,
+            status: "PRESENT",
+            attendanceRecords:
+              existingRecordIndex >= 0
+                ? student.attendanceRecords.map((r, idx) =>
+                    idx === existingRecordIndex ? newRecord : r
+                  )
+                : [...student.attendanceRecords, newRecord],
+          };
+        }
+        return student;
+      })
+    );
+
+    // 2. Save to database
+    const excusedStudentIds = new Set(excusedStudents.map((s) => s.id));
+    setSavingStudents(excusedStudentIds);
+    try {
+      await recordAttendanceMutation.mutateAsync({
+        courseSlug,
+        date: dateStr,
+        attendance: excusedStudents.map((student) => ({
+          studentId: student.id,
+          status: "PRESENT" as AttendanceStatus,
+        })),
+      });
+
+      // Dispatch event to update right sidebar
+      dispatchAttendanceUpdate();
+
+      toast.success("All excused students marked as present");
+    } catch (error) {
+      console.error("Error marking excused as present:", error);
+      // Revert on error
+      setStudentList((prev) =>
+        prev.map((student) => {
+          if (excusedStudents.find((es) => es.id === student.id)) {
+            const record = student.attendanceRecords.find(
+              (r) => r.date === dateStr
+            );
+            return {
+              ...student,
+              status: record?.status || "EXCUSED",
+            };
+          }
+          return student;
+        })
+      );
+      toast.dismiss("error-toast");
+      toast.error("Failed to mark excused students as present", {
+        id: "error-toast",
+      });
+    } finally {
+      setIsMarkingAll(false);
+      setSavingStudents(new Set());
+    }
+  };
+
   const renderStudentCards = useMemo(() => {
     console.log("Current Students:", currentStudents);
     return currentStudents.map((student, index) => (
@@ -2788,7 +2897,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           <div className="flex items-center gap-2">
             <div>
               <h1 className="text-[#124A69] font-bold text-xl">
-                {courseInfo?.code || "Course"}
+                {courseInfo?.title || "Course"}
               </h1>
               <p className="text-gray-500 text-sm">
                 {courseInfo?.section || "N/A"}
@@ -3017,6 +3126,21 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                   }
                 >
                   Mark All Late as Present
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={markAllExcusedAsPresent}
+                  className="text-[#F59E0B] focus:text-[#F59E0B] focus:bg-[#F59E0B]/10"
+                  disabled={
+                    isUpdating ||
+                    isDateLoading ||
+                    isClearing ||
+                    isMarkingAll ||
+                    isSavingRfidAttendance ||
+                    !hasAttendanceForSelectedDate ||
+                    isAnyStudentSaving
+                  }
+                >
+                  Mark All Excused as Present
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowClearConfirm(true)}
@@ -3728,7 +3852,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               Start Attendance Session
             </DialogTitle>
             <DialogDescription className="text-base text-gray-600">
-              Configure your attendance session settings
+              Set your grace period for the attendance session
             </DialogDescription>
           </DialogHeader>
 
@@ -4017,7 +4141,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                         : s.status === "LATE"
                         ? "border-yellow-600"
                         : "border-red-600";
-                    const borderborderColor = "border-[#124A69]";
+                    const borderborderColor = "border-gray-300";
                     return (
                       <div
                         key={s.id}
@@ -4076,17 +4200,17 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <Button
                   variant="outline"
                   className="flex-1 h-11"
-                  onClick={() => setShowTimeoutModal(false)}
+                  onClick={() => setShowBackConfirm(true)}
                   disabled={isSavingRfidAttendance}
                 >
                   Back
                 </Button>
                 <Button
                   className="flex-1 h-11 bg-[#124A69] hover:bg-[#0a2f42] text-white"
-                  onClick={handleDoneClick}
+                  onClick={() => setShowTimeoutConfirm(true)}
                   disabled={isSavingRfidAttendance}
                 >
-                  Done
+                  Time Out
                 </Button>
               </div>
             </div>
@@ -4119,16 +4243,27 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <Input
-              placeholder={
-                isBulkExcuse
-                  ? "Enter reason for all selected..."
-                  : "Enter reason..."
-              }
-              value={excuseReason}
-              onChange={(e) => setExcuseReason(e.target.value)}
-              className="w-full border-gray-200 focus:border-[#124A69] focus:ring-[#124A69]"
-            />
+            <div className="relative">
+              <Input
+                placeholder={
+                  isBulkExcuse
+                    ? "Enter reason for all selected..."
+                    : "Enter reason..."
+                }
+                value={excuseReason}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 30) {
+                    setExcuseReason(value);
+                  }
+                }}
+                className="w-full border-gray-200 focus:border-[#124A69] focus:ring-[#124A69] pr-12"
+                maxLength={30}
+              />
+              <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                {excuseReason.length}/30
+              </span>
+            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-2">
@@ -4155,6 +4290,69 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Back Confirmation Alert */}
+      <AlertDialog open={showBackConfirm} onOpenChange={setShowBackConfirm}>
+        <AlertDialogContent className="sm:max-w-[425px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#124A69] text-xl font-bold">
+              Go Back?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-500">
+              Are you sure you want to go back? The RFID modal will minimize,
+              and tapped RFID cards after the grace period will be marked as
+              late.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel
+              onClick={() => setShowBackConfirm(false)}
+              className="border-gray-200"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBackConfirm}
+              className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
+            >
+              Go Back
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Timeout Confirmation Alert */}
+      <AlertDialog
+        open={showTimeoutConfirm}
+        onOpenChange={setShowTimeoutConfirm}
+      >
+        <AlertDialogContent className="sm:max-w-[425px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[#124A69] text-xl font-bold">
+              Time Out?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-500">
+              Are you sure you want to time out? Students without a status or
+              didn't tap their RFID card will be marked as absent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel
+              onClick={() => setShowTimeoutConfirm(false)}
+              className="border-gray-200"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleTimeoutConfirm}
+              className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
+              disabled={isSavingRfidAttendance}
+            >
+              {isSavingRfidAttendance ? "Processing..." : "Time Out"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

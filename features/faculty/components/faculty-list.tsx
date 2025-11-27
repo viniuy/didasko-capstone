@@ -184,7 +184,7 @@ const FacultyList: React.FC<FacultyListProps> = ({
                     onClick={() => handleViewSchedule(faculty)}
                     className="w-full bg-[#124A69] text-white px-4 py-2 rounded-full hover:bg-[#0D3A54] transition-colors text-sm font-medium"
                   >
-                    View Schedule
+                    View Faculty Load
                   </button>
                 </div>
               </div>

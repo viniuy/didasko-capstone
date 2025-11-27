@@ -34,9 +34,9 @@ export default async function AttendancePage() {
         <div className="flex flex-col flex-grow px-2 sm:px-4 md:px-6 lg:px-8">
           <div className="space-y-2 md:space-y-6 lg:space-y-8">
             <div className="space-y-2">
-              <h2 className="pl-2 pb-1 text-xl sm:text-2xl font-bold text-muted-foreground">
+              <h1 className="pl-2 pb-1 text-xl sm:text-2xl font-bold text-muted-foreground">
                 Overview of Attendance
-              </h2>
+              </h1>
 
               <div className="grid gap-4 md:gap-6 lg:gap-8">
                 <SemesterCourses

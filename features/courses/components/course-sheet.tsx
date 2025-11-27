@@ -148,6 +148,14 @@ export function CourseSheet({
       toast.error("Course code is required");
       return;
     }
+
+    // Validate course code: no spaces or special characters allowed
+    if (!/^[A-Z0-9]+$/.test(formData.code.trim())) {
+      toast.error(
+        "Course code can only contain letters and numbers. No spaces or special characters allowed."
+      );
+      return;
+    }
     if (!formData.title.trim()) {
       toast.error("Course title is required");
       return;
@@ -309,30 +317,46 @@ export function CourseSheet({
             <Label htmlFor="code">
               Course Code <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="code"
-              value={formData.code}
-              onChange={(e) =>
-                handleChange("code", e.target.value.toUpperCase())
-              }
-              placeholder="e.g., ITCAPSTONE"
-              maxLength={15}
-              required
-            />
+            <div className="relative">
+              <Input
+                id="code"
+                value={formData.code}
+                onChange={(e) => {
+                  // Remove spaces and special characters, only allow alphanumeric
+                  const value = e.target.value
+                    .replace(/[^A-Za-z0-9]/g, "")
+                    .toUpperCase();
+                  handleChange("code", value);
+                }}
+                placeholder="e.g., ITCAPSTONE"
+                maxLength={15}
+                required
+                className="pr-12"
+              />
+              <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                {formData.code.length}/15
+              </span>
+            </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="title">
               Course Title <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => handleChange("title", e.target.value)}
-              placeholder="e.g., IT Capstone"
-              maxLength={80}
-              required
-            />
+            <div className="relative">
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => handleChange("title", e.target.value)}
+                placeholder="e.g., IT Capstone"
+                maxLength={80}
+                required
+                className="pr-12"
+              />
+              <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                {formData.title.length}/80
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -340,35 +364,47 @@ export function CourseSheet({
               <Label htmlFor="section">
                 Section <span className="text-red-500">*</span>
               </Label>
-              <Input
-                id="section"
-                value={formData.section}
-                onChange={(e) =>
-                  handleChange("section", e.target.value.toUpperCase())
-                }
-                placeholder="e.g., BSIT-711"
-                maxLength={10}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="section"
+                  value={formData.section}
+                  onChange={(e) =>
+                    handleChange("section", e.target.value.toUpperCase())
+                  }
+                  placeholder="e.g., BSIT-711"
+                  maxLength={10}
+                  required
+                  className="pr-12"
+                />
+                <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                  {formData.section.length}/10
+                </span>
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="room">
                 Room <span className="text-red-500">*</span>
               </Label>
-              <Input
-                id="room"
-                value={formData.room}
-                onChange={(e) => {
-                  let value = e.target.value;
-                  // Remove "Room:" or "room:" prefix (case-insensitive) with optional colon and space
-                  value = value.replace(/^room:\s*/i, "").trim();
-                  handleChange("room", value.toUpperCase());
-                }}
-                placeholder="e.g., 402"
-                maxLength={15}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="room"
+                  value={formData.room}
+                  onChange={(e) => {
+                    let value = e.target.value;
+                    // Remove "Room:" or "room:" prefix (case-insensitive) with optional colon and space
+                    value = value.replace(/^room:\s*/i, "").trim();
+                    handleChange("room", value.toUpperCase());
+                  }}
+                  placeholder="e.g., 402"
+                  maxLength={15}
+                  required
+                  className="pr-12"
+                />
+                <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                  {formData.room.length}/15
+                </span>
+              </div>
             </div>
           </div>
 
@@ -395,21 +431,27 @@ export function CourseSheet({
               <Label htmlFor="academicYear">
                 Academic Year <span className="text-red-500">*</span>
               </Label>
-              <Input
-                id="academicYear"
-                value={formData.academicYear}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Only allow format: 0000-0000
-                  const academicYearPattern = /^(\d{0,4})(-?)(\d{0,4})$/;
-                  if (academicYearPattern.test(value) || value === "") {
-                    handleChange("academicYear", value);
-                  }
-                }}
-                placeholder="e.g., 2024-2025"
-                maxLength={9}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="academicYear"
+                  value={formData.academicYear}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Only allow format: 0000-0000
+                    const academicYearPattern = /^(\d{0,4})(-?)(\d{0,4})$/;
+                    if (academicYearPattern.test(value) || value === "") {
+                      handleChange("academicYear", value);
+                    }
+                  }}
+                  placeholder="e.g., 2024-2025"
+                  maxLength={9}
+                  required
+                  className="pr-12"
+                />
+                <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                  {formData.academicYear.length}/9
+                </span>
+              </div>
               {formData.academicYear &&
                 !/^\d{4}-\d{4}$/.test(formData.academicYear) && (
                   <p className="text-xs text-red-500">
