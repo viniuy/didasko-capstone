@@ -83,7 +83,10 @@ export function useOnlineUsers() {
 }
 
 // Query: Get break glass status
-export function useBreakGlassStatus(userId?: string) {
+export function useBreakGlassStatus(
+  userId?: string,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: queryKeys.admin.breakGlass(userId),
     queryFn: async () => {
@@ -94,6 +97,7 @@ export function useBreakGlassStatus(userId?: string) {
       );
       return data;
     },
+    enabled: options?.enabled !== false, // Default to true, can be disabled
     refetchInterval: 30000, // Poll every 30 seconds
   });
 }

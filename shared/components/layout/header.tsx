@@ -24,7 +24,13 @@ export default function Header() {
   const [promotionCode, setPromotionCode] = useState("");
 
   // React Query hooks
-  const { data: breakGlassStatus } = useBreakGlassStatus(session?.user?.id);
+  // Only fetch break-glass status for non-academic-head users (they don't need it)
+  // Academic heads use BreakGlassCompact component which fetches its own status
+  const shouldFetchBreakGlass = session?.user?.role !== "ACADEMIC_HEAD";
+  const { data: breakGlassStatus } = useBreakGlassStatus(
+    shouldFetchBreakGlass ? session?.user?.id : undefined,
+    { enabled: shouldFetchBreakGlass } // Disable query for academic heads
+  );
   const selfPromoteMutation = useSelfPromote();
 
   // Only show "Temporary Admin" badge if:
