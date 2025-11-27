@@ -95,6 +95,7 @@ import { saveAs } from "file-saver";
 import axiosInstance from "@/lib/axios";
 import axios from "@/lib/axios";
 import AnimatedContent from "@/components/ui/AnimatedContent";
+import SplitText from "@/components/ui/SplitText";
 import { checkActiveRfidSession } from "@/lib/utils/rfid-session";
 
 interface CourseStats {
@@ -2453,57 +2454,57 @@ export function CourseDataTable({
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       try {
-      // For edit mode, ensure comprehensive invalidation and refetch
-      if (scheduleDialogMode === "edit") {
-        // Invalidate all course-related queries
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.courses.all,
-        });
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.stats.all,
-        });
+        // For edit mode, ensure comprehensive invalidation and refetch
+        if (scheduleDialogMode === "edit") {
+          // Invalidate all course-related queries
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.courses.all,
+          });
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.stats.all,
+          });
 
-        // Invalidate specific course queries
-        await queryClient.invalidateQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) && key.length >= 1 && key[0] === "courses"
-            );
-          },
-        });
+          // Invalidate specific course queries
+          await queryClient.invalidateQueries({
+            predicate: (query) => {
+              const key = query.queryKey;
+              return (
+                Array.isArray(key) && key.length >= 1 && key[0] === "courses"
+              );
+            },
+          });
 
-        // Force refetch all course queries
-        await queryClient.refetchQueries({
-          queryKey: queryKeys.courses.all,
-        });
+          // Force refetch all course queries
+          await queryClient.refetchQueries({
+            queryKey: queryKeys.courses.all,
+          });
 
-        // Force refetch active courses to ensure UI updates immediately
-        await queryClient.refetchQueries({
-          predicate: (query) => {
-            const key = query.queryKey;
-            return (
-              Array.isArray(key) &&
-              key.length >= 2 &&
-              key[0] === "courses" &&
-              (key[1] === "list" || key[1] === "active")
-            );
-          },
-        });
-      } else {
-        // For create/import mode, use the standard refresh
-        await refreshTableData(false);
-      }
+          // Force refetch active courses to ensure UI updates immediately
+          await queryClient.refetchQueries({
+            predicate: (query) => {
+              const key = query.queryKey;
+              return (
+                Array.isArray(key) &&
+                key.length >= 2 &&
+                key[0] === "courses" &&
+                (key[1] === "list" || key[1] === "active")
+              );
+            },
+          });
+        } else {
+          // For create/import mode, use the standard refresh
+          await refreshTableData(false);
+        }
 
-      if (onCourseAdded) onCourseAdded();
+        if (onCourseAdded) onCourseAdded();
 
-      // Reset all state
-      setImportedCoursesForSchedule([]);
-      setShowScheduleAssignment(false);
-      setSelectedFile(null);
-      setPreviewData([]);
-      setIsValidFile(false);
-      setPreImportValidationErrors([]);
+        // Reset all state
+        setImportedCoursesForSchedule([]);
+        setShowScheduleAssignment(false);
+        setSelectedFile(null);
+        setPreviewData([]);
+        setIsValidFile(false);
+        setPreImportValidationErrors([]);
       } finally {
         // Clear editing states after everything is complete
         setIsEditingSchedule(false);
@@ -2511,9 +2512,9 @@ export function CourseDataTable({
           setIsEditingCourse(false);
         }
 
-      // Ensure loading states are cleared
-      setIsLoading(false);
-      setIsRefreshing(false);
+        // Ensure loading states are cleared
+        setIsLoading(false);
+        setIsRefreshing(false);
       }
     },
     [
@@ -2702,8 +2703,6 @@ export function CourseDataTable({
     if (suggestions.length > 0) {
       return `Try ${suggestions.join(" or ")}`;
     }
-
-    return "Get started by adding a new course";
   };
 
   return (
@@ -2789,7 +2788,12 @@ export function CourseDataTable({
                   <Button
                     variant="outline"
                     onClick={() => setIsFilterSheetOpen(true)}
-                    disabled={isInitialLoading || isLoading || !hasLoadedOnce}
+                    disabled={
+                      isInitialLoading ||
+                      isLoading ||
+                      !hasLoadedOnce ||
+                      activeCoursesCount === 0
+                    }
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
                   >
                     <Filter className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2808,7 +2812,12 @@ export function CourseDataTable({
                   <Button
                     variant="outline"
                     onClick={() => setShowSettingsDialog(true)}
-                    disabled={isInitialLoading || isLoading || !hasLoadedOnce}
+                    disabled={
+                      isInitialLoading ||
+                      isLoading ||
+                      !hasLoadedOnce ||
+                      activeCoursesCount === 0
+                    }
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                   >
                     <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2818,7 +2827,12 @@ export function CourseDataTable({
                     <Button
                       variant="outline"
                       onClick={() => setShowExportPreview(true)}
-                      disabled={isInitialLoading || isLoading || !hasLoadedOnce}
+                      disabled={
+                        isInitialLoading ||
+                        isLoading ||
+                        !hasLoadedOnce ||
+                        activeCoursesCount === 0
+                      }
                       className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                     >
                       <Download className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -2841,7 +2855,8 @@ export function CourseDataTable({
                         hasReachedMaxActiveCourses ||
                         isInitialLoading ||
                         isLoading ||
-                        !hasLoadedOnce
+                        !hasLoadedOnce ||
+                        activeCoursesCount === 0
                       }
                       className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                       title={
@@ -2882,7 +2897,8 @@ export function CourseDataTable({
                         hasReachedMaxActiveCourses ||
                         isInitialLoading ||
                         isLoading ||
-                        !hasLoadedOnce
+                        !hasLoadedOnce ||
+                        activeCoursesCount === 0
                       }
                     />
                   )}
@@ -2896,6 +2912,86 @@ export function CourseDataTable({
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69] mb-4"></div>
                   <p className="text-sm text-gray-600">Loading courses...</p>
+                </div>
+              </div>
+            ) : activeCoursesCount === 0 ? (
+              // Show fancy empty state when there are no active courses (first time or after loading)
+              <div className="flex flex-col items-center justify-center flex-1 min-h-[400px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
+                <div className="text-center px-4 pb-8 z-10 relative">
+                  <div className="mb-8">
+                    <SplitText
+                      text="Welcome to your Course Management"
+                      className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#124A69]"
+                      delay={0.2}
+                      duration={0.6}
+                      stagger={0.03}
+                    />
+                  </div>
+                  <AnimatedContent
+                    container={null}
+                    delay={1.5}
+                    duration={0.8}
+                    direction="vertical"
+                    distance={30}
+                    initialOpacity={0}
+                    className="mt-6"
+                    onComplete={() => {}}
+                    onDisappearanceComplete={() => {}}
+                  >
+                    <p className="text-lg sm:text-xl text-gray-600 mb-4">
+                      {hasReachedMaxActiveCourses
+                        ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
+                        : "Get started by adding your first course!"}
+                    </p>
+                    <p className="text-sm sm:text-base text-gray-500">
+                      {getEmptyStateSubMessage()}
+                    </p>
+                  </AnimatedContent>
+                  {!hasReachedMaxActiveCourses && (
+                    <div className="flex items-center justify-center mt-8 gap-3 flex-wrap">
+                      {permissions.canCreateCourse && (
+                        <CourseSheet
+                          mode="add"
+                          onSuccess={async (courseData) => {
+                            if (courseData) {
+                              setIsEditingCourse(true);
+                              setPendingCourseData(courseData);
+                              setImportedCoursesForSchedule([courseData]);
+                              setScheduleDialogMode("create");
+                              setShowScheduleAssignment(true);
+                              setIsEditingSchedule(true);
+                            }
+                          }}
+                          faculties={faculties}
+                          userId={userId}
+                          userRole={userRole}
+                          disabled={hasReachedMaxActiveCourses}
+                        />
+                      )}
+                      {permissions.canImportCourses && (
+                        <>
+                          <span className="text-gray-500">or</span>
+                          <Button
+                            onClick={() => {
+                              if (hasReachedMaxActiveCourses) {
+                                toast.error(
+                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+                                );
+                                return;
+                              }
+                              setShowImportPreview(true);
+                            }}
+                            variant="outline"
+                            disabled={hasReachedMaxActiveCourses}
+                            className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Upload className="w-4 h-4" />
+                            Import Courses
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : tableData.length > 0 ? (
@@ -3099,120 +3195,6 @@ export function CourseDataTable({
                   </div>
                 )}
               </>
-            ) : hasLoadedOnce && tableData.length === 0 ? (
-              // Empty state when there are no courses at all (only show after loading is complete)
-              <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
-                <style>{`
-                  @keyframes tumbleweedHorizontal {
-                    0% {
-                      left: -100px;
-                    }
-                    100% {
-                      left: calc(100% + 20px);
-                    }
-                  }
-                  @keyframes tumbleweedBounce {
-                    0% {
-                      transform: translateY(0px);
-                    }
-                    25% {
-                      transform: translateY(-12px);
-                    }
-                    50% {
-                      transform: translateY(0px);
-                    }
-                    75% {
-                      transform: translateY(-10px);
-                    }
-                    100% {
-                      transform: translateY(0px);
-                    }
-                  }
-                  @keyframes tumbleweedRotate {
-                    from {
-                      transform: rotate(0deg);
-                    }
-                    to {
-                      transform: rotate(360deg);
-                    }
-                  }
-                  .tumbleweed-container {
-                    animation: tumbleweedHorizontal 8s linear infinite,
-                               tumbleweedBounce 1.6s ease-in-out infinite;
-                  }
-                  .tumbleweed-svg {
-                    animation: tumbleweedRotate 4s linear infinite;
-                  }
-                `}</style>
-                <div className="text-center px-4 pb-8 z-10 relative">
-                  <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                    It seems empty here
-                  </h3>
-                  <p className="text-gray-500 mb-4">
-                    {hasReachedMaxActiveCourses
-                      ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
-                      : "Start by adding courses to get started"}
-                  </p>
-                  {!hasReachedMaxActiveCourses && (
-                    <div className="flex items-center gap-3 justify-center flex-wrap">
-                      {permissions.canCreateCourse && (
-                        <CourseSheet
-                          mode="add"
-                          onSuccess={async (courseData) => {
-                            if (courseData) {
-                              setIsEditingCourse(true);
-                              setPendingCourseData(courseData);
-                              setImportedCoursesForSchedule([courseData]);
-                              setScheduleDialogMode("create");
-                              setShowScheduleAssignment(true);
-                              setIsEditingSchedule(true);
-                            }
-                          }}
-                          faculties={faculties}
-                          userId={userId}
-                          userRole={userRole}
-                          disabled={hasReachedMaxActiveCourses}
-                        />
-                      )}
-                      {permissions.canImportCourses && (
-                        <>
-                          <span className="text-gray-500">or</span>
-                          <Button
-                            onClick={() => {
-                              if (hasReachedMaxActiveCourses) {
-                                toast.error(
-                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
-                                );
-                                return;
-                              }
-                              setShowImportPreview(true);
-                            }}
-                            variant="outline"
-                            disabled={hasReachedMaxActiveCourses}
-                            className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Upload className="w-4 h-4" />
-                            Import Courses
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {/* Tumbleweed Animation */}
-                <div className="relative w-full flex items-end">
-                  {/* Outer container: horizontal movement + vertical bounce */}
-                  <div className="absolute bottom-0 tumbleweed-container">
-                    {/* Inner SVG: rotation only */}
-                    <img
-                      src="/svg/tumbleweed.svg"
-                      alt="Tumbleweed"
-                      className="w-20 h-20 tumbleweed-svg"
-                      style={{ filter: "brightness(0.8)" }}
-                    />
-                  </div>
-                </div>
-              </div>
             ) : null}
 
             {/* Export Dialog */}
@@ -3657,7 +3639,7 @@ export function CourseDataTable({
                   } finally {
                     setIsEditingCourse(false);
                     setIsLoading(false);
-                  setEditingCourse(null);
+                    setEditingCourse(null);
                   }
                 }}
                 onClose={() => {

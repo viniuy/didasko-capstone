@@ -106,6 +106,8 @@ export function StudentsPageClient({
   const scanTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const rfidScanContainerRef = React.useRef<HTMLDivElement>(null);
+  const lastRfidInputTimeRef = React.useRef<number>(0);
+  const rfidInputBufferRef = React.useRef<string>("");
 
   // Use TanStack Query with server-side pagination
   const { data: studentsData, isLoading } = useStudents({
@@ -239,6 +241,8 @@ export function StudentsPageClient({
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
     }
+    lastRfidInputTimeRef.current = 0;
+    rfidInputBufferRef.current = "";
   };
 
   // Handle student selection from list
@@ -254,6 +258,8 @@ export function StudentsPageClient({
     });
     setScannedRfid("");
     setIsScanning(false);
+    lastRfidInputTimeRef.current = 0;
+    rfidInputBufferRef.current = "";
   };
 
   // Handle "Add Student" button
@@ -269,6 +275,8 @@ export function StudentsPageClient({
     });
     setScannedRfid("");
     setIsScanning(false);
+    lastRfidInputTimeRef.current = 0;
+    rfidInputBufferRef.current = "";
     // Focus on hidden RFID input if user wants to scan
     if (rfidInputRef.current) {
       rfidInputRef.current.value = "";
@@ -281,6 +289,8 @@ export function StudentsPageClient({
     setSelectedStudent(null);
     setIsScanning(true);
     setScannedRfid("");
+    lastRfidInputTimeRef.current = 0;
+    rfidInputBufferRef.current = "";
 
     if (rfidInputRef.current) {
       rfidInputRef.current.focus();
@@ -402,6 +412,8 @@ export function StudentsPageClient({
     setViewMode("assigning-rfid");
     setIsScanning(true);
     setScannedRfid("");
+    lastRfidInputTimeRef.current = 0;
+    rfidInputBufferRef.current = "";
 
     if (rfidInputRef.current) {
       rfidInputRef.current.focus();
@@ -413,6 +425,8 @@ export function StudentsPageClient({
     setIsScanning(false);
     setScannedRfid("");
     setViewMode("editing");
+    lastRfidInputTimeRef.current = 0;
+    rfidInputBufferRef.current = "";
 
     if (rfidInputRef.current) {
       rfidInputRef.current.value = "";
@@ -422,9 +436,25 @@ export function StudentsPageClient({
     }
   };
 
-  // Handle RFID input
+  // Handle RFID input - only accept rapid scans (RFID scanner), not manual typing
   const handleRfidInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const currentTime = Date.now();
+    const timeSinceLastInput = currentTime - lastRfidInputTimeRef.current;
+
+    // If there's a delay > 50ms between characters, it's likely manual typing - reject it
+    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 50) {
+      // Reset - this is manual typing, not RFID scan
+      e.target.value = rfidInputBufferRef.current;
+      toast.error("Please use RFID scanner. Manual input is disabled.");
+      return;
+    }
+
     const value = e.target.value.replace(/\D/g, ""); // Only numbers
+    lastRfidInputTimeRef.current = currentTime;
+    rfidInputBufferRef.current = value;
+
+    // Add 10ms delay before processing
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
@@ -449,6 +479,8 @@ export function StudentsPageClient({
           handleSelectStudent(existingStudent);
           setScannedRfid("");
           setIsScanning(false);
+          lastRfidInputTimeRef.current = 0;
+          rfidInputBufferRef.current = "";
           if (rfidInputRef.current) rfidInputRef.current.value = "";
           return;
         }
@@ -461,6 +493,8 @@ export function StudentsPageClient({
           );
           setScannedRfid("");
           setIsScanning(false);
+          lastRfidInputTimeRef.current = 0;
+          rfidInputBufferRef.current = "";
           if (rfidInputRef.current) rfidInputRef.current.value = "";
           return;
         }
@@ -473,6 +507,8 @@ export function StudentsPageClient({
         });
         setScannedRfid("");
         setIsScanning(false);
+        lastRfidInputTimeRef.current = 0;
+        rfidInputBufferRef.current = "";
         if (rfidInputRef.current) rfidInputRef.current.value = "";
         return;
       }
@@ -492,6 +528,8 @@ export function StudentsPageClient({
             toast.error("Incomplete RFID scan. Please try again.");
           }
           setScannedRfid("");
+          lastRfidInputTimeRef.current = 0;
+          rfidInputBufferRef.current = "";
           if (rfidInputRef.current) {
             rfidInputRef.current.value = "";
           }
@@ -852,11 +890,14 @@ export function StudentsPageClient({
                       size="icon"
                       onClick={() => {
                         setIsScanning(true);
+                        lastRfidInputTimeRef.current = 0;
+                        rfidInputBufferRef.current = "";
                         if (rfidInputRef.current) {
                           rfidInputRef.current.focus();
                         }
                       }}
-                      className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+                      disabled={!!scannedRfid}
+                      className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Scan className="w-4 h-4" />
                     </Button>
@@ -875,6 +916,8 @@ export function StudentsPageClient({
                       onClick={() => {
                         setScannedRfid("");
                         setIsScanning(false);
+                        lastRfidInputTimeRef.current = 0;
+                        rfidInputBufferRef.current = "";
                         if (rfidInputRef.current) {
                           rfidInputRef.current.value = "";
                         }
@@ -968,13 +1011,32 @@ export function StudentsPageClient({
       <Header />
       <AppSidebar />
 
-      {/* Hidden RFID input */}
+      {/* Hidden RFID input - disabled keyboard input, only accepts rapid RFID scans */}
       <input
         ref={rfidInputRef}
         type="text"
         onChange={handleRfidInput}
+        onKeyDown={(e) => {
+          // Prevent manual keyboard input
+          if (
+            e.key.length === 1 ||
+            e.key === "Backspace" ||
+            e.key === "Delete" ||
+            e.key === "ArrowLeft" ||
+            e.key === "ArrowRight"
+          ) {
+            e.preventDefault();
+            return false;
+          }
+        }}
+        onPaste={(e) => {
+          // Prevent paste
+          e.preventDefault();
+          return false;
+        }}
         className="absolute -left-[9999px]"
         placeholder="RFID input"
+        autoComplete="off"
       />
 
       <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
