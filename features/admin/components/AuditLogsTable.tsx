@@ -986,118 +986,124 @@ function AuditLogsTableComponent({
                     {filteredAndSortedLogs.length !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <Pagination className="flex justify-end sm:justify-end w-full sm:w-auto">
-                  <PaginationContent className="flex gap-1">
-                    <PaginationItem>
-                      <PaginationPrevious
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (currentPage > 1) {
-                            handlePageChange(currentPage - 1);
-                          }
-                        }}
-                        className={
-                          currentPage === 1
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
-                        }
-                      />
-                    </PaginationItem>
-
-                    {(() => {
-                      const pages: number[] = [];
-
-                      // If total pages is 5 or less, show all pages
-                      if (totalPages <= 5) {
-                        for (let i = 1; i <= totalPages; i++) {
-                          pages.push(i);
-                        }
-                      } else {
-                        // Always show first 2 pages
-                        pages.push(1, 2);
-
-                        // Determine which pages to show around current
-                        const showAroundCurrent: number[] = [];
-                        if (currentPage > 2 && currentPage < totalPages - 1) {
-                          // Show current-1, current, current+1 if in middle
-                          showAroundCurrent.push(
-                            currentPage - 1,
-                            currentPage,
-                            currentPage + 1
-                          );
-                        } else if (currentPage <= 2) {
-                          // If current is 1 or 2, show 3, 4
-                          showAroundCurrent.push(3, 4);
-                        } else if (currentPage >= totalPages - 1) {
-                          // If current is near end, show last-3, last-2, last-1
-                          showAroundCurrent.push(
-                            totalPages - 3,
-                            totalPages - 2,
-                            totalPages - 1
-                          );
-                        }
-
-                        // Remove duplicates and sort
-                        const uniquePages = Array.from(
-                          new Set([...pages, ...showAroundCurrent, totalPages])
-                        ).sort((a, b) => a - b) as number[];
-
-                        // Build final array with ellipsis
-                        const finalPages: (number | string)[] = [];
-                        for (let i = 0; i < uniquePages.length; i++) {
-                          const page = uniquePages[i];
-                          if (i > 0 && page - uniquePages[i - 1] > 1) {
-                            finalPages.push("…");
-                          }
-                          finalPages.push(page);
-                        }
-
-                        return finalPages;
-                      }
-
-                      return pages;
-                    })().map((item, i) => (
-                      <PaginationItem key={i}>
-                        {item === "…" ? (
-                          <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
-                            …
-                          </span>
-                        ) : (
-                          <PaginationLink
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handlePageChange(item as number);
-                            }}
-                            isActive={currentPage === item}
-                            className={
-                              currentPage === item
-                                ? "bg-[#124A69] text-white hover:bg-[#0d3a56] cursor-pointer"
-                                : "cursor-pointer"
+                <div className="flex justify-end">
+                  <Pagination className="flex justify-end sm:justify-end w-full sm:w-auto">
+                    <PaginationContent className="flex gap-1">
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (currentPage > 1) {
+                              handlePageChange(currentPage - 1);
                             }
-                          >
-                            {item}
-                          </PaginationLink>
-                        )}
-                      </PaginationItem>
-                    ))}
-
-                    <PaginationItem>
-                      <PaginationNext
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (currentPage < totalPages) {
-                            handlePageChange(currentPage + 1);
+                          }}
+                          className={
+                            currentPage === 1
+                              ? "pointer-events-none opacity-50"
+                              : "cursor-pointer"
                           }
-                        }}
-                        className={
-                          currentPage === totalPages
-                            ? "pointer-events-none opacity-50"
-                            : "cursor-pointer"
+                        />
+                      </PaginationItem>
+
+                      {(() => {
+                        const pages: number[] = [];
+
+                        // If total pages is 5 or less, show all pages
+                        if (totalPages <= 5) {
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i);
+                          }
+                        } else {
+                          // Always show first 2 pages
+                          pages.push(1, 2);
+
+                          // Determine which pages to show around current
+                          const showAroundCurrent: number[] = [];
+                          if (currentPage > 2 && currentPage < totalPages - 1) {
+                            // Show current-1, current, current+1 if in middle
+                            showAroundCurrent.push(
+                              currentPage - 1,
+                              currentPage,
+                              currentPage + 1
+                            );
+                          } else if (currentPage <= 2) {
+                            // If current is 1 or 2, show 3, 4
+                            showAroundCurrent.push(3, 4);
+                          } else if (currentPage >= totalPages - 1) {
+                            // If current is near end, show last-3, last-2, last-1
+                            showAroundCurrent.push(
+                              totalPages - 3,
+                              totalPages - 2,
+                              totalPages - 1
+                            );
+                          }
+
+                          // Remove duplicates and sort
+                          const uniquePages = Array.from(
+                            new Set([
+                              ...pages,
+                              ...showAroundCurrent,
+                              totalPages,
+                            ])
+                          ).sort((a, b) => a - b) as number[];
+
+                          // Build final array with ellipsis
+                          const finalPages: (number | string)[] = [];
+                          for (let i = 0; i < uniquePages.length; i++) {
+                            const page = uniquePages[i];
+                            if (i > 0 && page - uniquePages[i - 1] > 1) {
+                              finalPages.push("…");
+                            }
+                            finalPages.push(page);
+                          }
+
+                          return finalPages;
                         }
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
+
+                        return pages;
+                      })().map((item, i) => (
+                        <PaginationItem key={i}>
+                          {item === "…" ? (
+                            <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                              …
+                            </span>
+                          ) : (
+                            <PaginationLink
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handlePageChange(item as number);
+                              }}
+                              isActive={currentPage === item}
+                              className={
+                                currentPage === item
+                                  ? "bg-[#124A69] text-white hover:bg-[#0d3a56] cursor-pointer"
+                                  : "cursor-pointer"
+                              }
+                            >
+                              {item}
+                            </PaginationLink>
+                          )}
+                        </PaginationItem>
+                      ))}
+
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (currentPage < totalPages) {
+                              handlePageChange(currentPage + 1);
+                            }
+                          }}
+                          className={
+                            currentPage === totalPages
+                              ? "pointer-events-none opacity-50"
+                              : "cursor-pointer"
+                          }
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
               </div>
             )}
           </div>
