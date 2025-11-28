@@ -11,6 +11,7 @@ import { getFacultyStats, getFacultyCount } from "@/lib/services/stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
+import CourseEmptyState from "@/features/courses/components/course-empty-state";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,11 @@ export default async function AcademicHeadDashboard() {
     getFacultyCount(),
   ]);
 
+  // Check if user has no courses
+  const hasNoCourses =
+    !coursesResult ||
+    (Array.isArray(coursesResult) && coursesResult.length === 0);
+
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <AppSidebar />
@@ -47,21 +53,32 @@ export default async function AcademicHeadDashboard() {
                 initialFacultyCount={facultyCount}
                 userRole={session.user.role}
               />
-              <div className="space-y-3 sm:space-y-4">
-                <h2 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
-                  Your Subjects
-                </h2>
-                <AllCourses type="attendance" initialCourses={coursesResult} />
-              </div>
-            </div>
 
-            {session.user.id && (
-              <WeeklySchedule
-                teacherInfo={{
-                  id: session.user.id,
-                }}
-              />
-            )}
+              {hasNoCourses ? (
+                <CourseEmptyState />
+              ) : (
+                // Show courses and schedule when courses exist
+                <>
+                  <div className="space-y-3 sm:space-y-4">
+                    <h2 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
+                      Your Subjects
+                    </h2>
+                    <AllCourses
+                      type="attendance"
+                      initialCourses={coursesResult}
+                    />
+                  </div>
+
+                  {session.user.id && (
+                    <WeeklySchedule
+                      teacherInfo={{
+                        id: session.user.id,
+                      }}
+                    />
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 

@@ -11,6 +11,7 @@ import { getFacultyStats, getFacultyCount } from "@/lib/services/stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
+import CourseEmptyState from "@/features/courses/components/course-empty-state";
 
 export const dynamic = "force-dynamic";
 
@@ -37,11 +38,15 @@ async function StatsContent({
 }
 
 // Separate async component for courses
-async function CoursesContent({ userId }: { userId: string }) {
-  const coursesResult = await getCourses({
-    facultyId: userId,
-    status: "ACTIVE",
-  });
+function CoursesContent({ coursesResult }: { coursesResult: any }) {
+  // Check if user has no courses
+  const hasNoCourses =
+    !coursesResult ||
+    (Array.isArray(coursesResult) && coursesResult.length === 0);
+
+  if (hasNoCourses) {
+    return <CourseEmptyState />;
+  }
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -59,6 +64,16 @@ export default async function FacultyDashboard() {
   if (!session?.user) {
     redirect("/");
   }
+
+  // Fetch courses to check if user has any
+  const coursesResult = await getCourses({
+    facultyId: session.user.id,
+    status: "ACTIVE",
+  });
+
+  const hasNoCourses =
+    !coursesResult ||
+    (Array.isArray(coursesResult) && coursesResult.length === 0);
 
   return (
     <SidebarProvider>
@@ -80,11 +95,11 @@ export default async function FacultyDashboard() {
                 />
 
                 {/* Courses */}
-                <CoursesContent userId={session.user.id} />
+                <CoursesContent coursesResult={coursesResult} />
               </div>
 
-              {/* Weekly Schedule - shown immediately */}
-              {session.user.id && (
+              {/* Weekly Schedule - only show when there are courses */}
+              {session.user.id && !hasNoCourses && (
                 <WeeklySchedule
                   teacherInfo={{
                     id: session.user.id,

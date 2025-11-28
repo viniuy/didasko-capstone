@@ -153,29 +153,29 @@ export default function WeeklySchedule({
         course: ScheduleWithCourse["course"];
         schedules: ScheduleWithCourse[];
       }) => {
-      // Get all schedules for this course on this specific day
+        // Get all schedules for this course on this specific day
         // Compare abbreviated day names directly (database stores "Mon", "Tue", etc.)
-      const daySchedules = group.schedules.filter(
+        const daySchedules = group.schedules.filter(
           (s: ScheduleWithCourse) =>
             s.day.toLowerCase() === dayName.toLowerCase()
-      );
-
-      // Get all days this course appears on
-        const allDays = group.schedules.map((s: ScheduleWithCourse) => {
-        const dayAbbr = Object.keys(dayMap).find(
-          (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
         );
-        return dayAbbr || s.day.substring(0, 3);
-      });
 
-      // Add each schedule for this day
-        daySchedules.forEach((schedule: ScheduleWithCourse) => {
-        schedulesForDay.push({
-          course: group.course,
-          schedule,
-            allDays: [...new Set(allDays)] as string[], // Remove duplicates
+        // Get all days this course appears on
+        const allDays = group.schedules.map((s: ScheduleWithCourse) => {
+          const dayAbbr = Object.keys(dayMap).find(
+            (key) => dayMap[key].toLowerCase() === s.day.toLowerCase()
+          );
+          return dayAbbr || s.day.substring(0, 3);
         });
-      });
+
+        // Add each schedule for this day
+        daySchedules.forEach((schedule: ScheduleWithCourse) => {
+          schedulesForDay.push({
+            course: group.course,
+            schedule,
+            allDays: [...new Set(allDays)] as string[], // Remove duplicates
+          });
+        });
       }
     );
 
@@ -355,23 +355,6 @@ export default function WeeklySchedule({
                               {formatTime(item.schedule.fromTime)} -{" "}
                               {formatTime(item.schedule.toTime)}
                             </div>
-                            {hasMultipleDays && (
-                              <div className="absolute top-1 right-1 flex gap-0.5">
-                                {item.allDays.map((d, idx) => (
-                                  <span
-                                    key={idx}
-                                    className={`text-[7px] px-0.5 py-0.5 rounded ${
-                                      d === day
-                                        ? "bg-[#124A69] text-white"
-                                        : "bg-[#124A69]/20 text-[#124A69]"
-                                    }`}
-                                    title={`Also on ${d}`}
-                                  >
-                                    {d}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
                             {hasMultipleSchedulesToday && (
                               <div className="absolute bottom-1 left-1 text-[7px] text-[#124A69] opacity-75">
                                 {schedulesForThisCourse.indexOf(item) + 1}/

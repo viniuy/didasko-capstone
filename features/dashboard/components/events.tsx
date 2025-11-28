@@ -438,7 +438,7 @@ export default function UpcomingEvents() {
     if (!eventToDelete) return;
 
     if (!canManageEvents) {
-      toast.error("Only Academic Head can manage events");
+      toast.error("Only Academic Head or Admin can manage events");
       return;
     }
 
@@ -484,7 +484,7 @@ export default function UpcomingEvents() {
     if (isSaving) return;
 
     if (!canManageEvents) {
-      toast.error("Only Academic Head can manage events");
+      toast.error("Only Academic Head or Admin can manage events");
       return;
     }
 
@@ -523,7 +523,7 @@ export default function UpcomingEvents() {
     if (isSaving) return;
 
     if (!canManageEvents) {
-      toast.error("Only Academic Head can manage events");
+      toast.error("Only Academic Head or Admin can manage events");
       return;
     }
 
@@ -716,13 +716,13 @@ export default function UpcomingEvents() {
         )}
       </div>
       <div className="flex-1 bg-white rounded-lg p-2 shadow-md overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#124A69] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#0a2f42]">
-        <div className="space-y-2 mt-2">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full min-h-[200px]">
-              <Loader2 className="w-8 h-8 animate-spin text-[#124A69]" />
-            </div>
-          ) : eventList.length > 0 ? (
-            eventList.map((event, eventIndex) => {
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full min-h-[200px]">
+            <Loader2 className="w-8 h-8 animate-spin text-[#124A69]" />
+          </div>
+        ) : eventList.length > 0 ? (
+          <div className="space-y-2 mt-2">
+            {eventList.map((event, eventIndex) => {
               const isToday = isSameDay(event.date, new Date());
               return (
                 <div key={eventIndex} ref={isToday ? todayRef : null}>
@@ -848,13 +848,13 @@ export default function UpcomingEvents() {
                   })}
                 </div>
               );
-            })
-          ) : (
-            <div className="flex items-center justify-center h-[350px]">
-              <p className="text-gray-500 text-xs text-center">No events.</p>
-            </div>
-          )}
-        </div>
+            })}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full min-h-[200px]">
+            <p className="text-gray-500 text-xs text-center">No events.</p>
+          </div>
+        )}
       </div>
 
       <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>

@@ -371,5 +371,5 @@ export async function handleUpdateEvent({
 }
 
 export function canUserManageEvents(userRole: Role | undefined): boolean {
-  return userRole === Role.ACADEMIC_HEAD;
+  return userRole === Role.ACADEMIC_HEAD || userRole === Role.ADMIN;
 }
