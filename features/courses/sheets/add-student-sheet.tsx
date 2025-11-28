@@ -28,14 +28,34 @@ export const AddStudentSheet = ({
   onSelectStudent,
 }: AddStudentSheetProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Search optimization constants
+  const MIN_SEARCH_LENGTH = 2; // Require at least 2 characters
+  const SEARCH_DEBOUNCE_MS = 800; // Debounce time
+
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Only update debounced query if minimum length met or clearing search
+      if (
+        searchQuery.trim().length >= MIN_SEARCH_LENGTH ||
+        searchQuery.trim().length === 0
+      ) {
+        setDebouncedSearchQuery(searchQuery.trim());
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // React Query hook with search
-  // Only fetch when there's a search query (to avoid loading all students)
+  // Only fetch when there's a debounced search query (to avoid loading all students)
   const { data: studentsData, isLoading: isSearching } = useStudents({
-    filters: searchQuery.trim()
+    filters: debouncedSearchQuery
       ? {
-          search: searchQuery.trim(),
+          search: debouncedSearchQuery,
           limit: 50,
         }
       : undefined,
@@ -68,6 +88,7 @@ export const AddStudentSheet = ({
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery("");
+      setDebouncedSearchQuery("");
     }
   }, [isOpen]);
 
@@ -122,13 +143,25 @@ export const AddStudentSheet = ({
                 <Loader2 className="w-6 h-6 animate-spin text-[#124A69] mb-2" />
                 <p className="text-sm text-gray-500">Searching students...</p>
               </div>
-            ) : searchQuery.trim() === "" ? (
+            ) : debouncedSearchQuery === "" ? (
               <div className="p-8 text-center text-gray-500">
                 <Search className="w-12 h-12 mx-auto mb-2 text-gray-400" />
                 <p className="font-medium">Start searching</p>
                 <p className="text-sm mt-1">
-                  Enter a name, Student ID, or RFID ID to find students
+                  Enter at least {MIN_SEARCH_LENGTH} characters to search for
+                  students
                 </p>
+                {searchQuery.trim().length > 0 &&
+                  searchQuery.trim().length < MIN_SEARCH_LENGTH && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Type {MIN_SEARCH_LENGTH - searchQuery.trim().length} more
+                      character
+                      {MIN_SEARCH_LENGTH - searchQuery.trim().length > 1
+                        ? "s"
+                        : ""}{" "}
+                      to search
+                    </p>
+                  )}
               </div>
             ) : searchResults.length > 0 ? (
               searchResults.map((student: Student) => (
@@ -146,14 +179,24 @@ export const AddStudentSheet = ({
                         {getInitials(student.firstName, student.lastName)}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
-                      <p className="font-medium text-gray-900">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="font-medium text-gray-900 truncate"
+                        title={`${student.lastName}, ${student.firstName} ${
+                          student.middleInitial
+                            ? `${student.middleInitial}.`
+                            : ""
+                        }`}
+                      >
                         {student.lastName}, {student.firstName}{" "}
                         {student.middleInitial
                           ? `${student.middleInitial}.`
                           : ""}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p
+                        className="text-sm text-gray-500 truncate"
+                        title={`${student.studentId} • RFID: ${student.rfid_id}`}
+                      >
                         {student.studentId} • RFID: {student.rfid_id}
                       </p>
                     </div>

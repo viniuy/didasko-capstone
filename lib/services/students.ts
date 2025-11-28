@@ -19,7 +19,17 @@ export async function getStudents(filters: {
     const searchAsNumber = parseInt(search, 10);
     const isNumeric = !isNaN(searchAsNumber);
 
+    // Prioritize exact matches, then starts with, then contains for better search ranking
     where.OR = [
+      // Exact matches first (highest priority)
+      { studentId: { equals: search, mode: "insensitive" } },
+      { firstName: { equals: search, mode: "insensitive" } },
+      { lastName: { equals: search, mode: "insensitive" } },
+      // Then starts with
+      { firstName: { startsWith: search, mode: "insensitive" } },
+      { lastName: { startsWith: search, mode: "insensitive" } },
+      { studentId: { startsWith: search, mode: "insensitive" } },
+      // Then contains
       { firstName: { contains: search, mode: "insensitive" } },
       { lastName: { contains: search, mode: "insensitive" } },
       { studentId: { contains: search, mode: "insensitive" } },
@@ -52,9 +62,7 @@ export async function getStudents(filters: {
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
   ]);
 

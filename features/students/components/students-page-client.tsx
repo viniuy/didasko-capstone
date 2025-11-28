@@ -71,7 +71,9 @@ export function StudentsPageClient({
 
   // State management
   const [searchQuery, setSearchQuery] = React.useState(initialSearch || "");
-  const currentPage = Number(searchParams.get("page")) || 1;
+  const [currentPage, setCurrentPage] = React.useState(
+    Number(searchParams.get("page")) || 1
+  );
   const [limit, setLimit] = React.useState(50);
   const [windowHeight, setWindowHeight] = React.useState(
     typeof window !== "undefined" ? window.innerHeight : 1000
@@ -112,28 +114,28 @@ export function StudentsPageClient({
   const lastRfidInputTimeRef = React.useRef<number>(0);
   const rfidInputBufferRef = React.useRef<string>("");
 
-  // Use TanStack Query with server-side pagination
+  // Load all students initially (no search filter - we'll filter locally)
   const { data: studentsData, isLoading } = useStudents({
     filters: {
-      page: currentPage,
-      limit,
-      search: searchQuery || undefined,
+      page: 1,
+      limit: 1000, // Load a large batch initially
+      // No search filter - we'll filter locally
     },
     initialData: {
       students: initialStudents,
       pagination: initialPagination || {
         total: initialStudents.length,
         page: 1,
-        limit,
+        limit: 1000,
         totalPages: 1,
       },
     },
-    refetchOnMount: true,
+    refetchOnMount: false, // Don't refetch if we have data
     refetchOnWindowFocus: false,
   });
 
-  // Extract students and pagination from query data
-  const students = React.useMemo(() => {
+  // Extract all students from query data
+  const allStudents = React.useMemo(() => {
     if (!studentsData) return initialStudents;
     const studentList = Array.isArray(studentsData)
       ? studentsData
@@ -149,18 +151,69 @@ export function StudentsPageClient({
     }));
   }, [studentsData, initialStudents]);
 
-  const pagination =
-    studentsData && !Array.isArray(studentsData)
-      ? studentsData.pagination
-      : initialPagination || {
-          total: initialStudents.length,
-          page: 1,
-          limit,
-          totalPages: 1,
-        };
+  // Filter students locally based on search query and apply pagination
+  const students = React.useMemo(() => {
+    let filtered = allStudents;
 
-  // Debounce search navigation
-  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    // Apply local search filter if search query exists
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = allStudents.filter((student: Student) => {
+        const fullName = `${student.firstName} ${student.lastName} ${
+          student.middleInitial || ""
+        }`.toLowerCase();
+        const lastNameFirst =
+          `${student.lastName}, ${student.firstName}`.toLowerCase();
+        const studentId = student.studentId?.toLowerCase() || "";
+        const rfidId = student.rfid_id?.toString().toLowerCase() || "";
+
+        return (
+          fullName.includes(query) ||
+          lastNameFirst.includes(query) ||
+          studentId.includes(query) ||
+          rfidId.includes(query)
+        );
+      });
+    }
+
+    // Apply pagination to filtered results
+    const startIndex = (currentPage - 1) * limit;
+    const endIndex = startIndex + limit;
+    return filtered.slice(startIndex, endIndex);
+  }, [allStudents, searchQuery, currentPage, limit]);
+
+  // Calculate pagination based on filtered results
+  const pagination = React.useMemo(() => {
+    let totalStudents = allStudents.length;
+
+    // If searching, count filtered students
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      totalStudents = allStudents.filter((student: Student) => {
+        const fullName = `${student.firstName} ${student.lastName} ${
+          student.middleInitial || ""
+        }`.toLowerCase();
+        const lastNameFirst =
+          `${student.lastName}, ${student.firstName}`.toLowerCase();
+        const studentId = student.studentId?.toLowerCase() || "";
+        const rfidId = student.rfid_id?.toString().toLowerCase() || "";
+
+        return (
+          fullName.includes(query) ||
+          lastNameFirst.includes(query) ||
+          studentId.includes(query) ||
+          rfidId.includes(query)
+        );
+      }).length;
+    }
+
+    return {
+      total: totalStudents,
+      page: currentPage,
+      limit,
+      totalPages: Math.ceil(totalStudents / limit),
+    };
+  }, [allStudents, searchQuery, currentPage, limit]);
 
   // Adjust limit based on window height for low viewport laptops (max 30)
   React.useEffect(() => {
@@ -216,32 +269,70 @@ export function StudentsPageClient({
   }, [isScanning]);
 
   // Handle search with debounce and navigation
-  const handleSearch = React.useCallback(
-    (value: string) => {
-      // Navigate to page 1 with new search
-      const params = new URLSearchParams(searchParams.toString());
-      if (value.trim()) {
-        params.set("search", value);
-      } else {
-        params.delete("search");
-      }
-      params.set("page", "1");
-      router.push(`/main/students?${params.toString()}`);
-    },
-    [router, searchParams]
-  );
-
-  // Handle page navigation
-  const handlePageChange = React.useCallback(
-    (newPage: number) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("page", newPage.toString());
-      router.push(`/main/students?${params.toString()}`);
-    },
-    [router, searchParams]
-  );
+  // Handle page navigation (local state only, no URL update)
+  const handlePageChange = React.useCallback((newPage: number) => {
+    setCurrentPage(newPage);
+  }, []);
 
   const queryClient = useQueryClient();
+
+  // Search optimization constants
+  const MIN_SEARCH_LENGTH = 2; // Require at least 2 characters
+  const SEARCH_DEBOUNCE_MS = 800; // Increased debounce time
+
+  // Local storage cache for recently viewed students
+  const CACHE_KEY = "recent_students";
+  const MAX_CACHED = 100;
+
+  // Helper function to cache recently viewed students
+  const cacheStudent = React.useCallback((student: Student) => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      const recentStudents: Student[] = cached ? JSON.parse(cached) : [];
+
+      // Remove if already exists
+      const filtered = recentStudents.filter((s) => s.id !== student.id);
+      // Add to front
+      filtered.unshift(student);
+      // Keep only last MAX_CACHED
+      const toCache = filtered.slice(0, MAX_CACHED);
+
+      localStorage.setItem(CACHE_KEY, JSON.stringify(toCache));
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  // Helper function to get cached students
+  const getCachedStudents = React.useCallback((): Student[] => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Prefetch next page when current page loads
+  React.useEffect(() => {
+    if (studentsData && pagination && currentPage < pagination.totalPages) {
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.students.list({
+          page: currentPage + 1,
+          limit,
+          search: searchQuery || undefined,
+        }),
+        queryFn: async () => {
+          return await studentsService.getStudents({
+            page: currentPage + 1,
+            limit,
+            search: searchQuery || undefined,
+          });
+        },
+        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      });
+    }
+  }, [currentPage, limit, searchQuery, pagination, queryClient, studentsData]);
 
   // Helper function to truncate student names for toast messages
   const truncateName = (
@@ -317,6 +408,9 @@ export function StudentsPageClient({
     setIsScanning(false);
     lastRfidInputTimeRef.current = 0;
     rfidInputBufferRef.current = "";
+
+    // Cache the student for quick access
+    cacheStudent(student);
   };
 
   // Handle "Add Student" button
@@ -521,8 +615,8 @@ export function StudentsPageClient({
 
     // Wait for complete RFID (at least 10 characters)
     if (value.length >= 10) {
-      // Check if RFID is already assigned in local data
-      const existingStudent = students.find(
+      // Check if RFID is already assigned in local data (check all students, not just current page)
+      const existingStudent = allStudents.find(
         (s: Student) => s.rfid_id && String(s.rfid_id) === value
       );
 
@@ -1187,21 +1281,9 @@ export function StudentsPageClient({
                       onChange={(e) => {
                         const value = e.target.value;
                         setSearchQuery(value);
-                        // Clear existing timeout
-                        if (searchTimeoutRef.current) {
-                          clearTimeout(searchTimeoutRef.current);
-                        }
-                        // Debounce search navigation
-                        searchTimeoutRef.current = setTimeout(() => {
-                          handleSearch(value);
-                        }, 500);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          if (searchTimeoutRef.current) {
-                            clearTimeout(searchTimeoutRef.current);
-                          }
-                          handleSearch(searchQuery);
+                        // Reset to page 1 when search changes (local state only, no URL update)
+                        if (currentPage !== 1) {
+                          setCurrentPage(1);
                         }
                       }}
                       maxLength={100}

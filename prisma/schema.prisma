@@ -107,6 +107,11 @@ model Student {
   groups           Group[]           @relation("GroupStudents")
   coursesEnrolled  Course[]          @relation("StudentCourses")
 
+  @@index([firstName])
+  @@index([lastName])
+  @@index([studentId])
+  @@index([rfid_id])
+  @@index([firstName, lastName]) // Composite index for name searches
   @@map("students")
 }
 
