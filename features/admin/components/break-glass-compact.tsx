@@ -100,8 +100,11 @@ export function BreakGlassCompact() {
     return facultyData.filter((user: FacultyMember) => user.role === "FACULTY");
   }, [facultyData]);
 
-  // Only show for Academic Head
-  if (session?.user?.role !== Role.ACADEMIC_HEAD) {
+  // Only show for Academic Head and Admin
+  if (
+    session?.user?.role !== Role.ACADEMIC_HEAD &&
+    session?.user?.role !== Role.ADMIN
+  ) {
     return null;
   }
 
@@ -154,6 +157,13 @@ export function BreakGlassCompact() {
   const sessionData = status?.session;
   const hasActiveSessions =
     isActive && status?.sessions && status.sessions.length > 0;
+  const isAdmin = session?.user?.role === Role.ADMIN;
+  const isAcademicHead = session?.user?.role === Role.ACADEMIC_HEAD;
+
+  // For admin: only show if there are active sessions (admin can't activate, only deactivate)
+  if (isAdmin && !hasActiveSessions) {
+    return null;
+  }
 
   return (
     <>
@@ -161,7 +171,7 @@ export function BreakGlassCompact() {
         {/* Hidden rectangle that expands on hover or always visible if active */}
         <div
           className={cn(
-            "h-6 rounded transition-all duration-300 cursor-pointer",
+            "h-6 rounded transition-all duration-300 cursor-pointer relative",
             hasActiveSessions
               ? "w-48 bg-green-100 dark:bg-green-900/20 border border-green-300 dark:border-green-700"
               : "w-1 bg-white group-hover:w-48"
@@ -173,6 +183,13 @@ export function BreakGlassCompact() {
             }
           }}
         >
+          {/* Always visible icon when collapsed */}
+          {!hasActiveSessions && (
+            <div className="absolute left-0 top-0 h-full w-6 flex items-center justify-center z-20 opacity-70 group-hover:opacity-0 transition-opacity duration-300">
+              <ShieldAlert className="w-3 h-3 text-[#124A69] dark:text-[#4da6d1]" />
+            </div>
+          )}
+
           {/* Hover reveal text - always visible if active, otherwise on hover */}
           <div
             className={cn(
@@ -300,7 +317,7 @@ export function BreakGlassCompact() {
                 </div>
               )}
               <div className="flex gap-2 pt-1 border-t border-gray-200 dark:border-gray-700">
-                {!isActive && (
+                {!isActive && isAcademicHead && (
                   <Button
                     onClick={() => setIsDialogOpen(true)}
                     size="sm"

@@ -20,13 +20,16 @@ export const GET = withLogging(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
-      // For Academic Head, get all active break-glass sessions
+      // For Academic Head and Admin, get all active break-glass sessions
       // For others, check specific user
       const { searchParams } = new URL(req.url);
       const userId = searchParams.get("userId");
 
-      if (session.user.role === "ACADEMIC_HEAD") {
-        // Academic Head can see all active break-glass sessions
+      if (
+        session.user.role === "ACADEMIC_HEAD" ||
+        session.user.role === "ADMIN"
+      ) {
+        // Academic Head and Admin can see all active break-glass sessions
         // Optimized: Use select instead of include for better performance
         const activeSessions = await prisma.breakGlassSession.findMany({
           select: {

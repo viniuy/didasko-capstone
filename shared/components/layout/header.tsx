@@ -24,12 +24,13 @@ export default function Header() {
   const [promotionCode, setPromotionCode] = useState("");
 
   // React Query hooks
-  // Only fetch break-glass status for non-academic-head users (they don't need it)
-  // Academic heads use BreakGlassCompact component which fetches its own status
-  const shouldFetchBreakGlass = session?.user?.role !== "ACADEMIC_HEAD";
+  // Only fetch break-glass status for non-academic-head and non-admin users (they don't need it)
+  // Academic heads and admins use BreakGlassCompact component which fetches its own status
+  const shouldFetchBreakGlass =
+    session?.user?.role !== "ACADEMIC_HEAD" && session?.user?.role !== "ADMIN";
   const { data: breakGlassStatus } = useBreakGlassStatus(
     shouldFetchBreakGlass ? session?.user?.id : undefined,
-    { enabled: shouldFetchBreakGlass } // Disable query for academic heads
+    { enabled: shouldFetchBreakGlass } // Disable query for academic heads and admins
   );
   const selfPromoteMutation = useSelfPromote();
 
@@ -95,9 +96,9 @@ export default function Header() {
           <BreakGlassCompact />
           {/* Temp Admin Button */}
           {!isChecking && isTempAdmin && (
-              <Button
-                onClick={() => !showPromoteDialog && setShowPromoteDialog(true)}
-                className={`
+            <Button
+              onClick={() => !showPromoteDialog && setShowPromoteDialog(true)}
+              className={`
                   relative overflow-hidden
                   bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600
                   hover:from-yellow-500 hover:via-yellow-600 hover:to-yellow-700
@@ -117,29 +118,29 @@ export default function Header() {
                       : "animate-pulse"
                   }
                 `}
-                size="sm"
-                disabled={showPromoteDialog}
-                onMouseEnter={(e) => {
-                  if (showPromoteDialog) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }
-                }}
-              >
-                {/* Shimmer effect */}
-                {!showPromoteDialog && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-                )}
+              size="sm"
+              disabled={showPromoteDialog}
+              onMouseEnter={(e) => {
+                if (showPromoteDialog) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+            >
+              {/* Shimmer effect */}
+              {!showPromoteDialog && (
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+              )}
 
-                {/* Glow effect */}
-                <div className="absolute inset-0 rounded-md bg-yellow-400/50 blur-xl animate-pulse opacity-50" />
+              {/* Glow effect */}
+              <div className="absolute inset-0 rounded-md bg-yellow-400/50 blur-xl animate-pulse opacity-50" />
 
-                <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 relative z-10 animate-[bounce_2s_infinite]" />
-                <span className="hidden sm:inline relative z-10">
-                  Temporary Admin
-                </span>
-                <span className="sm:hidden relative z-10">Temp</span>
-              </Button>
+              <ShieldCheck className="w-3 h-3 sm:w-4 sm:h-4 relative z-10 animate-[bounce_2s_infinite]" />
+              <span className="hidden sm:inline relative z-10">
+                Temporary Admin
+              </span>
+              <span className="sm:hidden relative z-10">Temp</span>
+            </Button>
           )}
         </div>
 
