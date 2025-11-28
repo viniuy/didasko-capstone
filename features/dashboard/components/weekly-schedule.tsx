@@ -284,7 +284,7 @@ export default function WeeklySchedule({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm min-h-[430px] max-h-[600px] flex flex-col">
+    <div className="bg-white rounded-lg shadow-sm min-h-[430px] flex flex-col">
       <div className="p-4 border-b flex-shrink-0">
         <h2 className="text-base sm:text-lg md:text-xl font-bold text-center text-[#124A69]">
           {isViewingOtherTeacher ? "WEEKLY SCHEDULE" : "MY WEEKLY SCHEDULE"}
@@ -320,7 +320,7 @@ export default function WeeklySchedule({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto overflow-y-auto flex-1">
+        <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto flex-1">
           {days.map((day) => (
             <div
               key={day}
