@@ -269,8 +269,69 @@ export default function GradingLeaderboard({
 
         setGradeCounts(counts);
 
-        // Sort by current grade (highest to lowest) for student rankings
+        // Sort by selected term grade (highest to lowest) for student rankings
         const rankings = [...data]
+          .map((student) => {
+            let gradeToUse: number;
+            let numericGradeToUse: string | null;
+
+            if (selectedTerm === "FINAL") {
+              // Use final grade
+              gradeToUse = student.currentGrade;
+              numericGradeToUse =
+                student.numericGrade ||
+                (() => {
+                  const percent = student.currentGrade;
+                  if (percent >= 97.5) return "1.00";
+                  if (percent >= 94.5) return "1.25";
+                  if (percent >= 91.5) return "1.50";
+                  if (percent >= 86.5) return "1.75";
+                  if (percent >= 81.5) return "2.00";
+                  if (percent >= 76.0) return "2.25";
+                  if (percent >= 70.5) return "2.50";
+                  if (percent >= 65.0) return "2.75";
+                  if (percent >= 59.5) return "3.00";
+                  return "5.00";
+                })();
+            } else {
+              // Use term-specific grade
+              const termNumericGrade = student.termGrades?.[selectedTerm];
+              numericGradeToUse = termNumericGrade || null;
+
+              if (termNumericGrade) {
+                // Convert numeric grade to percentage for display
+                const numGrade = parseFloat(termNumericGrade);
+                // Use midpoint of each grade range for better sorting
+                if (numGrade <= 1.0) gradeToUse = 98.75; // midpoint of 97.5-100
+                else if (numGrade <= 1.25)
+                  gradeToUse = 96.0; // midpoint of 94.5-97.5
+                else if (numGrade <= 1.5)
+                  gradeToUse = 93.0; // midpoint of 91.5-94.5
+                else if (numGrade <= 1.75)
+                  gradeToUse = 89.0; // midpoint of 86.5-91.5
+                else if (numGrade <= 2.0)
+                  gradeToUse = 84.0; // midpoint of 81.5-86.5
+                else if (numGrade <= 2.25)
+                  gradeToUse = 78.5; // midpoint of 76.0-81.5
+                else if (numGrade <= 2.5)
+                  gradeToUse = 73.25; // midpoint of 70.5-76.0
+                else if (numGrade <= 2.75)
+                  gradeToUse = 67.75; // midpoint of 65.0-70.5
+                else if (numGrade <= 3.0)
+                  gradeToUse = 62.25; // midpoint of 59.5-65.0
+                else gradeToUse = 0; // 5.00 (failed)
+              } else {
+                // No grade for this term, use 0 (will be sorted to bottom)
+                gradeToUse = 0;
+              }
+            }
+
+            return {
+              ...student,
+              currentGrade: gradeToUse,
+              numericGrade: numericGradeToUse,
+            };
+          })
           .sort((a, b) => b.currentGrade - a.currentGrade)
           .map((student, index) => ({
             ...student,
@@ -421,20 +482,47 @@ export default function GradingLeaderboard({
             value="rankings"
             className="flex-1 overflow-y-auto mt-3 space-y-2"
           >
+            <div className="mb-3">
+              <Select
+                value={selectedTerm}
+                onValueChange={(
+                  value: "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
+                ) => setSelectedTerm(value)}
+              >
+                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
+                  <SelectValue placeholder="Select term" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FINAL">Final Grade</SelectItem>
+                  <SelectItem value="PRELIM">Prelim</SelectItem>
+                  <SelectItem value="MIDTERM">Midterm</SelectItem>
+                  <SelectItem value="PREFINALS">Pre-Finals</SelectItem>
+                  <SelectItem value="FINALS">Finals</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {studentRankings.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-white/70">
                   No student rankings available
                 </p>
                 <p className="text-xs text-white/50 mt-2">
-                  Rankings are based on final grades
+                  Rankings are based on{" "}
+                  {selectedTerm === "FINAL"
+                    ? "final"
+                    : selectedTerm.toLowerCase()}{" "}
+                  grades
                 </p>
               </div>
             ) : (
               <>
                 <div className="mb-2 px-1">
                   <p className="text-xs text-white/60 italic">
-                    Ranked by final grade (highest to lowest)
+                    Ranked by{" "}
+                    {selectedTerm === "FINAL"
+                      ? "final"
+                      : selectedTerm.toLowerCase()}{" "}
+                    grade (highest to lowest)
                   </p>
                 </div>
                 {studentRankings.map((student) => (

@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
 import Rightsidebar from "@/shared/components/layout/right-sidebar";
@@ -9,7 +8,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect, notFound } from "next/navigation";
 import { ClassRecordTable } from "@/features/grading/components/class-record";
-import { ClassRecordSkeleton } from "@/shared/components/skeletons/course-skeletons";
 
 // Separate async component for class record content
 async function ClassRecordContent({ courseSlug }: { courseSlug: string }) {
@@ -54,9 +52,9 @@ export default async function GradebookCoursePage({
     <div className="relative h-screen w-screen overflow-hidden">
       <Header />
       <AppSidebar />
-      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
+      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
         <div className="flex flex-col flex-grow px-4">
-          <div className="flex-1 p-4">
+          <div className="flex-1 p-4 ">
             {/* Header - shown immediately */}
             <div className="flex items-center justify-between mb-8">
               <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
@@ -67,10 +65,8 @@ export default async function GradebookCoursePage({
               </h1>
             </div>
 
-            {/* Class Record Table with Suspense */}
-            <Suspense fallback={<ClassRecordSkeleton />}>
-              <ClassRecordContent courseSlug={course_slug} />
-            </Suspense>
+            {/* Class Record Table */}
+            <ClassRecordContent courseSlug={course_slug} />
           </div>
         </div>
         <Rightsidebar />

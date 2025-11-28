@@ -1270,6 +1270,11 @@ export function GradingTable({
 
   // Helper function to handle numeric keydown (from class-record.tsx)
   const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Allow keyboard shortcuts (Ctrl, Cmd, Alt combinations)
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      return;
+    }
+
     const allowed = [
       "Backspace",
       "Delete",

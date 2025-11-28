@@ -4244,13 +4244,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
           <div className="space-y-4 py-4">
             <div className="relative">
-              <Input
-                placeholder={
-                  isBulkExcuse
-                    ? "Enter reason for all selected..."
-                    : "Enter reason..."
-                }
-                value={excuseReason}
+            <Input
+              placeholder={
+                isBulkExcuse
+                  ? "Enter reason for all selected..."
+                  : "Enter reason..."
+              }
+              value={excuseReason}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value.length <= 30) {
