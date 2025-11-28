@@ -106,7 +106,9 @@ export default function CustomTutorial({
           left = rect.left + rect.width / 2;
           break;
         case "top":
-          top = rect.top - padding - 200;
+          // Position tooltip so it sits right on top of the highlighted element
+          // We'll use translateY(-100%) to position it above, so set top to element's top
+          top = rect.top - padding;
           left = rect.left + rect.width / 2;
           break;
         case "left":
@@ -257,8 +259,10 @@ export default function CustomTutorial({
           top: tooltipPosition.top,
           left: tooltipPosition.left,
           transform:
-            placement === "bottom" || placement === "top"
+            placement === "bottom"
               ? "translateX(-50%)"
+              : placement === "top"
+              ? "translate(-50%, -100%)"
               : placement === "right"
               ? "translateX(0)"
               : "translateX(-100%)",

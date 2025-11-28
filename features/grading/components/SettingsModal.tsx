@@ -936,6 +936,113 @@ export function SettingsModal({
     [savedTerms]
   );
 
+  // Autoscroll to tutorial target elements
+  useEffect(() => {
+    if (!showTutorial || tutorialSteps.length === 0) return;
+
+    const scrollToTarget = (targetSelector: string) => {
+      const element = document.querySelector(targetSelector);
+      if (element) {
+        // Find the scrollable container (the modal content area)
+        const scrollableContainer = element.closest(
+          ".overflow-y-auto"
+        ) as HTMLElement;
+
+        if (scrollableContainer) {
+          // Scroll within the modal container
+          const elementRect = element.getBoundingClientRect();
+          const containerRect = scrollableContainer.getBoundingClientRect();
+
+          const scrollTop =
+            scrollableContainer.scrollTop +
+            elementRect.top -
+            containerRect.top -
+            100; // Offset for better visibility
+
+          scrollableContainer.scrollTo({
+            top: Math.max(0, scrollTop),
+            behavior: "smooth",
+          });
+        } else {
+          // Fallback: scroll element into view
+          element.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest",
+          });
+        }
+      }
+    };
+
+    // Scroll to first step when tutorial starts
+    if (tutorialSteps.length > 0) {
+      setTimeout(() => {
+        scrollToTarget(tutorialSteps[0].target);
+      }, 300);
+    }
+
+    // Monitor for tutorial step changes by watching for the highlight border
+    const checkAndScroll = () => {
+      // Find the tutorial highlight border element
+      const highlightBorder = Array.from(
+        document.querySelectorAll('[class*="border-4"]')
+      ).find((el) => {
+        const style = window.getComputedStyle(el);
+        const borderColor = style.borderColor;
+        return (
+          borderColor === "rgb(18, 74, 105)" ||
+          borderColor === "#124A69" ||
+          el.getAttribute("style")?.includes("border-4 border-[#124A69]")
+        );
+      }) as HTMLElement;
+
+      if (highlightBorder) {
+        // Find which tutorial step target is currently highlighted
+        for (const step of tutorialSteps) {
+          const targetElement = document.querySelector(step.target);
+          if (targetElement) {
+            const targetRect = targetElement.getBoundingClientRect();
+            const borderRect = highlightBorder.getBoundingClientRect();
+
+            // Check if the border is highlighting this target (within 50px tolerance)
+            if (
+              Math.abs(targetRect.top - borderRect.top) < 50 &&
+              Math.abs(targetRect.left - borderRect.left) < 50 &&
+              Math.abs(targetRect.width - borderRect.width) < 100 &&
+              Math.abs(targetRect.height - borderRect.height) < 100
+            ) {
+              scrollToTarget(step.target);
+              break;
+            }
+          }
+        }
+      }
+    };
+
+    // Use MutationObserver to detect when tutorial step changes
+    const observer = new MutationObserver(() => {
+      checkAndScroll();
+    });
+
+    // Observe the document body for tutorial overlay changes
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+
+    // Also check periodically as a fallback (every 600ms)
+    const intervalId = setInterval(() => {
+      checkAndScroll();
+    }, 600);
+
+    return () => {
+      observer.disconnect();
+      clearInterval(intervalId);
+    };
+  }, [showTutorial, tutorialSteps]);
+
   const handleTutorialComplete = () => {
     setShowTutorial(false);
     localStorage.setItem("didasko-settings-tutorial", "completed");

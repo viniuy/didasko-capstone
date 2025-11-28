@@ -122,25 +122,25 @@ const ClickSpark = ({
 
   // Use document-level event delegation to capture clicks on all elements
   useEffect(() => {
-    const handleClick = (e) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+  const handleClick = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
       // Use viewport coordinates directly since canvas is sized to viewport
       const x = e.clientX;
       const y = e.clientY;
 
       // Create sparks for any click on the page
-      const now = performance.now();
-      const newSparks = Array.from({ length: sparkCount }, (_, i) => ({
-        x,
-        y,
-        angle: (2 * Math.PI * i) / sparkCount,
-        startTime: now,
-      }));
+    const now = performance.now();
+    const newSparks = Array.from({ length: sparkCount }, (_, i) => ({
+      x,
+      y,
+      angle: (2 * Math.PI * i) / sparkCount,
+      startTime: now,
+    }));
 
-      sparksRef.current.push(...newSparks);
-    };
+    sparksRef.current.push(...newSparks);
+  };
 
     // Attach click listener to document to capture all clicks
     document.addEventListener("click", handleClick);

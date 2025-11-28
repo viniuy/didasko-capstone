@@ -68,9 +68,9 @@ export default function FacultyDetails({
       if (course.students && Array.isArray(course.students)) {
         course.students.forEach((student) => {
           if (student && student.id) {
-            uniqueStudents.add(student.id);
+        uniqueStudents.add(student.id);
           }
-        });
+      });
       }
       // Count courses
       totalCourses += 1;
@@ -78,18 +78,18 @@ export default function FacultyDetails({
       // Calculate teaching hours per week
       course.schedules?.forEach((schedule) => {
         if (!schedule.fromTime || !schedule.toTime) return;
-
+        
         try {
           const fromParts = schedule.fromTime.split(":");
           const toParts = schedule.toTime.split(":");
-
+          
           if (fromParts.length !== 2 || toParts.length !== 2) return;
-
+          
           const fromHours = parseInt(fromParts[0], 10);
           const fromMinutes = parseInt(fromParts[1], 10);
           const toHours = parseInt(toParts[0], 10);
           const toMinutes = parseInt(toParts[1], 10);
-
+          
           if (
             isNaN(fromHours) ||
             isNaN(fromMinutes) ||
@@ -98,12 +98,12 @@ export default function FacultyDetails({
           ) {
             return;
           }
-
+          
           const fromTotalMinutes = fromHours * 60 + fromMinutes;
           const toTotalMinutes = toHours * 60 + toMinutes;
-
+          
           const durationHours = (toTotalMinutes - fromTotalMinutes) / 60;
-
+          
           if (durationHours > 0 && !isNaN(durationHours)) {
             totalTeachingHours += durationHours;
           }

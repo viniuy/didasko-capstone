@@ -418,11 +418,11 @@ export async function getCourseStudentsWithAttendance(
   const allGradeScores =
     studentIds.length > 0
       ? await prisma.gradeScore.findMany({
-          where: {
+    where: {
             courseId: courseWithData.id,
-            studentId: { in: studentIds },
-          },
-          orderBy: { createdAt: "desc" },
+      studentId: { in: studentIds },
+    },
+    orderBy: { createdAt: "desc" },
           take: 1000, // Limit to prevent excessive data
         })
       : [];

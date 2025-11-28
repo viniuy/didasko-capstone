@@ -149,6 +149,36 @@ const LoadingSkeleton = ({ index }: { index: number }) => (
   </Card>
 );
 
+// Hook to get responsive items per page based on screen width
+const useItemsPerPage = () => {
+  const [itemsPerPage, setItemsPerPage] = useState(3);
+
+  useEffect(() => {
+    const updateItemsPerPage = () => {
+      const width = window.innerWidth;
+
+      if (width < 1600) {
+        setItemsPerPage(2);
+      } else if (width >= 2500) {
+        setItemsPerPage(5);
+      } else if (width >= 1956) {
+        setItemsPerPage(4);
+      } else {
+        setItemsPerPage(3);
+      }
+    };
+
+    // Set initial value
+    updateItemsPerPage();
+
+    // Update on resize
+    window.addEventListener("resize", updateItemsPerPage);
+    return () => window.removeEventListener("resize", updateItemsPerPage);
+  }, []);
+
+  return itemsPerPage;
+};
+
 export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -156,7 +186,7 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   const [isNavigating, setIsNavigating] = useState(false);
   const [showRedirectSpinner, setShowRedirectSpinner] = useState(false);
   const [redirectingSlug, setRedirectingSlug] = useState<string | null>(null);
-  const itemsPerPage = 3;
+  const itemsPerPage = useItemsPerPage();
 
   // React Query hook with initialData
   const { data: coursesData, isLoading } = useActiveCourses({
@@ -229,6 +259,27 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
     }
   };
 
+  // Reset to page 1 when itemsPerPage changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
+
+  // Get grid class based on itemsPerPage
+  const getGridClass = () => {
+    switch (itemsPerPage) {
+      case 2:
+        return "grid-cols-1 sm:grid-cols-2";
+      case 3:
+        return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+      case 4:
+        return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
+      case 5:
+        return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5";
+      default:
+        return "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
+    }
+  };
+
   const totalPages = Math.ceil(courses.length / itemsPerPage);
   const currentCourses = courses.slice(
     (currentPage - 1) * itemsPerPage,
@@ -294,7 +345,9 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
         </h2>
       </div>
       <Card className="p-4 shadow-md rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
+        <div
+          className={`grid ${getGridClass()} gap-4 max-h-[600px] overflow-hidden`}
+        >
           {currentCourses.map((course) => (
             <CourseCard
               key={course.id}
@@ -310,10 +363,10 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
         </div>
 
         {courses.length > itemsPerPage && (
-          <div className="flex justify-between items-center px-2 -mt-4">
-            <p className="text-sm text-gray-500 w-90">
-              {currentPage * itemsPerPage - (itemsPerPage - 1)}-
-              {Math.min(currentPage * itemsPerPage, courses.length)} out of{" "}
+          <div className="flex flex-col sm:flex-row justify-between items-center px-2 -mt-4 gap-2 sm:gap-0">
+            <p className="text-xs sm:text-sm text-gray-500 w-100">
+              Showing {currentPage * itemsPerPage - (itemsPerPage - 1)}-
+              {Math.min(currentPage * itemsPerPage, courses.length)} of{" "}
               {courses.length} classes
             </p>
             <Pagination className="flex justify-end">
@@ -328,25 +381,82 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
                     }
                   />
                 </PaginationItem>
-                {[...Array(totalPages || 1)].map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      isActive={currentPage === i + 1}
-                      onClick={() => setCurrentPage(i + 1)}
-                      className={
-                        currentPage === i + 1 ? "bg-[#124A69] text-white" : ""
+
+                {(() => {
+                  const pages: number[] = [];
+
+                  // If total pages is 5 or less, show all pages
+                  if (totalPages <= 5) {
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(i);
+                    }
+                    return pages;
+                  } else {
+                    // Always show first 2 pages
+                    pages.push(1, 2);
+
+                    // Determine which pages to show around current
+                    const showAroundCurrent: number[] = [];
+                    if (currentPage > 2 && currentPage < totalPages - 1) {
+                      // Show current-1, current, current+1 if in middle
+                      showAroundCurrent.push(
+                        currentPage - 1,
+                        currentPage,
+                        currentPage + 1
+                      );
+                    } else if (currentPage <= 2) {
+                      // If current is 1 or 2, show 3, 4
+                      showAroundCurrent.push(3, 4);
+                    } else if (currentPage >= totalPages - 1) {
+                      // If current is near end, show last-3, last-2, last-1
+                      showAroundCurrent.push(
+                        totalPages - 3,
+                        totalPages - 2,
+                        totalPages - 1
+                      );
+                    }
+
+                    // Remove duplicates and sort
+                    const uniquePages = Array.from(
+                      new Set([...pages, ...showAroundCurrent, totalPages])
+                    ).sort((a, b) => a - b) as number[];
+
+                    // Build final array with ellipsis
+                    const finalPages: (number | string)[] = [];
+                    for (let i = 0; i < uniquePages.length; i++) {
+                      const page = uniquePages[i];
+                      if (i > 0 && page - uniquePages[i - 1] > 1) {
+                        finalPages.push("…");
                       }
-                    >
-                      {i + 1}
-                    </PaginationLink>
+                      finalPages.push(page);
+                    }
+
+                    return finalPages;
+                  }
+                })().map((item, i) => (
+                  <PaginationItem key={i}>
+                    {item === "…" ? (
+                      <span className="px-0.5 text-gray-500 select-none text-xs sm:text-sm">
+                        …
+                      </span>
+                    ) : (
+                      <PaginationLink
+                        isActive={currentPage === item}
+                        onClick={() => setCurrentPage(item as number)}
+                        className={
+                          currentPage === item ? "bg-[#124A69] text-white" : ""
+                        }
+                      >
+                        {item}
+                      </PaginationLink>
+                    )}
                   </PaginationItem>
                 ))}
+
                 <PaginationItem>
                   <PaginationNext
                     onClick={() =>
-                      setCurrentPage((prev) =>
-                        Math.min(prev + 1, totalPages || 1)
-                      )
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                     }
                     className={
                       currentPage === totalPages
