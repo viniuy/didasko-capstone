@@ -50,7 +50,6 @@ import {
   useCoursesStatsBatch,
   useFaculty,
   useBulkArchiveCourses,
-  useArchivedCourses,
 } from "@/lib/hooks/queries";
 import { CourseResponse } from "@/shared/types/course";
 import { useQueryClient } from "@tanstack/react-query";
@@ -692,6 +691,7 @@ export function CourseDataTable({
 
     if (coursesToUse.length === 0) {
       setTableData([]);
+      setHasLoadedOnce(true); // Mark as loaded even when there are no courses
       return;
     }
 
@@ -797,6 +797,8 @@ export function CourseDataTable({
   }, [tableData, userRole, userId, facultyFilter, faculties]);
 
   const hasReachedMaxActiveCourses = activeCoursesCount >= MAX_ACTIVE_COURSES;
+
+  const isInEmptyState = activeCoursesCount === 0;
 
   // Filter courses based on role and faculty (without search/status filters)
   const baseFilteredCourses = useMemo(() => {
@@ -2765,7 +2767,9 @@ export function CourseDataTable({
                       isInitialLoading ||
                       isLoading ||
                       !hasLoadedOnce ||
-                      activeCoursesCount === 0
+                      // Enable for ACADEMIC_HEAD in empty state, otherwise disable when no active courses
+                      (activeCoursesCount === 0 &&
+                        !(userRole === "ACADEMIC_HEAD" && isInEmptyState))
                     }
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0 relative"
                   >
@@ -2789,7 +2793,9 @@ export function CourseDataTable({
                       isInitialLoading ||
                       isLoading ||
                       !hasLoadedOnce ||
-                      activeCoursesCount === 0
+                      // Enable for ACADEMIC_HEAD in empty state, otherwise disable when no active courses
+                      (activeCoursesCount === 0 &&
+                        !(userRole === "ACADEMIC_HEAD" && isInEmptyState))
                     }
                     className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                   >

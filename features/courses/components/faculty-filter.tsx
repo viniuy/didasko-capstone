@@ -16,6 +16,7 @@ interface FacultyFilterProps {
   selectedFacultyIds: string[];
   onChange: (facultyIds: string[]) => void;
   currentUserId: string;
+  disabled?: boolean;
 }
 
 export function FacultyFilter({
@@ -23,6 +24,7 @@ export function FacultyFilter({
   selectedFacultyIds,
   onChange,
   currentUserId,
+  disabled = false,
 }: FacultyFilterProps) {
   const { data: session } = useSession();
   const currentUser = session?.user;
@@ -42,10 +44,10 @@ export function FacultyFilter({
       return "No faculty selected";
     }
     if (selectedFacultyId === currentUserId) {
-        return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
-      }
+      return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
+    }
     const faculty = faculties.find((f) => f.id === selectedFacultyId);
-      return faculty?.name || "Selected faculty";
+    return faculty?.name || "Selected faculty";
   };
 
   // Filter faculties based on search query
@@ -67,11 +69,15 @@ export function FacultyFilter({
 
   return (
     <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <Users className="w-4 h-4" />
-          <span>Filter by Faculty:</span>
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <Users className="w-4 h-4" />
+        <span>Filter by Faculty:</span>
       </div>
-      <div className="border rounded-md p-3 bg-gray-50">
+      <div
+        className={`border rounded-md p-3 bg-gray-50 ${
+          disabled ? "opacity-50 pointer-events-none" : ""
+        }`}
+      >
         <div className="text-sm text-gray-600 mb-2 min-h-[20px]">
           {getDisplayText()}
         </div>
@@ -84,6 +90,7 @@ export function FacultyFilter({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-9 text-sm"
+            disabled={disabled}
           />
         </div>
         <div className="h-[200px] overflow-y-auto pr-4">
@@ -93,15 +100,18 @@ export function FacultyFilter({
               <div className="flex items-center space-x-2 p-2 rounded hover:bg-white transition-colors group">
                 <label
                   htmlFor={`faculty-${currentUserId}`}
-                  className="flex items-center cursor-pointer"
+                  className={`flex items-center ${
+                    disabled ? "cursor-not-allowed" : "cursor-pointer"
+                  }`}
                 >
                   <input
                     type="radio"
-                  id={`faculty-${currentUserId}`}
+                    id={`faculty-${currentUserId}`}
                     name="faculty-filter"
                     checked={selectedFacultyId === currentUserId}
                     onChange={() => handleSelectFaculty(currentUserId)}
                     className="sr-only peer"
+                    disabled={disabled}
                   />
                   <div
                     className={`relative w-4 h-4 rounded-full border-2 transition-all duration-200 flex items-center justify-center group-hover:border-[#124A69]/60 peer-focus-visible:ring-2 peer-focus-visible:ring-[#124A69]/50 peer-focus-visible:ring-offset-2 peer-focus-visible:outline-none ${
@@ -117,7 +127,9 @@ export function FacultyFilter({
                 </label>
                 <label
                   htmlFor={`faculty-${currentUserId}`}
-                  className="text-sm font-medium cursor-pointer flex-1"
+                  className={`text-sm font-medium flex-1 ${
+                    disabled ? "cursor-not-allowed" : "cursor-pointer"
+                  }`}
                 >
                   My Courses
                   {currentUser?.name && (
@@ -140,15 +152,18 @@ export function FacultyFilter({
                 >
                   <label
                     htmlFor={`faculty-${faculty.id}`}
-                    className="flex items-center cursor-pointer"
+                    className={`flex items-center ${
+                      disabled ? "cursor-not-allowed" : "cursor-pointer"
+                    }`}
                   >
                     <input
                       type="radio"
-                    id={`faculty-${faculty.id}`}
+                      id={`faculty-${faculty.id}`}
                       name="faculty-filter"
                       checked={selectedFacultyId === faculty.id}
                       onChange={() => handleSelectFaculty(faculty.id)}
                       className="sr-only peer"
+                      disabled={disabled}
                     />
                     <div
                       className={`relative w-4 h-4 rounded-full border-2 transition-all duration-200 flex items-center justify-center group-hover:border-[#124A69]/60 peer-focus-visible:ring-2 peer-focus-visible:ring-[#124A69]/50 peer-focus-visible:ring-offset-2 peer-focus-visible:outline-none ${
@@ -164,7 +179,9 @@ export function FacultyFilter({
                   </label>
                   <label
                     htmlFor={`faculty-${faculty.id}`}
-                    className="text-sm cursor-pointer flex-1"
+                    className={`text-sm flex-1 ${
+                      disabled ? "cursor-not-allowed" : "cursor-pointer"
+                    }`}
                   >
                     {faculty.name}
                     {faculty.department && (

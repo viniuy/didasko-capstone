@@ -55,7 +55,7 @@ type EventData = {
 export async function addEvent(data: EventData) {
   const { title, description, date, fromTime, toTime, userRole } = data;
 
-  if (userRole !== Role.ACADEMIC_HEAD) {
+  if (userRole !== Role.ACADEMIC_HEAD && userRole !== Role.ADMIN) {
     return { success: false, error: "Unauthorized" };
   }
 
@@ -89,7 +89,7 @@ type UpdateEventData = EventData & { id: string };
 export async function updateEvent(data: UpdateEventData) {
   const { id, title, description, date, fromTime, toTime, userRole } = data;
 
-  if (userRole !== Role.ACADEMIC_HEAD) {
+  if (userRole !== Role.ACADEMIC_HEAD && userRole !== Role.ADMIN) {
     return { success: false, error: "Unauthorized" };
   }
 
@@ -128,7 +128,7 @@ export async function deleteEvent({
   id: string;
   userRole: Role;
 }) {
-  if (userRole !== Role.ACADEMIC_HEAD) {
+  if (userRole !== Role.ACADEMIC_HEAD && userRole !== Role.ADMIN) {
     return { success: false, error: "Unauthorized" };
   }
 

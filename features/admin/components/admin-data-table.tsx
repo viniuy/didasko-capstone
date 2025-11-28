@@ -905,6 +905,11 @@ export function AdminDataTable({
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         ),
+        sortingFn: (rowA, rowB) => {
+          const emailA = (rowA.original.email || "").toLowerCase();
+          const emailB = (rowB.original.email || "").toLowerCase();
+          return emailA.localeCompare(emailB);
+        },
       },
       {
         accessorKey: "department",
@@ -1342,7 +1347,7 @@ export function AdminDataTable({
         </div>
       </div>
 
-      <div className="relative flex flex-col flex-1">
+      <div className="relative min-h-[610px] max-h-[610px] flex flex-col">
         <div className="flex-1 rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
@@ -1574,7 +1579,7 @@ export function AdminDataTable({
       <Dialog open={showImportPreview} onOpenChange={setShowImportPreview}>
         <DialogContent
           className={`p-4 sm:p-6 h-auto ${
-            previewData.length > 0 ? "w-[65vw]" : "w-[25vw]"
+            previewData.length > 0 ? "w-[65vw]" : "w-[40vw]"
           }`}
         >
           <DialogHeader className="w-full">
