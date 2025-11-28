@@ -243,6 +243,31 @@ export function StudentsPageClient({
 
   const queryClient = useQueryClient();
 
+  // Helper function to truncate student names for toast messages
+  const truncateName = (
+    firstName: string,
+    lastName: string,
+    maxLength: number = 25
+  ): string => {
+    const fullName = `${firstName} ${lastName}`;
+    if (fullName.length <= maxLength) return fullName;
+    return `${fullName.substring(0, maxLength - 3)}...`;
+  };
+
+  // Helper function to show error toast (ensures only one error at a time)
+  const showErrorToast = (message: string, options?: { duration?: number }) => {
+    toast.dismiss(); // Dismiss all existing toasts
+    toast.error(message, { duration: options?.duration || 3000 });
+  };
+
+  // Helper function to show success toast
+  const showSuccessToast = (
+    message: string,
+    options?: { duration?: number }
+  ) => {
+    toast.success(message, { duration: options?.duration || 3000 });
+  };
+
   // Fetch all students from API (for refetch after mutations)
   const fetchStudents = async () => {
     try {
@@ -250,7 +275,7 @@ export function StudentsPageClient({
       queryClient.invalidateQueries({ queryKey: queryKeys.students.lists() });
     } catch (error) {
       console.error("Error fetching students:", error);
-      toast.error("Failed to load students");
+      showErrorToast("Failed to load students");
     }
   };
 
@@ -354,7 +379,7 @@ export function StudentsPageClient({
     if (!file) return;
 
     if (!file.name.endsWith(".csv")) {
-      toast.error("Please select a CSV file");
+      showErrorToast("Please select a CSV file");
       return;
     }
 
@@ -381,7 +406,7 @@ export function StudentsPageClient({
   // Handle import students
   const handleImportStudents = async () => {
     if (!importFile) {
-      toast.error("Please select a file first");
+      showErrorToast("Please select a file first");
       return;
     }
 
@@ -420,9 +445,9 @@ export function StudentsPageClient({
         }
       }
 
-      toast.success(`Imported ${successCount} students successfully!`);
+      showSuccessToast(`Imported ${successCount} students successfully!`);
       if (errorCount > 0) {
-        toast.error(`${errorCount} students failed to import`);
+        showErrorToast(`${errorCount} students failed to import`);
       }
 
       await fetchStudents();
@@ -431,7 +456,7 @@ export function StudentsPageClient({
       setImportPreview([]);
     } catch (error) {
       console.error("Error importing students:", error);
-      toast.error("Failed to import students");
+      showErrorToast("Failed to import students");
     } finally {
       setIsSubmitting(false);
     }
@@ -473,11 +498,11 @@ export function StudentsPageClient({
     const currentTime = Date.now();
     const timeSinceLastInput = currentTime - lastRfidInputTimeRef.current;
 
-    // If there's a delay > 100ms between characters, it's likely manual typing - reject it
-    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 100) {
+    // If there's a delay > 400ms between characters, it's likely manual typing - reject it
+    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 400) {
       // Reset - this is manual typing, not RFID scan
       e.target.value = rfidInputBufferRef.current;
-      toast.error("Please use RFID scanner. Manual input is disabled.");
+      showErrorToast("Please use RFID scanner. Manual input is disabled.");
       return;
     }
 
@@ -504,10 +529,11 @@ export function StudentsPageClient({
       if (existingStudent) {
         // If we're searching via RFID, load the student
         if (viewMode === "searching-rfid") {
-          toast.success(
-            `Found student: ${existingStudent.firstName} ${existingStudent.lastName}`,
-            { duration: 3000 }
+          const truncatedName = truncateName(
+            existingStudent.firstName,
+            existingStudent.lastName
           );
+          showSuccessToast(`Found student: ${truncatedName}`);
           handleSelectStudent(existingStudent);
           setScannedRfid("");
           setIsScanning(false);
@@ -519,9 +545,12 @@ export function StudentsPageClient({
 
         // If we're assigning RFID or creating, show error
         if (viewMode === "assigning-rfid" || viewMode === "creating") {
-          toast.error(
-            `RFID "${value}" is already assigned to ${existingStudent.firstName} ${existingStudent.lastName}`,
-            { duration: 3000 }
+          const truncatedName = truncateName(
+            existingStudent.firstName,
+            existingStudent.lastName
+          );
+          showErrorToast(
+            `RFID "${value}" is already assigned to ${truncatedName}`
           );
           setScannedRfid("");
           setIsScanning(false);
@@ -532,21 +561,17 @@ export function StudentsPageClient({
         }
       }
 
-      // If searching and no student found locally, search in database
+      // If searching and no student found locally, search in database by rfid_id only
       if (viewMode === "searching-rfid") {
+        // Show loading toast
+        const loadingToastId = toast.loading("Searching for student...");
+
         try {
-          // Search in database using the search API
-          const searchResult = await studentsService.getStudents({
-            search: value,
-            page: 1,
-            limit: 10,
-          });
+          // Search in database using the RFID-specific endpoint (searches only by rfid_id, not studentId)
+          const searchResult = await studentsService.getByRfid(value);
 
-          const foundStudent = searchResult?.students?.find(
-            (s: any) => s.rfid_id && String(s.rfid_id) === value
-          );
-
-          if (foundStudent) {
+          if (searchResult?.student) {
+            const foundStudent = searchResult.student;
             const mappedStudent: Student = {
               id: foundStudent.id,
               rfid_id: foundStudent.rfid_id
@@ -558,10 +583,14 @@ export function StudentsPageClient({
               studentImage: foundStudent.image,
               studentId: foundStudent.studentId,
             };
-            toast.success(
-              `Found student: ${mappedStudent.firstName} ${mappedStudent.lastName}`,
-              { duration: 3000 }
+            const truncatedName = truncateName(
+              mappedStudent.firstName,
+              mappedStudent.lastName
             );
+            // Replace loading toast with success
+            toast.success(`Found student: ${truncatedName}`, {
+              id: loadingToastId,
+            });
             handleSelectStudent(mappedStudent);
             setScannedRfid("");
             setIsScanning(false);
@@ -572,8 +601,9 @@ export function StudentsPageClient({
             await fetchStudents();
             return;
           } else {
+            // Replace loading toast with error
             toast.error(`No student found with RFID "${value}"`, {
-              duration: 3000,
+              id: loadingToastId,
             });
             setScannedRfid("");
             setIsScanning(false);
@@ -584,8 +614,9 @@ export function StudentsPageClient({
           }
         } catch (error) {
           console.error("Error searching for RFID:", error);
+          // Replace loading toast with error
           toast.error(`No student found with RFID "${value}"`, {
-            duration: 3000,
+            id: loadingToastId,
           });
           setScannedRfid("");
           setIsScanning(false);
@@ -598,7 +629,7 @@ export function StudentsPageClient({
 
       // Valid RFID scanned for assignment or creation
       if (viewMode === "assigning-rfid" || viewMode === "creating") {
-        toast.success(`RFID "${value}" scanned successfully!`);
+        showSuccessToast(`RFID "${value}" scanned successfully!`);
         setIsScanning(false);
         // Update scannedRfid state for the visible input
         setScannedRfid(value);
@@ -608,7 +639,7 @@ export function StudentsPageClient({
       if (viewMode === "assigning-rfid" || viewMode === "searching-rfid") {
         scanTimeoutRef.current = setTimeout(() => {
           if (value.length > 0 && value.length < 10) {
-            toast.error("Incomplete RFID scan. Please try again.");
+            showErrorToast("Incomplete RFID scan. Please try again.");
           }
           setScannedRfid("");
           lastRfidInputTimeRef.current = 0;
@@ -688,18 +719,18 @@ export function StudentsPageClient({
       if (viewMode === "editing" && selectedStudent?.id) {
         // Update existing student
         await studentsService.update(selectedStudent.id, studentData);
-        toast.success("Student updated successfully!");
+        showSuccessToast("Student updated successfully!");
       } else {
         // Create new student
         await studentsService.create(studentData);
-        toast.success("Student created successfully!");
+        showSuccessToast("Student created successfully!");
       }
 
       await fetchStudents();
       resetToIdle();
     } catch (error) {
       console.error("Error submitting student:", error);
-      toast.error("Failed to save student. Please try again.");
+      showErrorToast("Failed to save student. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -717,12 +748,12 @@ export function StudentsPageClient({
         studentId: selectedStudent.id,
       });
 
-      toast.success(`RFID assigned successfully!`);
+      showSuccessToast(`RFID assigned successfully!`);
       await fetchStudents();
       resetToIdle();
     } catch (error: any) {
       console.error("Error assigning RFID:", error);
-      toast.error(error.message || "Failed to assign RFID");
+      showErrorToast(error.message || "Failed to assign RFID");
     } finally {
       setIsSubmitting(false);
     }
@@ -749,21 +780,21 @@ export function StudentsPageClient({
               Search Student via RFID
             </h3>
 
-            <div className="flex justify-center gap-3 mb-4">
+            <div className="flex flex-col items-center gap-3 mb-4">
               {isScanning ? (
                 <>
                   <Button
                     onClick={resetToIdle}
                     size="lg"
                     variant="outline"
-                    className="min-w-[120px]"
+                    className="w-full max-w-[200px]"
                   >
                     Cancel
                   </Button>
                   <Button
                     disabled
                     size="lg"
-                    className="min-w-[200px] bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                    className="w-full max-w-[200px] bg-[#124A69] hover:bg-[#0a2f42] text-white"
                   >
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -1100,9 +1131,9 @@ export function StudentsPageClient({
         type="text"
         onChange={handleRfidInput}
         onKeyDown={(e) => {
-          // Prevent manual keyboard input
+          // Only prevent navigation/editing keys, but allow character input
+          // The timing check in onChange will differentiate RFID from manual typing
           if (
-            e.key.length === 1 ||
             e.key === "Backspace" ||
             e.key === "Delete" ||
             e.key === "ArrowLeft" ||
@@ -1111,6 +1142,8 @@ export function StudentsPageClient({
             e.preventDefault();
             return false;
           }
+          // Allow all other keys (including single characters) to pass through
+          // The onChange handler will check timing to reject manual typing
         }}
         onPaste={(e) => {
           // Prevent paste
@@ -1124,7 +1157,7 @@ export function StudentsPageClient({
 
       <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex flex-col flex-grow px-4">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
               Student Management
             </h1>
@@ -1365,12 +1398,17 @@ export function StudentsPageClient({
                           onClick={() => handleSelectStudent(student)}
                         >
                           <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <p className="font-semibold">
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className="font-semibold truncate"
+                                title={`${student.lastName}, ${
+                                  student.firstName
+                                } ${student.middleInitial || ""}`.trim()}
+                              >
                                 {student.lastName}, {student.firstName}{" "}
                                 {student.middleInitial}
                               </p>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-sm text-muted-foreground truncate">
                                 ID: {student.studentId}
                               </p>
                               {student.rfid_id ? (

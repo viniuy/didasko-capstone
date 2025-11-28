@@ -30,6 +30,12 @@ export const studentsService = {
   assignRfid: (data: { rfid: number; studentId: string }) =>
     axiosInstance.post("/students/rfid/assign", data).then((res) => res.data),
 
+  // Get student by RFID ID (searches only by rfid_id, not studentId)
+  getByRfid: (rfidId: string) =>
+    axiosInstance
+      .get(`/students/rfid?rfidId=${rfidId}`)
+      .then((res) => res.data),
+
   // Import students to course
   importToCourse: (courseSlug: string, students: any[]) =>
     axiosInstance

@@ -326,8 +326,31 @@ export function CourseSheet({
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-6">
           <div className="space-y-2">
+            <Label htmlFor="title">
+              Course Title <span className="text-red-500">*</span>
+            </Label>
+            <div className="relative">
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => {
+                  const value = removeEmojis(e.target.value);
+                  handleChange("title", value);
+                }}
+                placeholder="e.g., IT Capstone"
+                maxLength={80}
+                required
+                className="pr-12"
+              />
+              <span className="absolute bottom-2 right-3 text-xs text-gray-500">
+                {formData.title.length}/80
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="code">
-              Course Code <span className="text-red-500">*</span>
+              Course Abbreviation <span className="text-red-500">*</span>
             </Label>
             <div className="relative">
               <Input
@@ -347,29 +370,6 @@ export function CourseSheet({
               />
               <span className="absolute bottom-2 right-3 text-xs text-gray-500">
                 {formData.code.length}/15
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="title">
-              Course Title <span className="text-red-500">*</span>
-            </Label>
-            <div className="relative">
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => {
-                  const value = removeEmojis(e.target.value);
-                  handleChange("title", value);
-                }}
-                placeholder="e.g., IT Capstone"
-                maxLength={80}
-                required
-                className="pr-12"
-              />
-              <span className="absolute bottom-2 right-3 text-xs text-gray-500">
-                {formData.title.length}/80
               </span>
             </div>
           </div>

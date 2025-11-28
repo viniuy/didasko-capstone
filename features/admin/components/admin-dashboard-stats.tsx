@@ -75,7 +75,7 @@ export function AdminDashboardStats({
   return (
     <>
       {/* Stats Cards */}
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6 mt-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-5 mb-2 mt-1">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">
