@@ -96,7 +96,7 @@ const useItemsPerPage = () => {
     const updateItemsPerPage = () => {
       const width = window.innerWidth;
 
-      if (width < 1500) {
+      if (width < 1600) {
         setItemsPerPage(2);
       } else if (width >= 2500) {
         setItemsPerPage(5);
