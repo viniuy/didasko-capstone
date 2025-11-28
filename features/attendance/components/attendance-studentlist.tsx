@@ -209,6 +209,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
   const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    // Always start with today's date, not from localStorage
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
@@ -608,16 +609,21 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       }
 
       // Restore scanned statuses from localStorage (for unsaved scans)
+      // Only load if the selected date is today
       let scannedStatuses: { [studentId: string]: AttendanceStatus } = {};
-      try {
-        const savedScannedStatuses = localStorage.getItem(
-          getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
-        );
-        if (savedScannedStatuses) {
-          scannedStatuses = JSON.parse(savedScannedStatuses);
+      const today = new Date();
+      const todayStr = format(today, "yyyy-MM-dd");
+      if (selectedDateStr === todayStr) {
+        try {
+          const savedScannedStatuses = localStorage.getItem(
+            getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
+          );
+          if (savedScannedStatuses) {
+            scannedStatuses = JSON.parse(savedScannedStatuses);
+          }
+        } catch (e) {
+          console.error("Error loading scanned statuses:", e);
         }
-      } catch (e) {
-        console.error("Error loading scanned statuses:", e);
       }
 
       setStudentList((prevStudents) =>
@@ -756,6 +762,11 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     if (!selectedDateStr || !courseSlug || studentList.length === 0) return;
     if (hasRestoredScannedStatusesRef.current) return;
 
+    // Only restore scanned statuses if the selected date is today
+    const today = new Date();
+    const todayStr = format(today, "yyyy-MM-dd");
+    if (selectedDateStr !== todayStr) return;
+
     try {
       const savedScannedStatuses = localStorage.getItem(
         getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
@@ -835,7 +846,27 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       if (savedTimeOut) setTimeOut(savedTimeOut);
       if (savedSelectedDate) {
         const parsed = new Date(savedSelectedDate);
-        if (!isNaN(parsed.getTime())) setSelectedDate(parsed);
+        // Only restore saved date if it's today - otherwise use today's date
+        const today = new Date();
+        const todayStr = format(today, "yyyy-MM-dd");
+        const savedDateStr = format(parsed, "yyyy-MM-dd");
+        if (!isNaN(parsed.getTime()) && savedDateStr === todayStr) {
+          setSelectedDate(parsed);
+        } else {
+          // Clear old localStorage data for the old date
+          if (savedDateStr !== todayStr) {
+            try {
+              localStorage.removeItem(
+                getStorageKey(`rfidScannedStatuses:${savedDateStr}`)
+              );
+              localStorage.removeItem(
+                getStorageKey(`rfidTimeInMap:${savedDateStr}`)
+              );
+            } catch (e) {
+              console.error("Error clearing old localStorage data:", e);
+            }
+          }
+        }
       }
 
       if (savedSession) {
@@ -3114,7 +3145,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={markAllLateAsPresent}
-                  className="text-[#3B82F6] focus:text-[#3B82F6] focus:bg-[#3B82F6]/10"
+                  className="text-[#F59E0B] focus:text-[#F59E0B] focus:bg-[#F59E0B]/10"
                   disabled={
                     isUpdating ||
                     isDateLoading ||
@@ -3129,7 +3160,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={markAllExcusedAsPresent}
-                  className="text-[#F59E0B] focus:text-[#F59E0B] focus:bg-[#F59E0B]/10"
+                  className="text-[#3B82F6] focus:text-[#3B82F6] focus:bg-[#3B82F6]/10"
                   disabled={
                     isUpdating ||
                     isDateLoading ||
@@ -4244,13 +4275,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
           <div className="space-y-4 py-4">
             <div className="relative">
-            <Input
-              placeholder={
-                isBulkExcuse
-                  ? "Enter reason for all selected..."
-                  : "Enter reason..."
-              }
-              value={excuseReason}
+              <Input
+                placeholder={
+                  isBulkExcuse
+                    ? "Enter reason for all selected..."
+                    : "Enter reason..."
+                }
+                value={excuseReason}
                 onChange={(e) => {
                   const value = e.target.value;
                   if (value.length <= 30) {
