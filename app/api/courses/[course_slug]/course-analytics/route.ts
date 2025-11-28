@@ -352,6 +352,7 @@ export async function GET(
       course: courseInfo,
       stats,
       students: studentAnalytics,
+      termConfigs: course.termConfigs || [],
     });
   } catch (error) {
     console.error("Error fetching course analytics:", error);

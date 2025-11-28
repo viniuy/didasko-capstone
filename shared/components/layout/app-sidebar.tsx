@@ -59,7 +59,7 @@ import { toast } from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
 
 const adminItems = [
-  { title: "Dashboard", url: "/dashboard/admin", icon: LayoutDashboard },
+  { title: "Users", url: "/dashboard/admin", icon: Users },
   { title: "Students", url: "/main/students", icon: Users },
   { title: "Audit Logs", url: "/main/logs", icon: Activity },
 ];

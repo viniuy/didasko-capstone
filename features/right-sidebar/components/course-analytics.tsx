@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UserCheck, TrendingUp, UserX } from "lucide-react";
+import { Users, UserCheck, TrendingUp, UserX, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCourseAnalytics } from "@/lib/hooks/queries";
 
@@ -56,6 +56,19 @@ export default function CourseAnalytics({
 }: {
   courseSlug: string;
 }) {
+  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [termAverageGrade, setTermAverageGrade] = useState<{
+    averageGrade: number;
+    passingRate: number;
+    hasGrades: boolean;
+    isLoading: boolean;
+  }>({
+    averageGrade: 0,
+    passingRate: 0,
+    hasGrades: false,
+    isLoading: false,
+  });
+
   // React Query hook
   const {
     data: analyticsData,
@@ -65,6 +78,61 @@ export default function CourseAnalytics({
 
   const stats = analyticsData?.stats || null;
   const courseInfo = analyticsData?.course || null;
+
+  // Listen for tab changes and computed averages from course-dashboard
+  useEffect(() => {
+    const handleTabChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const {
+        courseSlug: eventCourseSlug,
+        activeTab: newTab,
+        termAverageGrade: computedGrade,
+      } = customEvent.detail || {};
+      // Only update if this event is for our course
+      if (eventCourseSlug === courseSlug) {
+        console.log(`[CourseAnalytics] Received event for ${courseSlug}`, {
+          newTab,
+          computedGrade,
+        });
+        if (newTab) {
+          setActiveTab(newTab);
+        }
+        if (computedGrade) {
+          console.log(
+            `[CourseAnalytics] Setting termAverageGrade:`,
+            computedGrade
+          );
+          setTermAverageGrade(computedGrade);
+        } else if (newTab === "overview") {
+          // Fallback to overall stats for overview
+          setTermAverageGrade({
+            averageGrade: stats?.averageGrade || 0,
+            passingRate: stats?.passingRate || 0,
+            hasGrades: true,
+            isLoading: false,
+          });
+        }
+      }
+    };
+
+    window.addEventListener("courseTabChanged", handleTabChange);
+
+    return () => {
+      window.removeEventListener("courseTabChanged", handleTabChange);
+    };
+  }, [courseSlug, stats]);
+
+  // Initialize with overall stats on mount
+  useEffect(() => {
+    if (stats && !termAverageGrade.hasGrades && activeTab === "overview") {
+      setTermAverageGrade({
+        averageGrade: stats.averageGrade || 0,
+        passingRate: stats.passingRate || 0,
+        hasGrades: true,
+        isLoading: false,
+      });
+    }
+  }, [stats, activeTab, termAverageGrade.hasGrades]);
 
   if (isLoading && !isRefetching) {
     return <LoadingSkeleton />;
@@ -88,8 +156,18 @@ export default function CourseAnalytics({
     {
       icon: TrendingUp,
       label: "Avg Grade",
-      value: stats.averageGrade.toFixed(1),
-      subtitle: `${stats.passingRate.toFixed(0)}% passing`,
+      value: termAverageGrade.isLoading ? (
+        <Loader2 className="w-5 h-5 animate-spin text-white" />
+      ) : activeTab === "overview" || termAverageGrade.hasGrades ? (
+        termAverageGrade.averageGrade.toFixed(1)
+      ) : (
+        "N/A"
+      ),
+      subtitle: termAverageGrade.isLoading
+        ? "Loading..."
+        : activeTab === "overview" || termAverageGrade.hasGrades
+        ? `${termAverageGrade.passingRate.toFixed(0)}% passing`
+        : "No grades yet",
       gradient: "from-purple-500/20 to-purple-600/10",
     },
     {
@@ -133,9 +211,9 @@ export default function CourseAnalytics({
 
               {/* Value */}
               <div className="mt-auto">
-                <p className="text-white font-bold text-2xl leading-none mb-1">
+                <div className="text-white font-bold text-2xl leading-none mb-1 flex items-center gap-2 min-h-[28px]">
                   {stat.value}
-                </p>
+                </div>
                 {stat.subtitle && (
                   <p className="text-white/70 text-xs leading-tight">
                     {stat.subtitle}

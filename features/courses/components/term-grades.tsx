@@ -22,6 +22,12 @@ interface TermGradesTabProps {
   termKey: "prelims" | "midterm" | "preFinals" | "finals";
   globalSearchQuery?: string; // Add this prop
   onLoadingChange?: (loading: boolean) => void; // Callback to notify parent of loading state
+  onAverageGradeChange?: (averageGrade: {
+    averageGrade: number;
+    passingRate: number;
+    hasGrades: boolean;
+    isLoading: boolean;
+  }) => void; // Callback to notify parent of computed average grade
 }
 
 export const TermGradesTab = ({
@@ -29,6 +35,7 @@ export const TermGradesTab = ({
   termKey,
   globalSearchQuery = "", // Default to empty string
   onLoadingChange,
+  onAverageGradeChange,
 }: TermGradesTabProps) => {
   const termName =
     termKey === "preFinals" ? "PRE-FINALS" : termKey.toUpperCase();
@@ -55,6 +62,93 @@ export const TermGradesTab = ({
     setSearchQuery(globalSearchQuery);
   }, [globalSearchQuery]);
 
+  // Normalize termKey early (before any hooks that use it)
+  const normalizedTermKey = termKey === "preFinals" ? "prefinals" : termKey;
+
+  // Get term config weights from API response (before any returns)
+  const termConfig = termGradesData?.termConfig;
+  const ptWeight = termConfig?.ptWeight || 0;
+  const quizWeight = termConfig?.quizWeight || 0;
+  const examWeight = termConfig?.examWeight || 0;
+
+  // Helper function to convert percentage to numeric grade
+  const getNumericGrade = (totalPercent: number): number => {
+    if (totalPercent >= 97.5) return 1.0;
+    if (totalPercent >= 94.5) return 1.25;
+    if (totalPercent >= 91.5) return 1.5;
+    if (totalPercent >= 86.5) return 1.75;
+    if (totalPercent >= 81.5) return 2.0;
+    if (totalPercent >= 76.0) return 2.25;
+    if (totalPercent >= 70.5) return 2.5;
+    if (totalPercent >= 65.0) return 2.75;
+    if (totalPercent >= 59.5) return 3.0;
+    return 5.0;
+  };
+
+  // Helper function to calculate final percentage and grade for a student
+  const calculateTermGrade = useMemo(() => {
+    return (termData: TermGradeData) => {
+      // Calculate PT average percentage
+      const ptPercentages: number[] = [];
+      termData.ptScores?.forEach((pt) => {
+        if (pt.score !== null && pt.score !== undefined && pt.maxScore > 0) {
+          const percentage = (pt.score / pt.maxScore) * 100;
+          ptPercentages.push(percentage);
+        }
+      });
+      const ptAvg =
+        ptPercentages.length > 0
+          ? ptPercentages.reduce((a, b) => a + b, 0) / ptPercentages.length
+          : 0;
+
+      // Calculate Quiz average percentage
+      const quizPercentages: number[] = [];
+      termData.quizScores?.forEach((quiz) => {
+        if (
+          quiz.score !== null &&
+          quiz.score !== undefined &&
+          quiz.maxScore > 0
+        ) {
+          const percentage = (quiz.score / quiz.maxScore) * 100;
+          quizPercentages.push(percentage);
+        }
+      });
+      const quizAvg =
+        quizPercentages.length > 0
+          ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
+          : 0;
+
+      // Calculate Exam percentage
+      let examPercentage: number | null = null;
+      if (termData.examScore) {
+        const exam = termData.examScore;
+        if (
+          exam.score !== null &&
+          exam.score !== undefined &&
+          exam.maxScore > 0
+        ) {
+          examPercentage = (exam.score / exam.maxScore) * 100;
+        }
+      }
+
+      // If no exam score, can't compute term grade
+      if (examPercentage === null) {
+        return { totalPercentage: null, numericGrade: null };
+      }
+
+      // Calculate weighted total
+      const ptWeighted = (ptAvg / 100) * ptWeight;
+      const quizWeighted = (quizAvg / 100) * quizWeight;
+      const examWeighted = (examPercentage / 100) * examWeight;
+      const totalPercentage = ptWeighted + quizWeighted + examWeighted;
+
+      // Calculate numeric grade
+      const numericGrade = getNumericGrade(totalPercentage);
+
+      return { totalPercentage, numericGrade };
+    };
+  }, [ptWeight, quizWeight, examWeight]);
+
   // Transform fetched data to match expected format
   const students = useMemo(() => {
     if (!termGradesData?.students) return [];
@@ -70,7 +164,6 @@ export const TermGradesTab = ({
     }
 
     return termGradesData.students.map((student: ApiStudent) => {
-      const normalizedTermKey = termKey === "preFinals" ? "prefinals" : termKey;
       return {
         id: student.id,
         studentId: student.studentId,
@@ -83,7 +176,67 @@ export const TermGradesTab = ({
         },
       };
     });
-  }, [termGradesData, termKey]);
+  }, [termGradesData, normalizedTermKey]);
+
+  // Calculate average grade for all students (MUST be before any returns)
+  const termAverageGrade = useMemo(() => {
+    if (!students || students.length === 0 || isLoading) {
+      return {
+        averageGrade: 0,
+        passingRate: 0,
+        hasGrades: false,
+        isLoading: isLoading,
+      };
+    }
+
+    let gradeSum = 0;
+    let gradeCount = 0;
+    let passingStudents = 0;
+
+    for (const student of students) {
+      const termData = student.termGrades[
+        normalizedTermKey as keyof typeof student.termGrades
+      ] as TermGradeData | undefined;
+
+      if (!termData) continue;
+
+      // Calculate grade using the same logic as the table
+      const { totalPercentage, numericGrade } = calculateTermGrade(termData);
+
+      // Prefer numericGrade, fallback to totalPercentage
+      const grade = numericGrade ?? totalPercentage;
+
+      if (grade !== null) {
+        gradeSum += grade;
+        gradeCount++;
+
+        // Check if passing (assuming 75 is passing for percentage, 3.0 or less for numeric)
+        if (grade <= 5) {
+          // Numeric grading (1.0-5.0)
+          if (grade <= 3.0) passingStudents++;
+        } else {
+          // Percentage (0-100)
+          if (grade >= 75) passingStudents++;
+        }
+      }
+    }
+
+    const averageGrade = gradeCount > 0 ? gradeSum / gradeCount : 0;
+    const passingRate =
+      gradeCount > 0 ? (passingStudents / gradeCount) * 100 : 0;
+
+    return {
+      averageGrade: Math.round(averageGrade * 10) / 10,
+      passingRate: Math.round(passingRate * 10) / 10,
+      hasGrades: gradeCount > 0,
+      isLoading: isLoading,
+    };
+  }, [students, normalizedTermKey, isLoading, calculateTermGrade]);
+
+  // Notify parent of average grade changes (MUST be before any returns)
+  useEffect(() => {
+    onAverageGradeChange?.(termAverageGrade);
+  }, [termAverageGrade, onAverageGradeChange]);
 
   // Loading state
   if (isLoading) {
@@ -115,7 +268,6 @@ export const TermGradesTab = ({
     );
   }
 
-  const normalizedTermKey = termKey === "preFinals" ? "prefinals" : termKey;
   const hasData = students.some(
     (s: StudentWithGrades) =>
       s.termGrades[normalizedTermKey as keyof typeof s.termGrades]
@@ -150,88 +302,6 @@ export const TermGradesTab = ({
           sensitivity: "base",
         });
     });
-
-  // Get term config weights from API response
-  const termConfig = termGradesData?.termConfig;
-  const ptWeight = termConfig?.ptWeight || 0;
-  const quizWeight = termConfig?.quizWeight || 0;
-  const examWeight = termConfig?.examWeight || 0;
-
-  // Helper function to convert percentage to numeric grade
-  const getNumericGrade = (totalPercent: number): number => {
-    if (totalPercent >= 97.5) return 1.0;
-    if (totalPercent >= 94.5) return 1.25;
-    if (totalPercent >= 91.5) return 1.5;
-    if (totalPercent >= 86.5) return 1.75;
-    if (totalPercent >= 81.5) return 2.0;
-    if (totalPercent >= 76.0) return 2.25;
-    if (totalPercent >= 70.5) return 2.5;
-    if (totalPercent >= 65.0) return 2.75;
-    if (totalPercent >= 59.5) return 3.0;
-    return 5.0;
-  };
-
-  // Helper function to calculate final percentage and grade for a student
-  const calculateTermGrade = (termData: TermGradeData) => {
-    // Calculate PT average percentage
-    const ptPercentages: number[] = [];
-    termData.ptScores?.forEach((pt) => {
-      if (pt.score !== null && pt.score !== undefined && pt.maxScore > 0) {
-        const percentage = (pt.score / pt.maxScore) * 100;
-        ptPercentages.push(percentage);
-      }
-    });
-    const ptAvg =
-      ptPercentages.length > 0
-        ? ptPercentages.reduce((a, b) => a + b, 0) / ptPercentages.length
-        : 0;
-
-    // Calculate Quiz average percentage
-    const quizPercentages: number[] = [];
-    termData.quizScores?.forEach((quiz) => {
-      if (
-        quiz.score !== null &&
-        quiz.score !== undefined &&
-        quiz.maxScore > 0
-      ) {
-        const percentage = (quiz.score / quiz.maxScore) * 100;
-        quizPercentages.push(percentage);
-      }
-    });
-    const quizAvg =
-      quizPercentages.length > 0
-        ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
-        : 0;
-
-    // Calculate Exam percentage
-    let examPercentage: number | null = null;
-    if (termData.examScore) {
-      const exam = termData.examScore;
-      if (
-        exam.score !== null &&
-        exam.score !== undefined &&
-        exam.maxScore > 0
-      ) {
-        examPercentage = (exam.score / exam.maxScore) * 100;
-      }
-    }
-
-    // If no exam score, can't compute term grade
-    if (examPercentage === null) {
-      return { totalPercentage: null, numericGrade: null };
-    }
-
-    // Calculate weighted total
-    const ptWeighted = (ptAvg / 100) * ptWeight;
-    const quizWeighted = (quizAvg / 100) * quizWeight;
-    const examWeighted = (examPercentage / 100) * examWeight;
-    const totalPercentage = ptWeighted + quizWeighted + examWeighted;
-
-    // Calculate numeric grade
-    const numericGrade = getNumericGrade(totalPercentage);
-
-    return { totalPercentage, numericGrade };
-  };
 
   const sampleTerm = students.find(
     (s: StudentWithGrades) =>

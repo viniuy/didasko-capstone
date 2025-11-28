@@ -117,6 +117,18 @@ export function CourseDashboard({
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [isTermLoading, setIsTermLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [termAverageGrade, setTermAverageGrade] = useState<{
+    averageGrade: number;
+    passingRate: number;
+    hasGrades: boolean;
+    isLoading: boolean;
+  }>({
+    averageGrade: 0,
+    passingRate: 0,
+    hasGrades: false,
+    isLoading: false,
+  });
 
   // Check if any term grades query is fetching
   const isFetchingTermGrades = useIsFetching({
@@ -222,6 +234,128 @@ export function CourseDashboard({
   useEffect(() => {
     setIsLoading(isLoadingAnalytics);
   }, [isLoadingAnalytics]);
+
+  // Helper function to convert percentage to numeric grade
+  const getNumericGrade = (totalPercent: number): number => {
+    if (totalPercent >= 97.5) return 1.0;
+    if (totalPercent >= 94.5) return 1.25;
+    if (totalPercent >= 91.5) return 1.5;
+    if (totalPercent >= 86.5) return 1.75;
+    if (totalPercent >= 81.5) return 2.0;
+    if (totalPercent >= 76.0) return 2.25;
+    if (totalPercent >= 70.5) return 2.5;
+    if (totalPercent >= 65.0) return 2.75;
+    if (totalPercent >= 59.5) return 3.0;
+    return 5.0;
+  };
+
+  // Helper function to calculate grade from assessment scores
+  const calculateGradeFromScores = (
+    termGrade: any,
+    ptWeight: number,
+    quizWeight: number,
+    examWeight: number
+  ): { totalPercentage: number | null; numericGrade: number | null } => {
+    if (!termGrade) return { totalPercentage: null, numericGrade: null };
+
+    // Calculate PT average percentage
+    const ptPercentages: number[] = [];
+    termGrade.ptScores?.forEach((pt: any) => {
+      if (pt.score !== null && pt.score !== undefined && pt.maxScore > 0) {
+        const percentage = (pt.score / pt.maxScore) * 100;
+        ptPercentages.push(percentage);
+      }
+    });
+    const ptAvg =
+      ptPercentages.length > 0
+        ? ptPercentages.reduce((a, b) => a + b, 0) / ptPercentages.length
+        : 0;
+
+    // Calculate Quiz average percentage
+    const quizPercentages: number[] = [];
+    termGrade.quizScores?.forEach((quiz: any) => {
+      if (
+        quiz.score !== null &&
+        quiz.score !== undefined &&
+        quiz.maxScore > 0
+      ) {
+        const percentage = (quiz.score / quiz.maxScore) * 100;
+        quizPercentages.push(percentage);
+      }
+    });
+    const quizAvg =
+      quizPercentages.length > 0
+        ? quizPercentages.reduce((a, b) => a + b, 0) / quizPercentages.length
+        : 0;
+
+    // Calculate Exam percentage
+    let examPercentage: number | null = null;
+    if (termGrade.examScore) {
+      const exam = termGrade.examScore;
+      if (
+        exam.score !== null &&
+        exam.score !== undefined &&
+        exam.maxScore > 0
+      ) {
+        examPercentage = (exam.score / exam.maxScore) * 100;
+      }
+    }
+
+    // If no exam score, can't compute term grade
+    if (examPercentage === null) {
+      return { totalPercentage: null, numericGrade: null };
+    }
+
+    // Calculate weighted total
+    const ptWeighted = (ptAvg / 100) * ptWeight;
+    const quizWeighted = (quizAvg / 100) * quizWeight;
+    const examWeighted = (examPercentage / 100) * examWeight;
+    const totalPercentage = ptWeighted + quizWeighted + examWeighted;
+
+    // Calculate numeric grade
+    const numericGrade = getNumericGrade(totalPercentage);
+
+    return { totalPercentage, numericGrade };
+  };
+
+  // Reset termAverageGrade when switching to overview tab
+  useEffect(() => {
+    if (activeTab === "overview") {
+      setTermAverageGrade({
+        averageGrade: stats?.averageGrade || 0,
+        passingRate: stats?.passingRate || 0,
+        hasGrades: true,
+        isLoading: false,
+      });
+    }
+  }, [activeTab, stats]);
+
+  // Dispatch tab change with computed average
+  useEffect(() => {
+    if (courseInfo && !isLoading) {
+      // Use termAverageGrade from TermGradesTab if on a term tab, otherwise use overview stats
+      const averageGradeData =
+        activeTab === "overview"
+          ? {
+              averageGrade: stats?.averageGrade || 0,
+              passingRate: stats?.passingRate || 0,
+              hasGrades: true,
+              isLoading: false,
+            }
+          : termAverageGrade;
+
+      // Dispatch tab state with computed average
+      window.dispatchEvent(
+        new CustomEvent("courseTabChanged", {
+          detail: {
+            courseSlug,
+            activeTab,
+            termAverageGrade: averageGradeData,
+          },
+        })
+      );
+    }
+  }, [courseInfo, courseSlug, isLoading, activeTab, termAverageGrade, stats]);
 
   const columns = useMemo<ColumnDef<StudentWithGrades>[]>(
     () => [
@@ -541,6 +675,10 @@ export function CourseDashboard({
         <Tabs
           defaultValue="overview"
           className="w-full flex flex-col flex-1 min-h-0"
+          onValueChange={(value) => {
+            setActiveTab(value);
+            // Event will be dispatched by useEffect that watches activeTab
+          }}
         >
           <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
             <TabsTrigger
@@ -744,6 +882,11 @@ export function CourseDashboard({
               termKey="prelims"
               globalSearchQuery={globalSearchQuery}
               onLoadingChange={setIsTermLoading}
+              onAverageGradeChange={(avg) => {
+                if (activeTab === "prelims") {
+                  setTermAverageGrade(avg);
+                }
+              }}
             />
           </TabsContent>
 
@@ -756,6 +899,11 @@ export function CourseDashboard({
               termKey="midterm"
               globalSearchQuery={globalSearchQuery}
               onLoadingChange={setIsTermLoading}
+              onAverageGradeChange={(avg) => {
+                if (activeTab === "midterm") {
+                  setTermAverageGrade(avg);
+                }
+              }}
             />
           </TabsContent>
 
@@ -768,6 +916,11 @@ export function CourseDashboard({
               termKey="preFinals"
               globalSearchQuery={globalSearchQuery}
               onLoadingChange={setIsTermLoading}
+              onAverageGradeChange={(avg) => {
+                if (activeTab === "prefinals") {
+                  setTermAverageGrade(avg);
+                }
+              }}
             />
           </TabsContent>
 
@@ -780,6 +933,11 @@ export function CourseDashboard({
               termKey="finals"
               globalSearchQuery={globalSearchQuery}
               onLoadingChange={setIsTermLoading}
+              onAverageGradeChange={(avg) => {
+                if (activeTab === "finals") {
+                  setTermAverageGrade(avg);
+                }
+              }}
             />
           </TabsContent>
         </Tabs>
