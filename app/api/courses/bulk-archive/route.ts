@@ -78,10 +78,10 @@ export async function PATCH(request: NextRequest) {
     try {
       const action =
         status === "ARCHIVED"
-          ? "Course Archived"
+          ? "COURSE_ARCHIVED"
           : status === "ACTIVE"
-          ? "Course Activated"
-          : "Course Status Changed";
+          ? "COURSE_ACTIVATED"
+          : "COURSE_STATUS_CHANGED";
       await logAction({
         userId: session.user.id,
         action,

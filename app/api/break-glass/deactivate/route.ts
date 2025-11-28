@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 export const POST = withLogging(
-  { action: "BreakGlass Deactivate", module: "Security" },
+  { action: "BREAK_GLASS_DEACTIVATED", module: "Security" },
   async (req: NextRequest) => {
     try {
       const session = await getServerSession(authOptions);

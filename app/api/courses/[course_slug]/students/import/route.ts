@@ -155,7 +155,6 @@ function parseFullName(fullName: string) {
   }
 }
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -365,7 +364,7 @@ export async function POST(
     try {
       await logAction({
         userId: session.user.id,
-        action: "Student Import",
+        action: "STUDENT_IMPORT",
         module: "Student",
         reason: `Imported ${result.imported} student(s) to course ${course.code}. Skipped: ${result.skipped}, Errors: ${result.errors.length}`,
         batchId,
@@ -403,7 +402,7 @@ export async function POST(
       if (session?.user) {
         await logAction({
           userId: session.user.id,
-          action: "Student Import",
+          action: "STUDENT_IMPORT",
           module: "Student",
           reason: `Failed to import students to course`,
           status: "FAILED",

@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       try {
         await logAction({
           userId: session.user.id,
-          action: "Course Create",
+          action: "COURSE_CREATE",
           module: "Course",
           reason: `Failed to create course: Missing required fields`,
           status: "FAILED",
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       try {
         await logAction({
           userId: session.user.id,
-          action: "Course Create",
+          action: "COURSE_CREATE",
           module: "Course",
           reason: `Course created: ${course.code} - ${course.title}`,
           status: "SUCCESS",
@@ -149,7 +149,7 @@ export async function POST(request: Request) {
       try {
         await logAction({
           userId: session.user.id,
-          action: "Course Create",
+          action: "COURSE_CREATE",
           module: "Course",
           reason: `Failed to create course: ${code} - ${title}`,
           status: "FAILED",
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
       if (session?.user) {
         await logAction({
           userId: session.user.id,
-          action: "Course Create",
+          action: "COURSE_CREATE",
           module: "Course",
           reason: `Failed to create course`,
           status: "FAILED",

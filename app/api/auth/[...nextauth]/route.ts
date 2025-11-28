@@ -88,7 +88,7 @@ const handler = NextAuth({
           try {
             await logAction({
               userId: null,
-              action: "User Failed Login",
+              action: "USER_FAILED_LOGIN",
               module: "User",
               reason: `User not found in database: ${user.email}`,
               status: "FAILED",
@@ -110,7 +110,7 @@ const handler = NextAuth({
           try {
             await logAction({
               userId: dbUser.id,
-              action: "User Failed Login",
+              action: "USER_FAILED_LOGIN",
               module: "User",
               reason: `User account is archived: ${user.email}`,
               status: "FAILED",
@@ -252,7 +252,7 @@ const handler = NextAuth({
         // Log login
         await logAction({
           userId: dbUser.id,
-          action: "User Login",
+          action: "USER_LOGIN",
           module: "User",
           reason: `User logged in: ${dbUser.name} (${dbUser.email})`,
           status: "SUCCESS",
@@ -274,7 +274,7 @@ const handler = NextAuth({
         try {
           await logAction({
             userId: null,
-            action: "User Failed Login",
+            action: "USER_FAILED_LOGIN",
             module: "User",
             reason: `Sign-in error: ${user.email}`,
             status: "FAILED",

@@ -45,7 +45,7 @@ export function useAttendanceByCourse(
     enabled: !!courseSlug && !!date,
     staleTime: 0, // Always consider data stale for real-time updates
     refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false, // Disable refetch on window focus for fresh data
     retry: 1, // Only retry once on failure
     retryDelay: 1000, // Wait 1 second before retrying
   });
@@ -132,7 +132,7 @@ export function useAttendanceDates(courseSlug: string) {
       }
     },
     enabled: !!courseSlug,
-    staleTime: 30 * 1000, // Cache for 30 seconds to prevent unnecessary refetches
+    staleTime: 0, // Always consider data stale for fresh data
     refetchOnMount: false, // Don't refetch on mount if we have cached data
     refetchOnWindowFocus: false, // Don't refetch on window focus
     retry: 1, // Only retry once on failure
@@ -153,7 +153,7 @@ export function useAttendanceStats(courseSlug: string) {
     enabled: !!courseSlug,
     staleTime: 0, // Always consider data stale for real-time updates
     refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false, // Disable refetch on window focus for fresh data
   });
 }
 

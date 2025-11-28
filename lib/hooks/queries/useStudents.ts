@@ -86,7 +86,7 @@ export function useStudentsByCourse(
   const {
     initialData,
     refetchOnMount = true,
-    refetchOnWindowFocus = true,
+    refetchOnWindowFocus = false, // Disable refetch on window focus for fresh data
   } = options || {};
 
   return useQuery({

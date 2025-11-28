@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
     try {
       await logAction({
         userId: session.user.id,
-        action: "Course Import",
+        action: "COURSE_IMPORT",
         module: "Course",
         reason: `Imported ${results.imported} course(s), skipped ${results.skipped}`,
         status: "SUCCESS",
@@ -318,7 +318,7 @@ export async function POST(request: NextRequest) {
       if (session?.user) {
         await logAction({
           userId: session.user.id,
-          action: "Course Import",
+          action: "COURSE_IMPORT",
           module: "Course",
           reason: `Failed to import courses`,
           status: "FAILED",

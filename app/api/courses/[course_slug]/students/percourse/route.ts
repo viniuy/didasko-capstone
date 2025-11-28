@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
     try {
       await logAction({
         userId: session.user.id,
-        action: "Student Register",
+        action: "STUDENT_REGISTER",
         module: "Student",
         reason: `Student registered: ${newStudent.firstName} ${
           newStudent.lastName
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
       if (session?.user) {
         await logAction({
           userId: session.user.id,
-          action: "Student Register",
+          action: "STUDENT_REGISTER",
           module: "Student",
           reason: `Failed to register student`,
           status: "FAILED",

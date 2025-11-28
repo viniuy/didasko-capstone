@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       try {
         await logAction({
           userId: session.user.id,
-          action: "Course Import",
+          action: "COURSE_IMPORT",
           module: "Course",
           reason: `Course import failed: No courses provided`,
           status: "FAILED",
@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
         try {
           await logAction({
             userId: session.user.id,
-            action: "Course Create",
+            action: "COURSE_CREATE",
             module: "Course",
             reason: `Course created: ${newCourse.code} - ${newCourse.title} (via import with schedules)`,
             status: "SUCCESS",
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
     try {
       await logAction({
         userId: session.user.id,
-        action: "Course Import",
+        action: "COURSE_IMPORT",
         module: "Course",
         reason: `Course import with schedules completed: ${results.success} successful, ${results.failed} failed, ${results.errors.length} errors.`,
         status: "SUCCESS",
@@ -372,7 +372,7 @@ export async function POST(request: NextRequest) {
       if (session?.user) {
         await logAction({
           userId: session.user.id,
-          action: "Course Import",
+          action: "COURSE_IMPORT",
           module: "Course",
           reason: `Course import with schedules failed.`,
           status: "FAILED",

@@ -2737,21 +2737,6 @@ export function CourseDataTable({
           isRedirecting ? "opacity-0" : "opacity-100"
         }`}
       >
-        {/* Loading Overlay for Course/Schedule Operations */}
-        {(isEditingCourse || isEditingSchedule) && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center rounded-lg">
-            <div className="flex flex-col items-center gap-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69]"></div>
-              <p className="text-sm font-medium text-[#124A69]">
-                {isEditingCourse && isEditingSchedule
-                  ? "Creating course and schedules..."
-                  : isEditingCourse
-                  ? "Saving course..."
-                  : "Saving schedules..."}
-              </p>
-            </div>
-          </div>
-        )}
         <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[500px] md:min-h-[590px] overflow-x-visible">
           <h1 className="pl-1 sm:pl-2 pb-1 text-lg sm:text-xl md:text-2xl font-bold text-muted-foreground">
             Course Management Dashboard

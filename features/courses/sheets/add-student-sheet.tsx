@@ -169,8 +169,8 @@ export const AddStudentSheet = ({
                   key={student.id}
                   className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
+                  <div className="flex items-center gap-3 w-[calc(100%-3rem)]">
+                    <Avatar className="h-10 w-10 flex-shrink-0">
                       <AvatarImage
                         src={student.image}
                         alt={student.firstName}
@@ -179,7 +179,7 @@ export const AddStudentSheet = ({
                         {getInitials(student.firstName, student.lastName)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 max-w-[calc(100%-3rem)]">
                       <p
                         className="font-medium text-gray-900 truncate"
                         title={`${student.lastName}, ${student.firstName} ${

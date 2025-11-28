@@ -5,13 +5,12 @@ import { promoteToPermanentAdmin, isTemporaryAdmin } from "@/lib/breakGlass";
 import { withLogging } from "@/lib/withLogging";
 import { handleAuthError } from "@/lib/authz";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 export const POST = withLogging(
-  { action: "BreakGlass Promote", module: "Security" },
+  { action: "BREAK_GLASS_PROMOTE", module: "Security" },
   async (req: NextRequest) => {
     try {
       const session = await getServerSession(authOptions);

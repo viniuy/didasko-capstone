@@ -5,7 +5,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { logAction } from "@/lib/audit";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,8 +80,8 @@ export async function POST(request: Request) {
       await logAction({
         userId: session.user.id,
         action: isReassignment
-          ? "Student RFID Reassigned"
-          : "Student RFID Assigned",
+          ? "STUDENT_RFID_REASSIGNED"
+          : "STUDENT_RFID_ASSIGNED",
         module: "Student",
         reason: `RFID ${rfidInt} ${
           isReassignment ? "reassigned" : "assigned"
@@ -126,7 +125,7 @@ export async function POST(request: Request) {
       if (session?.user) {
         await logAction({
           userId: session.user.id,
-          action: "Student RFID Assigned",
+          action: "STUDENT_RFID_ASSIGNED",
           module: "Student",
           reason: `Failed to assign RFID to student`,
           status: "FAILED",

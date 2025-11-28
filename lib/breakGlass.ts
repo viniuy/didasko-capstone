@@ -133,7 +133,7 @@ export async function activateBreakGlass(
   // Log the activation
   await logAction({
     userId: activatedBy,
-    action: "BreakGlass Activated",
+    action: "BREAK_GLASS_ACTIVATED",
     module: "Security",
     reason: reason,
     before: {
@@ -220,7 +220,7 @@ export async function deactivateBreakGlass(
     // Log the deactivation
     await logAction({
       userId: deactivatedBy,
-      action: "BreakGlass Deactivate",
+      action: "BREAK_GLASS_DEACTIVATED",
       module: "Security",
       reason: session.reason || null,
       before: {
@@ -352,7 +352,7 @@ export async function promoteToPermanentAdmin(
   // Log the promotion
   await logAction({
     userId: promotedBy,
-    action: "BreakGlass Promote",
+    action: "BREAK_GLASS_PROMOTE",
     module: "Security",
     reason: `Temporary admin promoted to permanent Admin`,
     before: {

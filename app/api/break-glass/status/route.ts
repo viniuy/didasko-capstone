@@ -31,6 +31,7 @@ export const GET = withLogging(
       ) {
         // Academic Head and Admin can see all active break-glass sessions
         // Optimized: Use select instead of include for better performance
+        // Note: Only Academic Head can see promotionCodePlain, Admin cannot
         const activeSessions = await prisma.breakGlassSession.findMany({
           select: {
             id: true,
@@ -40,7 +41,7 @@ export const GET = withLogging(
             expiresAt: true,
             activatedBy: true,
             originalRole: true,
-            promotionCodePlain: true,
+            promotionCodePlain: true, // Always fetch, but remove for Admin below
             user: {
               select: {
                 id: true,
@@ -55,10 +56,20 @@ export const GET = withLogging(
           },
         });
 
+        // Remove promotionCodePlain from response if requester is Admin
+        // Only Academic Head can see promotion codes, Admin cannot
+        const finalSessions =
+          session.user.role === "ADMIN"
+            ? activeSessions.map((session: any) => {
+                const { promotionCodePlain, ...rest } = session;
+                return rest;
+              })
+            : activeSessions;
+
         return NextResponse.json({
           isActive: activeSessions.length > 0,
-          sessions: activeSessions,
-          session: activeSessions[0] || null, // For backward compatibility
+          sessions: finalSessions,
+          session: finalSessions[0] || null, // For backward compatibility
         });
       } else {
         // For other roles, check specific user

@@ -67,6 +67,7 @@ export function StudentImportDialog({
   );
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // React Query hook
   const importMutation = useImportStudentsToCourse();
@@ -78,10 +79,7 @@ export function StudentImportDialog({
     );
   };
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
+  const processFile = async (file: File) => {
     if (!file) return;
 
     setSelectedFile(file);
@@ -131,6 +129,49 @@ export function StudentImportDialog({
       console.error("Error parsing file:", error);
       setIsValidFile(false);
       setPreviewData([]);
+    }
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await processFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!importProgress) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (importProgress) return;
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      // Validate file type
+      const extension = file.name.toLowerCase().split(".").pop();
+      if (extension !== "xlsx") {
+        setIsValidFile(false);
+        setPreviewData([]);
+        return;
+      }
+      await processFile(file);
     }
   };
 
@@ -284,7 +325,7 @@ export function StudentImportDialog({
             </div>
 
             {/* File Upload Section */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="space-y-4">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -292,19 +333,53 @@ export function StudentImportDialog({
                 accept=".xlsx"
                 className="hidden"
               />
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 bg-white hover:bg-gray-50"
-                disabled={!!importProgress}
-              >
-                <Upload className="h-4 w-4" />
-                Choose File
-              </Button>
 
+              {/* Drag and Drop Zone */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-8 transition-all ${
+                  isDragging
+                    ? "border-[#124A69] bg-[#124A69]/5"
+                    : "border-gray-300 bg-gray-50 hover:border-[#124A69]/50 hover:bg-gray-100/50"
+                } ${
+                  importProgress
+                    ? "opacity-50 pointer-events-none"
+                    : "cursor-pointer"
+                }`}
+                onClick={() => !importProgress && fileInputRef.current?.click()}
+              >
+                <div className="flex flex-col items-center justify-center gap-3 text-center">
+                  <Upload
+                    className={`h-10 w-10 ${
+                      isDragging ? "text-[#124A69]" : "text-gray-400"
+                    }`}
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">
+                      {isDragging
+                        ? "Drop file here"
+                        : "Drag and drop your Excel file here"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      or{" "}
+                      <span className="text-[#124A69] font-medium underline">
+                        click to browse
+                      </span>
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Only .xlsx files are supported
+                  </p>
+                </div>
+              </div>
+
+              {/* Selected File Info */}
               {selectedFile && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600 truncate max-w-[200px]">
+                <div className="flex items-center gap-2 p-3 bg-white border rounded-lg">
+                  <Upload className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-700 truncate flex-1">
                     {selectedFile.name}
                   </span>
                   <Badge
@@ -322,7 +397,7 @@ export function StudentImportDialog({
             </div>
 
             {/* Preview Section */}
-            {previewData.length > 0 ? (
+            {previewData.length > 0 && (
               <div className="border rounded-lg w-full">
                 <div className="bg-gray-50 p-4 border-b">
                   <h3 className="font-medium text-gray-700">
@@ -370,16 +445,6 @@ export function StudentImportDialog({
                     </tbody>
                   </table>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center p-8 border-2 border-dashed rounded-lg bg-gray-50">
-                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600 font-medium mb-1">
-                  No file selected
-                </p>
-                <p className="text-sm text-gray-500">
-                  Upload an Excel file to preview the data before importing
-                </p>
               </div>
             )}
 

@@ -122,7 +122,8 @@ export function useCourses(filters?: {
       return false;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff: 1s, 2s, 4s
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always consider data stale - no caching
+    refetchOnWindowFocus: false, // Disable refetch on window focus
   });
 }
 
@@ -136,14 +137,8 @@ export function useActiveCourses(options?: {
   };
   initialData?: any;
   refetchOnMount?: boolean;
-  refetchOnWindowFocus?: boolean;
 }) {
-  const {
-    filters,
-    initialData,
-    refetchOnMount = true,
-    refetchOnWindowFocus = true,
-  } = options || {};
+  const { filters, initialData, refetchOnMount = true } = options || {};
 
   return useQuery({
     queryKey: queryKeys.courses.active(filters),
@@ -199,7 +194,6 @@ export function useActiveCourses(options?: {
     },
     initialData,
     refetchOnMount,
-    refetchOnWindowFocus,
     retry: (failureCount, error: any) => {
       // Retry on connection errors (P1017) or network errors
       if (failureCount < 3) {
@@ -222,7 +216,8 @@ export function useActiveCourses(options?: {
       return false;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff: 1s, 2s, 4s
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always consider data stale - no caching
+    refetchOnWindowFocus: false, // Disable refetch on window focus
   });
 }
 
@@ -258,7 +253,8 @@ export function useArchivedCourses(filters?: {
         throw error;
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always consider data stale - no caching
+    refetchOnWindowFocus: false, // Disable refetch on window focus
   });
 }
 
@@ -434,7 +430,8 @@ export function useCoursesStatsBatch(courseSlugs: string[]) {
       }
     },
     enabled: courseSlugs.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // Always consider data stale - no caching
+    refetchOnWindowFocus: false, // Disable refetch on window focus
     retry: 1,
   });
 }

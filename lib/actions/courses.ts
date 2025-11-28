@@ -117,7 +117,7 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
         const session = await getServerSession(authOptions);
         await logAction({
           userId: session?.user?.id || null,
-          action: "Course Create",
+          action: "COURSE_CREATE",
           module: "Course",
           reason: `Course created: ${newCourse.code} - ${newCourse.title}${
             isFromImport ? " (via import)" : ""
@@ -182,7 +182,7 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
       const session = await getServerSession(authOptions);
       await logAction({
         userId: session?.user?.id || null,
-        action: "Course Create",
+        action: "COURSE_CREATE",
         module: "Course",
         reason: `Failed to create course`,
         status: "FAILED",
@@ -326,7 +326,7 @@ export async function editCourse(
         const session = await getServerSession(authOptions);
         await logAction({
           userId: session?.user?.id || null,
-          action: "Course Edited",
+          action: "COURSE_EDITED",
           module: "Course Management",
           reason: `Course edited: ${updatedCourse.code} - ${
             updatedCourse.title
