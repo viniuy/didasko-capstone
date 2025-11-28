@@ -552,189 +552,221 @@ export function ScheduleAssignmentDialog({
         }
       }}
     >
-      <DialogContent className="max-h-[90vh] w-[60vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold text-[#124A69]">
-              {getDialogTitle()}
-            </DialogTitle>
-            {mode === "import" && (
-              <Badge className="bg-[#124A69] text-white px-3 py-1">
-                {currentIndex + 1} of {courses.length}
-              </Badge>
-            )}
-          </div>
-          <DialogDescription className="flex items-start gap-2 text-base">
-            <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <span>
-              <strong>Schedules are required!</strong> {getDialogDescription()}
-            </span>
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Progress Bar (only for import mode) */}
-        {mode === "import" && (
-          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
-            <div
-              className="bg-[#124A69] h-2.5 rounded-full transition-all duration-300 ease-in-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
-
-        {/* Current Course Info */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-[#124A69] rounded-lg p-5 mb-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="bg-[#124A69] rounded-lg p-3">
-              <Calendar className="h-6 w-6 text-white" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-900">
-                {currentCourse.code} - {currentCourse.section}
-              </h3>
-              <p className="text-sm text-gray-700 mt-1">
-                {currentCourse.title}
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge variant="secondary" className="text-xs">
-                  Room: {currentCourse.room}
+      <DialogContent className="max-h-[90vh] w-[70vh] max-w-[70vh] overflow-y-auto overflow-x-hidden min-w-0">
+        <div className="w-full min-w-0 max-w-full">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <DialogTitle className="text-xl font-semibold text-[#124A69] truncate flex-1 min-w-0">
+                {getDialogTitle()}
+              </DialogTitle>
+              {mode === "import" && (
+                <Badge className="bg-[#124A69] text-white px-3 py-1 flex-shrink-0">
+                  {currentIndex + 1} of {courses.length}
                 </Badge>
-              </div>
+              )}
             </div>
-          </div>
-        </div>
+            <DialogDescription className="flex items-start gap-2 text-base min-w-0">
+              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <span className="min-w-0 break-words">
+                <strong>Schedules are required!</strong>{" "}
+                {getDialogDescription()}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Schedule Form */}
-        <div className="space-y-5">
-          <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold text-gray-900">
-              Class Schedules <span className="text-red-500">*</span>
-            </Label>
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <AlertCircle className="h-3.5 w-3.5" />
-              <span>Schedules cannot overlap on the same day</span>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {currentSchedules.map((schedule, index) => (
+          {/* Progress Bar (only for import mode) */}
+          {mode === "import" && (
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-6">
               <div
-                key={index}
-                className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:border-[#124A69] transition-colors"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-sm font-medium text-gray-700">
-                    Schedule {index + 1}
-                  </Label>
-                  {currentSchedules.length > 1 && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7"
-                      onClick={() => removeSchedule(index)}
-                      disabled={isSubmitting}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Remove
-                    </Button>
-                  )}
-                </div>
+                className="bg-[#124A69] h-2.5 rounded-full transition-all duration-300 ease-in-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-gray-600">
-                      Day of the Week
-                    </Label>
-                    <Select
-                      value={schedule.day}
-                      onValueChange={(value) =>
-                        updateSchedule(index, "day", value)
-                      }
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger
-                        className={cn(
-                          "w-full",
-                          schedule.day && "border-[#124A69] bg-blue-50"
-                        )}
-                      >
-                        <SelectValue placeholder="Choose day" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAYS.map((day) => (
-                          <SelectItem key={day.value} value={day.value}>
-                            {day.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-gray-600">
-                      Start Time
-                    </Label>
-                    <TimePicker
-                      value={schedule.fromTime}
-                      onChange={(val) => updateSchedule(index, "fromTime", val)}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-gray-600">
-                      End Time
-                    </Label>
-                    <TimePicker
-                      value={schedule.toTime}
-                      onChange={(val) => updateSchedule(index, "toTime", val)}
-                      disabled={isSubmitting}
-                    />
-                  </div>
+          {/* Current Course Info */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-[#124A69] rounded-lg p-5 mb-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="bg-[#124A69] rounded-lg p-3">
+                <Calendar className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3
+                  className="font-bold text-lg text-gray-900 truncate"
+                  title={`${currentCourse.code} - ${currentCourse.section}`}
+                >
+                  {currentCourse.code} - {currentCourse.section}
+                </h3>
+                <p
+                  className="text-sm text-gray-700 mt-1 truncate"
+                  title={currentCourse.title}
+                >
+                  {currentCourse.title}
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge
+                    variant="secondary"
+                    className="text-xs truncate max-w-full"
+                    title={`Room: ${currentCourse.room}`}
+                  >
+                    Room: {currentCourse.room}
+                  </Badge>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full border-dashed border-2 hover:border-[#124A69] hover:bg-blue-50"
-            onClick={addSchedule}
-            disabled={isSubmitting}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Another Schedule Slot
-          </Button>
-        </div>
+          {/* Schedule Form */}
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <Label className="text-base font-semibold text-gray-900 flex-shrink-0">
+                Class Schedules <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex items-center gap-1 text-xs text-gray-500 min-w-0 flex-1 justify-end">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                <span
+                  className="truncate"
+                  title="Schedules cannot overlap on the same day"
+                >
+                  Schedules cannot overlap on the same day
+                </span>
+              </div>
+            </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-between gap-3 mt-8 pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={handleCancel}
-            disabled={isSubmitting}
-            className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            {mode === "edit" ? "Cancel" : "Cancel Creation"}
-          </Button>
+            <div className="space-y-4">
+              {currentSchedules.map((schedule, index) => (
+                <div
+                  key={index}
+                  className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:border-[#124A69] transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <Label className="text-sm font-medium text-gray-700">
+                      Schedule {index + 1}
+                    </Label>
+                    {currentSchedules.length > 1 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7"
+                        onClick={() => removeSchedule(index)}
+                        disabled={isSubmitting}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
 
-          <Button
-            className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8"
-            onClick={handleNext}
-            disabled={isSubmitting}
-          >
-            {isSubmitting
-              ? mode === "edit"
-                ? "Updating..."
-                : "Creating..."
-              : mode === "import" && currentIndex < courses.length - 1
-              ? "Next Course →"
-              : mode === "edit"
-              ? "Update Schedules"
-              : "Create Course"}
-          </Button>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-w-0">
+                    <div className="space-y-2 min-w-0">
+                      <Label className="text-xs font-medium text-gray-600">
+                        Day of the Week
+                      </Label>
+                      <Select
+                        value={schedule.day}
+                        onValueChange={(value) =>
+                          updateSchedule(index, "day", value)
+                        }
+                        disabled={isSubmitting}
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            "w-full min-w-0",
+                            schedule.day && "border-[#124A69] bg-blue-50"
+                          )}
+                        >
+                          <SelectValue placeholder="Choose day" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DAYS.map((day) => (
+                            <SelectItem key={day.value} value={day.value}>
+                              {day.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2 min-w-0">
+                      <Label className="text-xs font-medium text-gray-600">
+                        Start Time
+                      </Label>
+                      <TimePicker
+                        value={schedule.fromTime}
+                        onChange={(val) =>
+                          updateSchedule(index, "fromTime", val)
+                        }
+                        disabled={isSubmitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2 min-w-0">
+                      <Label className="text-xs font-medium text-gray-600">
+                        End Time
+                      </Label>
+                      <TimePicker
+                        value={schedule.toTime}
+                        onChange={(val) => updateSchedule(index, "toTime", val)}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-dashed border-2 hover:border-[#124A69] hover:bg-blue-50"
+              onClick={addSchedule}
+              disabled={isSubmitting}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Another Schedule Slot
+            </Button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-between gap-3 mt-8 pt-4 border-t min-w-0">
+            <Button
+              variant="outline"
+              onClick={handleCancel}
+              disabled={isSubmitting}
+              className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
+              title={mode === "edit" ? "Cancel" : "Cancel Creation"}
+            >
+              {mode === "edit" ? "Cancel" : "Cancel Creation"}
+            </Button>
+
+            <Button
+              className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
+              onClick={handleNext}
+              disabled={isSubmitting}
+              title={
+                isSubmitting
+                  ? mode === "edit"
+                    ? "Updating..."
+                    : "Creating..."
+                  : mode === "import" && currentIndex < courses.length - 1
+                  ? "Next Course →"
+                  : mode === "edit"
+                  ? "Update Schedules"
+                  : "Create Course"
+              }
+            >
+              {isSubmitting
+                ? mode === "edit"
+                  ? "Updating..."
+                  : "Creating..."
+                : mode === "import" && currentIndex < courses.length - 1
+                ? "Next Course →"
+                : mode === "edit"
+                ? "Update Schedules"
+                : "Create Course"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

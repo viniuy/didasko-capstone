@@ -57,9 +57,21 @@ const CourseShortcut = ({
           >
             {course.title}
           </h3>
-          <p className="text-xs text-white/70">Section {course.section}</p>
+          <p
+            className="text-xs text-white/70 truncate"
+            title={`Section ${course.section}`}
+          >
+            Section {course.section}
+          </p>
           {showAttendanceStats && (
-            <p className="text-xs text-white/60 mt-1">
+            <p
+              className="text-xs text-white/60 mt-1 truncate"
+              title={`Absents last attendance: ${
+                course.attendanceStats?.lastAttendanceAbsents ??
+                course.attendanceStats?.totalAbsents ??
+                0
+              }`}
+            >
               Absents last attendance:{" "}
               {course.attendanceStats?.lastAttendanceAbsents ??
                 course.attendanceStats?.totalAbsents ??
@@ -209,7 +221,7 @@ export default function CourseShortcuts({
   }
 
   return (
-    <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
+    <Card className="bg-[#124A69] border-white/20 h-full flex flex-col max-w-[320px] overflow-hidden">
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white text-lg flex items-center gap-2 -mb-8">
           <Calendar className="h-5 w-5" />

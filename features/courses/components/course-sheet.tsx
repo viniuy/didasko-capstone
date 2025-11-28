@@ -338,12 +338,12 @@ export function CourseSheet({
                   handleChange("title", value);
                 }}
                 placeholder="e.g., IT Capstone"
-                maxLength={80}
+                maxLength={70}
                 required
                 className="pr-12"
               />
               <span className="absolute bottom-2 right-3 text-xs text-gray-500">
-                {formData.title.length}/80
+                {formData.title.length}/70
               </span>
             </div>
           </div>

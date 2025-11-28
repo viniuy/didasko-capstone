@@ -55,7 +55,7 @@ export function ReportingTypePageClient({
                 </Button>
                 <div>
                   <h1 className="text-2xl font-semibold text-[#124A69]">
-                    {course.title}
+                    {course.code}
                   </h1>
                   <p className="text-sm text-muted-foreground text-[#124A69]">
                     {course.section}

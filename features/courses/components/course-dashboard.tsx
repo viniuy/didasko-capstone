@@ -595,11 +595,17 @@ export function CourseDashboard({
             >
               <ArrowLeft className="w-4 h-4" />
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-[#124A69]">
+            <div className="flex-1 min-w-0">
+              <h1
+                className="text-2xl font-bold text-[#124A69] truncate"
+                title={`${courseInfo.code} - ${courseInfo.title}`}
+              >
                 {courseInfo.code} - {courseInfo.title}
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <p
+                className="text-sm text-gray-600 mt-1 truncate"
+                title={`Section: ${courseInfo.section} • Room: ${courseInfo.room} • ${courseInfo.semester} • ${courseInfo.academicYear}`}
+              >
                 Section: {courseInfo.section} • Room: {courseInfo.room} •{" "}
                 {courseInfo.semester} • {courseInfo.academicYear}
               </p>
