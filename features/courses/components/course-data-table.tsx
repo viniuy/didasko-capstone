@@ -309,7 +309,7 @@ const CourseCard = ({
     facultyFilter[0] !== userId;
 
   return (
-    <div className="group relative w-auto h-auto min-h-[240px] sm:h-[250px] md:h-[270px] bg-white rounded-lg border-2 border-[#124A69]/30 p-2 sm:p-3 hover:border-[#124A69] hover:shadow-xl transition-all duration-300 ease-in-out text-[#124A69] transform hover:scale-105 hover:-translate-y-1 will-change-transform overflow-hidden">
+    <div className="group relative w-auto h-auto min-h-[280px] sm:min-h-[300px] md:min-h-[320px] bg-white rounded-lg border-2 border-[#124A69]/30 p-4 sm:p-5 md:p-6 hover:border-[#124A69] hover:shadow-xl transition-all duration-300 ease-in-out text-[#124A69] transform hover:scale-105 hover:-translate-y-1 will-change-transform overflow-hidden flex flex-col">
       {/* Status Stripe - Diagonal top right (backward slash) */}
       <div
         className={`absolute top-0 right-0 w-24 h-1.5 ${
@@ -390,27 +390,30 @@ const CourseCard = ({
             router.push(`/main/course/${course.slug}`);
           }
         }}
-        className="cursor-pointer h-full"
+        className="cursor-pointer h-full flex flex-col"
       >
-        <div className="mb-2 sm:mb-3 md:mb-4">
-          <h3
-            className={`font-bold group-hover:text-[#0C3246] transition-colors flex items-center gap-1 ${
+        {/* Course Code and Title Section */}
+        <div className="mb-4 sm:mb-5 md:mb-6 flex-shrink-0">
+          <p
+            className={`font-bold group-hover:text-[#0C3246] transition-colors flex items-center gap-2 mb-2 ${
               itemsPerPage === 3
-                ? "text-sm sm:text-base"
-                : "text-base sm:text-lg"
+                ? "text-base sm:text-lg"
+                : "text-lg sm:text-xl md:text-2xl"
             }`}
             title={`${course.code} - ${course.section}`}
           >
-            <span className="truncate max-w-[120px] sm:max-w-[150px] md:max-w-[180px]">
+            <span className="truncate max-w-[140px] sm:max-w-[180px] md:max-w-[220px]">
               {course.code}
             </span>
-            <span className="flex-shrink-0">- {course.section}</span>
-          </h3>
+            <span className="flex-shrink-0 text-[#124A69]/70">
+              - {course.section}
+            </span>
+          </p>
           <p
-            className={`opacity-80 mt-0.5 sm:mt-1 truncate ${
+            className={`opacity-90 mt-1 sm:mt-2 truncate leading-relaxed ${
               itemsPerPage === 3
-                ? "text-[9px] sm:text-[10px]"
-                : "text-[10px] sm:text-xs"
+                ? "text-[10px] sm:text-xs"
+                : "text-xs sm:text-sm md:text-base"
             }`}
             title={course.title}
           >
@@ -418,120 +421,99 @@ const CourseCard = ({
           </p>
         </div>
 
-        <div className="flex items-center mb-2 sm:mb-3 md:mb-4 opacity-80">
+        {/* Schedule and Room Section */}
+        <div className="flex items-start mb-4 sm:mb-5 md:mb-6 opacity-90 flex-shrink-0">
           <Calendar
-            className={`flex-shrink-0 ${
+            className={`flex-shrink-0 mt-0.5 ${
               itemsPerPage === 3
                 ? "w-3 h-3 sm:w-4 sm:h-4"
-                : "w-4 h-4 sm:w-5 sm:h-5"
+                : "w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
             }`}
           />
-          <span
-            className={`font-medium ml-1 sm:ml-2 truncate ${
-              itemsPerPage === 3
-                ? "text-[9px] sm:text-[10px]"
-                : "text-[10px] sm:text-xs"
-            }`}
-          >
-            {course.room} |{" "}
+          <div className="ml-2 sm:ml-3 flex-1 min-w-0">
+            <span
+              className={`font-semibold block truncate ${
+                itemsPerPage === 3
+                  ? "text-[10px] sm:text-xs"
+                  : "text-xs sm:text-sm md:text-base"
+              }`}
+            >
+              Room: {course.room}
+            </span>
             {hasNoSchedule ? (
-              <span className="text-amber-600 font-semibold">
+              <span
+                className={`text-amber-600 font-semibold mt-1 block ${
+                  itemsPerPage === 3
+                    ? "text-[9px] sm:text-[10px]"
+                    : "text-[10px] sm:text-xs"
+                }`}
+              >
                 No schedule set
               </span>
             ) : (
-              course.schedules
-                .map(
-                  (s) =>
-                    `${s.day.slice(0, 3)} ${formatTo12Hour(
-                      s.fromTime
-                    )}–${formatTo12Hour(s.toTime)}`
-                )
-                .join(", ")
+              <span
+                className={`text-gray-600 mt-1 block ${
+                  itemsPerPage === 3
+                    ? "text-[9px] sm:text-[10px]"
+                    : "text-[10px] sm:text-xs md:text-sm"
+                }`}
+              >
+                {course.schedules
+                  .map(
+                    (s) =>
+                      `${s.day.slice(0, 3)} ${formatTo12Hour(
+                        s.fromTime
+                      )}–${formatTo12Hour(s.toTime)}`
+                  )
+                  .join(", ")}
+              </span>
             )}
-          </span>
-        </div>
-
-        <div className="flex justify-between items-center mb-2 sm:mb-3 md:mb-4 opacity-80 text-gray-700 gap-2">
-          <div className="flex items-center min-w-0 flex-1">
-            <CircleUserRound
-              className={`flex-shrink-0 ${
-                itemsPerPage === 3
-                  ? "w-3 h-3 sm:w-4 sm:h-4"
-                  : "w-4 h-4 sm:w-5 sm:h-5"
-              }`}
-            />
-            <span
-              className={`font-medium ml-1 sm:ml-2 truncate max-w-[120px] sm:max-w-[150px] ${
-                itemsPerPage === 3
-                  ? "text-[9px] sm:text-[10px]"
-                  : "text-[10px] sm:text-xs"
-              }`}
-              title={course.faculty?.name || "No Instructor"}
-            >
-              {course.faculty?.name || "No Instructor"}
-            </span>
-          </div>
-
-          <div className="flex items-center flex-shrink-0">
-            <Users
-              className={
-                itemsPerPage === 3
-                  ? "w-3 h-3 sm:w-4 sm:h-4"
-                  : "w-4 h-4 sm:w-5 sm:h-5"
-              }
-            />
-            <span
-              className={`font-medium ml-1 sm:ml-2 ${
-                itemsPerPage === 3
-                  ? "text-[9px] sm:text-[10px]"
-                  : "text-[10px] sm:text-xs"
-              }`}
-            >
-              {course._count?.students || 0}
-            </span>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-4 sm:pt-5 md:pt-7">
-          <div className="rounded-lg p-2 sm:p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
-            <div
-              className={`flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 ${
-                itemsPerPage === 3
-                  ? "text-[9px] sm:text-[10px]"
-                  : "text-[10px] sm:text-xs"
-              }`}
-            >
-              <span>Passing Rate</span>
+        {/* Faculty and Students Section */}
+        <div className="mt-auto pt-4 sm:pt-5 border-t border-gray-200/50 flex-shrink-0">
+          <div className="bg-[#124A69] rounded-lg p-3 sm:p-4 border border-[#124A69]/10">
+            <div className="flex justify-between items-center gap-3">
+              <div className="flex items-center min-w-0 flex-1">
+                <CircleUserRound
+                  className={`flex-shrink-0 text-white ${
+                    itemsPerPage === 3
+                      ? "w-3 h-3 sm:w-4 sm:h-4"
+                      : "w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"
+                  }`}
+                />
+                <span
+                  className={`font-semibold ml-2 sm:ml-3 truncate max-w-[140px] sm:max-w-[180px] text-white ${
+                    itemsPerPage === 3
+                      ? "text-[10px] sm:text-xs"
+                      : "text-xs sm:text-sm md:text-base"
+                  }`}
+                  title={course.faculty?.name || "No Instructor"}
+                >
+                  {course.faculty?.name || "No Instructor"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Users
+                  className={`text-white ${
+                    itemsPerPage === 3
+                      ? "w-3 h-3 sm:w-4 sm:h-4"
+                      : "w-4 h-4 sm:w-5 sm:h-5"
+                  }`}
+                />
+                <span
+                  className={`font-bold text-white ${
+                    itemsPerPage === 3
+                      ? "text-xs sm:text-sm"
+                      : "text-sm sm:text-base md:text-lg"
+                  }`}
+                >
+                  {course._count?.students || 0}
+                </span>
+              </div>
             </div>
-            <p
-              className={`font-bold ${
-                itemsPerPage === 3
-                  ? "text-base sm:text-lg"
-                  : "text-lg sm:text-xl"
-              }`}
-            >
-              {passingRate}%
-            </p>
-          </div>
-          <div className="rounded-lg p-2 sm:p-3 bg-[#124A69] text-white border border-[#124A69] shadow-sm">
-            <div
-              className={`flex items-center gap-1 sm:gap-2 mb-0.5 sm:mb-1 ${
-                itemsPerPage === 3
-                  ? "text-[9px] sm:text-[10px]"
-                  : "text-[10px] sm:text-xs"
-              }`}
-            >
-              <span>Attendance Rate</span>
-            </div>
-            <p
-              className={`font-bold ${
-                itemsPerPage === 3
-                  ? "text-base sm:text-lg"
-                  : "text-lg sm:text-xl"
-              }`}
-            >
-              {attendanceRate}%
-            </p>
           </div>
         </div>
       </div>
@@ -2598,6 +2580,12 @@ export function CourseDataTable({
   const hasActiveFilters = getActiveFilterCount() > 0;
   const activeFilterCount = getActiveFilterCount();
 
+  // Check if academic head is viewing another faculty's courses
+  const isViewingOtherFaculty =
+    userRole === "ACADEMIC_HEAD" &&
+    facultyFilter.length > 0 &&
+    facultyFilter[0] !== userId;
+
   // Handle course navigation with fade out
   const handleCourseNavigate = (slug: string) => {
     // Check if there's an active RFID session for this course
@@ -2813,12 +2801,18 @@ export function CourseDataTable({
                       variant="outline"
                       onClick={() => setShowExportPreview(true)}
                       disabled={
+                        isViewingOtherFaculty ||
                         isInitialLoading ||
                         isLoading ||
                         !hasLoadedOnce ||
                         activeCoursesCount === 0
                       }
                       className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                      title={
+                        isViewingOtherFaculty
+                          ? "Cannot export courses for other faculties"
+                          : "Export courses"
+                      }
                     >
                       <Download className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span className="hidden xl:inline">Export</span>
@@ -2837,6 +2831,7 @@ export function CourseDataTable({
                         setShowImportPreview(true);
                       }}
                       disabled={
+                        isViewingOtherFaculty ||
                         hasReachedMaxActiveCourses ||
                         isInitialLoading ||
                         isLoading ||
@@ -2845,7 +2840,9 @@ export function CourseDataTable({
                       }
                       className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
                       title={
-                        hasReachedMaxActiveCourses
+                        isViewingOtherFaculty
+                          ? "Cannot import courses for other faculties"
+                          : hasReachedMaxActiveCourses
                           ? `Maximum ${MAX_ACTIVE_COURSES} active courses reached`
                           : "Import courses"
                       }
@@ -2879,6 +2876,7 @@ export function CourseDataTable({
                       userId={userId}
                       userRole={userRole}
                       disabled={
+                        isViewingOtherFaculty ||
                         hasReachedMaxActiveCourses ||
                         isInitialLoading ||
                         isLoading ||
@@ -2900,85 +2898,118 @@ export function CourseDataTable({
                 </div>
               </div>
             ) : activeCoursesCount === 0 ? (
-              // Show fancy empty state when there are no active courses (first time or after loading)
-              <div className="flex flex-col items-center justify-center flex-1 min-h-[400px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
-                <div className="text-center px-4 pb-8 z-10 relative">
-                  <div className="mb-8">
-                    <SplitText
-                      text="Welcome to your Course Management"
-                      className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#124A69]"
-                      delay={0.2}
-                      duration={0.6}
-                      stagger={0.03}
-                    />
-                  </div>
-                  <AnimatedContent
-                    container={null}
-                    delay={1.5}
-                    duration={0.8}
-                    direction="vertical"
-                    distance={30}
-                    initialOpacity={0}
-                    className="mt-6"
-                    onComplete={() => {}}
-                    onDisappearanceComplete={() => {}}
-                  >
-                    <p className="text-lg sm:text-xl text-gray-600 mb-4">
-                      {hasReachedMaxActiveCourses
-                        ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
-                        : "Get started by adding your first course!"}
-                    </p>
-                    <p className="text-sm sm:text-base text-gray-500">
-                      {getEmptyStateSubMessage()}
-                    </p>
-                  </AnimatedContent>
-                  {!hasReachedMaxActiveCourses && (
-                    <div className="flex items-center justify-center mt-8 gap-3 flex-wrap">
-                      {permissions.canCreateCourse && (
-                        <CourseSheet
-                          mode="add"
-                          onSuccess={async (courseData) => {
-                            if (courseData) {
-                              setIsEditingCourse(true);
-                              setPendingCourseData(courseData);
-                              setImportedCoursesForSchedule([courseData]);
-                              setScheduleDialogMode("create");
-                              setShowScheduleAssignment(true);
-                              setIsEditingSchedule(true);
-                            }
-                          }}
-                          faculties={faculties}
-                          userId={userId}
-                          userRole={userRole}
-                          disabled={hasReachedMaxActiveCourses}
+              // Check if academic head is viewing another faculty's courses
+              (() => {
+                const isViewingOtherFaculty =
+                  userRole === "ACADEMIC_HEAD" &&
+                  facultyFilter.length > 0 &&
+                  facultyFilter[0] !== userId;
+
+                const selectedFacultyId = isViewingOtherFaculty
+                  ? facultyFilter[0]
+                  : null;
+                const selectedFaculty = selectedFacultyId
+                  ? faculties.find((f) => f.id === selectedFacultyId)
+                  : null;
+                const facultyName = selectedFaculty?.name || "this faculty";
+
+                // Show fancy empty state when there are no active courses (first time or after loading)
+                return (
+                  <div className="flex flex-col items-center justify-center flex-1 min-h-[400px] mb-4 rounded-md border border-dashed border-gray-300 bg-gray-50/50 relative overflow-hidden">
+                    <div className="text-center px-4 pb-8 z-10 relative">
+                      <div className="mb-8">
+                        <SplitText
+                          text={
+                            isViewingOtherFaculty
+                              ? `No Courses for ${facultyName}`
+                              : "Welcome to your Course Management"
+                          }
+                          className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#124A69]"
+                          delay={0.2}
+                          duration={0.6}
+                          stagger={0.03}
                         />
-                      )}
-                      {permissions.canImportCourses && (
-                        <>
-                          <span className="text-gray-500">or</span>
-                          <Button
-                            onClick={() => {
-                              if (hasReachedMaxActiveCourses) {
-                                toast.error(
-                                  `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
-                                );
-                                return;
-                              }
-                              setShowImportPreview(true);
-                            }}
-                            variant="outline"
-                            disabled={hasReachedMaxActiveCourses}
-                            className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Upload className="w-4 h-4" />
-                            Import Courses
-                          </Button>
-                        </>
-                      )}
+                      </div>
+                      <AnimatedContent
+                        container={null}
+                        delay={1.5}
+                        duration={0.8}
+                        direction="vertical"
+                        distance={30}
+                        initialOpacity={0}
+                        className="mt-6"
+                        onComplete={() => {}}
+                        onDisappearanceComplete={() => {}}
+                      >
+                        <p className="text-lg sm:text-xl text-gray-600 mb-4">
+                          {isViewingOtherFaculty
+                            ? `${facultyName} has no active courses yet.`
+                            : hasReachedMaxActiveCourses
+                            ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
+                            : "Get started by adding your first course!"}
+                        </p>
+                        {!isViewingOtherFaculty && (
+                          <p className="text-sm sm:text-base text-gray-500">
+                            {getEmptyStateSubMessage()}
+                          </p>
+                        )}
+                      </AnimatedContent>
+                      {!hasReachedMaxActiveCourses &&
+                        !isViewingOtherFaculty && (
+                          <div className="flex items-center justify-center mt-8 gap-3 flex-wrap">
+                            {permissions.canCreateCourse && (
+                              <CourseSheet
+                                mode="add"
+                                onSuccess={async (courseData) => {
+                                  if (courseData) {
+                                    setIsEditingCourse(true);
+                                    setPendingCourseData(courseData);
+                                    setImportedCoursesForSchedule([courseData]);
+                                    setScheduleDialogMode("create");
+                                    setShowScheduleAssignment(true);
+                                    setIsEditingSchedule(true);
+                                  }
+                                }}
+                                faculties={faculties}
+                                userId={userId}
+                                userRole={userRole}
+                                disabled={
+                                  isViewingOtherFaculty ||
+                                  hasReachedMaxActiveCourses
+                                }
+                              />
+                            )}
+                            {permissions.canImportCourses && (
+                              <>
+                                <span className="text-gray-500">or</span>
+                                <Button
+                                  onClick={() => {
+                                    if (hasReachedMaxActiveCourses) {
+                                      toast.error(
+                                        `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before importing new ones.`
+                                      );
+                                      return;
+                                    }
+                                    setShowImportPreview(true);
+                                  }}
+                                  variant="outline"
+                                  disabled={
+                                    isViewingOtherFaculty ||
+                                    hasReachedMaxActiveCourses
+                                  }
+                                  className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                  Import Courses
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        )}
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                );
+              })()
             ) : tableData.length > 0 ? (
               <>
                 {filteredCourses.length > 0 ? (
