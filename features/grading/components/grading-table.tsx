@@ -1484,8 +1484,18 @@ export function GradingTable({
     return "";
   };
 
+  // Function to remove emojis from text
+  const removeEmojis = (text: string): string => {
+    // Remove emojis using regex pattern
+    // This pattern matches most emoji ranges in Unicode
+    return text.replace(
+      /[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{200D}]|[\u{FE00}-\u{FE0F}]|[\u{20D0}-\u{20FF}]/gu,
+      ""
+    );
+  };
+
   const handleReportNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = removeEmojis(e.target.value);
     const error = validateReportName(value);
     setValidationErrors((prev) => ({ ...prev, name: error }));
 
@@ -1644,7 +1654,7 @@ export function GradingTable({
         };
       } else {
         // Validate name input
-        const nameValue = value as string;
+        const nameValue = removeEmojis(value as string);
         const error = validateRubricName(nameValue, index);
         setValidationErrors((prev) => ({
           ...prev,

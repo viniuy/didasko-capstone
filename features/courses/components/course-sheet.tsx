@@ -137,8 +137,20 @@ export function CourseSheet({
     }
   }, [open, mode, course]);
 
+  // Function to remove emojis from text
+  const removeEmojis = (text: string): string => {
+    // Remove emojis using regex pattern
+    // This pattern matches most emoji ranges in Unicode
+    return text.replace(
+      /[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{200D}]|[\u{FE00}-\u{FE0F}]|[\u{20D0}-\u{20FF}]/gu,
+      ""
+    );
+  };
+
   const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    // Remove emojis from the value before setting it
+    const cleanedValue = removeEmojis(value);
+    setFormData((prev) => ({ ...prev, [field]: cleanedValue }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -322,8 +334,8 @@ export function CourseSheet({
                 id="code"
                 value={formData.code}
                 onChange={(e) => {
-                  // Remove spaces and special characters, only allow alphanumeric
-                  const value = e.target.value
+                  // Remove emojis, spaces and special characters, only allow alphanumeric
+                  const value = removeEmojis(e.target.value)
                     .replace(/[^A-Za-z0-9]/g, "")
                     .toUpperCase();
                   handleChange("code", value);
@@ -347,7 +359,10 @@ export function CourseSheet({
               <Input
                 id="title"
                 value={formData.title}
-                onChange={(e) => handleChange("title", e.target.value)}
+                onChange={(e) => {
+                  const value = removeEmojis(e.target.value);
+                  handleChange("title", value);
+                }}
                 placeholder="e.g., IT Capstone"
                 maxLength={80}
                 required
@@ -368,9 +383,10 @@ export function CourseSheet({
                 <Input
                   id="section"
                   value={formData.section}
-                  onChange={(e) =>
-                    handleChange("section", e.target.value.toUpperCase())
-                  }
+                  onChange={(e) => {
+                    const value = removeEmojis(e.target.value).toUpperCase();
+                    handleChange("section", value);
+                  }}
                   placeholder="e.g., BSIT-711"
                   maxLength={10}
                   required
@@ -391,7 +407,7 @@ export function CourseSheet({
                   id="room"
                   value={formData.room}
                   onChange={(e) => {
-                    let value = e.target.value;
+                    let value = removeEmojis(e.target.value);
                     // Remove "Room:" or "room:" prefix (case-insensitive) with optional colon and space
                     value = value.replace(/^room:\s*/i, "").trim();
                     handleChange("room", value.toUpperCase());
@@ -436,7 +452,7 @@ export function CourseSheet({
                   id="academicYear"
                   value={formData.academicYear}
                   onChange={(e) => {
-                    const value = e.target.value;
+                    const value = removeEmojis(e.target.value);
                     // Only allow format: 0000-0000
                     const academicYearPattern = /^(\d{0,4})(-?)(\d{0,4})$/;
                     if (academicYearPattern.test(value) || value === "") {
