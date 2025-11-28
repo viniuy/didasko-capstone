@@ -77,7 +77,7 @@ export function AdminDashboardStats({
       {/* Stats Cards */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6 mt-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">
               Faculty Full-Time
             </CardTitle>
@@ -88,7 +88,7 @@ export function AdminDashboardStats({
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">
               Faculty Part-Time
             </CardTitle>
@@ -99,7 +99,7 @@ export function AdminDashboardStats({
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">Active Users</CardTitle>
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -108,7 +108,7 @@ export function AdminDashboardStats({
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">
               Archived Users
             </CardTitle>
@@ -119,7 +119,7 @@ export function AdminDashboardStats({
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -130,7 +130,7 @@ export function AdminDashboardStats({
       </div>
 
       {/* Users Table */}
-      <div className="mb-4">
+      <div className="mb-1">
         <AdminDataTable users={users} />
       </div>
     </>
