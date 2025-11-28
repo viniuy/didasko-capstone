@@ -72,7 +72,10 @@ export function StudentsPageClient({
   // State management
   const [searchQuery, setSearchQuery] = React.useState(initialSearch || "");
   const currentPage = Number(searchParams.get("page")) || 1;
-  const limit = 50;
+  const [limit, setLimit] = React.useState(50);
+  const [windowHeight, setWindowHeight] = React.useState(
+    typeof window !== "undefined" ? window.innerHeight : 1000
+  );
 
   // Current view state
   const [viewMode, setViewMode] = React.useState<ViewMode>("idle");
@@ -158,6 +161,35 @@ export function StudentsPageClient({
 
   // Debounce search navigation
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Adjust limit based on window height for low viewport laptops (max 30)
+  React.useEffect(() => {
+    const updateLimit = () => {
+      const height = window.innerHeight;
+      setWindowHeight(height);
+      const newLimit = height < 930 ? 30 : 50;
+      setLimit((prevLimit) => {
+        if (prevLimit !== newLimit) {
+          // Reset to page 1 when limit changes
+          const params = new URLSearchParams(window.location.search);
+          params.set("page", "1");
+          router.push(`/main/students?${params.toString()}`);
+          return newLimit;
+        }
+        return prevLimit;
+      });
+    };
+
+    // Set initial value
+    updateLimit();
+
+    // Listen for resize events
+    window.addEventListener("resize", updateLimit);
+
+    return () => {
+      window.removeEventListener("resize", updateLimit);
+    };
+  }, [router]);
 
   // Handle click outside RFID scan area
   React.useEffect(() => {
@@ -441,8 +473,8 @@ export function StudentsPageClient({
     const currentTime = Date.now();
     const timeSinceLastInput = currentTime - lastRfidInputTimeRef.current;
 
-    // If there's a delay > 50ms between characters, it's likely manual typing - reject it
-    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 50) {
+    // If there's a delay > 100ms between characters, it's likely manual typing - reject it
+    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 100) {
       // Reset - this is manual typing, not RFID scan
       e.target.value = rfidInputBufferRef.current;
       toast.error("Please use RFID scanner. Manual input is disabled.");
@@ -464,7 +496,7 @@ export function StudentsPageClient({
 
     // Wait for complete RFID (at least 10 characters)
     if (value.length >= 10) {
-      // Check if RFID is already assigned
+      // Check if RFID is already assigned in local data
       const existingStudent = students.find(
         (s: Student) => s.rfid_id && String(s.rfid_id) === value
       );
@@ -500,17 +532,68 @@ export function StudentsPageClient({
         }
       }
 
-      // If searching and no student found
+      // If searching and no student found locally, search in database
       if (viewMode === "searching-rfid") {
-        toast.error(`No student found with RFID "${value}"`, {
-          duration: 3000,
-        });
-        setScannedRfid("");
-        setIsScanning(false);
-        lastRfidInputTimeRef.current = 0;
-        rfidInputBufferRef.current = "";
-        if (rfidInputRef.current) rfidInputRef.current.value = "";
-        return;
+        try {
+          // Search in database using the search API
+          const searchResult = await studentsService.getStudents({
+            search: value,
+            page: 1,
+            limit: 10,
+          });
+
+          const foundStudent = searchResult?.students?.find(
+            (s: any) => s.rfid_id && String(s.rfid_id) === value
+          );
+
+          if (foundStudent) {
+            const mappedStudent: Student = {
+              id: foundStudent.id,
+              rfid_id: foundStudent.rfid_id
+                ? String(foundStudent.rfid_id)
+                : null,
+              lastName: foundStudent.lastName,
+              firstName: foundStudent.firstName,
+              middleInitial: foundStudent.middleInitial || "",
+              studentImage: foundStudent.image,
+              studentId: foundStudent.studentId,
+            };
+            toast.success(
+              `Found student: ${mappedStudent.firstName} ${mappedStudent.lastName}`,
+              { duration: 3000 }
+            );
+            handleSelectStudent(mappedStudent);
+            setScannedRfid("");
+            setIsScanning(false);
+            lastRfidInputTimeRef.current = 0;
+            rfidInputBufferRef.current = "";
+            if (rfidInputRef.current) rfidInputRef.current.value = "";
+            // Refresh the students list to include this student
+            await fetchStudents();
+            return;
+          } else {
+            toast.error(`No student found with RFID "${value}"`, {
+              duration: 3000,
+            });
+            setScannedRfid("");
+            setIsScanning(false);
+            lastRfidInputTimeRef.current = 0;
+            rfidInputBufferRef.current = "";
+            if (rfidInputRef.current) rfidInputRef.current.value = "";
+            return;
+          }
+        } catch (error) {
+          console.error("Error searching for RFID:", error);
+          toast.error(`No student found with RFID "${value}"`, {
+            duration: 3000,
+          });
+          setScannedRfid("");
+          setIsScanning(false);
+          lastRfidInputTimeRef.current = 0;
+          rfidInputBufferRef.current = "";
+          if (rfidInputRef.current) rfidInputRef.current.value = "";
+          return;
+        }
       }
 
       // Valid RFID scanned for assignment or creation
@@ -1050,14 +1133,18 @@ export function StudentsPageClient({
             </h1>
           </div>
 
-          <div className="flex-1 overflow-y-auto pb-6 ">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+          <div className="flex-1 overflow-y-auto pb-6 flex">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl ">
               {/* Student Directory */}
-              <Card className="lg:col-span-1">
+              <Card
+                className={`lg:col-span-1 flex flex-col ${
+                  windowHeight < 890 ? "max-h-[600px]" : ""
+                }`}
+              >
                 <CardHeader>
                   <CardTitle>Student Directory</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 flex-1 flex flex-col min-h-0">
                   <div className="space-y-2">
                     <Label htmlFor="search">Search Students</Label>
                     <Input
@@ -1090,18 +1177,30 @@ export function StudentsPageClient({
 
                   <Button
                     onClick={handleAddNewStudent}
-                    className="w-full bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                    className={`w-full bg-[#124A69] hover:bg-[#0a2f42] text-white ${
+                      windowHeight < 890 ? "h-9 text-sm" : ""
+                    }`}
                   >
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus
+                      className={`mr-2 ${
+                        windowHeight < 890 ? "w-3.5 h-3.5" : "w-4 h-4"
+                      }`}
+                    />
                     Add New Student
                   </Button>
 
                   <Button
                     onClick={handleSearchViaRfid}
                     variant="outline"
-                    className="w-full border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white"
+                    className={`w-full border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white ${
+                      windowHeight < 890 ? "h-9 text-sm" : ""
+                    }`}
                   >
-                    <Scan className="w-4 h-4 mr-2" />
+                    <Scan
+                      className={`mr-2 ${
+                        windowHeight < 890 ? "w-3.5 h-3.5" : "w-4 h-4"
+                      }`}
+                    />
                     Search via RFID
                   </Button>
 
@@ -1112,9 +1211,15 @@ export function StudentsPageClient({
                     <DialogTrigger asChild>
                       <Button
                         variant="outline"
-                        className="w-full border-green-600 text-green-600 hover:bg-green-600 hover:text-white"
+                        className={`w-full border-green-600 text-green-600 hover:bg-green-600 hover:text-white ${
+                          windowHeight < 890 ? "h-9 text-sm" : ""
+                        }`}
                       >
-                        <Upload className="w-4 h-4 mr-2" />
+                        <Upload
+                          className={`mr-2 ${
+                            windowHeight < 890 ? "w-3.5 h-3.5" : "w-4 h-4"
+                          }`}
+                        />
                         Import Students
                       </Button>
                     </DialogTrigger>
@@ -1239,7 +1344,11 @@ export function StudentsPageClient({
                     </DialogContent>
                   </Dialog>
 
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  <div
+                    className={`space-y-2 overflow-y-auto ${
+                      windowHeight < 890 ? "max-h-[250px]" : "max-h-[400px]"
+                    }`}
+                  >
                     {isLoading ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         Loading...
@@ -1319,36 +1428,68 @@ export function StudentsPageClient({
               </Card>
 
               {/* Form Section */}
-              <Card className="lg:col-span-1">
+              <Card
+                className={`lg:col-span-1 flex flex-col ${
+                  windowHeight < 890 ? "max-h-[600px]" : ""
+                }`}
+              >
                 <CardHeader>
                   <CardTitle>Student Details</CardTitle>
                 </CardHeader>
-                <CardContent>{renderFormSection()}</CardContent>
+                <CardContent className="flex-1 overflow-y-auto">
+                  {renderFormSection()}
+                </CardContent>
               </Card>
 
               {/* ID Preview */}
-              <Card className="lg:col-span-1">
+              <Card
+                className={`lg:col-span-1 flex flex-col ${
+                  windowHeight < 890 ? "max-h-[600px]" : ""
+                }`}
+              >
                 <CardHeader>
                   <CardTitle>ID Preview</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="flex-1 overflow-y-auto">
                   <div className="bg-white border-2 border-gray-300 rounded-lg shadow-sm overflow-hidden">
-                    <div className="bg-[#FEF100] h-20 flex flex-col items-center justify-center">
+                    <div
+                      className={`bg-[#FEF100] flex flex-col items-center justify-center ${
+                        windowHeight < 890 ? "h-[72px]" : "h-20"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
                         <img
                           src={STI_logo.src}
-                          className="w-35"
+                          className={windowHeight < 890 ? "w-32" : "w-35"}
                           alt="STI Logo"
                         />
                       </div>
                     </div>
 
-                    <div className="bg-blue-800 p-6 relative">
-                      <div className="text-[#FEF100] flex justify-center font-semibold text-lg mb-7 mt-2">
+                    <div
+                      className={`bg-blue-800 relative ${
+                        windowHeight < 890 ? "p-5" : "p-6"
+                      }`}
+                    >
+                      <div
+                        className={`text-[#FEF100] flex justify-center font-semibold ${
+                          windowHeight < 890
+                            ? "text-lg mb-5 mt-1"
+                            : "text-lg mb-7 mt-2"
+                        }`}
+                      >
                         ALABANG
                       </div>
-                      <div className="flex justify-center mb-7">
-                        <div className="w-70 h-70 bg-gray-200 border-2 border-white shadow-md flex items-center justify-center overflow-hidden">
+                      <div
+                        className={`flex justify-center ${
+                          windowHeight < 890 ? "mb-5" : "mb-7"
+                        }`}
+                      >
+                        <div
+                          className={`bg-gray-200 border-2 border-white shadow-md flex items-center justify-center overflow-hidden ${
+                            windowHeight < 890 ? "w-24 h-24" : "w-70 h-70"
+                          }`}
+                        >
                           {getPreviewImage() ? (
                             <img
                               src={getPreviewImage()!}
@@ -1356,27 +1497,55 @@ export function StudentsPageClient({
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <span className="text-xs text-gray-500 text-center">
+                            <span
+                              className={`text-gray-500 text-center ${
+                                windowHeight < 890 ? "text-[10px]" : "text-xs"
+                              }`}
+                            >
                               No Photo
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="text-center mb-6">
-                        <div className="text-white font-bold text-3xl mb-1 truncate px-2">
+                      <div
+                        className={`text-center ${
+                          windowHeight < 890 ? "mb-5" : "mb-6"
+                        }`}
+                      >
+                        <div
+                          className={`text-white font-bold mb-1 truncate px-2 ${
+                            windowHeight < 890 ? "text-2xl" : "text-3xl"
+                          }`}
+                        >
                           {formData.lastName || "________"}
                         </div>
-                        <div className="text-white text-lg truncate px-2">
+                        <div
+                          className={`text-white truncate px-2 ${
+                            windowHeight < 890 ? "text-lg" : "text-lg"
+                          }`}
+                        >
                           {formData.firstName || "________"}{" "}
                           {formData.middleInitial}
                           {formData.middleInitial ? "." : ""}
                         </div>
                       </div>
-                      <div className="bg-teal-500 rounded-lg p-3 text-center">
-                        <div className="text-white font-semibold text-lg">
+                      <div
+                        className={`bg-teal-500 rounded-lg text-center ${
+                          windowHeight < 890 ? "p-3" : "p-3"
+                        }`}
+                      >
+                        <div
+                          className={`text-white font-semibold ${
+                            windowHeight < 890 ? "text-lg" : "text-lg"
+                          }`}
+                        >
                           {formData.studentId || "________"}
                         </div>
-                        <div className="text-white text-xs opacity-90">
+                        <div
+                          className={`text-white opacity-90 ${
+                            windowHeight < 890 ? "text-[10px]" : "text-xs"
+                          }`}
+                        >
                           Student Number
                         </div>
                       </div>

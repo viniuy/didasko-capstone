@@ -161,17 +161,17 @@ export async function POST(request: Request, context: { params }) {
           const BATCH_SIZE = 50;
           for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
             const batch = toUpdate.slice(i, i + BATCH_SIZE);
-            await Promise.all(
+          await Promise.all(
               batch.map((update) =>
-                tx.attendance.update({
-                  where: { id: update.id },
-                  data: {
-                    status: update.status as any,
-                    reason: update.reason,
-                  },
-                })
-              )
-            );
+              tx.attendance.update({
+                where: { id: update.id },
+                data: {
+                  status: update.status as any,
+                  reason: update.reason,
+                },
+              })
+            )
+          );
           }
         }
 

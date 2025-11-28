@@ -4,7 +4,7 @@ import { CourseSchedule } from "@prisma/client";
 import { ScheduleResponse } from "@/shared/types/schedule";
 import { useFacultySchedules, useActiveCourses } from "@/lib/hooks/queries";
 
-const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface ScheduleWithCourse extends CourseSchedule {
   course: {
@@ -254,7 +254,7 @@ export default function WeeklySchedule({
           </h2>
         </div>
 
-        <div className="grid grid-cols-7 gap-4 animate-pulse">
+        <div className="grid grid-cols-6 gap-4 animate-pulse">
           {days.map((day) => (
             <div key={day}>
               {/* Day title skeleton */}
@@ -320,7 +320,7 @@ export default function WeeklySchedule({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto flex-1">
+        <div className="grid grid-cols-6 gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 overflow-x-auto flex-1">
           {days.map((day) => (
             <div
               key={day}

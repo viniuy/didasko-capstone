@@ -86,6 +86,7 @@ import {
   VisibilityState,
   getFilteredRowModel,
   getPaginationRowModel,
+  PaginationState,
 } from "@tanstack/react-table";
 import { supabase } from "@/lib/supabaseClient";
 import { useSession } from "next-auth/react";
@@ -242,6 +243,11 @@ export function AdminDataTable({
   const [promotionCode, setPromotionCode] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<Role | null>(null);
   const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
+  const [pageSize, setPageSize] = useState(10);
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
@@ -270,6 +276,34 @@ export function AdminDataTable({
     }
     setCurrentUserRole(session?.user?.role as Role);
   }, [currentUserBreakGlass, session?.user?.role]);
+
+  // Adjust page size based on window height
+  useEffect(() => {
+    const updatePageSize = () => {
+      const newPageSize = window.innerHeight < 930 ? 6 : 10;
+      setPageSize((prevSize) => {
+        if (prevSize !== newPageSize) {
+          setPagination((prev) => ({
+            ...prev,
+            pageSize: newPageSize,
+            pageIndex: 0, // Reset to first page when page size changes
+          }));
+          return newPageSize;
+        }
+        return prevSize;
+      });
+    };
+
+    // Set initial value
+    updatePageSize();
+
+    // Listen for resize events
+    window.addEventListener("resize", updatePageSize);
+
+    return () => {
+      window.removeEventListener("resize", updatePageSize);
+    };
+  }, []);
 
   // Check if a user is a temporary admin
   const checkIsTempAdmin = async (userId: string): Promise<boolean> => {
@@ -1087,10 +1121,18 @@ export function AdminDataTable({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
+    initialState: {
+      pagination: {
+        pageIndex: 0,
+        pageSize: 10,
+      },
+    },
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      pagination,
     },
   });
 
@@ -1300,7 +1342,7 @@ export function AdminDataTable({
         </div>
       </div>
 
-      <div className="relative min-h-[610px] max-h-[610px] flex flex-col">
+      <div className="relative flex flex-col flex-1">
         <div className="flex-1 rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>

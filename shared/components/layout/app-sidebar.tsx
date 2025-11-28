@@ -14,7 +14,7 @@ import {
   BookUser,
   BookOpen,
   Users,
-  BookCopy,
+  UserRoundCog,
   Activity,
   Menu,
 } from "lucide-react";
@@ -59,7 +59,7 @@ import { toast } from "react-hot-toast";
 import { supabase } from "@/lib/supabaseClient";
 
 const adminItems = [
-  { title: "Users", url: "/dashboard/admin", icon: Users },
+  { title: "Users", url: "/dashboard/admin", icon: UserRoundCog },
   { title: "Students", url: "/main/students", icon: Users },
   { title: "Audit Logs", url: "/main/logs", icon: Activity },
 ];
