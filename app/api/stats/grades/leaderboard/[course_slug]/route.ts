@@ -396,7 +396,7 @@ export async function GET(
     course.students.forEach((student) => {
       studentPerformanceMap.set(student.id, {
         studentId: student.id,
-        studentName: `${student.firstName} ${student.lastName}`,
+        studentName: `${student.lastName}, ${student.firstName}`,
         studentNumber: student.studentId,
         termGrades: [],
       });
@@ -594,12 +594,18 @@ export async function GET(
           improvement,
           isImproving,
           rank: 0, // Will be set after sorting
-          // Add term-specific numeric grades for per-term counting
+          // Add term-specific numeric grades and percentages for per-term counting and sorting
           termGrades: {
             PRELIM: prelimNumeric,
             MIDTERM: midtermNumeric,
             PREFINALS: prefinalNumeric,
             FINALS: finalNumeric,
+          },
+          termPercentages: {
+            PRELIM: prelimGrade,
+            MIDTERM: midtermGrade,
+            PREFINALS: prefinalGrade,
+            FINALS: finalGrade,
           },
         };
       })

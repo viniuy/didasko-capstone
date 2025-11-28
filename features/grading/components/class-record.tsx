@@ -1145,6 +1145,14 @@ export function ClassRecordTable({
     setCurrentPage(1);
   }, [search]);
 
+  // Dispatch custom event when activeTerm changes to sync with leaderboard
+  useEffect(() => {
+    const event = new CustomEvent("classRecordTermChanged", {
+      detail: { courseSlug, activeTerm },
+    });
+    window.dispatchEvent(event);
+  }, [activeTerm, courseSlug]);
+
   const studentName = (s: Student) =>
     `${s.lastName}, ${s.firstName}${
       s.middleInitial ? ` ${s.middleInitial}.` : ""
@@ -1189,6 +1197,13 @@ export function ClassRecordTable({
       const updatedConfigs = response?.termConfigs || configs;
       setTermConfigs(updatedConfigs);
       setHasTermConfigs(true);
+
+      // Dispatch event to refresh leaderboard
+      const event = new CustomEvent("classRecordSettingsSaved", {
+        detail: { courseSlug },
+      });
+      window.dispatchEvent(event);
+
       // No success toast - only loading toast is shown
     } catch (error: any) {
       console.error("Failed to save settings:", error.response?.data || error);

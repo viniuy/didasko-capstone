@@ -6,13 +6,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { statsService } from "@/lib/services/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface StudentGrade {
   id: string;
@@ -193,9 +186,10 @@ export default function GradingLeaderboard({
   const [gradeCounts, setGradeCounts] = useState<GradeCount[]>([]);
   const [studentRankings, setStudentRankings] = useState<StudentGrade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTerm, setSelectedTerm] = useState<
+  // Synced term from class record component - defaults to PRELIM on first load
+  const [syncedTerm, setSyncedTerm] = useState<
     "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
-  >("FINAL");
+  >("PRELIM");
 
   const fetchLeaderboard = useCallback(
     async (silent = false) => {
@@ -230,7 +224,7 @@ export default function GradingLeaderboard({
         data.forEach((student) => {
           let numericGrade: string | null = null;
 
-          if (selectedTerm === "FINAL") {
+          if (syncedTerm === "FINAL") {
             // Use final grade
             numericGrade =
               student.numericGrade ||
@@ -250,7 +244,7 @@ export default function GradingLeaderboard({
               })();
           } else {
             // Use term-specific grade
-            numericGrade = student.termGrades?.[selectedTerm] || null;
+            numericGrade = student.termGrades?.[syncedTerm] || null;
           }
 
           if (numericGrade) {
@@ -275,7 +269,7 @@ export default function GradingLeaderboard({
             let gradeToUse: number;
             let numericGradeToUse: string | null;
 
-            if (selectedTerm === "FINAL") {
+            if (syncedTerm === "FINAL") {
               // Use final grade
               gradeToUse = student.currentGrade;
               numericGradeToUse =
@@ -294,32 +288,16 @@ export default function GradingLeaderboard({
                   return "5.00";
                 })();
             } else {
-              // Use term-specific grade
-              const termNumericGrade = student.termGrades?.[selectedTerm];
+              // Use term-specific grade - use actual percentage from API for accurate sorting
+              const termPercentage = (student as any).termPercentages?.[
+                syncedTerm
+              ];
+              const termNumericGrade = student.termGrades?.[syncedTerm];
               numericGradeToUse = termNumericGrade || null;
 
-              if (termNumericGrade) {
-                // Convert numeric grade to percentage for display
-                const numGrade = parseFloat(termNumericGrade);
-                // Use midpoint of each grade range for better sorting
-                if (numGrade <= 1.0) gradeToUse = 98.75; // midpoint of 97.5-100
-                else if (numGrade <= 1.25)
-                  gradeToUse = 96.0; // midpoint of 94.5-97.5
-                else if (numGrade <= 1.5)
-                  gradeToUse = 93.0; // midpoint of 91.5-94.5
-                else if (numGrade <= 1.75)
-                  gradeToUse = 89.0; // midpoint of 86.5-91.5
-                else if (numGrade <= 2.0)
-                  gradeToUse = 84.0; // midpoint of 81.5-86.5
-                else if (numGrade <= 2.25)
-                  gradeToUse = 78.5; // midpoint of 76.0-81.5
-                else if (numGrade <= 2.5)
-                  gradeToUse = 73.25; // midpoint of 70.5-76.0
-                else if (numGrade <= 2.75)
-                  gradeToUse = 67.75; // midpoint of 65.0-70.5
-                else if (numGrade <= 3.0)
-                  gradeToUse = 62.25; // midpoint of 59.5-65.0
-                else gradeToUse = 0; // 5.00 (failed)
+              if (termPercentage !== null && termPercentage !== undefined) {
+                // Use the actual percentage from the API (computed with linked criteria)
+                gradeToUse = termPercentage;
               } else {
                 // No grade for this term, use 0 (will be sorted to bottom)
                 gradeToUse = 0;
@@ -351,7 +329,7 @@ export default function GradingLeaderboard({
         }
       }
     },
-    [session?.user?.id, courseSlug, selectedTerm]
+    [session?.user?.id, courseSlug, syncedTerm]
   );
 
   useEffect(() => {
@@ -359,6 +337,55 @@ export default function GradingLeaderboard({
       fetchLeaderboard(false);
     }
   }, [status, fetchLeaderboard]);
+
+  // Refetch when syncedTerm changes
+  useEffect(() => {
+    if (status === "authenticated" && syncedTerm) {
+      fetchLeaderboard(false);
+    }
+  }, [syncedTerm, status, fetchLeaderboard]);
+
+  // Listen for term changes from class record component
+  useEffect(() => {
+    const handleTermChanged = (event: CustomEvent) => {
+      const { courseSlug: eventCourseSlug, activeTerm } = event.detail || {};
+
+      // Only sync if this leaderboard matches the course or if no courseSlug (general leaderboard)
+      if (eventCourseSlug === courseSlug || !courseSlug) {
+        // Map class record terms to leaderboard terms
+        let mappedTerm: "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL";
+
+        if (activeTerm === "SUMMARY") {
+          mappedTerm = "FINAL";
+        } else if (activeTerm === "PRELIM") {
+          mappedTerm = "PRELIM";
+        } else if (activeTerm === "MIDTERM") {
+          mappedTerm = "MIDTERM";
+        } else if (activeTerm === "PREFINALS") {
+          mappedTerm = "PREFINALS";
+        } else if (activeTerm === "FINALS") {
+          mappedTerm = "FINALS";
+        } else {
+          // Default to FINAL if unknown term
+          mappedTerm = "FINAL";
+        }
+
+        setSyncedTerm(mappedTerm);
+      }
+    };
+
+    window.addEventListener(
+      "classRecordTermChanged",
+      handleTermChanged as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "classRecordTermChanged",
+        handleTermChanged as EventListener
+      );
+    };
+  }, [courseSlug]);
 
   // Listen for grade updates to refresh seamlessly
   useEffect(() => {
@@ -385,6 +412,30 @@ export default function GradingLeaderboard({
       window.removeEventListener(
         "gradesUpdated",
         handleGradesUpdated as EventListener
+      );
+    };
+  }, [courseSlug, fetchLeaderboard]);
+
+  // Listen for settings saved to refresh leaderboard
+  useEffect(() => {
+    const handleSettingsSaved = (event: CustomEvent) => {
+      const savedCourseSlug = event.detail?.courseSlug;
+      // Only refresh if this leaderboard matches the course or if no courseSlug (general leaderboard)
+      if (savedCourseSlug === courseSlug || !courseSlug) {
+        // Refresh leaderboard when settings are saved (term configs may have changed)
+        fetchLeaderboard(false);
+      }
+    };
+
+    window.addEventListener(
+      "classRecordSettingsSaved",
+      handleSettingsSaved as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "classRecordSettingsSaved",
+        handleSettingsSaved as EventListener
       );
     };
   }, [courseSlug, fetchLeaderboard]);
@@ -426,13 +477,28 @@ export default function GradingLeaderboard({
 
   return (
     <Card className="bg-[#124A69] border-white/20 h-full flex flex-col overflow-hidden">
-      <CardHeader className="pb-3 flex-shrink-0">
-        <CardTitle className="text-white text-lg flex items-center gap-2 -mb-8">
+      <CardHeader className="flex-shrink-0">
+        <CardTitle className="text-white text-lg flex items-center gap-2 -mb-9">
           <Trophy className="h-5 w-5" />
           Grade Leaderboard
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden flex flex-col">
+        <div className="mt-2 items-center flex justify-center">
+          <span className="text-xs text-white/70 font-medium">
+            {syncedTerm === "FINAL"
+              ? "Final Grade Rankings"
+              : syncedTerm === "PRELIM"
+              ? "Prelim Rankings"
+              : syncedTerm === "MIDTERM"
+              ? "Midterm Rankings"
+              : syncedTerm === "PREFINALS"
+              ? "Pre-Finals Rankings"
+              : syncedTerm === "FINALS"
+              ? "Finals Rankings"
+              : "Rankings"}
+          </span>
+        </div>
         <Tabs defaultValue="grades" className="h-full flex flex-col">
           <TabsList className="grid w-full grid-cols-2 bg-white/10">
             <TabsTrigger
@@ -449,26 +515,7 @@ export default function GradingLeaderboard({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="grades" className="flex-1 overflow-y-auto mt-3">
-            <div className="mb-3">
-              <Select
-                value={selectedTerm}
-                onValueChange={(
-                  value: "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
-                ) => setSelectedTerm(value)}
-              >
-                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
-                  <SelectValue placeholder="Select term" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FINAL">Final Grade</SelectItem>
-                  <SelectItem value="PRELIM">Prelim</SelectItem>
-                  <SelectItem value="MIDTERM">Midterm</SelectItem>
-                  <SelectItem value="PREFINALS">Pre-Finals</SelectItem>
-                  <SelectItem value="FINALS">Finals</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <TabsContent value="grades" className="flex-1 overflow-y-auto">
             {gradeCounts.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-white/70">No grades available yet</p>
@@ -482,25 +529,6 @@ export default function GradingLeaderboard({
             value="rankings"
             className="flex-1 overflow-y-auto mt-3 space-y-2"
           >
-            <div className="mb-3">
-              <Select
-                value={selectedTerm}
-                onValueChange={(
-                  value: "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
-                ) => setSelectedTerm(value)}
-              >
-                <SelectTrigger className="w-full bg-white/10 border-white/20 text-white">
-                  <SelectValue placeholder="Select term" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FINAL">Final Grade</SelectItem>
-                  <SelectItem value="PRELIM">Prelim</SelectItem>
-                  <SelectItem value="MIDTERM">Midterm</SelectItem>
-                  <SelectItem value="PREFINALS">Pre-Finals</SelectItem>
-                  <SelectItem value="FINALS">Finals</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             {studentRankings.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-sm text-white/70">
@@ -508,9 +536,7 @@ export default function GradingLeaderboard({
                 </p>
                 <p className="text-xs text-white/50 mt-2">
                   Rankings are based on{" "}
-                  {selectedTerm === "FINAL"
-                    ? "final"
-                    : selectedTerm.toLowerCase()}{" "}
+                  {syncedTerm === "FINAL" ? "final" : syncedTerm.toLowerCase()}{" "}
                   grades
                 </p>
               </div>
@@ -519,9 +545,9 @@ export default function GradingLeaderboard({
                 <div className="mb-2 px-1">
                   <p className="text-xs text-white/60 italic">
                     Ranked by{" "}
-                    {selectedTerm === "FINAL"
+                    {syncedTerm === "FINAL"
                       ? "final"
-                      : selectedTerm.toLowerCase()}{" "}
+                      : syncedTerm.toLowerCase()}{" "}
                     grade (highest to lowest)
                   </p>
                 </div>
