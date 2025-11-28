@@ -286,6 +286,7 @@ export function useRecordAttendance() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.leaderboard(variables.courseSlug),
       });
+      // Invalidate leaderboardAll to update right sidebar
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.leaderboardAll(),
       });
@@ -338,6 +339,7 @@ export function useBatchAttendance() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.leaderboard(variables.courseSlug),
       });
+      // Invalidate leaderboardAll to update right sidebar
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.leaderboardAll(),
       });
@@ -399,6 +401,10 @@ export function useClearAttendance() {
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.attendance.leaderboard(variables.courseSlug),
+      });
+      // Invalidate leaderboardAll to update right sidebar
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.attendance.leaderboardAll(),
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.courses.analytics(variables.courseSlug),

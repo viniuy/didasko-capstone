@@ -96,6 +96,7 @@ import axios from "@/lib/axios";
 import AnimatedContent from "@/components/ui/AnimatedContent";
 import SplitText from "@/components/ui/SplitText";
 import { checkActiveRfidSession } from "@/lib/utils/rfid-session";
+import { checkCourseSlugExists } from "@/lib/actions/courses";
 
 interface CourseStats {
   passingRate: number;
@@ -147,7 +148,7 @@ interface CourseDataTableProps {
 }
 
 interface CsvRow {
-  "Course Code": string;
+  "Course Abbreviation": string;
   "Course Title": string;
   Room: string;
   Semester: string;
@@ -194,7 +195,7 @@ const useItemsPerPage = () => {
         items = 1;
       } else if (width < 1280) {
         items = 2;
-      } else if (width < 1536) {
+      } else if (width < 1600) {
         items = 3;
       } else {
         items = 4;
@@ -214,7 +215,7 @@ const useItemsPerPage = () => {
   return itemsPerPage;
 };
 const EXPECTED_HEADERS = [
-  "Course Code",
+  "Course Abbreviation",
   "Course Title",
   "Room",
   "Semester",
@@ -609,6 +610,7 @@ export function CourseDataTable({
     error?: string;
     hasError?: boolean;
   } | null>(null);
+  const [importedRows, setImportedRows] = useState<Set<number>>(new Set());
 
   // React Query hooks
   const queryClient = useQueryClient();
@@ -1637,7 +1639,7 @@ export function CourseDataTable({
 
         // Add header row
         const headerRow = worksheet.addRow([
-          "Course Code",
+          "Course Abbreviation",
           "Course Title",
           "Room",
           "Semester",
@@ -1780,7 +1782,7 @@ export function CourseDataTable({
       instructionTitle.alignment = { vertical: "middle", horizontal: "left" };
 
       const instructions = [
-        "1. Course Code must be unique (e.g., CS101, MATH201)",
+        "1. Course Abbreviation must be unique per section and academic year (e.g., CS101, MATH201)",
         "2. Semester must be exactly: 1st Semester or 2nd Semester",
         "3. Status must be exactly: Active, Inactive, or Archived",
         "4. All fields are required - do not leave any cell empty",
@@ -1805,7 +1807,7 @@ export function CourseDataTable({
 
       // Header
       const headerRow = worksheet.addRow([
-        "Course Code",
+        "Course Abbreviation",
         "Course Title",
         "Room",
         "Semester",
@@ -1931,7 +1933,7 @@ export function CourseDataTable({
 
       let headerRowIndex = -1;
       const EXPECTED_HEADERS = [
-        "Course Code",
+        "Course Abbreviation",
         "Course Title",
         "Room",
         "Semester",
@@ -2119,7 +2121,7 @@ export function CourseDataTable({
 
       for (let rowIndex = 0; rowIndex < previewData.length; rowIndex++) {
         const row = previewData[rowIndex];
-        const code = row["Course Code"]?.trim().toUpperCase() || "";
+        const code = row["Course Abbreviation"]?.trim().toUpperCase() || "";
         const title = row["Course Title"]?.trim() || "";
         const section = row["Section"]?.trim().toUpperCase() || "";
         let academicYear = row["Academic Year"]?.trim() || "";
@@ -2134,11 +2136,11 @@ export function CourseDataTable({
         // Validation errors
         const errors: string[] = [];
 
-        // Validate course code
+        // Validate course abbreviation
         if (!code) {
-          errors.push("Course Code is required");
+          errors.push("Course Abbreviation is required");
         } else if (code.length > 15) {
-          errors.push("Course Code must be 15 characters or less");
+          errors.push("Course Abbreviation must be 15 characters or less");
         }
 
         // Validate course title
@@ -2225,16 +2227,16 @@ export function CourseDataTable({
           continue;
         }
 
-        // Check if course already exists in database (case-insensitive comparison)
-        const isDuplicate = existingCourses.some(
-          (c: any) =>
-            c.code?.trim().toUpperCase() === code &&
-            c.section?.trim().toUpperCase() === section &&
-            c.academicYear?.trim() === academicYear &&
-            c.semester?.trim() === semester
-        );
+        // Check if course slug already exists using the server action
+        let slugExists = false;
+        try {
+          slugExists = await checkCourseSlugExists(code, academicYear, section);
+        } catch (error) {
+          console.error("Error checking course slug:", error);
+          // Continue with validation - server will catch it
+        }
 
-        if (isDuplicate) {
+        if (slugExists) {
           validationErrors.push({
             row: rowIndex + 2,
             code: code || "N/A",
@@ -2250,7 +2252,7 @@ export function CourseDataTable({
           // Use cleaned and normalized values
           validCourses.push({
             ...row,
-            "Course Code": code,
+            "Course Abbreviation": code,
             "Course Title": title.trim(),
             Section: section,
             Room: room.toUpperCase(),
@@ -2330,7 +2332,7 @@ export function CourseDataTable({
       // Prepare courses for schedule assignment (NO database import yet)
       const coursesToImport = validCourses.map((row, index) => ({
         tempId: `temp-${index}`,
-        code: row["Course Code"],
+        code: row["Course Abbreviation"],
         title: row["Course Title"],
         section: row["Section"],
         room: row["Room"],
@@ -2409,6 +2411,21 @@ export function CourseDataTable({
             (importResults.failed || 0) +
             skippedFromApi ||
           imported + (importResults.failed || 0) + totalSkipped;
+
+        // Track which rows were successfully imported
+        const newImportedRows = new Set<number>();
+        allFeedback.forEach((feedback) => {
+          if (feedback.status === "imported" && feedback.row) {
+            // Convert row number (Excel row) to preview index (0-based)
+            // Row numbers are Excel row numbers (starting from 1, with header at row 1)
+            // So row 2 = index 0, row 3 = index 1, etc.
+            const previewIndex = feedback.row - 2;
+            if (previewIndex >= 0 && previewIndex < previewData.length) {
+              newImportedRows.add(previewIndex);
+            }
+          }
+        });
+        setImportedRows(newImportedRows);
 
         // Map the results to match ImportStatus interface
         const status: ImportStatus = {
@@ -2489,6 +2506,7 @@ export function CourseDataTable({
         setPreviewData([]);
         setIsValidFile(false);
         setPreImportValidationErrors([]);
+        setImportedRows(new Set());
       } finally {
         // Clear editing states after everything is complete
         setIsEditingSchedule(false);
@@ -2507,6 +2525,7 @@ export function CourseDataTable({
       scheduleDialogMode,
       preImportValidationErrors,
       queryClient,
+      previewData,
     ]
   );
 
@@ -3241,6 +3260,7 @@ export function CourseDataTable({
                   setPreviewData([]);
                   setIsValidFile(false);
                   setImportProgress(null);
+                  setImportedRows(new Set());
                 }
               }}
               previewData={previewData}
@@ -3250,6 +3270,7 @@ export function CourseDataTable({
               onImport={handleImport}
               onDownloadTemplate={handleImportTemplate}
               importProgress={importProgress}
+              importedRows={importedRows}
             />
 
             {/* Validating Dialog */}

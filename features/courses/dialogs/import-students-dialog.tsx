@@ -334,46 +334,50 @@ export function StudentImportDialog({
                 className="hidden"
               />
 
-              {/* Drag and Drop Zone */}
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-lg p-8 transition-all ${
-                  isDragging
-                    ? "border-[#124A69] bg-[#124A69]/5"
-                    : "border-gray-300 bg-gray-50 hover:border-[#124A69]/50 hover:bg-gray-100/50"
-                } ${
-                  importProgress
-                    ? "opacity-50 pointer-events-none"
-                    : "cursor-pointer"
-                }`}
-                onClick={() => !importProgress && fileInputRef.current?.click()}
-              >
-                <div className="flex flex-col items-center justify-center gap-3 text-center">
-                  <Upload
-                    className={`h-10 w-10 ${
-                      isDragging ? "text-[#124A69]" : "text-gray-400"
-                    }`}
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">
-                      {isDragging
-                        ? "Drop file here"
-                        : "Drag and drop your Excel file here"}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      or{" "}
-                      <span className="text-[#124A69] font-medium underline">
-                        click to browse
-                      </span>
+              {/* Drag and Drop Zone - Hidden when file is imported */}
+              {previewData.length === 0 && (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-lg p-8 transition-all ${
+                    isDragging
+                      ? "border-[#124A69] bg-[#124A69]/5"
+                      : "border-gray-300 bg-gray-50 hover:border-[#124A69]/50 hover:bg-gray-100/50"
+                  } ${
+                    importProgress
+                      ? "opacity-50 pointer-events-none"
+                      : "cursor-pointer"
+                  }`}
+                  onClick={() =>
+                    !importProgress && fileInputRef.current?.click()
+                  }
+                >
+                  <div className="flex flex-col items-center justify-center gap-3 text-center">
+                    <Upload
+                      className={`h-10 w-10 ${
+                        isDragging ? "text-[#124A69]" : "text-gray-400"
+                      }`}
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">
+                        {isDragging
+                          ? "Drop file here"
+                          : "Drag and drop your Excel file here"}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        or{" "}
+                        <span className="text-[#124A69] font-medium underline">
+                          click to browse
+                        </span>
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Only .xlsx files are supported
                     </p>
                   </div>
-                  <p className="text-xs text-gray-400">
-                    Only .xlsx files are supported
-                  </p>
                 </div>
-              </div>
+              )}
 
               {/* Selected File Info */}
               {selectedFile && (

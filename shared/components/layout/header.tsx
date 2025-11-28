@@ -92,8 +92,8 @@ export default function Header() {
             height={76}
             className="w-32 h-auto sm:w-48 md:w-60 sm:h-19"
           />
-          {/* Break-Glass Compact - Accessible everywhere for Academic Head */}
-          <BreakGlassCompact />
+          {/* Break-Glass Compact - Only show for Academic Head and permanent Admin, not temporary Admin */}
+          {!isChecking && !isTempAdmin && <BreakGlassCompact />}
           {/* Temp Admin Button */}
           {!isChecking && isTempAdmin && (
             <Button

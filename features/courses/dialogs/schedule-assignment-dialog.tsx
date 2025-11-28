@@ -129,8 +129,25 @@ export function ScheduleAssignmentDialog({
           ? existingSchedules
           : [{ day: "", fromTime: "", toTime: "" }]
       );
+    } else if (
+      open &&
+      currentCourse &&
+      mode === "import" &&
+      currentCourse.schedules
+    ) {
+      // For import mode, populate existing schedules if available
+      const existingSchedules = currentCourse.schedules.map((s) => ({
+        day: expandDayName(s.day),
+        fromTime: s.fromTime,
+        toTime: s.toTime,
+      }));
+      setCurrentSchedules(
+        existingSchedules.length > 0
+          ? existingSchedules
+          : [{ day: "", fromTime: "", toTime: "" }]
+      );
     } else if (open) {
-      // For create/import mode, start fresh
+      // For create mode, start fresh
       setCurrentSchedules([{ day: "", fromTime: "", toTime: "" }]);
     }
   }, [open, currentCourse, mode, currentIndex]);

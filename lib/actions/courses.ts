@@ -37,16 +37,6 @@ export async function createCourse(data: CourseInput, isFromImport = false) {
       };
     }
 
-    // duplicate check
-    const existing = await prisma.course.findFirst({
-      where: { code: data.code },
-    });
-    if (existing)
-      return {
-        success: false,
-        error: "A course with this code already exists",
-      };
-
     // optional faculty check
     if (data.facultyId) {
       const faculty = await prisma.user.findUnique({
@@ -220,28 +210,37 @@ export async function editCourse(
     });
     if (!existingCourse) return { success: false, error: "Course not found" };
 
-    // if changing code, ensure uniqueness
-    if (data.code && data.code !== existingCourse.code) {
-      // Check for duplicate code
-      const dupCode = await prisma.course.findFirst({
-        where: { code: data.code, id: { not: courseId } },
-      });
-      if (dupCode) {
-        return {
-          success: false,
-          error: "A course with this code already exists",
-        };
-      }
+    // Check for duplicate slug if code, academicYear, or section changed
+    const codeChanged = data.code && data.code !== existingCourse.code;
+    const academicYearChanged =
+      data.academicYear && data.academicYear !== existingCourse.academicYear;
+    const sectionChanged =
+      data.section && data.section !== existingCourse.section;
 
-      // Check for duplicate slug (since slug is generated from code)
-      const newSlug = data.code.toLowerCase().replace(/\s+/g, "-");
+    if (codeChanged || academicYearChanged || sectionChanged) {
+      // Generate slug from updated values (use new values if provided, otherwise existing)
+      const codeToUse = data.code || existingCourse.code;
+      const academicYearToUse =
+        data.academicYear || existingCourse.academicYear;
+      const sectionToUse = data.section || existingCourse.section;
+
+      const normalizedCode = codeToUse.toLowerCase().replace(/\s+/g, "-");
+      const normalizedAcademicYear = academicYearToUse
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/\//g, "-");
+      const normalizedSection = sectionToUse.toLowerCase().replace(/\s+/g, "-");
+      const newSlug = `${normalizedCode}-${normalizedAcademicYear}-${normalizedSection}`;
+
+      // Check for duplicate slug
       const dupSlug = await prisma.course.findUnique({
         where: { slug: newSlug },
       });
       if (dupSlug && dupSlug.id !== courseId) {
         return {
           success: false,
-          error: "A course with this code already exists (slug conflict)",
+          error:
+            "A course with this code, section, and academic year already exists",
         };
       }
     }
@@ -251,6 +250,23 @@ export async function editCourse(
         where: { id: data.facultyId },
       });
       if (!faculty) return { success: false, error: "Faculty not found" };
+    }
+
+    // Generate slug if code, academicYear, or section changed
+    let newSlug: string | undefined;
+    if (codeChanged || academicYearChanged || sectionChanged) {
+      const codeToUse = data.code || existingCourse.code;
+      const academicYearToUse =
+        data.academicYear || existingCourse.academicYear;
+      const sectionToUse = data.section || existingCourse.section;
+
+      const normalizedCode = codeToUse.toLowerCase().replace(/\s+/g, "-");
+      const normalizedAcademicYear = academicYearToUse
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/\//g, "-");
+      const normalizedSection = sectionToUse.toLowerCase().replace(/\s+/g, "-");
+      newSlug = `${normalizedCode}-${normalizedAcademicYear}-${normalizedSection}`;
     }
 
     // Build update payload for scalar fields only (exclude schedules)
@@ -266,10 +282,8 @@ export async function editCourse(
       ...(data.section !== undefined && { section: data.section }),
       ...(data.facultyId !== undefined && { facultyId: data.facultyId }),
       ...(data.status !== undefined && { status: data.status }),
-      // update slug if code changed
-      ...(data.code
-        ? { slug: data.code.toLowerCase().replace(/\s+/g, "-") }
-        : {}),
+      // update slug if code, academicYear, or section changed
+      ...(newSlug ? { slug: newSlug } : {}),
       updatedAt: new Date(),
     };
 
@@ -393,5 +407,44 @@ export async function editCourse(
       success: false,
       error: err instanceof Error ? err.message : "Failed to update course",
     };
+  }
+}
+
+/** CHECK IF COURSE SLUG EXISTS */
+export async function checkCourseSlugExists(
+  code: string,
+  academicYear: string,
+  section: string,
+  excludeCourseId?: string
+): Promise<boolean> {
+  try {
+    // Generate slug: code-academicyear-section
+    const normalizedCode = code.toLowerCase().replace(/\s+/g, "-");
+    const normalizedAcademicYear = academicYear
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/\//g, "-"); // Replace slashes with dashes
+    const normalizedSection = section.toLowerCase().replace(/\s+/g, "-");
+    const slug = `${normalizedCode}-${normalizedAcademicYear}-${normalizedSection}`;
+
+    // Check if slug exists
+    const existingCourse = await prisma.course.findUnique({
+      where: { slug },
+    });
+
+    // If checking for edit mode, exclude the current course
+    if (
+      existingCourse &&
+      excludeCourseId &&
+      existingCourse.id === excludeCourseId
+    ) {
+      return false;
+    }
+
+    return !!existingCourse;
+  } catch (error) {
+    console.error("Error checking course slug:", error);
+    // Return false on error to allow form submission (server will catch it)
+    return false;
   }
 }

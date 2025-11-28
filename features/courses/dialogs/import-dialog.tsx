@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import { Upload, Download } from "lucide-react";
 
 const MAX_PREVIEW_ROWS = 100;
 const EXPECTED_HEADERS = [
-  "Course Code",
+  "Course Abbreviation",
   "Course Title",
   "Room",
   "Semester",
@@ -25,7 +25,7 @@ const EXPECTED_HEADERS = [
 ];
 
 interface CsvRow {
-  "Course Code": string;
+  "Course Abbreviation": string;
   "Course Title": string;
   Room: string;
   Semester: string;
@@ -49,6 +49,7 @@ interface ImportDialogProps {
     total: number;
     status: string;
   } | null;
+  importedRows?: Set<number>; // Track which rows were successfully imported
 }
 
 export function ImportDialog({
@@ -61,8 +62,46 @@ export function ImportDialog({
   onImport,
   onDownloadTemplate,
   importProgress,
+  importedRows = new Set(),
 }: ImportDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!importProgress && !selectedFile) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (importProgress || selectedFile) return;
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      // Validate file type
+      const extension = file.name.toLowerCase().split(".").pop();
+      if (extension !== "xlsx") {
+        return;
+      }
+      // Create a synthetic event to trigger onFileChange
+      const syntheticEvent = {
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+      onFileChange(syntheticEvent);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -85,42 +124,76 @@ export function ImportDialog({
 
         <div className="mt-6 space-y-6">
           {/* File Upload Section */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={onFileChange}
-              accept=".xlsx"
-              className="hidden"
-            />
-            <Button
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 bg-white hover:bg-gray-50"
-              disabled={!!importProgress}
-            >
-              <Upload className="h-4 w-4" />
-              Choose File
-            </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={onFileChange}
+            accept=".xlsx"
+            className="hidden"
+          />
 
-            {selectedFile && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600 truncate max-w-[200px]">
-                  {selectedFile.name}
-                </span>
-                <Badge
-                  variant={isValidFile ? "default" : "destructive"}
-                  className={
-                    isValidFile
-                      ? "bg-[#124A69] text-white hover:bg-[#0D3A54]"
-                      : ""
-                  }
-                >
-                  {isValidFile ? "Valid" : "Invalid"}
-                </Badge>
+          {/* Drag and Drop Zone - Hidden when file is selected */}
+          {!selectedFile && (
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => !importProgress && fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-8 transition-all ${
+                isDragging
+                  ? "border-[#124A69] bg-[#124A69]/5"
+                  : "border-gray-300 bg-gray-50 hover:border-[#124A69]/50 hover:bg-gray-100/50"
+              } ${
+                importProgress
+                  ? "opacity-50 pointer-events-none"
+                  : "cursor-pointer"
+              }`}
+            >
+              <div className="flex flex-col items-center justify-center gap-3 text-center">
+                <Upload
+                  className={`h-10 w-10 ${
+                    isDragging ? "text-[#124A69]" : "text-gray-400"
+                  }`}
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">
+                    {isDragging
+                      ? "Drop file here"
+                      : "Drag and drop your Excel file here"}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    or{" "}
+                    <span className="text-[#124A69] font-medium underline">
+                      click to browse
+                    </span>
+                  </p>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Only .xlsx files are supported
+                </p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Selected File Info */}
+          {selectedFile && (
+            <div className="flex items-center gap-2 p-3 bg-white border rounded-lg">
+              <Upload className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-700 truncate flex-1">
+                {selectedFile.name}
+              </span>
+              <Badge
+                variant={isValidFile ? "default" : "destructive"}
+                className={
+                  isValidFile
+                    ? "bg-[#124A69] text-white hover:bg-[#0D3A54]"
+                    : ""
+                }
+              >
+                {isValidFile ? "Valid" : "Invalid"}
+              </Badge>
+            </div>
+          )}
 
           {/* Preview Section */}
           {previewData.length > 0 ? (
@@ -155,50 +228,50 @@ export function ImportDialog({
                   <tbody>
                     {previewData
                       .slice(0, MAX_PREVIEW_ROWS)
-                      .map((row, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-2 text-xs text-gray-500">
-                            {index + 1}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Course Code"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900 max-w-[200px] truncate">
-                            {row["Course Title"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Room"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Semester"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Academic Year"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Class Number"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Section"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Status"]}
-                          </td>
-                        </tr>
-                      ))}
+                      .map((row, index) => {
+                        const isImported = importedRows.has(index);
+                        return (
+                          <tr
+                            key={index}
+                            className={`border-b hover:bg-gray-50 ${
+                              isImported ? "bg-green-50 hover:bg-green-100" : ""
+                            }`}
+                          >
+                            <td className="px-4 py-2 text-xs text-gray-500">
+                              {index + 1}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Course Abbreviation"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900 max-w-[200px] truncate">
+                              {row["Course Title"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Room"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Semester"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Academic Year"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Class Number"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Section"]}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {row["Status"]}
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
             </div>
-          ) : (
-            <div className="text-center p-8 border-2 border-dashed rounded-lg bg-gray-50">
-              <Upload className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600 font-medium mb-1">No file selected</p>
-              <p className="text-sm text-gray-500">
-                Upload an Excel file to preview the data before importing
-              </p>
-            </div>
-          )}
+          ) : null}
 
           {/* Import Progress */}
           {importProgress && (

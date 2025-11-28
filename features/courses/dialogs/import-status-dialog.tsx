@@ -100,10 +100,15 @@ export function ImportStatusDialog({
   const summaryStats = useMemo(() => {
     if (!importStatus) return { imported: 0, skipped: 0, errors: 0 };
 
+    // Use importStatus.imported directly if available, otherwise count from detailedFeedback
+    const importedCount =
+      importStatus.imported ||
+      importStatus.detailedFeedback.filter(
+        (f) => f.status === "imported" || f.status === "success"
+      ).length;
+
     return {
-      imported: importStatus.detailedFeedback.filter(
-        (f) => f.status === "imported"
-      ).length,
+      imported: importedCount,
       skipped: importStatus.detailedFeedback.filter(
         (f) => f.status === "skipped"
       ).length,
@@ -271,51 +276,64 @@ export function ImportStatusDialog({
                         </thead>
                         <tbody>
                           {importStatus.detailedFeedback.map(
-                            (feedback, index) => (
-                              <tr
-                                key={index}
-                                className="border-t hover:bg-gray-50 transition-colors"
-                              >
-                                <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 whitespace-nowrap">
-                                  {feedback.row || index + 1}
-                                </td>
-                                <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 font-medium font-mono">
-                                  {feedback.code ||
-                                    feedback.studentNumber ||
-                                    "N/A"}
-                                </td>
-                                <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap">
-                                  <Badge
-                                    variant={
-                                      feedback.status === "imported"
-                                        ? "default"
-                                        : feedback.status === "skipped"
-                                        ? "secondary"
-                                        : "destructive"
-                                    }
-                                    className={
-                                      feedback.status === "imported"
-                                        ? "bg-green-500 hover:bg-green-600 text-white text-xs border-0"
-                                        : feedback.status === "skipped"
-                                        ? "text-xs"
-                                        : "text-xs"
-                                    }
-                                  >
-                                    {feedback.status.charAt(0).toUpperCase() +
-                                      feedback.status.slice(1)}
-                                  </Badge>
-                                </td>
-                                <td
-                                  className={`px-2 sm:px-4 py-2 text-xs sm:text-sm ${
-                                    feedback.status === "error"
-                                      ? "text-red-600"
-                                      : "text-gray-900"
-                                  } break-words max-w-[300px]`}
+                            (feedback, index) => {
+                              const isImported =
+                                feedback.status === "imported" ||
+                                feedback.status === "success";
+                              return (
+                                <tr
+                                  key={index}
+                                  className={`border-t hover:bg-gray-50 transition-colors ${
+                                    isImported
+                                      ? "bg-green-50 hover:bg-green-100"
+                                      : ""
+                                  }`}
                                 >
-                                  {feedback.message || "-"}
-                                </td>
-                              </tr>
-                            )
+                                  <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 whitespace-nowrap">
+                                    {feedback.row || index + 1}
+                                  </td>
+                                  <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 font-medium font-mono">
+                                    {feedback.code ||
+                                      feedback.studentNumber ||
+                                      "N/A"}
+                                  </td>
+                                  <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium whitespace-nowrap">
+                                    <Badge
+                                      variant={
+                                        isImported
+                                          ? "default"
+                                          : feedback.status === "skipped"
+                                          ? "secondary"
+                                          : "destructive"
+                                      }
+                                      className={
+                                        isImported
+                                          ? "bg-green-500 hover:bg-green-600 text-white text-xs border-0"
+                                          : feedback.status === "skipped"
+                                          ? "text-xs"
+                                          : "text-xs"
+                                      }
+                                    >
+                                      {feedback.status === "success"
+                                        ? "Imported"
+                                        : feedback.status
+                                            .charAt(0)
+                                            .toUpperCase() +
+                                          feedback.status.slice(1)}
+                                    </Badge>
+                                  </td>
+                                  <td
+                                    className={`px-2 sm:px-4 py-2 text-xs sm:text-sm ${
+                                      feedback.status === "error"
+                                        ? "text-red-600"
+                                        : "text-gray-900"
+                                    } break-words max-w-[300px]`}
+                                  >
+                                    {feedback.message || "-"}
+                                  </td>
+                                </tr>
+                              );
+                            }
                           )}
                         </tbody>
                       </table>

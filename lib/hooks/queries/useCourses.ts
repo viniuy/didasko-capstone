@@ -629,13 +629,22 @@ export function useImportCoursesWithSchedulesArray() {
       queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
       queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
-      toast.success("Courses with schedules imported successfully");
+      // Invalidate statsBatch queries explicitly (same as useCreateCourse behavior)
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length >= 2 &&
+            key[0] === "courses" &&
+            key[1] === "statsBatch"
+          );
+        },
+      });
+      toast.success("Courses imported successfully");
     },
     onError: (error: any) => {
-      toast.error(
-        error?.response?.data?.error ||
-          "Failed to import courses with schedules"
-      );
+      toast.error(error?.response?.data?.error || "Failed to import courses");
     },
   });
 }

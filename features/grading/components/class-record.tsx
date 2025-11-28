@@ -2018,6 +2018,14 @@ export function ClassRecordTable({
           courseSlug={courseSlug}
         />
 
+        {/* Export Dialog - Must be rendered here for SUMMARY view */}
+        <ExportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          onExport={handleExportToExcel}
+          availableTerms={Object.keys(termConfigs) as Term[]}
+        />
+
         <PasteGradesModal
           isOpen={isPasteModalOpen}
           onClose={() => setIsPasteModalOpen(false)}

@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 interface BottomActionBarProps {
   activeReport: {
     name: string;
+    scoringRange?: string;
   } | null;
   previousScores: Record<string, any> | null;
   isLoading: boolean;
@@ -33,6 +34,18 @@ export function BottomActionBar({
         <span className="font-medium text-[#124A69] ml-1">
           {activeReport?.name}
         </span>
+        {activeReport?.scoringRange && (
+          <>
+            {" "}
+            <span className="text-gray-400 mx-1">•</span>
+            <span className="text-gray-500">
+              Scoring Range:{" "}
+              <span className="font-medium text-[#124A69]">
+                1-{activeReport.scoringRange}
+              </span>
+            </span>
+          </>
+        )}
       </div>
       <div className="flex gap-2">
         <Button

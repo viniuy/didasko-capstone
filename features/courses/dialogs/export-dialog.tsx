@@ -22,7 +22,7 @@ import { useArchivedCourses } from "@/lib/hooks/queries";
 
 const MAX_PREVIEW_ROWS = 100;
 const EXPECTED_HEADERS = [
-  "Course Code",
+  "Course Abbreviation",
   "Course Title",
   "Room",
   "Semester",
@@ -133,8 +133,8 @@ export function ExportDialog({
 
     // For ACTIVE filter, use active courses filtered by faculty
     return facultyFilteredActiveCourses.filter(
-        (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
-      );
+      (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+    );
   }, [exportFilter, facultyFilteredActiveCourses, archivedCoursesData]);
 
   // Calculate counts for radio buttons
@@ -170,28 +170,28 @@ export function ExportDialog({
 
         {/* Faculty Selection (Academic Head only) */}
         {isAcademicHead && (
-        <div className="mt-4 space-y-2 flex-shrink-0">
-          <Label
+          <div className="mt-4 space-y-2 flex-shrink-0">
+            <Label
               htmlFor="faculty-filter"
               className="text-sm font-medium text-[#124A69] flex items-center gap-2"
-          >
+            >
               <Users className="w-4 h-4" />
               Select Faculty
-          </Label>
-          <Select
+            </Label>
+            <Select
               value={selectedFacultyId}
               onValueChange={setSelectedFacultyId}
-          >
+            >
               <SelectTrigger id="faculty-filter" className="w-full">
                 <SelectValue placeholder="Select faculty" />
-            </SelectTrigger>
-            <SelectContent>
+              </SelectTrigger>
+              <SelectContent>
                 {currentUserFaculty && (
                   <SelectItem value={currentUserFaculty.id} disabled>
                     {currentUserFaculty.name} (me)
                     {currentUserFaculty.department &&
                       ` - ${currentUserFaculty.department}`}
-              </SelectItem>
+                  </SelectItem>
                 )}
                 {faculties
                   .filter((faculty) => faculty.id !== userId)
@@ -199,10 +199,10 @@ export function ExportDialog({
                     <SelectItem key={faculty.id} value={faculty.id}>
                       {faculty.name}
                       {faculty.department && ` (${faculty.department})`}
-              </SelectItem>
+                    </SelectItem>
                   ))}
-            </SelectContent>
-          </Select>
+              </SelectContent>
+            </Select>
           </div>
         )}
 
@@ -275,80 +275,80 @@ export function ExportDialog({
               </div>
             </div>
           ) : (
-          <div
-            className="flex-1 overflow-auto min-h-0"
-            style={{ maxHeight: `${tableHeight}px` }}
-          >
-            <table className="w-full border-collapse">
-              <thead className="bg-gray-50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-2 sm:px-4 py-2 text-left text-xs font-medium text-gray-500 border-b">
-                    #
-                  </th>
-                  {EXPECTED_HEADERS.map((header) => (
-                    <th
-                      key={header}
-                      className="px-2 sm:px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-nowrap"
-                    >
-                      {header}
+            <div
+              className="flex-1 overflow-auto min-h-0"
+              style={{ maxHeight: `${tableHeight}px` }}
+            >
+              <table className="w-full border-collapse">
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-2 sm:px-4 py-2 text-left text-xs font-medium text-gray-500 border-b">
+                      #
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredExportCourses
-                  .slice(0, MAX_PREVIEW_ROWS)
-                  .map((course, index) => (
-                    <tr
-                      key={index}
-                      className="border-b hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-2 sm:px-4 py-2 text-xs text-gray-500">
-                        {index + 1}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 font-medium">
-                        {course.code}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 max-w-[150px] sm:max-w-[250px] truncate">
-                        {course.title}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                        {course.room}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                        {course.semester}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                        {course.academicYear}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                        {course.classNumber}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                        {course.section}
-                      </td>
-                      <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                        {formatEnumValue(course.status)}
+                    {EXPECTED_HEADERS.map((header) => (
+                      <th
+                        key={header}
+                        className="px-2 sm:px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-nowrap"
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredExportCourses
+                    .slice(0, MAX_PREVIEW_ROWS)
+                    .map((course, index) => (
+                      <tr
+                        key={index}
+                        className="border-b hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-2 sm:px-4 py-2 text-xs text-gray-500">
+                          {index + 1}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 font-medium">
+                          {course.code}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900 max-w-[150px] sm:max-w-[250px] truncate">
+                          {course.title}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
+                          {course.room}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
+                          {course.semester}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
+                          {course.academicYear}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
+                          {course.classNumber}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
+                          {course.section}
+                        </td>
+                        <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
+                          {formatEnumValue(course.status)}
+                        </td>
+                      </tr>
+                    ))}
+                  {filteredExportCourses.length > MAX_PREVIEW_ROWS && (
+                    <tr className="border-t bg-gray-50">
+                      <td
+                        colSpan={9}
+                        className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 text-center font-medium"
+                      >
+                        + {filteredExportCourses.length - MAX_PREVIEW_ROWS} more{" "}
+                        {filteredExportCourses.length - MAX_PREVIEW_ROWS === 1
+                          ? "course"
+                          : "courses"}{" "}
+                        will be exported
                       </td>
                     </tr>
-                  ))}
-                {filteredExportCourses.length > MAX_PREVIEW_ROWS && (
-                  <tr className="border-t bg-gray-50">
-                    <td
-                      colSpan={9}
-                      className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-gray-600 text-center font-medium"
-                    >
-                      + {filteredExportCourses.length - MAX_PREVIEW_ROWS} more{" "}
-                      {filteredExportCourses.length - MAX_PREVIEW_ROWS === 1
-                        ? "course"
-                        : "courses"}{" "}
-                      will be exported
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
 import toast from "react-hot-toast";
-import { editCourse } from "@/lib/actions/courses";
+import { editCourse, checkCourseSlugExists } from "@/lib/actions/courses";
 import { CourseStatus } from "@prisma/client";
 import type { UserRole } from "@/lib/permission";
 
@@ -225,7 +225,27 @@ export function CourseSheet({
       return;
     }
 
+    // Check if course slug already exists
     setIsLoading(true);
+    try {
+      const slugExists = await checkCourseSlugExists(
+        formData.code.trim().toUpperCase(),
+        formData.academicYear.trim(),
+        formData.section.trim().toUpperCase(),
+        mode === "edit" ? course?.id : undefined
+      );
+
+      if (slugExists) {
+        toast.error(
+          "A course with this code, section, and academic year already exists. Please use different values."
+        );
+        setIsLoading(false);
+        return;
+      }
+    } catch (error) {
+      console.error("Error checking course slug:", error);
+      // Continue with submission - server will catch duplicate
+    }
 
     try {
       // Clean room input - remove "Room:" prefix if present

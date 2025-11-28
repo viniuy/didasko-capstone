@@ -190,6 +190,7 @@ export default function GradingLeaderboard({
   const [syncedTerm, setSyncedTerm] = useState<
     "PRELIM" | "MIDTERM" | "PREFINALS" | "FINALS" | "FINAL"
   >("PRELIM");
+  const [isSummaryView, setIsSummaryView] = useState(false);
 
   const fetchLeaderboard = useCallback(
     async (silent = false) => {
@@ -357,17 +358,23 @@ export default function GradingLeaderboard({
 
         if (activeTerm === "SUMMARY") {
           mappedTerm = "FINAL";
+          setIsSummaryView(true);
         } else if (activeTerm === "PRELIM") {
           mappedTerm = "PRELIM";
+          setIsSummaryView(false);
         } else if (activeTerm === "MIDTERM") {
           mappedTerm = "MIDTERM";
+          setIsSummaryView(false);
         } else if (activeTerm === "PREFINALS") {
           mappedTerm = "PREFINALS";
+          setIsSummaryView(false);
         } else if (activeTerm === "FINALS") {
           mappedTerm = "FINALS";
+          setIsSummaryView(false);
         } else {
           // Default to FINAL if unknown term
           mappedTerm = "FINAL";
+          setIsSummaryView(false);
         }
 
         setSyncedTerm(mappedTerm);
@@ -499,14 +506,23 @@ export default function GradingLeaderboard({
               : "Rankings"}
           </span>
         </div>
-        <Tabs defaultValue="grades" className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 bg-white/10">
-            <TabsTrigger
-              value="grades"
-              className="data-[state=active]:bg-white/20 text-white"
-            >
-              Grade Count
-            </TabsTrigger>
+        <Tabs
+          defaultValue={isSummaryView ? "rankings" : "grades"}
+          className="h-full flex flex-col"
+        >
+          <TabsList
+            className={`grid w-full bg-white/10 ${
+              isSummaryView ? "grid-cols-1" : "grid-cols-2"
+            }`}
+          >
+            {!isSummaryView && (
+              <TabsTrigger
+                value="grades"
+                className="data-[state=active]:bg-white/20 text-white"
+              >
+                Grade Count
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="rankings"
               className="data-[state=active]:bg-white/20 text-white"
@@ -515,15 +531,19 @@ export default function GradingLeaderboard({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="grades" className="flex-1 overflow-y-auto">
-            {gradeCounts.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-sm text-white/70">No grades available yet</p>
-              </div>
-            ) : (
-              <GradeCountTable gradeCounts={gradeCounts} />
-            )}
-          </TabsContent>
+          {!isSummaryView && (
+            <TabsContent value="grades" className="flex-1 overflow-y-auto">
+              {gradeCounts.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-white/70">
+                    No grades available yet
+                  </p>
+                </div>
+              ) : (
+                <GradeCountTable gradeCounts={gradeCounts} />
+              )}
+            </TabsContent>
+          )}
 
           <TabsContent
             value="rankings"
