@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import {
   Search,
+  Download,
   Upload,
   GraduationCap,
   Users,
@@ -75,6 +76,7 @@ import {
   type UserRole,
 } from "@/lib/permission";
 import { FacultyFilter } from "./faculty-filter";
+import { ExportDialog } from "../dialogs/export-dialog";
 import { ImportDialog } from "../dialogs/import-dialog";
 import { ImportStatusDialog } from "../dialogs/import-status-dialog";
 import { ScheduleAssignmentDialog } from "../dialogs/schedule-assignment-dialog";
@@ -586,6 +588,7 @@ export function CourseDataTable({
 
   // Import/Export State
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showExportPreview, setShowExportPreview] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
   const [showValidatingDialog, setShowValidatingDialog] = useState(false);
@@ -1568,6 +1571,185 @@ export function CourseDataTable({
       setIsLoading(false);
     }
   };
+
+  // Export handler
+  const handleExport = useCallback(
+    async (exportFilter: "ACTIVE" | "ARCHIVED", facultyId?: string) => {
+      try {
+        // Filter courses based on export option and faculty
+        let coursesToExport: Course[];
+
+        if (exportFilter === "ARCHIVED") {
+          // For archived courses, fetch them from the API
+          const archivedResponse = await fetch(
+            `/api/courses/archived?${facultyId ? `facultyId=${facultyId}` : ""}`
+          );
+          if (archivedResponse.ok) {
+            coursesToExport = await archivedResponse.json();
+          } else {
+            coursesToExport = [];
+          }
+        } else {
+          // For active courses, filter from baseFilteredCourses
+          // First filter by faculty if specified (for Academic Head)
+          if (facultyId) {
+            coursesToExport = baseFilteredCourses.filter(
+              (c) => c.facultyId === facultyId
+            );
+          } else if (userRole === "ACADEMIC_HEAD") {
+            // Academic Head without faculty selection - export all courses
+            coursesToExport = baseFilteredCourses;
+          } else {
+            // Regular faculty - only their own courses
+            coursesToExport = baseFilteredCourses.filter(
+              (c) => c.facultyId === userId
+            );
+          }
+
+          // Then filter by status (ACTIVE/INACTIVE)
+          coursesToExport = coursesToExport.filter(
+            (c) => c.status === "ACTIVE" || c.status === "INACTIVE"
+          );
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Courses");
+
+        // Add title row
+        worksheet.mergeCells("A1:H1");
+        const titleRow = worksheet.getCell("A1");
+        titleRow.value = "COURSE MANAGEMENT DATA";
+        titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+        titleRow.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF124A69" },
+        };
+        titleRow.alignment = { vertical: "middle", horizontal: "center" };
+        worksheet.getRow(1).height = 30;
+
+        // Add date row
+        worksheet.mergeCells("A2:H2");
+        const dateRow = worksheet.getCell("A2");
+        dateRow.value = `Export Date: ${new Date().toLocaleDateString()}`;
+        dateRow.font = { italic: true, size: 11 };
+        dateRow.alignment = { vertical: "middle", horizontal: "center" };
+
+        worksheet.addRow([]);
+
+        // Add header row
+        const headerRow = worksheet.addRow([
+          "Course Abbreviation",
+          "Course Title",
+          "Room",
+          "Semester",
+          "Academic Year",
+          "Class Number",
+          "Section",
+          "Status",
+        ]);
+        headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        headerRow.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF124A69" },
+        };
+        headerRow.alignment = { vertical: "middle", horizontal: "center" };
+        headerRow.height = 25;
+
+        headerRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+
+        // Add data rows
+        coursesToExport.forEach((course: Course) => {
+          const row = worksheet.addRow([
+            course.code,
+            course.title,
+            course.room,
+            course.semester,
+            course.academicYear,
+            course.classNumber.toString(),
+            course.section,
+            formatEnumValue(course.status),
+          ]);
+
+          row.eachCell((cell) => {
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFD3D3D3" } },
+              left: { style: "thin", color: { argb: "FFD3D3D3" } },
+              bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
+              right: { style: "thin", color: { argb: "FFD3D3D3" } },
+            };
+            cell.alignment = { vertical: "middle" };
+          });
+
+          if (row.number % 2 === 0) {
+            row.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFF9FAFB" },
+            };
+          }
+        });
+
+        // Set column widths
+        worksheet.columns = [
+          { width: 15 },
+          { width: 35 },
+          { width: 12 },
+          { width: 18 },
+          { width: 18 },
+          { width: 15 },
+          { width: 12 },
+          { width: 15 },
+        ];
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const filterSuffix = exportFilter === "ACTIVE" ? "active" : "archived";
+        const facultySuffix = facultyId
+          ? `_${
+              faculties
+                .find((f) => f.id === facultyId)
+                ?.name.replace(/\s+/g, "_") || "faculty"
+            }`
+          : "";
+        const filename = `courses_${filterSuffix}${facultySuffix}_${
+          new Date().toISOString().split("T")[0]
+        }.xlsx`;
+        saveAs(blob, filename);
+
+        // Log course export
+        try {
+          await axiosInstance.post("/courses/export", {
+            filter: exportFilter,
+            count: coursesToExport.length,
+            exportedAt: new Date().toISOString(),
+          });
+        } catch (logError) {
+          console.error("Error logging course export:", logError);
+          // Don't fail export if logging fails
+        }
+
+        toast.success(
+          `Successfully exported ${coursesToExport.length} ${filterSuffix} course(s)`
+        );
+        setShowExportPreview(false);
+      } catch (error) {
+        console.error("Export error:", error);
+        toast.error("Failed to export courses");
+      }
+    },
+    [baseFilteredCourses, userRole, userId, faculties]
+  );
 
   // Import template handler
   const handleImportTemplate = useCallback(async () => {
@@ -2735,6 +2917,28 @@ export function CourseDataTable({
                     <Archive className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span className="hidden xl:inline">Archive</span>
                   </Button>
+                  {permissions.canExportData && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowExportPreview(true)}
+                      disabled={
+                        isViewingOtherFaculty ||
+                        isInitialLoading ||
+                        isLoading ||
+                        !hasLoadedOnce ||
+                        activeCoursesCount === 0
+                      }
+                      className="gap-1 xl:gap-2 text-xs xl:text-sm px-2 xl:px-3 py-2 min-h-[44px] sm:min-h-0"
+                      title={
+                        isViewingOtherFaculty
+                          ? "Cannot export courses for other faculties"
+                          : "Export courses"
+                      }
+                    >
+                      <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span className="hidden xl:inline">Export</span>
+                    </Button>
+                  )}
                   {permissions.canImportCourses && (
                     <Button
                       variant="outline"
@@ -3129,6 +3333,18 @@ export function CourseDataTable({
                 )}
               </>
             ) : null}
+
+            {/* Export Dialog */}
+            <ExportDialog
+              open={showExportPreview}
+              onOpenChange={setShowExportPreview}
+              courses={filteredCourses}
+              allCourses={baseFilteredCourses}
+              onExport={handleExport}
+              userRole={userRole}
+              userId={userId}
+              faculties={faculties}
+            />
 
             {/* Import Dialog */}
             <ImportDialog
