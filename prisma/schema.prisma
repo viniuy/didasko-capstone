@@ -19,7 +19,6 @@ model User {
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   status              UserStatus         @default(ACTIVE)
-  currentSessionToken String?            @map("current_session_token")
   accounts            Account[]
   sessions            Session[]
   auditLogs           AuditLog[]
