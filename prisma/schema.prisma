@@ -9,23 +9,24 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(uuid())
-  name              String
-  email             String             @unique
-  department        String
-  workType          WorkType           @map("work_type")
-  role              Role
-  image             String?
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-  status            UserStatus         @default(ACTIVE)
-  accounts          Account[]
-  sessions          Session[]
-  auditLogs         AuditLog[]
-  breakGlassSession BreakGlassSession?
-  coursesTeaching   Course[]           @relation("FacultyCourses")
-  criteria          Criteria[]
-  notes             Note[]
+  id                  String             @id @default(uuid())
+  name                String
+  email               String             @unique
+  department          String
+  workType            WorkType           @map("work_type")
+  role                Role
+  image               String?
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  status              UserStatus         @default(ACTIVE)
+  currentSessionToken String?            @map("current_session_token")
+  accounts            Account[]
+  sessions            Session[]
+  auditLogs           AuditLog[]
+  breakGlassSession   BreakGlassSession?
+  coursesTeaching     Course[]           @relation("FacultyCourses")
+  criteria            Criteria[]
+  notes               Note[]
 
   @@map("users")
 }
