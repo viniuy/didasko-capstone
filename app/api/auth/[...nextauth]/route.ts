@@ -434,13 +434,17 @@ const handler = NextAuth({
         `${baseUrl}/dashboard`,
         `${baseUrl}/redirecting`,
       ];
+      // Allow redirect to baseUrl with error query params
+      if (url.startsWith(`${baseUrl}/?error=`)) {
+        return url;
+      }
       return safeUrls.includes(url) ? url : `${baseUrl}/redirecting`;
     },
   },
 
   pages: {
     signIn: "/",
-    error: "/?error=true",
+    error: "/?error=AccessDenied",
   },
 
   session: {

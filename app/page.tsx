@@ -1,19 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
 import VantaBackground from "@/shared/components/VantaBackground";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function AdminLogin() {
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check for error in URL params on mount
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error) {
+      if (error === "AccessDenied") {
+        setErrorMessage(
+          "Your account has been archived. Please contact an administrator."
+        );
+      } else if (error === "CredentialsSignin") {
+        setErrorMessage("Invalid credentials. Please try again.");
+      } else {
+        setErrorMessage("An error occurred during sign in. Please try again.");
+      }
+    }
+  }, [searchParams]);
 
   const handleAdminLogin = async () => {
     try {
       setIsLoading(true);
+      setErrorMessage(null); // Clear previous errors
+
       const result = await signIn("azure-ad", {
         callbackUrl: "/dashboard/admin",
         redirect: false,
@@ -21,8 +41,17 @@ export default function AdminLogin() {
 
       if (result?.error) {
         console.error("Sign in error:", result.error);
-        // You can add error toast notification here
-        throw new Error(result.error);
+
+        // Handle specific error types and redirect with error code
+        if (result.error === "AccessDenied") {
+          setErrorMessage(
+            "Your account has been archived. Please contact an administrator."
+          );
+        } else {
+          // Redirect to error page with error code
+          router.push(`/?error=${result.error}`);
+          return;
+        }
       }
 
       if (result?.ok) {
@@ -30,7 +59,7 @@ export default function AdminLogin() {
       }
     } catch (err) {
       console.error("Login failed:", err);
-      // You can add error toast notification here
+      setErrorMessage("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -68,6 +97,13 @@ export default function AdminLogin() {
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">
                 Sign In
               </h2>
+
+              {/* Error Message Display */}
+              {errorMessage && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md w-full">
+                  <p className="text-sm text-red-800">{errorMessage}</p>
+                </div>
+              )}
 
               <button
                 className="flex items-center justify-center bg-[#124A69] text-white px-6 py-3 rounded-md w-full shadow-md hover:bg-[#0D3A54] transition disabled:opacity-50 disabled:cursor-not-allowed"
