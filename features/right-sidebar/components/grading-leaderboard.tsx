@@ -89,14 +89,16 @@ const StudentRankCard = ({ student }: { student: StudentGrade }) => {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-white truncate">
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <h3 className="text-sm font-semibold text-white truncate max-w-full">
                 {student.studentName}
               </h3>
-              <p className="text-xs text-white/60">{student.studentNumber}</p>
+              <p className="text-xs text-white/60 truncate">
+                {student.studentNumber}
+              </p>
             </div>
 
-            <div className="text-right">
+            <div className="text-right flex-shrink-0">
               <div className="text-lg font-bold text-white">
                 {student.currentGrade.toFixed(1)}
               </div>

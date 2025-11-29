@@ -16,7 +16,6 @@ import {
 import toast from "react-hot-toast";
 import {
   Search,
-  Download,
   Upload,
   ArrowLeft,
   Users,
@@ -47,7 +46,6 @@ import { StudentImportDialog } from "../dialogs/import-students-dialog";
 import { AddStudentSheet } from "../sheets/add-student-sheet";
 import { RemoveStudentSheet } from "../sheets/remove-student-sheet";
 import { TermGradesTab } from "./term-grades";
-import { ExportDialog } from "../dialogs/new-export-dialog";
 import {
   StudentAvatar,
   AttendanceVisualizer,
@@ -102,18 +100,6 @@ export function CourseDashboard({
   const [studentsWithRecords, setStudentsWithRecords] = useState<
     StudentWithRecords[]
   >([]);
-  const [showExportDialog, setShowExportDialog] = useState(false);
-  const [exportOptions, setExportOptions] = useState({
-    studentId: true,
-    firstName: true,
-    lastName: true,
-    middleInitial: true,
-    attendance: false,
-    prelims: false,
-    midterm: false,
-    preFinals: false,
-    finals: false,
-  });
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [isTermLoading, setIsTermLoading] = useState(false);
@@ -628,15 +614,6 @@ export function CourseDashboard({
               />
             </div>
             <div className="flex gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                onClick={() => setShowExportDialog(true)}
-                className={isSmallScreen ? "" : "gap-2"}
-                size={isSmallScreen ? "icon" : "default"}
-              >
-                <Download className="w-4 h-4" />
-                {!isSmallScreen && <span>Export</span>}
-              </Button>
               {!isArchived && !isViewOnly && (
                 <>
                   <Button
@@ -947,13 +924,6 @@ export function CourseDashboard({
             />
           </TabsContent>
         </Tabs>
-
-        <ExportDialog
-          open={showExportDialog}
-          onOpenChange={setShowExportDialog}
-          students={tableData}
-          courseInfo={courseInfo}
-        />
 
         {/* Modals */}
         {!isViewOnly && (

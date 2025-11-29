@@ -124,13 +124,13 @@ export function ImportDialog({
 
         <div className="mt-6 space-y-6">
           {/* File Upload Section */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={onFileChange}
-            accept=".xlsx"
-            className="hidden"
-          />
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={onFileChange}
+              accept=".xlsx"
+              className="hidden"
+            />
 
           {/* Drag and Drop Zone - Hidden when file is selected */}
           {!selectedFile && (
@@ -176,24 +176,24 @@ export function ImportDialog({
           )}
 
           {/* Selected File Info */}
-          {selectedFile && (
+            {selectedFile && (
             <div className="flex items-center gap-2 p-3 bg-white border rounded-lg">
               <Upload className="h-4 w-4 text-gray-400" />
               <span className="text-sm text-gray-700 truncate flex-1">
-                {selectedFile.name}
-              </span>
-              <Badge
-                variant={isValidFile ? "default" : "destructive"}
-                className={
-                  isValidFile
-                    ? "bg-[#124A69] text-white hover:bg-[#0D3A54]"
-                    : ""
-                }
-              >
-                {isValidFile ? "Valid" : "Invalid"}
-              </Badge>
-            </div>
-          )}
+                  {selectedFile.name}
+                </span>
+                <Badge
+                  variant={isValidFile ? "default" : "destructive"}
+                  className={
+                    isValidFile
+                      ? "bg-[#124A69] text-white hover:bg-[#0D3A54]"
+                      : ""
+                  }
+                >
+                  {isValidFile ? "Valid" : "Invalid"}
+                </Badge>
+              </div>
+            )}
 
           {/* Preview Section */}
           {previewData.length > 0 ? (
@@ -237,34 +237,34 @@ export function ImportDialog({
                               isImported ? "bg-green-50 hover:bg-green-100" : ""
                             }`}
                           >
-                            <td className="px-4 py-2 text-xs text-gray-500">
-                              {index + 1}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
+                          <td className="px-4 py-2 text-xs text-gray-500">
+                            {index + 1}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
                               {row["Course Abbreviation"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900 max-w-[200px] truncate">
-                              {row["Course Title"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Room"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Semester"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Academic Year"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Class Number"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Section"]}
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-900">
-                              {row["Status"]}
-                            </td>
-                          </tr>
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900 max-w-[200px] truncate">
+                            {row["Course Title"]}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {row["Room"]}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {row["Semester"]}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {row["Academic Year"]}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {row["Class Number"]}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {row["Section"]}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">
+                            {row["Status"]}
+                          </td>
+                        </tr>
                         );
                       })}
                   </tbody>

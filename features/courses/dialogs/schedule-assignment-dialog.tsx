@@ -792,33 +792,22 @@ export function ScheduleAssignmentDialog({
               )}
             </div>
             <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={handleCancel}
-                disabled={isSubmitting}
-                className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
-                title={mode === "edit" ? "Cancel" : "Cancel Creation"}
-              >
-                {mode === "edit" ? "Cancel" : "Cancel Creation"}
-              </Button>
+            <Button
+              variant="outline"
+              onClick={handleCancel}
+              disabled={isSubmitting}
+              className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
+              title={mode === "edit" ? "Cancel" : "Cancel Creation"}
+            >
+              {mode === "edit" ? "Cancel" : "Cancel Creation"}
+            </Button>
 
-              <Button
-                className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
-                onClick={handleNext}
-                disabled={isSubmitting}
-                title={
-                  isSubmitting
-                    ? mode === "edit"
-                      ? "Updating..."
-                      : "Creating..."
-                    : mode === "import" && currentIndex < courses.length - 1
-                    ? "Next Course →"
-                    : mode === "edit"
-                    ? "Update Schedules"
-                    : "Create Course"
-                }
-              >
-                {isSubmitting
+            <Button
+              className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
+              onClick={handleNext}
+              disabled={isSubmitting}
+              title={
+                isSubmitting
                   ? mode === "edit"
                     ? "Updating..."
                     : "Creating..."
@@ -826,8 +815,19 @@ export function ScheduleAssignmentDialog({
                   ? "Next Course →"
                   : mode === "edit"
                   ? "Update Schedules"
-                  : "Create Course"}
-              </Button>
+                  : "Create Course"
+              }
+            >
+              {isSubmitting
+                ? mode === "edit"
+                  ? "Updating..."
+                  : "Creating..."
+                : mode === "import" && currentIndex < courses.length - 1
+                ? "Next Course →"
+                : mode === "edit"
+                ? "Update Schedules"
+                : "Create Course"}
+            </Button>
             </div>
           </div>
         </div>

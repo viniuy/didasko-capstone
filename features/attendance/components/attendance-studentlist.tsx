@@ -2534,6 +2534,112 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     setIsInGracePeriod(false);
 
     const now = new Date();
+    
+    // Reconstruct pendingAttendanceUpdates from current studentList
+    const reconstructedPendingUpdates: {
+      [studentId: string]: {
+        status: AttendanceStatus;
+        timestamp: Date;
+        rfid: string;
+      };
+    } = {};
+
+    studentList.forEach((student) => {
+      if (student.status !== "NOT_SET" && localTimeInMap[student.id]) {
+        const timeInIso = localTimeInMap[student.id];
+        const timeInDate = timeInIso ? new Date(timeInIso) : now;
+        reconstructedPendingUpdates[student.id] = {
+          status: student.status,
+          timestamp: timeInDate,
+          rfid: "",
+        };
+      }
+    });
+
+    // NEW: Check for orphaned scanned students (removed from course but still in localStorage)
+    const currentStudentIds = new Set(studentList.map(s => s.id));
+    let orphanedStudents: string[] = [];
+    
+    try {
+      const savedScannedStatuses = localStorage.getItem(
+        getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
+      );
+      const savedTimeInMap = localStorage.getItem(
+        getStorageKey(`rfidTimeInMap:${selectedDateStr}`)
+      );
+      
+      if (savedScannedStatuses && savedTimeInMap) {
+        const scannedStatuses = JSON.parse(savedScannedStatuses) as {
+          [studentId: string]: AttendanceStatus;
+        };
+        const timeInMap = JSON.parse(savedTimeInMap) as {
+          [studentId: string]: string;
+        };
+        
+        // Find students that were scanned but are no longer in the course
+        Object.keys(scannedStatuses).forEach((studentId) => {
+          if (!currentStudentIds.has(studentId) && timeInMap[studentId]) {
+            orphanedStudents.push(studentId);
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Error checking for orphaned students:", e);
+    }
+
+    // Warn user about orphaned students if any exist
+    if (orphanedStudents.length > 0) {
+      toast.error(
+        `${orphanedStudents.length} scanned student(s) were removed from the course. Their attendance will not be saved.`,
+        {
+          id: "orphaned-students-warning",
+          duration: 5000,
+        }
+      );
+      
+      // Clean up orphaned data from localStorage
+      try {
+        const savedScannedStatuses = localStorage.getItem(
+          getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
+        );
+        const savedTimeInMap = localStorage.getItem(
+          getStorageKey(`rfidTimeInMap:${selectedDateStr}`)
+        );
+        
+        if (savedScannedStatuses && savedTimeInMap) {
+          const scannedStatuses = JSON.parse(savedScannedStatuses) as {
+            [studentId: string]: AttendanceStatus;
+          };
+          const timeInMap = JSON.parse(savedTimeInMap) as {
+            [studentId: string]: string;
+          };
+          
+          // Remove orphaned students from localStorage
+          orphanedStudents.forEach((studentId) => {
+            delete scannedStatuses[studentId];
+            delete timeInMap[studentId];
+          });
+          
+          localStorage.setItem(
+            getStorageKey(`rfidScannedStatuses:${selectedDateStr}`),
+            JSON.stringify(scannedStatuses)
+          );
+          localStorage.setItem(
+            getStorageKey(`rfidTimeInMap:${selectedDateStr}`),
+            JSON.stringify(timeInMap)
+          );
+        }
+      } catch (e) {
+        console.error("Error cleaning up orphaned students:", e);
+      }
+    }
+
+    // Merge with existing pendingAttendanceUpdates
+    const allPendingUpdates = {
+      ...pendingAttendanceUpdates,
+      ...reconstructedPendingUpdates,
+    };
+
     const remainingNotSet = studentList
       .filter((s) => s.status === "NOT_SET")
       .reduce((acc, s) => {
@@ -2545,12 +2651,12 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         return acc;
       }, {} as { [studentId: string]: { status: AttendanceStatus; timestamp: Date; rfid: string } });
 
-    const hasPending = Object.keys(pendingAttendanceUpdates).length > 0;
+    const hasPending = Object.keys(allPendingUpdates).length > 0;
     const hasRemaining = Object.keys(remainingNotSet).length > 0;
 
     if (hasPending || hasRemaining) {
       await batchUpdateAttendance({
-        ...pendingAttendanceUpdates,
+        ...allPendingUpdates,
         ...remainingNotSet,
       });
     }
