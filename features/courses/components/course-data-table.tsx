@@ -2493,8 +2493,103 @@ export function CourseDataTable({
             },
           });
         } else {
-          // For create/import mode, use the standard refresh
-          await refreshTableData(false);
+          // For create/import mode, the mutation's onSuccess already invalidates queries
+          // For manual creation, React Query automatically refetches and it works perfectly
+          // For import, we need to explicitly wait for refetch to complete because:
+          // 1. Dialog closes immediately, which may interfere with refetch timing
+          // 2. Heavy state processing happens synchronously after mutation
+          // 3. We need to ensure data is fresh before continuing
+          if (scheduleDialogMode === "import") {
+            // Wait a bit to let React Query process the invalidation
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            // Explicitly invalidate stats queries to ensure they refetch with new courses
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.stats.all,
+            });
+            queryClient.invalidateQueries({
+              predicate: (query) => {
+                const key = query.queryKey;
+                return (
+                  Array.isArray(key) &&
+                  key.length >= 2 &&
+                  key[0] === "courses" &&
+                  key[1] === "statsBatch"
+                );
+              },
+            });
+
+            // Explicitly trigger refetch to ensure data is fresh
+            // Wait for it to complete to ensure coursesData is updated
+            const refetchResult = await refetchCourses();
+
+            // Log the refetch result to debug
+            console.log("🔍 Refetch result:", {
+              hasData: !!refetchResult?.data,
+              coursesCount: refetchResult?.data?.courses?.length || 0,
+              dataStructure: refetchResult?.data
+                ? Object.keys(refetchResult.data)
+                : "no data",
+            });
+
+            // Check if courses were actually imported successfully
+            const coursesWereImported = importResults?.success > 0;
+
+            if (coursesWereImported) {
+              console.log(
+                `✅ Import successful: ${importResults.success} courses created. Waiting for database commit and refetching...`
+              );
+
+              // Wait longer for database transaction to fully commit
+              // The import happens in a transaction, so we need to wait for it to complete
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+
+              // Invalidate ALL course queries to ensure fresh data
+              queryClient.invalidateQueries({
+                queryKey: queryKeys.courses.all,
+              });
+
+              // Refetch and wait for it to complete
+              const finalRefetch = await refetchCourses();
+
+              console.log("🔍 Final refetch result:", {
+                hasData: !!finalRefetch?.data,
+                coursesCount: finalRefetch?.data?.courses?.length || 0,
+              });
+
+              // Wait for React Query to update the hook's coursesData
+              await new Promise((resolve) => setTimeout(resolve, 500));
+
+              // Check if coursesData from hook has updated
+              if (coursesData?.courses && coursesData.courses.length > 0) {
+                console.log(
+                  "✅ Courses data updated:",
+                  coursesData.courses.length
+                );
+              } else {
+                console.warn(
+                  "⚠️ coursesData still not updated. This might indicate:",
+                  "\n1. Database transaction hasn't committed yet",
+                  "\n2. Courses are being filtered out by query parameters",
+                  "\n3. Query key mismatch",
+                  "\nHook data:",
+                  coursesData?.courses?.length || 0,
+                  "\nImport results:",
+                  importResults
+                );
+              }
+            } else {
+              console.warn(
+                "⚠️ No courses were imported according to import results:",
+                importResults
+              );
+            }
+
+            // Wait a bit more for stats to refetch (since courseSlugs depends on coursesData)
+            // The courseSlugs useMemo will update when coursesData changes, triggering stats refetch
+            await new Promise((resolve) => setTimeout(resolve, 200));
+          }
+          // For create mode, just rely on automatic refetch (works perfectly)
         }
 
         if (onCourseAdded) onCourseAdded();
@@ -2526,6 +2621,7 @@ export function CourseDataTable({
       preImportValidationErrors,
       queryClient,
       previewData,
+      refetchCourses,
     ]
   );
 

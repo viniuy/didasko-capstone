@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Plus, Trash2, AlertCircle } from "lucide-react";
+import { Calendar, Plus, Trash2, AlertCircle, ChevronLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   useCreateCourse,
@@ -313,6 +313,35 @@ export function ScheduleAssignmentDialog({
     }
 
     return true;
+  };
+
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      // Save current schedules before going back
+      const validSchedules = currentSchedules.filter(
+        (s) => s.day && s.fromTime && s.toTime
+      );
+      
+      const updatedSchedules = {
+        ...allSchedules,
+        [currentIndex]: validSchedules.map((s) => ({
+          day: s.day,
+          fromTime: s.fromTime,
+          toTime: s.toTime,
+        })),
+      };
+      setAllSchedules(updatedSchedules);
+      
+      // Go to previous course
+      setCurrentIndex(currentIndex - 1);
+      // Restore schedules for previous course if they exist
+      const previousSchedules = allSchedules[currentIndex - 1];
+      setCurrentSchedules(
+        previousSchedules && previousSchedules.length > 0
+          ? previousSchedules
+          : [{ day: "", fromTime: "", toTime: "" }]
+      );
+    }
   };
 
   const handleNext = () => {
@@ -747,22 +776,49 @@ export function ScheduleAssignmentDialog({
 
           {/* Action Buttons */}
           <div className="flex justify-between gap-3 mt-8 pt-4 border-t min-w-0">
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              disabled={isSubmitting}
-              className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
-              title={mode === "edit" ? "Cancel" : "Cancel Creation"}
-            >
-              {mode === "edit" ? "Cancel" : "Cancel Creation"}
-            </Button>
+            <div className="flex gap-3">
+              {/* Back Button - only show for import mode when not on first course */}
+              {mode === "import" && currentIndex > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 px-6 flex-shrink-0 min-w-0 truncate"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Back
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isSubmitting}
+                className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
+                title={mode === "edit" ? "Cancel" : "Cancel Creation"}
+              >
+                {mode === "edit" ? "Cancel" : "Cancel Creation"}
+              </Button>
 
-            <Button
-              className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
-              onClick={handleNext}
-              disabled={isSubmitting}
-              title={
-                isSubmitting
+              <Button
+                className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
+                onClick={handleNext}
+                disabled={isSubmitting}
+                title={
+                  isSubmitting
+                    ? mode === "edit"
+                      ? "Updating..."
+                      : "Creating..."
+                    : mode === "import" && currentIndex < courses.length - 1
+                    ? "Next Course →"
+                    : mode === "edit"
+                    ? "Update Schedules"
+                    : "Create Course"
+                }
+              >
+                {isSubmitting
                   ? mode === "edit"
                     ? "Updating..."
                     : "Creating..."
@@ -770,19 +826,9 @@ export function ScheduleAssignmentDialog({
                   ? "Next Course →"
                   : mode === "edit"
                   ? "Update Schedules"
-                  : "Create Course"
-              }
-            >
-              {isSubmitting
-                ? mode === "edit"
-                  ? "Updating..."
-                  : "Creating..."
-                : mode === "import" && currentIndex < courses.length - 1
-                ? "Next Course →"
-                : mode === "edit"
-                ? "Update Schedules"
-                : "Create Course"}
-            </Button>
+                  : "Create Course"}
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

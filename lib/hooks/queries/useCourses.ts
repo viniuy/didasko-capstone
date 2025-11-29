@@ -447,6 +447,9 @@ export function useCreateCourse() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.courses.list(undefined),
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
       toast.success("Course created successfully");
@@ -627,6 +630,9 @@ export function useImportCoursesWithSchedulesArray() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.courses.list(undefined),
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
       // Invalidate statsBatch queries explicitly (same as useCreateCourse behavior)

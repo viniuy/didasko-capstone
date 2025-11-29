@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { CourseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { logAction, generateBatchId } from "@/lib/audit";
+import { revalidateTag } from "next/cache";
 
 interface CourseWithSchedule {
   tempId: string;
@@ -356,6 +357,13 @@ export async function POST(request: NextRequest) {
       });
     } catch (logError) {
       console.error("Error logging import success:", logError);
+    }
+
+    // CRITICAL: Revalidate the courses cache so the new courses appear immediately
+    // The getCourses function uses unstable_cache with tag "courses"
+    // Without revalidating, the cache will serve stale data (empty courses array)
+    if (results.success > 0) {
+      revalidateTag("courses");
     }
 
     // Return results
