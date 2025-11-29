@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { logAction } from "@/lib/audit";
 import { isBreakGlassActive, deactivateBreakGlass } from "@/lib/breakGlass";
-import { prisma } from "@/lib/prisma";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -26,17 +25,6 @@ export async function POST(req: NextRequest) {
           console.error("Error deactivating break-glass on logout:", error);
           // Continue with logout even if deactivation fails
         }
-      }
-
-      // Clear session token on logout to ensure single-device enforcement
-      try {
-        await prisma.user.update({
-          where: { id: session.user.id },
-          data: { currentSessionToken: null },
-        });
-      } catch (error) {
-        console.error("Error clearing session token on logout:", error);
-        // Continue with logout even if clearing session token fails
       }
 
       // Log logout before session is destroyed

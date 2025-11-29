@@ -205,17 +205,9 @@ export async function editUser(
     }
 
     // Update the user
-    // If user is being archived, invalidate their session token to force immediate logout
-    const updateData = {
-      ...data,
-      ...(data.status === "ARCHIVED" && {
-        currentSessionToken: null,
-      }),
-    };
-
     const updatedUser = await prisma.user.update({
       where: { id: userId },
-      data: updateData,
+      data: data,
     });
 
     // Log user edit - determine action type

@@ -291,36 +291,13 @@ const handler = NextAuth({
       }
     },
 
-    /** JWT callback - attach role and department, manage session tokens */
+    /** JWT callback - attach role and department */
     async jwt({ token, user, trigger, session }) {
-      // On initial login (when user is provided)
       if (user) {
-        try {
-          // Generate a unique session token
-          const sessionToken = crypto.randomUUID();
-
-          // Store session token in database and invalidate old sessions
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { currentSessionToken: sessionToken },
-          });
-
-          // Store session token in JWT
-          token.sessionToken = sessionToken;
-          token.id = user.id;
-          token.role = user.role as Role;
-          token.email = user.email;
-          token.name = user.name;
-          token.lastValidation = Date.now();
-        } catch (err) {
-          console.error("JWT session token creation error:", err);
-          // Fallback to basic token if DB update fails
-          token.id = user.id;
-          token.role = user.role as Role;
-          token.email = user.email;
-          token.name = user.name;
-        }
-        return token;
+        token.id = user.id;
+        token.role = user.role as Role;
+        token.email = user.email;
+        token.name = user.name;
       }
 
       // Allow session.update() to override selectedRole
@@ -328,70 +305,29 @@ const handler = NextAuth({
         token.selectedRole = session.selectedRole;
       }
 
-      // On token refresh - validate session (with caching to reduce DB load)
-      if (token?.email && !user) {
-        // Only validate every 30 seconds to reduce DB load
-        const lastValidation = (token.lastValidation as number) || 0;
-        const now = Date.now();
-        const validationInterval = 30000; // 30 seconds
+      // Fallback sync from DB if missing
+      if (token?.email && !token?.role) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: token.email },
+            select: {
+              id: true,
+              role: true,
+              name: true,
+              image: true,
+              department: true,
+            },
+          });
 
-        if (!lastValidation || now - lastValidation > validationInterval) {
-          try {
-            const dbUser = await prisma.user.findUnique({
-              where: { email: token.email },
-              select: {
-                id: true,
-                role: true,
-                name: true,
-                image: true,
-                department: true,
-                status: true,
-                currentSessionToken: true,
-              },
-            });
-
-            if (!dbUser) {
-              // User deleted - invalidate token
-              token.invalid = true;
-              return token;
-            }
-
-            // Check if user is archived
-            if (dbUser.status !== "ACTIVE") {
-              // User archived - invalidate token
-              token.invalid = true;
-              return token;
-            }
-
-            // Check if session token matches (single device enforcement)
-            // If user has no session token yet (migration case), generate one
-            if (!dbUser.currentSessionToken) {
-              const sessionToken = crypto.randomUUID();
-              await prisma.user.update({
-                where: { id: dbUser.id },
-                data: { currentSessionToken: sessionToken },
-              });
-              token.sessionToken = sessionToken;
-            } else if (dbUser.currentSessionToken !== token.sessionToken) {
-              // Different device logged in - invalidate this token
-              token.invalid = true;
-              return token;
-            }
-
-            // Update token with latest user data
+          if (dbUser) {
             token.id = dbUser.id;
             token.role = dbUser.role as Role;
             token.name = dbUser.name;
             token.image = dbUser.image;
             token.department = dbUser.department;
-            token.lastValidation = now;
-          } catch (err) {
-            console.error("JWT validation error:", err);
-            // On error, don't invalidate - allow request to proceed
-            // This prevents DB outages from breaking the app
-            // Only update lastValidation to prevent repeated errors
-            token.lastValidation = now;
           }
+        } catch (err) {
+          console.error("JWT DB fetch error:", err);
         }
       }
 
@@ -400,16 +336,6 @@ const handler = NextAuth({
 
     /** Session callback - include all user data */
     async session({ session, token }) {
-      // If token is invalid (user archived, different device, etc.), return session with null user
-      // This will cause NextAuth to treat the session as unauthenticated
-      if (token.invalid) {
-        return {
-          ...session,
-          user: null as any, // Type assertion needed for NextAuth compatibility
-          expires: new Date(0).toISOString(), // Expired session
-        } as any;
-      }
-
       if (session.user && token) {
         session.user.id = token.id as string;
         session.user.role = token.role as "ADMIN" | "ACADEMIC_HEAD" | "FACULTY";

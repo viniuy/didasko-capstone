@@ -413,7 +413,7 @@ export function StudentImportDialog({
                     {previewData.length === 1 ? "student" : "students"}
                   </p>
                 </div>
-                <div className="max-h-[400px] overflow-auto">
+                <div className="max-h-[120px] overflow-auto">
                   <table className="w-full border-collapse">
                     <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
