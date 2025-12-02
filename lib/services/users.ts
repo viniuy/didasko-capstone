@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 
 // Get users with filters
 // Note: Not cached to ensure fresh data after saves
@@ -17,7 +17,7 @@ export async function getUsers(filters: {
         id: true,
         name: true,
         email: true,
-        role: true,
+        roles: true,
         department: true,
         workType: true,
         status: true,
@@ -33,7 +33,13 @@ export async function getUsers(filters: {
   // Build where clause based on filters
   const where: Prisma.UserWhereInput = {
     AND: [
-      filters.role ? { role: filters.role as Prisma.EnumRoleFilter } : {},
+      filters.role
+        ? {
+            roles: {
+              has: filters.role as Role,
+            },
+          }
+        : {},
       filters.department ? { department: filters.department } : {},
       filters.search
         ? {
@@ -62,7 +68,7 @@ export async function getUsers(filters: {
       id: true,
       name: true,
       email: true,
-      role: true,
+      roles: true,
       department: true,
       workType: true,
       status: true,
@@ -82,7 +88,7 @@ export async function getUserById(id: string) {
       id: true,
       name: true,
       email: true,
-      role: true,
+      roles: true,
       department: true,
       workType: true,
       status: true,
@@ -99,7 +105,7 @@ export async function getUserByEmail(email: string) {
     where: { email },
     select: {
       id: true,
-      role: true,
+      roles: true,
     },
   });
 }
@@ -110,7 +116,7 @@ export async function createUser(data: {
   name: string;
   department: string;
   workType: "FULL_TIME" | "PART_TIME" | "CONTRACT";
-  role: "ADMIN" | "FACULTY" | "ACADEMIC_HEAD";
+  roles: Role[];
   status: "ACTIVE" | "ARCHIVED";
 }) {
   // Check if email already exists
@@ -128,14 +134,14 @@ export async function createUser(data: {
       name: data.name,
       department: data.department,
       workType: data.workType,
-      role: data.role,
+      roles: data.roles,
       status: data.status,
     },
     select: {
       id: true,
       name: true,
       email: true,
-      role: true,
+      roles: true,
       department: true,
       workType: true,
       status: true,
@@ -154,7 +160,7 @@ export async function updateUser(
     email?: string;
     department?: string;
     workType?: "FULL_TIME" | "PART_TIME" | "CONTRACT";
-    role?: "ADMIN" | "FACULTY" | "ACADEMIC_HEAD";
+    roles?: Role[];
     status?: "ACTIVE" | "ARCHIVED";
   }
 ) {
@@ -165,7 +171,7 @@ export async function updateUser(
       id: true,
       name: true,
       email: true,
-      role: true,
+      roles: true,
       department: true,
       workType: true,
       status: true,

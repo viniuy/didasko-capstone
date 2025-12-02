@@ -54,7 +54,12 @@ import {
 
 export default function UpcomingEvents() {
   const { data: session, status } = useSession();
-  const userRole = session?.user?.role as Role | undefined;
+  const userRoles = session?.user?.roles || [];
+  const userRole = userRoles.includes(Role.ADMIN)
+    ? Role.ADMIN
+    : userRoles.includes(Role.ACADEMIC_HEAD)
+    ? Role.ACADEMIC_HEAD
+    : userRoles[0] || Role.FACULTY;
   const todayRef = useRef<HTMLDivElement>(null);
   const hasFetchedRef = useRef(false);
 

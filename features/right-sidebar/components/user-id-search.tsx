@@ -12,7 +12,7 @@ interface User {
   id: string;
   name: string | null;
   email: string | null;
-  role: string;
+  roles: string[];
   department: string | null;
   workType: string | null;
   status: string;
@@ -160,7 +160,7 @@ export default function UserIdSearch() {
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-white/60">Role:</span>
                   <span className="text-xs text-white font-semibold uppercase">
-                    {foundUser.role}
+                    {foundUser.roles?.join(", ") || "N/A"}
                   </span>
                 </div>
                 {foundUser.department && (

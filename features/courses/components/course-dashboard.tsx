@@ -81,9 +81,9 @@ export function CourseDashboard({
 }: CourseDashboardProps) {
   const router = useRouter();
   const { data: session } = useSession();
-  const userRole = session?.user?.role;
+  const userRoles = session?.user?.roles || [];
   const userId = session?.user?.id;
-  const isAcademicHead = userRole === "ACADEMIC_HEAD";
+  const isAcademicHead = userRoles.includes("ACADEMIC_HEAD");
   const [courseInfo, setCourseInfo] = useState<CourseInfo | null>(null);
   const [tableData, setTableData] = useState<StudentWithGrades[]>([]);
   const [stats, setStats] = useState<CourseStats | null>(null);

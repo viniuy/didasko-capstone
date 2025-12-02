@@ -97,13 +97,16 @@ export function BreakGlassCompact() {
   // Filter faculty to only FACULTY role
   const facultyList = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return [];
-    return facultyData.filter((user: FacultyMember) => user.role === "FACULTY");
+    return facultyData.filter((user: FacultyMember) =>
+      user.roles?.includes("FACULTY")
+    );
   }, [facultyData]);
 
   // Only show for Academic Head and Admin
+  const userRoles = session?.user?.roles || [];
   if (
-    session?.user?.role !== Role.ACADEMIC_HEAD &&
-    session?.user?.role !== Role.ADMIN
+    !userRoles.includes(Role.ACADEMIC_HEAD) &&
+    !userRoles.includes(Role.ADMIN)
   ) {
     return null;
   }
@@ -157,8 +160,8 @@ export function BreakGlassCompact() {
   const sessionData = status?.session;
   const hasActiveSessions =
     isActive && status?.sessions && status.sessions.length > 0;
-  const isAdmin = session?.user?.role === Role.ADMIN;
-  const isAcademicHead = session?.user?.role === Role.ACADEMIC_HEAD;
+  const isAdmin = userRoles.includes(Role.ADMIN);
+  const isAcademicHead = userRoles.includes(Role.ACADEMIC_HEAD);
 
   // For admin: only show if there are active sessions (admin can't activate, only deactivate)
   if (isAdmin && !hasActiveSessions) {

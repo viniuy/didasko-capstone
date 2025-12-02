@@ -34,7 +34,8 @@ export const POST = withLogging(
       }
 
       // Check if user is actually an admin
-      if (session.user.role !== "ADMIN") {
+      const userRoles = session.user.roles || [];
+      if (!userRoles.includes("ADMIN")) {
         return NextResponse.json(
           { error: "Only permanent admins can promote temporary admins" },
           { status: 403 }

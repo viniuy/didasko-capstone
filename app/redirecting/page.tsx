@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Role } from "@prisma/client";
 
 const SELECTED_ROLE_KEY = "admin_selected_role";
 
@@ -17,16 +18,16 @@ export default function RedirectingPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      const role = session?.user?.role;
+      const roles = session?.user?.roles || [];
 
-      if (!role) {
-        console.error("No role found in session");
+      if (roles.length === 0) {
+        console.error("No roles found in session");
         router.replace("/unauthorized");
         return;
       }
 
       // If user is admin, check if they're a temp admin first
-      if (role === "ADMIN") {
+      if (roles.includes(Role.ADMIN)) {
         // Check if user is a temporary admin (break-glass active)
         const checkTempAdmin = async () => {
           try {
@@ -75,19 +76,29 @@ export default function RedirectingPage() {
             return;
           }
 
-          // Use session selectedRole first, then localStorage, then show selection
+          // Check if user has both ADMIN and FACULTY roles
+          const hasBothRoles =
+            roles.includes(Role.ADMIN) && roles.includes(Role.FACULTY);
+
+          // If user is ADMIN only (not ADMIN+FACULTY), always redirect to admin dashboard
+          if (!hasBothRoles) {
+            router.replace("/dashboard/admin");
+            return;
+          }
+
+          // User has both ADMIN and FACULTY - respect their saved preference
           const effectiveRole = sessionSelectedRole || savedRole;
 
           if (effectiveRole === "FACULTY") {
-            // Admin has selected faculty role - redirect to faculty dashboard
+            // User has explicitly selected faculty role - redirect to faculty dashboard
             router.replace("/dashboard/faculty");
             return;
           } else if (effectiveRole === "ADMIN") {
-            // Admin has explicitly selected admin role - redirect to admin dashboard
+            // User has explicitly selected admin role - redirect to admin dashboard
             router.replace("/dashboard/admin");
             return;
           } else {
-            // No previous selection - show role selection
+            // No previous selection - show role selection for users with both roles
             setShowRoleSelection(true);
             return;
           }
@@ -96,12 +107,21 @@ export default function RedirectingPage() {
       }
 
       // For other roles, proceed with normal redirection
+      // Determine primary role (priority: ACADEMIC_HEAD > FACULTY)
+      const primaryRole = roles.includes(Role.ACADEMIC_HEAD)
+        ? Role.ACADEMIC_HEAD
+        : roles.includes(Role.FACULTY)
+        ? Role.FACULTY
+        : roles[0];
+
       const roleMap: Record<string, string> = {
         ACADEMIC_HEAD: "/dashboard/academic-head",
         FACULTY: "/dashboard/faculty",
       };
 
-      const path = roleMap[role] || "/dashboard";
+      const path = primaryRole
+        ? roleMap[primaryRole] || "/dashboard"
+        : "/dashboard";
       router.replace(path);
     }
   }, [session, status, router, update]);

@@ -8,7 +8,6 @@ import { Permission } from "@/lib/roles";
 import { withLogging } from "@/lib/withLogging";
 import { logAction } from "@/lib/audit";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,9 +22,10 @@ export const POST = withLogging(
       }
 
       // Check permissions
-      if (session.user.role === Role.ADMIN) {
+      const userRoles = session.user.roles || [];
+      if (userRoles.includes(Role.ADMIN)) {
         await requirePermission(session.user, Permission.VIEW_ALL_LOGS);
-      } else if (session.user.role === Role.ACADEMIC_HEAD) {
+      } else if (userRoles.includes(Role.ACADEMIC_HEAD)) {
         await requirePermission(session.user, Permission.VIEW_LIMITED_LOGS);
       } else {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -45,8 +45,11 @@ export const POST = withLogging(
       // Build where clause
       const where: any = {};
 
-      // Apply module filter for ACADEMIC_HEAD
-      if (session.user.role === Role.ACADEMIC_HEAD) {
+      // Apply module filter for ACADEMIC_HEAD (not ADMIN)
+      if (
+        userRoles.includes(Role.ACADEMIC_HEAD) &&
+        !userRoles.includes(Role.ADMIN)
+      ) {
         const allowedModules = [
           "Course Management",
           "Course",

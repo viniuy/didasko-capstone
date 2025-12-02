@@ -6,7 +6,7 @@ export interface User {
   name: string;
   department: string;
   workType: WorkType;
-  role: Role;
+  roles: Role[];
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -17,7 +17,7 @@ export interface UserCreateInput {
   name: string;
   department: string;
   workType: WorkType;
-  role: Role;
+  roles: Role[];
   status: UserStatus;
 }
 

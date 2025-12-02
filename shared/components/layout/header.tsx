@@ -26,8 +26,9 @@ export default function Header() {
   // React Query hooks
   // Only fetch break-glass status for non-academic-head and non-admin users (they don't need it)
   // Academic heads and admins use BreakGlassCompact component which fetches its own status
+  const userRoles = session?.user?.roles || [];
   const shouldFetchBreakGlass =
-    session?.user?.role !== "ACADEMIC_HEAD" && session?.user?.role !== "ADMIN";
+    !userRoles.includes("ACADEMIC_HEAD") && !userRoles.includes("ADMIN");
   const { data: breakGlassStatus } = useBreakGlassStatus(
     shouldFetchBreakGlass ? session?.user?.id : undefined,
     { enabled: shouldFetchBreakGlass } // Disable query for academic heads and admins
@@ -40,8 +41,8 @@ export default function Header() {
   // Academic Head should NEVER see this badge - they activate break-glass for others, not themselves
   // For ACADEMIC_HEAD, the API returns isActive=true if ANY session exists, so we must exclude them explicitly
   const isTempAdmin =
-    session?.user?.role !== "ACADEMIC_HEAD" && // Explicitly exclude Academic Head first
-    session?.user?.role === "ADMIN" &&
+    !userRoles.includes("ACADEMIC_HEAD") && // Explicitly exclude Academic Head first
+    userRoles.includes("ADMIN") &&
     !!breakGlassStatus?.isActive &&
     // Verify the session is for the current user (not just any active session)
     (breakGlassStatus?.session?.user?.id === session?.user?.id ||

@@ -632,8 +632,8 @@ export function CourseDataTable({
   // Sync faculty data from React Query
   useEffect(() => {
     if (facultyData && Array.isArray(facultyData)) {
-      const facultyOnly = facultyData.filter(
-        (user: any) => user.role === "FACULTY"
+      const facultyOnly = facultyData.filter((user: any) =>
+        user.roles?.includes("FACULTY")
       );
       setFaculties(facultyOnly);
     }

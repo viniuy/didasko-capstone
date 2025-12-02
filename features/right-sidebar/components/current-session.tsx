@@ -89,7 +89,7 @@ export default function CurrentSession() {
                   Role:
                 </span>
                 <span className="text-xs text-white font-semibold uppercase">
-                  {session.user.role || "N/A"}
+                  {session.user.roles?.join(", ") || "N/A"}
                 </span>
               </div>
               {session.user.selectedRole && (

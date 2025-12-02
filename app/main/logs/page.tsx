@@ -34,15 +34,18 @@ export default async function LogsPage({ searchParams }: PageProps) {
     redirect("/login");
   }
 
-  const userRole = session.user?.role;
+  const userRoles = session.user?.roles || [];
 
-  // Redirect FACULTY
-  if (userRole === Role.FACULTY) {
+  // Redirect FACULTY (only if they don't have other roles)
+  if (userRoles.length === 1 && userRoles[0] === Role.FACULTY) {
     redirect("/dashboard");
   }
 
   // Only ADMIN and ACADEMIC_HEAD can access
-  if (userRole !== Role.ADMIN && userRole !== Role.ACADEMIC_HEAD) {
+  if (
+    !userRoles.includes(Role.ADMIN) &&
+    !userRoles.includes(Role.ACADEMIC_HEAD)
+  ) {
     redirect("/dashboard");
   }
 
@@ -53,7 +56,7 @@ export default async function LogsPage({ searchParams }: PageProps) {
   const where: any = {};
 
   // Apply module filter for ACADEMIC_HEAD
-  if (userRole === Role.ACADEMIC_HEAD) {
+  if (userRoles.includes(Role.ACADEMIC_HEAD)) {
     // ACADEMIC_HEAD can only see specific modules
     where.module = {
       in: [
@@ -149,7 +152,7 @@ export default async function LogsPage({ searchParams }: PageProps) {
               <div className="grid gap-4 md:gap-6 lg:gap-8">
                 <AuditLogsTable
                   initialLogs={logs}
-                  userRole={userRole!}
+                  userRole={userRoles[0] as Role}
                   isLoading={isLoading}
                 />
               </div>

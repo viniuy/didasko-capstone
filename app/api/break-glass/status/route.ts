@@ -25,10 +25,8 @@ export const GET = withLogging(
       const { searchParams } = new URL(req.url);
       const userId = searchParams.get("userId");
 
-      if (
-        session.user.role === "ACADEMIC_HEAD" ||
-        session.user.role === "ADMIN"
-      ) {
+      const userRoles = session.user.roles || [];
+      if (userRoles.includes("ACADEMIC_HEAD") || userRoles.includes("ADMIN")) {
         // Academic Head and Admin can see all active break-glass sessions
         // Optimized: Use select instead of include for better performance
         // Note: Only Academic Head can see promotionCodePlain, Admin cannot
@@ -40,14 +38,14 @@ export const GET = withLogging(
             activatedAt: true,
             expiresAt: true,
             activatedBy: true,
-            originalRole: true,
+            originalRoles: true,
             promotionCodePlain: true, // Always fetch, but remove for Admin below
             user: {
               select: {
                 id: true,
                 name: true,
                 email: true,
-                role: true,
+                roles: true,
               },
             },
           },
@@ -58,13 +56,12 @@ export const GET = withLogging(
 
         // Remove promotionCodePlain from response if requester is Admin
         // Only Academic Head can see promotion codes, Admin cannot
-        const finalSessions =
-          session.user.role === "ADMIN"
-            ? activeSessions.map((session: any) => {
-                const { promotionCodePlain, ...rest } = session;
-                return rest;
-              })
-            : activeSessions;
+        const finalSessions = userRoles.includes("ADMIN")
+          ? activeSessions.map((session: any) => {
+              const { promotionCodePlain, ...rest } = session;
+              return rest;
+            })
+          : activeSessions;
 
         return NextResponse.json({
           isActive: activeSessions.length > 0,

@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import CourseEmptyState from "@/features/courses/components/course-empty-state";
+import { hasAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,11 @@ export default async function AcademicHeadDashboard() {
 
   if (!session?.user) {
     redirect("/");
+  }
+
+  // Check permission to access academic head dashboard
+  if (!hasAccess(session.user, "CAN_ACCESS_ACADEMIC_HEAD_DASHBOARD")) {
+    redirect("/403");
   }
 
   // Fetch data on the server
@@ -51,7 +57,7 @@ export default async function AcademicHeadDashboard() {
               <Stats
                 initialFacultyStats={facultyStats}
                 initialFacultyCount={facultyCount}
-                userRole={session.user.role}
+                userRole={session.user.roles?.[0] || "ACADEMIC_HEAD"}
               />
 
               {hasNoCourses ? (

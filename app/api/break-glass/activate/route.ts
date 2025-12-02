@@ -22,7 +22,8 @@ export const POST = withLogging(
       }
 
       // Only Academic Head can activate break-glass
-      if (session.user.role !== "ACADEMIC_HEAD") {
+      const userRoles = session.user.roles || [];
+      if (!userRoles.includes("ACADEMIC_HEAD")) {
         return NextResponse.json(
           { error: "Only Academic Head can activate break-glass override" },
           { status: 403 }
@@ -50,7 +51,7 @@ export const POST = withLogging(
       // Verify the selected user is a Faculty member
       const facultyUser = await prisma.user.findUnique({
         where: { id: facultyUserId },
-        select: { id: true, role: true, name: true, email: true },
+        select: { id: true, roles: true, name: true, email: true },
       });
 
       if (!facultyUser) {
@@ -60,7 +61,7 @@ export const POST = withLogging(
         );
       }
 
-      if (facultyUser.role !== "FACULTY") {
+      if (!facultyUser.roles.includes("FACULTY")) {
         return NextResponse.json(
           { error: "Break-glass can only be activated for Faculty members" },
           { status: 400 }

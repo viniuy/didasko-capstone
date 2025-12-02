@@ -4,11 +4,11 @@ import { Permission, hasPermission, canViewLog } from "./roles";
 import { isBreakGlassActive } from "./breakGlass";
 
 /**
- * User type with role
+ * User type with roles
  */
 export interface UserWithRole {
   id: string;
-  role: Role;
+  roles: Role[];
 }
 
 /**
@@ -37,20 +37,22 @@ export class ForbiddenError extends Error {
  * @param user - User object (can be null/undefined)
  * @param allowedRoles - Array of allowed roles
  * @throws UnauthorizedError if no user
- * @throws ForbiddenError if user role not allowed
+ * @throws ForbiddenError if user roles not allowed
  */
 export function requireRole(
   user: UserWithRole | null | undefined,
   allowedRoles: Role[]
 ): void {
-  if (!user) {
+  if (!user || !user.roles || user.roles.length === 0) {
     throw new UnauthorizedError("Authentication required");
   }
 
-  if (!allowedRoles.includes(user.role)) {
+  const hasAllowedRole = user.roles.some((role) => allowedRoles.includes(role));
+  if (!hasAllowedRole) {
     const requiredRoles = allowedRoles.join(" or ");
+    const userRoles = user.roles.join(", ");
     throw new ForbiddenError(
-      `Access denied. Required role: ${requiredRoles}. Your role: ${user.role}`
+      `Access denied. Required role: ${requiredRoles}. Your roles: ${userRoles}`
     );
   }
 }
@@ -63,7 +65,13 @@ export function requireRole(
  * @throws ForbiddenError if not ADMIN
  */
 export function requireAdmin(user: UserWithRole | null | undefined): void {
-  requireRole(user, [Role.ADMIN]);
+  if (!user || !user.roles || user.roles.length === 0) {
+    throw new UnauthorizedError("Authentication required");
+  }
+
+  if (!user.roles.includes(Role.ADMIN)) {
+    throw new ForbiddenError("Access denied. Required role: ADMIN");
+  }
 }
 
 /**
@@ -90,17 +98,17 @@ export function requireAcademicHead(
 export async function requireBreakGlass(
   user: UserWithRole | null | undefined
 ): Promise<void> {
-  if (!user) {
+  if (!user || !user.roles || user.roles.length === 0) {
     throw new UnauthorizedError("Authentication required");
   }
 
   // ADMIN is always allowed
-  if (user.role === Role.ADMIN) {
+  if (user.roles.includes(Role.ADMIN)) {
     return;
   }
 
   // ACADEMIC_HEAD needs break-glass active
-  if (user.role === Role.ACADEMIC_HEAD) {
+  if (user.roles.includes(Role.ACADEMIC_HEAD)) {
     const isActive = await isBreakGlassActive(user.id);
     if (!isActive) {
       throw new ForbiddenError("Break-glass override required");

@@ -22,17 +22,17 @@ export async function updateUserStatus(userId: string, status: UserStatus) {
   }
 }
 
-export async function updateUserRole(userId: string, role: Role) {
+export async function updateUserRoles(userId: string, roles: Role[]) {
   try {
     await prisma.user.update({
       where: { id: userId },
-      data: { role },
+      data: { roles },
     });
     revalidatePath("/dashboard/admin");
     return { success: true };
   } catch (error) {
-    console.error("Error updating user role:", error);
-    return { success: false, error: "Failed to update user role" };
+    console.error("Error updating user roles:", error);
+    return { success: false, error: "Failed to update user roles" };
   }
 }
 
@@ -42,7 +42,7 @@ interface AddUserParams {
   department: string;
   workType: WorkType;
   status: UserStatus;
-  role: Role;
+  roles: Role[];
 }
 
 export async function addUser(userData: AddUserParams) {
@@ -55,7 +55,10 @@ export async function addUser(userData: AddUserParams) {
 
       if (isTempAdmin) {
         // Temp admins can only create FACULTY users
-        if (userData.role !== "FACULTY") {
+        if (
+          userData.roles.length !== 1 ||
+          !userData.roles.includes("FACULTY")
+        ) {
           return {
             success: false,
             error: "Temporary admins can only create Faculty users",
@@ -81,7 +84,7 @@ export async function addUser(userData: AddUserParams) {
         department: userData.department,
         workType: userData.workType,
         status: userData.status,
-        role: userData.role,
+        roles: userData.roles,
       },
     });
 
@@ -92,13 +95,15 @@ export async function addUser(userData: AddUserParams) {
         userId: session?.user?.id || null,
         action: "USER_CREATED",
         module: "User Management",
-        reason: `User created: ${newUser.name} (${newUser.email}) with role ${newUser.role}`,
+        reason: `User created: ${newUser.name} (${
+          newUser.email
+        }) with roles ${newUser.roles.join(", ")}`,
         status: "SUCCESS",
         after: {
           id: newUser.id,
           name: newUser.name,
           email: newUser.email,
-          role: newUser.role,
+          roles: newUser.roles,
           department: newUser.department,
           status: newUser.status,
           workType: newUser.workType,
@@ -107,7 +112,7 @@ export async function addUser(userData: AddUserParams) {
           entityType: "User",
           entityId: newUser.id,
           entityName: newUser.name,
-          createdRole: newUser.role,
+          createdRoles: newUser.roles,
           createdDepartment: newUser.department,
         },
       });
@@ -131,7 +136,7 @@ export async function editUser(
     email?: string;
     department?: string;
     workType?: WorkType;
-    role?: Role;
+    roles?: Role[];
     status?: UserStatus;
   }
 ) {
@@ -145,7 +150,7 @@ export async function editUser(
         id: true,
         name: true,
         email: true,
-        role: true,
+        roles: true,
         department: true,
         status: true,
         workType: true,
@@ -163,10 +168,14 @@ export async function editUser(
       if (isTempAdmin) {
         // Temp admins cannot change roles of ADMIN or ACADEMIC_HEAD users
         if (
-          userBefore.role === "ADMIN" ||
-          userBefore.role === "ACADEMIC_HEAD"
+          userBefore.roles.includes("ADMIN") ||
+          userBefore.roles.includes("ACADEMIC_HEAD")
         ) {
-          if (data.role && data.role !== userBefore.role) {
+          if (
+            data.roles &&
+            JSON.stringify(data.roles.sort()) !==
+              JSON.stringify(userBefore.roles.sort())
+          ) {
             return {
               success: false,
               error:
@@ -176,8 +185,16 @@ export async function editUser(
         }
 
         // Temp admins cannot assign FACULTY users to ACADEMIC_HEAD or ADMIN roles
-        if (userBefore.role === "FACULTY" && data.role) {
-          if (data.role === "ACADEMIC_HEAD" || data.role === "ADMIN") {
+        if (
+          userBefore.roles.includes("FACULTY") &&
+          !userBefore.roles.includes("ADMIN") &&
+          !userBefore.roles.includes("ACADEMIC_HEAD") &&
+          data.roles
+        ) {
+          if (
+            data.roles.includes("ACADEMIC_HEAD") ||
+            data.roles.includes("ADMIN")
+          ) {
             return {
               success: false,
               error:
@@ -216,9 +233,16 @@ export async function editUser(
       let action = "USER_EDITED";
       let reason = `User edited: ${updatedUser.name} (${updatedUser.email})`;
 
-      if (data.role && data.role !== userBefore.role) {
+      const rolesChanged =
+        data.roles &&
+        JSON.stringify(data.roles.sort()) !==
+          JSON.stringify(userBefore.roles.sort());
+
+      if (rolesChanged) {
         action = "USER_ROLE_CHANGED";
-        reason = `User role changed: ${updatedUser.name} (${updatedUser.email}) from ${userBefore.role} to ${data.role}`;
+        reason = `User roles changed: ${updatedUser.name} (${
+          updatedUser.email
+        }) from ${userBefore.roles.join(", ")} to ${data.roles.join(", ")}`;
       } else if (data.status && data.status !== userBefore.status) {
         action = data.status === "ACTIVE" ? "USER_ACTIVATED" : "USER_ARCHIVED";
         reason = `User ${
@@ -235,7 +259,7 @@ export async function editUser(
         before: {
           name: userBefore.name,
           email: userBefore.email,
-          role: userBefore.role,
+          roles: userBefore.roles,
           department: userBefore.department,
           status: userBefore.status,
           workType: userBefore.workType,
@@ -243,7 +267,7 @@ export async function editUser(
         after: {
           name: updatedUser.name,
           email: updatedUser.email,
-          role: updatedUser.role,
+          roles: updatedUser.roles,
           department: updatedUser.department,
           status: updatedUser.status,
           workType: updatedUser.workType,
@@ -252,12 +276,10 @@ export async function editUser(
           entityType: "User",
           entityId: updatedUser.id,
           entityName: updatedUser.name,
-          roleChanged: data.role && data.role !== userBefore.role,
+          rolesChanged: rolesChanged || false,
           statusChanged: data.status && data.status !== userBefore.status,
-          previousRole:
-            data.role && data.role !== userBefore.role ? userBefore.role : null,
-          newRole:
-            data.role && data.role !== userBefore.role ? data.role : null,
+          previousRoles: rolesChanged ? userBefore.roles : null,
+          newRoles: rolesChanged ? data.roles : null,
         },
       });
     } catch (error) {

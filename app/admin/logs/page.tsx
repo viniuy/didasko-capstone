@@ -6,6 +6,7 @@ import { Role } from "@prisma/client";
 import { canViewLog } from "@/lib/roles";
 import AuditLogsTable from "@/features/admin/components/AuditLogsTable";
 import { getUsers } from "@/lib/services";
+import { hasAccess } from "@/lib/permissions";
 
 interface PageProps {
   searchParams: Promise<{
@@ -32,17 +33,23 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
     redirect("/login");
   }
 
-  const userRole = session.user?.role;
+  const userRoles = session.user?.roles || [];
 
-  // Redirect FACULTY
-  if (userRole === Role.FACULTY) {
+  // Check permission - only ADMIN and ACADEMIC_HEAD can access logs
+  // This is a special permission, not a dashboard permission
+  if (
+    !userRoles.includes(Role.ADMIN) &&
+    !userRoles.includes(Role.ACADEMIC_HEAD)
+  ) {
     redirect("/dashboard");
   }
 
-  // Only ADMIN and ACADEMIC_HEAD can access
-  if (userRole !== Role.ADMIN && userRole !== Role.ACADEMIC_HEAD) {
-    redirect("/dashboard");
-  }
+  // Determine primary role for filtering
+  const userRole = userRoles.includes(Role.ADMIN)
+    ? Role.ADMIN
+    : userRoles.includes(Role.ACADEMIC_HEAD)
+    ? Role.ACADEMIC_HEAD
+    : userRoles[0];
 
   // Await searchParams (Next.js 15 requirement)
   const params = await searchParams;
@@ -55,8 +62,11 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
   // Build where clause
   const where: any = {};
 
-  // Apply module filter for ACADEMIC_HEAD
-  if (userRole === Role.ACADEMIC_HEAD) {
+  // Apply module filter for ACADEMIC_HEAD (not ADMIN)
+  if (
+    userRoles.includes(Role.ACADEMIC_HEAD) &&
+    !userRoles.includes(Role.ADMIN)
+  ) {
     // ACADEMIC_HEAD can only see specific modules
     where.module = {
       in: [
@@ -180,7 +190,7 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
 
   // Fetch faculty users for filter dropdown
   const facultyUsers = await getUsers({
-    role: "FACULTY",
+    role: "FACULTY" as any, // Filter by role for backward compatibility
   });
 
   return (
@@ -188,16 +198,14 @@ export default async function AuditLogsPage({ searchParams }: PageProps) {
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">Audit Logs</h1>
         <p className="text-muted-foreground">
-          {userRole === Role.ADMIN
+          {userRoles.includes(Role.ADMIN)
             ? "All system activity logs"
             : "Course and faculty management logs"}
         </p>
       </div>
 
       <AuditLogsTable
-        logs={logs}
-        currentPage={page}
-        totalPages={totalPages}
+        initialLogs={logs}
         userRole={userRole!}
         initialFaculty={facultyUsers}
       />

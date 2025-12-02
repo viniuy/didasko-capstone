@@ -9,7 +9,7 @@ interface FacultyUser {
   id: string;
   name: string | null;
   email: string | null;
-  role: "FACULTY" | "ACADEMIC_HEAD";
+  roles: ("FACULTY" | "ACADEMIC_HEAD")[];
   department: string | null;
   workType: string | null;
   image: string | null;
@@ -51,12 +51,12 @@ const FacultyItem = ({ user }: { user: FacultyUser }) => {
             </h3>
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-semibold ${
-                user.role === "ACADEMIC_HEAD"
+                user.roles?.includes("ACADEMIC_HEAD")
                   ? "bg-blue-500/20 text-blue-200 border border-blue-500/30"
                   : "bg-green-500/20 text-green-200 border border-green-500/30"
               }`}
             >
-              {user.role === "ACADEMIC_HEAD" ? "AH" : "F"}
+              {user.roles?.includes("ACADEMIC_HEAD") ? "AH" : "F"}
             </span>
           </div>
           <p className="text-xs text-white/70 truncate">{user.email}</p>
@@ -75,10 +75,10 @@ export default function ActiveFaculty() {
 
   // Separate faculty and academic heads
   const academicHeads = faculty.filter(
-    (u: FacultyUser) => u.role === "ACADEMIC_HEAD"
+    (u: FacultyUser) => u.roles?.includes("ACADEMIC_HEAD")
   );
   const regularFaculty = faculty.filter(
-    (u: FacultyUser) => u.role === "FACULTY"
+    (u: FacultyUser) => u.roles?.includes("FACULTY")
   );
 
   return (

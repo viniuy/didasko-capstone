@@ -40,13 +40,13 @@ export async function getFacultyCount() {
   const [fullTime, partTime] = await Promise.all([
     prisma.user.count({
       where: {
-        role: "FACULTY",
+        roles: { has: "FACULTY" },
         workType: "FULL_TIME",
       },
     }),
     prisma.user.count({
       where: {
-        role: "FACULTY",
+        roles: { has: "FACULTY" },
         workType: "PART_TIME",
       },
     }),

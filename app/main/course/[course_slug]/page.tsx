@@ -42,7 +42,8 @@ export default async function CourseDashboardPage({
   }
 
   const { course_slug } = await params;
-  const userRole = (session.user.role || "FACULTY") as UserRole;
+  const userRoles = session.user.roles || [];
+  const userRole = (userRoles[0] || "FACULTY") as UserRole;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">

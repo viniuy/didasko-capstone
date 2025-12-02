@@ -23,10 +23,11 @@ export default async function CourseDashboardPage() {
 
   // Extract user info from session
   const userId = session.user.id;
-  const userRole = session.user.role as UserRole;
+  const userRoles = session.user.roles || [];
+  const userRole = (userRoles[0] || "FACULTY") as UserRole;
 
-  // Redirect if no role or if student tries to access
-  if (!userRole) {
+  // Redirect if no roles assigned
+  if (userRoles.length === 0) {
     redirect("/"); // No role assigned
   }
 

@@ -14,7 +14,7 @@ export interface EventItem {
   date: Date;
   fromTime: string | null;
   toTime: string | null;
-  role: Role;
+  roles: Role[];
 }
 
 export interface GroupedEvent {
@@ -170,7 +170,7 @@ export function groupEventsByDate(events: any[]): GroupedEvent[] {
       date: localDate,
       fromTime: event.fromTime,
       toTime: event.toTime,
-      role: event.role as Role,
+      roles: event.roles as Role[],
     });
   });
 

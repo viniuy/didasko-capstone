@@ -60,17 +60,17 @@ const ACADEMIC_HEAD_ALLOWED_MODULES = [
 ];
 
 /**
- * User type with role
+ * User type with roles
  */
 export interface UserWithRole {
   id: string;
-  role: Role;
+  roles: Role[];
 }
 
 /**
  * Checks if a user has a specific permission.
  *
- * @param user - User object with role
+ * @param user - User object with roles
  * @param permission - Permission to check
  * @returns True if user has permission, false otherwise
  */
@@ -78,26 +78,32 @@ export async function hasPermission(
   user: UserWithRole | null | undefined,
   permission: Permission
 ): Promise<boolean> {
-  if (!user) {
+  if (!user || !user.roles || user.roles.length === 0) {
     return false;
   }
 
   // ADMIN always has all permissions
-  if (user.role === Role.ADMIN) {
+  if (user.roles.includes(Role.ADMIN)) {
     return true;
   }
 
   // ACADEMIC_HEAD needs break-glass for USE_BREAK_GLASS permission
   if (
-    user.role === Role.ACADEMIC_HEAD &&
+    user.roles.includes(Role.ACADEMIC_HEAD) &&
     permission === Permission.USE_BREAK_GLASS
   ) {
     return await isBreakGlassActive(user.id);
   }
 
-  // Check if role has the permission
-  const rolePermissions = ROLE_PERMISSIONS[user.role] || [];
-  return rolePermissions.includes(permission);
+  // Check if any role has the permission (union logic)
+  for (const role of user.roles) {
+    const rolePermissions = ROLE_PERMISSIONS[role] || [];
+    if (rolePermissions.includes(permission)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -111,17 +117,20 @@ export async function canManageUser(
   actor: UserWithRole | null | undefined,
   targetUser: UserWithRole
 ): Promise<boolean> {
-  if (!actor) {
+  if (!actor || !actor.roles || actor.roles.length === 0) {
     return false;
   }
 
   // ADMIN can manage anyone
-  if (actor.role === Role.ADMIN) {
+  if (actor.roles.includes(Role.ADMIN)) {
     return true;
   }
 
   // ACADEMIC_HEAD can manage FACULTY
-  if (actor.role === Role.ACADEMIC_HEAD && targetUser.role === Role.FACULTY) {
+  if (
+    actor.roles.includes(Role.ACADEMIC_HEAD) &&
+    targetUser.roles.includes(Role.FACULTY)
+  ) {
     return true;
   }
 
@@ -131,25 +140,25 @@ export async function canManageUser(
 /**
  * Checks if a user can view logs for a specific module.
  *
- * @param userRole - The user's role
+ * @param userRoles - The user's roles
  * @param logModule - The module name from the log
  * @returns True if user can view the log, false otherwise
  */
 export function canViewLog(
-  userRole: Role | undefined,
+  userRoles: Role[] | undefined,
   logModule: string
 ): boolean {
-  if (!userRole) {
+  if (!userRoles || userRoles.length === 0) {
     return false;
   }
 
   // ADMIN can view all logs
-  if (userRole === Role.ADMIN) {
+  if (userRoles.includes(Role.ADMIN)) {
     return true;
   }
 
   // ACADEMIC_HEAD can view limited modules
-  if (userRole === Role.ACADEMIC_HEAD) {
+  if (userRoles.includes(Role.ACADEMIC_HEAD)) {
     const moduleLower = logModule.toLowerCase();
     return ACADEMIC_HEAD_ALLOWED_MODULES.some((allowed) =>
       moduleLower.includes(allowed.toLowerCase())

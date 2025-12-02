@@ -207,7 +207,12 @@ export function AppSidebar() {
 
   // Immediate path check and redirect
   useEffect(() => {
-    const role = session?.user?.role;
+    const userRoles = session?.user?.roles || [];
+    const role = userRoles.includes("ADMIN")
+      ? "ADMIN"
+      : userRoles.includes("ACADEMIC_HEAD")
+      ? "ACADEMIC_HEAD"
+      : userRoles[0] || "FACULTY";
     const selectedRole = session?.user?.selectedRole;
     const currentPath = pathname;
 
@@ -242,22 +247,23 @@ export function AppSidebar() {
     }
   }, [
     pathname,
-    session?.user?.role,
+    session?.user?.roles,
     session?.user?.selectedRole,
     status,
     router,
   ]);
 
-  const isAdmin = session?.user?.role === "ADMIN";
+  const userRoles = session?.user?.roles || [];
+  const isAdmin = userRoles.includes("ADMIN");
   const selectedRole = session?.user?.selectedRole;
-  const isAcademicHead = session?.user?.role === "ACADEMIC_HEAD";
-  const isFaculty = session?.user?.role === "FACULTY";
+  const isAcademicHead = userRoles.includes("ACADEMIC_HEAD");
+  const isFaculty = userRoles.includes("FACULTY");
 
   // Check if user is a temporary admin (has active break-glass session)
   const { data: breakGlassStatus } = useBreakGlassStatus(session?.user?.id);
   const isTempAdmin =
-    session?.user?.role !== "ACADEMIC_HEAD" &&
-    session?.user?.role === "ADMIN" &&
+    !userRoles.includes("ACADEMIC_HEAD") &&
+    userRoles.includes("ADMIN") &&
     !!breakGlassStatus?.isActive &&
     (breakGlassStatus?.session?.user?.id === session?.user?.id ||
       (breakGlassStatus?.isActive && !breakGlassStatus?.session?.user?.id));
@@ -365,7 +371,7 @@ export function AppSidebar() {
   const avatarInitial = displayName.charAt(0);
   const user = {
     name: session?.user?.name || "Unknown User",
-    role: session?.user?.role || "",
+    role: userRoles.join(", ") || "",
     id: session?.user?.id || "",
     department: displayDepartment,
     image: userImage || null,

@@ -75,7 +75,7 @@ const handler = NextAuth({
             id: true,
             email: true,
             name: true,
-            role: true,
+            roles: true,
             status: true,
             department: true,
             image: true,
@@ -128,7 +128,7 @@ const handler = NextAuth({
         }
 
         user.id = dbUser.id;
-        user.role = dbUser.role;
+        user.roles = dbUser.roles;
         user.name = dbUser.name;
 
         // Link Azure AD account with idempotency protection and transaction
@@ -257,7 +257,7 @@ const handler = NextAuth({
           reason: `User logged in: ${dbUser.name} (${dbUser.email})`,
           status: "SUCCESS",
           after: {
-            role: dbUser.role,
+            roles: dbUser.roles,
             department: dbUser.department,
             loginMethod: account?.provider || "unknown",
           },
@@ -291,11 +291,11 @@ const handler = NextAuth({
       }
     },
 
-    /** JWT callback - attach role and department */
+    /** JWT callback - attach roles and department */
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
-        token.role = user.role as Role;
+        token.roles = user.roles as Role[];
         token.email = user.email;
         token.name = user.name;
       }
@@ -306,13 +306,13 @@ const handler = NextAuth({
       }
 
       // Fallback sync from DB if missing
-      if (token?.email && !token?.role) {
+      if (token?.email && (!token?.roles || token.roles.length === 0)) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: token.email },
             select: {
               id: true,
-              role: true,
+              roles: true,
               name: true,
               image: true,
               department: true,
@@ -321,7 +321,7 @@ const handler = NextAuth({
 
           if (dbUser) {
             token.id = dbUser.id;
-            token.role = dbUser.role as Role;
+            token.roles = dbUser.roles as Role[];
             token.name = dbUser.name;
             token.image = dbUser.image;
             token.department = dbUser.department;
@@ -338,7 +338,7 @@ const handler = NextAuth({
     async session({ session, token }) {
       if (session.user && token) {
         session.user.id = token.id as string;
-        session.user.role = token.role as "ADMIN" | "ACADEMIC_HEAD" | "FACULTY";
+        session.user.roles = (token.roles as Role[]) || [];
         session.user.name = token.name;
         session.user.image =
           typeof token.image === "string" ? token.image : null;

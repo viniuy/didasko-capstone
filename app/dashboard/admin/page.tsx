@@ -8,6 +8,7 @@ import { getUsers } from "@/lib/services";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
+import { hasAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ export default async function AdminDashboardPage() {
 
   if (!session?.user) {
     redirect("/");
+  }
+
+  // Check permission to access admin dashboard
+  if (!hasAccess(session.user, "CAN_ACCESS_ADMIN_DASHBOARD")) {
+    redirect("/403");
   }
 
   // Fetch users data on the server

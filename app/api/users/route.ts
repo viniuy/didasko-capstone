@@ -61,10 +61,19 @@ export const POST = withLogging(
       }
 
       const body: UserCreateInput = await req.json();
-      const { email, name, department, workType, role, status } = body;
+      const { email, name, department, workType, roles, status } = body;
 
       // Validate required fields
-      if (!email || !name || !department || !workType || !role || !status) {
+      if (
+        !email ||
+        !name ||
+        !department ||
+        !workType ||
+        !roles ||
+        !Array.isArray(roles) ||
+        roles.length === 0 ||
+        !status
+      ) {
         return NextResponse.json(
           { error: "Missing required fields" },
           { status: 400 }
@@ -76,19 +85,21 @@ export const POST = withLogging(
 
       if (isTempAdmin) {
         // Temp admins can only create FACULTY users
-        if (role !== "FACULTY") {
+        if (roles.length !== 1 || !roles.includes("FACULTY" as any)) {
           return NextResponse.json(
             { error: "Temporary admins can only create Faculty users" },
             { status: 403 }
           );
         }
       } else {
-        // Check permissions based on role being created (only for permanent admins)
-        if (role === "ADMIN") {
+        // Check permissions based on roles being created (only for permanent admins)
+        if (roles.includes("ADMIN" as any)) {
           await requirePermission(session.user, Permission.MANAGE_ADMINS);
-        } else if (role === "FACULTY") {
+        }
+        if (roles.includes("FACULTY" as any)) {
           await requirePermission(session.user, Permission.MANAGE_FACULTY);
-        } else {
+        }
+        if (roles.includes("ACADEMIC_HEAD" as any)) {
           await requirePermission(session.user, Permission.MANAGE_USERS);
         }
       }
@@ -99,7 +110,7 @@ export const POST = withLogging(
           name,
           department,
           workType,
-          role,
+          roles,
           status,
         });
 
@@ -112,10 +123,12 @@ export const POST = withLogging(
             id: user.id,
             email: user.email,
             name: user.name,
-            role: user.role,
+            roles: user.roles,
             department: user.department,
           },
-          reason: `Created ${role} user: ${user.name} (${user.email})`,
+          reason: `Created user with roles ${roles.join(", ")}: ${user.name} (${
+            user.email
+          })`,
         });
 
         return NextResponse.json(user);
@@ -153,7 +166,7 @@ export const DELETE = withLogging(
       // Get target user to check permissions
       const targetUser = await prisma.user.findUnique({
         where: { id },
-        select: { id: true, role: true, email: true, name: true },
+        select: { id: true, roles: true, email: true, name: true },
       });
 
       if (!targetUser) {
@@ -174,7 +187,7 @@ export const DELETE = withLogging(
         id: targetUser.id,
         email: targetUser.email,
         name: targetUser.name,
-        role: targetUser.role,
+        roles: targetUser.roles,
       };
 
       await deleteUser(id);
@@ -185,7 +198,9 @@ export const DELETE = withLogging(
         action: "USER_DELETED",
         module: "User Management",
         before,
-        reason: `Deleted user: ${targetUser.name} (${targetUser.email}) - ${targetUser.role}`,
+        reason: `Deleted user: ${targetUser.name} (${
+          targetUser.email
+        }) - ${targetUser.roles.join(", ")}`,
       });
 
       return NextResponse.json({

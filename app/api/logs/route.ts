@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
+import { canViewLog } from "@/lib/roles";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -17,10 +18,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userRole = session.user.role;
+    const userRoles = session.user.roles || [];
 
     // Only ADMIN and ACADEMIC_HEAD can access
-    if (userRole !== Role.ADMIN && userRole !== Role.ACADEMIC_HEAD) {
+    if (
+      !userRoles.includes(Role.ADMIN) &&
+      !userRoles.includes(Role.ACADEMIC_HEAD)
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -36,8 +40,8 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: any = {};
 
-    // Apply module filter for ACADEMIC_HEAD
-    if (userRole === Role.ACADEMIC_HEAD) {
+    // Apply module filter for ACADEMIC_HEAD (not ADMIN)
+    if (userRoles.includes(Role.ACADEMIC_HEAD) && !userRoles.includes(Role.ADMIN)) {
       where.module = {
         in: [
           "Course Management",

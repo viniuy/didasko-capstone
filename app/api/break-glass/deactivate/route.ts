@@ -32,10 +32,11 @@ export const POST = withLogging(
 
       // ADMIN can deactivate for anyone
       // ACADEMIC_HEAD can deactivate any active break-glass session (they activated it)
-      if (session.user.role === "ADMIN") {
+      const userRoles = session.user.roles || [];
+      if (userRoles.includes("ADMIN")) {
         // Admin can deactivate for any user
         await deactivateBreakGlass(userId, session.user.id);
-      } else if (session.user.role === "ACADEMIC_HEAD") {
+      } else if (userRoles.includes("ACADEMIC_HEAD")) {
         // Academic Head can deactivate any break-glass session they activated
         const sessionData = await prisma.breakGlassSession.findUnique({
           where: { userId },

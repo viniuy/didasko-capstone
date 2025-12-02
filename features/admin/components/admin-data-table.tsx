@@ -25,6 +25,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import toast from "react-hot-toast";
 import {
   MoreHorizontal,
@@ -49,6 +55,11 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -98,9 +109,9 @@ interface User {
   email: string;
   department: string;
   workType: WorkType;
-  role: Role;
+  roles: Role[];
   status: UserStatus;
-  [key: string]: string | WorkType | Role | UserStatus;
+  [key: string]: string | WorkType | Role[] | UserStatus;
 }
 
 interface AdminDataTableProps {
@@ -274,8 +285,15 @@ export function AdminDataTable({
       // If break-glass status is not available yet or is null, assume not temp admin
       setIsCurrentUserTempAdmin(false);
     }
-    setCurrentUserRole(session?.user?.role as Role);
-  }, [currentUserBreakGlass, session?.user?.role]);
+    const userRoles = session?.user?.roles || [];
+    // Set the primary role (first role or ADMIN if present)
+    const primaryRole = userRoles.includes(Role.ADMIN)
+      ? Role.ADMIN
+      : userRoles.includes(Role.ACADEMIC_HEAD)
+      ? Role.ACADEMIC_HEAD
+      : userRoles[0] || Role.FACULTY;
+    setCurrentUserRole(primaryRole);
+  }, [currentUserBreakGlass, session?.user?.roles]);
 
   // Adjust page size based on window height
   useEffect(() => {
@@ -386,15 +404,15 @@ export function AdminDataTable({
   }, [queryClient, refetchUsers]);
 
   const handleRoleChange = useCallback(
-    async (userId: string, newRole: Role) => {
+    async (userId: string, newRoles: Role[]) => {
       try {
         setIsRoleUpdating((prev) => ({ ...prev, [userId]: true }));
-        const result = await editUser(userId, { role: newRole });
+        const result = await editUser(userId, { roles: newRoles });
 
         if (result.success) {
           setTableData((prevData) =>
             prevData.map((user) =>
-              user.id === userId ? { ...user, role: newRole } : user
+              user.id === userId ? { ...user, roles: newRoles } : user
             )
           );
           // Invalidate and refetch users to update stats
@@ -402,16 +420,19 @@ export function AdminDataTable({
             queryKey: queryKeys.admin.users(),
           });
           await refetchUsers();
-          toast.success(`Role updated to ${formatEnumValue(newRole)}`, {
-            duration: 3000,
-            position: "top-center",
-          });
+          toast.success(
+            `Roles updated to ${newRoles.map(formatEnumValue).join(", ")}`,
+            {
+              duration: 3000,
+              position: "top-center",
+            }
+          );
         } else {
-          throw new Error(result.error || "Failed to update role");
+          throw new Error(result.error || "Failed to update roles");
         }
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to update role"
+          error instanceof Error ? error.message : "Failed to update roles"
         );
       } finally {
         setIsRoleUpdating((prev) => ({ ...prev, [userId]: false }));
@@ -422,6 +443,22 @@ export function AdminDataTable({
 
   const handleStatusChange = useCallback(
     async (userId: string, newStatus: UserStatus) => {
+      // Prevent archiving if user is the last academic head
+      if (newStatus === "ARCHIVED") {
+        const userToArchive = tableData.find((user) => user.id === userId);
+        if (userToArchive?.roles?.includes(Role.ACADEMIC_HEAD)) {
+          const academicHeadCount = tableData.filter((user) =>
+            user.roles?.includes(Role.ACADEMIC_HEAD)
+          ).length;
+          if (academicHeadCount <= 1) {
+            toast.error(
+              "Cannot archive user. At least one Academic Head must exist in the system."
+            );
+            return;
+          }
+        }
+      }
+
       try {
         setIsStatusUpdating((prev) => ({ ...prev, [userId]: true }));
         const result = await editUser(userId, { status: newStatus });
@@ -452,7 +489,7 @@ export function AdminDataTable({
         setIsStatusUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    [queryClient, refetchUsers]
+    [queryClient, refetchUsers, tableData]
   );
 
   //Done
@@ -937,120 +974,351 @@ export function AdminDataTable({
         cell: ({ row }) => formatEnumValue(row.original.workType),
       },
       {
-        accessorKey: "role",
-        header: "Role",
+        accessorKey: "roles",
+        header: "Roles",
         cell: ({ row }) => {
+          const userRoles = row.original.roles || [];
+          const isCurrentUser = row.original.id === session?.user?.id;
+          const currentUserHasAdmin = session?.user?.roles?.includes(
+            Role.ADMIN
+          );
+
           // Check if current user is temp admin and if target user is ADMIN/ACADEMIC_HEAD
           const isTargetAdminOrHead =
-            row.original.role === "ADMIN" ||
-            row.original.role === "ACADEMIC_HEAD";
+            userRoles.includes(Role.ADMIN) ||
+            userRoles.includes(Role.ACADEMIC_HEAD);
           // Always disable for temp admins viewing ADMIN/ACADEMIC_HEAD users
           const isDisabledForTempAdmin =
             isCurrentUserTempAdmin && isTargetAdminOrHead;
 
-          return (
-            <Select
-              value={row.original.role}
-              onValueChange={(value: Role) => {
-                // Prevent temp admin from assigning ADMIN or ACADEMIC_HEAD roles
-                if (
-                  isCurrentUserTempAdmin &&
-                  (value === "ADMIN" || value === "ACADEMIC_HEAD")
-                ) {
-                  toast.error(
-                    "Temporary admins cannot assign Admin or Academic Head roles"
-                  );
-                  return;
-                }
-                // Also prevent if trying to change an existing ADMIN/ACADEMIC_HEAD user
-                if (isDisabledForTempAdmin) {
-                  toast.error(
-                    "Temporary admins cannot modify Admin or Academic Head roles"
-                  );
-                  return;
-                }
-                handleRoleChange(row.original.id, value);
-              }}
-              disabled={
-                isRoleUpdating[row.original.id] || isDisabledForTempAdmin
+          // Prevent self-demotion: disable role editing for current user if they have ADMIN role
+          const isSelfWithAdmin = isCurrentUser && currentUserHasAdmin;
+
+          const handleRoleToggle = (role: Role, checked: boolean) => {
+            // Prevent self-demotion: don't allow removing ADMIN role from self
+            if (isSelfWithAdmin && role === Role.ADMIN && !checked) {
+              toast.error("You cannot remove your own Admin role");
+              return;
+            }
+
+            // Prevent temp admin from assigning ADMIN or ACADEMIC_HEAD roles
+            if (
+              isCurrentUserTempAdmin &&
+              (role === Role.ADMIN || role === Role.ACADEMIC_HEAD) &&
+              checked
+            ) {
+              toast.error(
+                "Temporary admins cannot assign Admin or Academic Head roles"
+              );
+              return;
+            }
+
+            // Prevent temp admin from removing ADMIN or ACADEMIC_HEAD roles from existing users
+            if (
+              isCurrentUserTempAdmin &&
+              (userRoles.includes(Role.ADMIN) ||
+                userRoles.includes(Role.ACADEMIC_HEAD)) &&
+              !checked &&
+              (role === Role.ADMIN || role === Role.ACADEMIC_HEAD)
+            ) {
+              toast.error(
+                "Temporary admins cannot modify Admin or Academic Head roles"
+              );
+              return;
+            }
+
+            // Prevent removing ADMIN role if it's the last admin
+            if (role === Role.ADMIN && !checked) {
+              const adminCount = tableData.filter((user) =>
+                user.roles?.includes(Role.ADMIN)
+              ).length;
+              if (adminCount <= 1) {
+                toast.error(
+                  "Cannot remove Admin role. At least one Admin must exist in the system."
+                );
+                return;
               }
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue>
+            }
+
+            // Prevent removing ACADEMIC_HEAD role if it's the last academic head
+            if (role === Role.ACADEMIC_HEAD && !checked) {
+              const academicHeadCount = tableData.filter((user) =>
+                user.roles?.includes(Role.ACADEMIC_HEAD)
+              ).length;
+              if (academicHeadCount <= 1) {
+                toast.error(
+                  "Cannot remove Academic Head role. At least one Academic Head must exist in the system."
+                );
+                return;
+              }
+            }
+
+            let newRoles: Role[];
+            if (checked) {
+              newRoles = [...userRoles, role];
+            } else {
+              // Ensure at least one role remains
+              if (userRoles.length === 1) {
+                toast.error("User must have at least one role");
+                return;
+              }
+              newRoles = userRoles.filter((r) => r !== role);
+            }
+
+            handleRoleChange(row.original.id, newRoles);
+          };
+
+          const displayText =
+            userRoles.length === 0
+              ? "No roles"
+              : userRoles.length === 1
+              ? formatEnumValue(userRoles[0])
+              : userRoles.map(formatEnumValue).join(", ");
+
+          return (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-[180px] justify-start"
+                  disabled={
+                    isRoleUpdating[row.original.id] ||
+                    isDisabledForTempAdmin ||
+                    isSelfWithAdmin
+                  }
+                >
                   {isRoleUpdating[row.original.id] ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
                       <span>Updating...</span>
                     </div>
                   ) : (
-                    formatEnumValue(row.original.role)
+                    <>
+                      <span className="truncate">{displayText}</span>
+                      {!isSelfWithAdmin && (
+                        <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                      )}
+                    </>
                   )}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {/* Temp admins cannot see or select ADMIN/ACADEMIC_HEAD */}
-                {!isCurrentUserTempAdmin && (
-                  <>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="ACADEMIC_HEAD">Academic Head</SelectItem>
-                  </>
-                )}
-                <SelectItem value="FACULTY">Faculty</SelectItem>
-              </SelectContent>
-            </Select>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-2" align="start">
+                <div className="space-y-2">
+                  {[
+                    { value: Role.FACULTY, label: "Faculty" },
+                    { value: Role.ADMIN, label: "Admin" },
+                    { value: Role.ACADEMIC_HEAD, label: "Academic Head" },
+                  ]
+                    .filter(
+                      (role) =>
+                        !isCurrentUserTempAdmin || role.value === Role.FACULTY
+                    )
+                    .map((role) => {
+                      const isChecked = userRoles.includes(role.value);
+                      const isDisabledForTemp =
+                        isCurrentUserTempAdmin &&
+                        (userRoles.includes(Role.ADMIN) ||
+                          userRoles.includes(Role.ACADEMIC_HEAD)) &&
+                        (role.value === Role.ADMIN ||
+                          role.value === Role.ACADEMIC_HEAD);
+                      // Prevent self-demotion: disable unchecking ADMIN role for self
+                      const isDisabledForSelf =
+                        isSelfWithAdmin &&
+                        role.value === Role.ADMIN &&
+                        isChecked;
+                      // Prevent removing last admin
+                      const isLastAdmin =
+                        role.value === Role.ADMIN &&
+                        isChecked &&
+                        tableData.filter((user) =>
+                          user.roles?.includes(Role.ADMIN)
+                        ).length <= 1;
+                      // Prevent removing last academic head
+                      const isLastAcademicHead =
+                        role.value === Role.ACADEMIC_HEAD &&
+                        isChecked &&
+                        tableData.filter((user) =>
+                          user.roles?.includes(Role.ACADEMIC_HEAD)
+                        ).length <= 1;
+                      const isDisabled =
+                        isDisabledForTemp ||
+                        isDisabledForSelf ||
+                        isLastAdmin ||
+                        isLastAcademicHead;
+
+                      // Determine tooltip message based on why it's disabled
+                      let tooltipMessage = "";
+                      if (isLastAdmin) {
+                        tooltipMessage =
+                          "Cannot remove Admin role. At least one Admin must exist in the system.";
+                      } else if (isLastAcademicHead) {
+                        tooltipMessage =
+                          "Cannot remove Academic Head role. At least one Academic Head must exist in the system.";
+                      } else if (isDisabledForSelf) {
+                        tooltipMessage =
+                          "You cannot remove your own Admin role";
+                      } else if (isDisabledForTemp) {
+                        tooltipMessage =
+                          "Temporary admins cannot modify Admin or Academic Head roles";
+                      }
+
+                      const checkboxElement = (
+                        <Checkbox
+                          id={`role-${row.original.id}-${role.value}`}
+                          checked={isChecked}
+                          onCheckedChange={(checked) =>
+                            handleRoleToggle(role.value, checked as boolean)
+                          }
+                          disabled={isDisabled}
+                        />
+                      );
+
+                      return (
+                        <div
+                          key={role.value}
+                          className="flex items-center space-x-2 p-2 rounded hover:bg-gray-50"
+                        >
+                          {isDisabled && tooltipMessage ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="cursor-not-allowed">
+                                  {checkboxElement}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{tooltipMessage}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            checkboxElement
+                          )}
+                          <label
+                            htmlFor={`role-${row.original.id}-${role.value}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                          >
+                            {role.label}
+                          </label>
+                        </div>
+                      );
+                    })}
+                </div>
+              </PopoverContent>
+            </Popover>
           );
         },
       },
       {
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => (
-          <Select
-            value={row.original.status}
-            onValueChange={(value: UserStatus) =>
-              handleStatusChange(row.original.id, value)
-            }
-            disabled={isStatusUpdating[row.original.id]}
-          >
-            <SelectTrigger className="w-[130px]">
-              <SelectValue>
-                {isStatusUpdating[row.original.id] ? (
+        cell: ({ row }) => {
+          const isCurrentUser = row.original.id === session?.user?.id;
+          const currentUserHasAdmin = session?.user?.roles?.includes(
+            Role.ADMIN
+          );
+          // Prevent self-archiving for admins
+          const isSelfWithAdmin = isCurrentUser && currentUserHasAdmin;
+
+          // Check if user is the last academic head
+          const isLastAcademicHead =
+            row.original.roles?.includes(Role.ACADEMIC_HEAD) &&
+            tableData.filter((user) => user.roles?.includes(Role.ACADEMIC_HEAD))
+              .length <= 1;
+
+          const isStatusDisabled =
+            isStatusUpdating[row.original.id] ||
+            (isSelfWithAdmin && row.original.status === "ACTIVE") ||
+            (isLastAcademicHead && row.original.status === "ACTIVE");
+
+          // Determine tooltip message
+          let statusTooltipMessage = "";
+          if (isLastAcademicHead && row.original.status === "ACTIVE") {
+            statusTooltipMessage =
+              "Cannot archive user. At least one Academic Head must exist in the system.";
+          } else if (isSelfWithAdmin && row.original.status === "ACTIVE") {
+            statusTooltipMessage = "You cannot archive yourself";
+          }
+
+          const selectElement = (
+            <Select
+              value={row.original.status}
+              onValueChange={(value: UserStatus) => {
+                // Prevent self-archiving for admins
+                if (isSelfWithAdmin && value === "ARCHIVED") {
+                  toast.error("You cannot archive yourself");
+                  return;
+                }
+                // Prevent archiving last academic head
+                if (isLastAcademicHead && value === "ARCHIVED") {
+                  toast.error(
+                    "Cannot archive user. At least one Academic Head must exist in the system."
+                  );
+                  return;
+                }
+                handleStatusChange(row.original.id, value);
+              }}
+              disabled={isStatusDisabled}
+            >
+              <SelectTrigger className="w-[130px]">
+                <SelectValue>
+                  {isStatusUpdating[row.original.id] ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
+                      <span>Updating...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`h-2 w-2 rounded-full ${
+                          row.original.status === "ACTIVE"
+                            ? "bg-green-500"
+                            : "bg-gray-500"
+                        }`}
+                      />
+                      <span>
+                        {row.original.status === "ACTIVE"
+                          ? "Active"
+                          : "Archived"}
+                      </span>
+                    </div>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ACTIVE">
                   <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
-                    <span>Updating...</span>
+                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                    <span>Active</span>
                   </div>
-                ) : (
+                </SelectItem>
+                <SelectItem value="ARCHIVED">
                   <div className="flex items-center gap-2">
-                    <div
-                      className={`h-2 w-2 rounded-full ${
-                        row.original.status === "ACTIVE"
-                          ? "bg-green-500"
-                          : "bg-gray-500"
-                      }`}
-                    />
-                    <span>
-                      {row.original.status === "ACTIVE" ? "Active" : "Archived"}
-                    </span>
+                    <div className="h-2 w-2 rounded-full bg-gray-500" />
+                    <span>Archived</span>
                   </div>
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ACTIVE">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-green-500" />
-                  <span>Active</span>
-                </div>
-              </SelectItem>
-              <SelectItem value="ARCHIVED">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-gray-500" />
-                  <span>Archived</span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        ),
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          );
+
+          return (
+            <>
+              {isStatusDisabled && statusTooltipMessage ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="cursor-not-allowed inline-block">
+                      {selectElement}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{statusTooltipMessage}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                selectElement
+              )}
+            </>
+          );
+        },
       },
       {
         id: "actions",
@@ -1065,41 +1333,21 @@ export function AdminDataTable({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              {/* Hide Edit User for ADMIN/ACADEMIC_HEAD when current user is temp admin */}
-              {!(
-                isCurrentUserTempAdmin &&
-                (row.original.role === "ADMIN" ||
-                  row.original.role === "ACADEMIC_HEAD")
-              ) && (
-                <DropdownMenuItem
-                  className="flex items-center gap-2"
-                  onClick={() => setEditingUser(row.original)}
-                >
-                  <Pencil className="h-4 w-4" />
-                  Edit User
-                </DropdownMenuItem>
-              )}
-              {/* Show promotion option only for permanent admins viewing temporary admins */}
-              {!isCurrentUserTempAdmin &&
-                currentUserRole === "ADMIN" &&
-                row.original.role === "ADMIN" && (
+              {/* Hide Edit User for current user (self-protection) and ADMIN/ACADEMIC_HEAD when current user is temp admin */}
+              {row.original.id !== session?.user?.id &&
+                !(
+                  isCurrentUserTempAdmin &&
+                  (row.original.roles?.includes(Role.ADMIN) ||
+                    row.original.roles?.includes(Role.ACADEMIC_HEAD))
+                ) && (
                   <DropdownMenuItem
-                    className="flex items-center gap-2 text-[#124A69]"
-                    onClick={async () => {
-                      const isTempAdmin = await checkIsTempAdmin(
-                        row.original.id
-                      );
-                      if (isTempAdmin) {
-                        setUserToPromote(row.original);
-                        setShowPromoteDialog(true);
-                      }
-                    }}
+                    className="flex items-center gap-2"
+                    onClick={() => setEditingUser(row.original)}
                   >
-                    <ShieldCheck className="h-4 w-4" />
-                    Promote to Permanent Admin
+                    <Pencil className="h-4 w-4" />
+                    Edit User
                   </DropdownMenuItem>
                 )}
-              <DropdownMenuSeparator />
             </DropdownMenuContent>
           </DropdownMenu>
         ),
@@ -1113,6 +1361,9 @@ export function AdminDataTable({
       imageMap,
       isCurrentUserTempAdmin,
       currentUserRole,
+      session?.user?.id,
+      session?.user?.roles,
+      tableData,
     ]
   );
 
@@ -1229,7 +1480,7 @@ export function AdminDataTable({
           user.email || "",
           user.department || "",
           formatEnumValue(user.workType),
-          formatEnumValue(user.role),
+          user.roles?.map((r) => formatEnumValue(r)).join(", ") || "",
           formatEnumValue(user.status),
         ]);
 
@@ -1527,7 +1778,9 @@ export function AdminDataTable({
                         {formatEnumValue(user.workType)}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-900">
-                        {formatEnumValue(user.role)}
+                        {user.roles
+                          ?.map((r) => formatEnumValue(r))
+                          .join(", ") || ""}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-900">
                         {formatEnumValue(user.status)}

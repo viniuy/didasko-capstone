@@ -12,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
 import CourseEmptyState from "@/features/courses/components/course-empty-state";
+import { hasAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,11 @@ export default async function FacultyDashboard() {
     redirect("/");
   }
 
+  // Check permission to access faculty dashboard
+  if (!hasAccess(session.user, "CAN_ACCESS_FACULTY_DASHBOARD")) {
+    redirect("/403");
+  }
+
   // Fetch courses to check if user has any
   const coursesResult = await getCourses({
     facultyId: session.user.id,
@@ -91,7 +97,7 @@ export default async function FacultyDashboard() {
                 {/* Stats */}
                 <StatsContent
                   userId={session.user.id}
-                  userRole={session.user.role}
+                  userRole={session.user.roles?.[0] || "FACULTY"}
                 />
 
                 {/* Courses */}

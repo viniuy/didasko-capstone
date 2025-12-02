@@ -50,7 +50,9 @@ const userSchema = z.object({
     ),
   department: z.string().min(1, "Department is required"),
   workType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT"]),
-  role: z.enum(["ADMIN", "FACULTY", "ACADEMIC_HEAD"]),
+  roles: z
+    .array(z.enum(["ADMIN", "FACULTY", "ACADEMIC_HEAD"]))
+    .min(1, "At least one role is required"),
   status: z.enum(["ACTIVE", "ARCHIVED"]),
 });
 
@@ -62,7 +64,7 @@ interface UserSheetProps {
     email: string;
     department: string;
     workType: WorkType;
-    role: Role;
+    roles: Role[];
     status: UserStatus;
   };
   onSuccess?: () => Promise<void> | void;
@@ -74,7 +76,7 @@ interface UserSheetProps {
       email?: string;
       department?: string;
       workType?: WorkType;
-      role?: Role;
+      roles?: Role[];
       status?: UserStatus;
     }
   ) => Promise<void>;
@@ -101,7 +103,7 @@ export function UserSheet({
     department:
       mode === "edit" ? user?.department || DEPARTMENTS[0] : DEPARTMENTS[0],
     workType: mode === "edit" ? user?.workType || "FULL_TIME" : "FULL_TIME",
-    role: mode === "edit" ? user?.role || "FACULTY" : "FACULTY",
+    roles: mode === "edit" ? user?.roles || ["FACULTY"] : ["FACULTY"],
     status: mode === "edit" ? user?.status || "ACTIVE" : "ACTIVE",
   };
 
@@ -137,7 +139,7 @@ export function UserSheet({
           email: values.email,
           department: values.department,
           workType: values.workType,
-          role: values.role,
+          roles: values.roles,
           status: values.status,
         });
         toast.success("User updated successfully!", { id: toastId });
@@ -339,49 +341,78 @@ export function UserSheet({
 
               <div className="flex flex-row gap-2">
                 <div className="space-y-1 flex-1">
-                  <Label htmlFor="role">
-                    Role <span className="text-red-500">*</span>
+                  <Label htmlFor="roles">
+                    Roles <span className="text-red-500">*</span>
                   </Label>
-                  <Select
-                    onValueChange={(value) => {
-                      // Prevent temp admin from assigning ADMIN or ACADEMIC_HEAD roles
-                      if (
-                        isCurrentUserTempAdmin &&
-                        (value === "ADMIN" || value === "ACADEMIC_HEAD")
-                      ) {
-                        toast.error(
-                          "Temporary admins cannot assign Admin or Academic Head roles"
+                  <div className="space-y-2 border rounded-md p-3">
+                    {[
+                      { value: Role.FACULTY, label: "Faculty" },
+                      { value: Role.ADMIN, label: "Admin" },
+                      { value: Role.ACADEMIC_HEAD, label: "Academic Head" },
+                    ]
+                      .filter(
+                        (role) =>
+                          !isCurrentUserTempAdmin || role.value === Role.FACULTY
+                      )
+                      .map((role) => {
+                        const currentRoles = form.watch("roles") || [];
+                        const isChecked = currentRoles.includes(role.value);
+                        return (
+                          <div
+                            key={role.value}
+                            className="flex items-center space-x-2"
+                          >
+                            <input
+                              type="checkbox"
+                              id={`role-${role.value}`}
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const currentRoles =
+                                  form.getValues("roles") || [];
+                                if (e.target.checked) {
+                                  if (
+                                    isCurrentUserTempAdmin &&
+                                    (role.value === Role.ADMIN ||
+                                      role.value === Role.ACADEMIC_HEAD)
+                                  ) {
+                                    toast.error(
+                                      "Temporary admins cannot assign Admin or Academic Head roles"
+                                    );
+                                    return;
+                                  }
+                                  form.setValue("roles", [
+                                    ...currentRoles,
+                                    role.value,
+                                  ]);
+                                } else {
+                                  form.setValue(
+                                    "roles",
+                                    currentRoles.filter((r) => r !== role.value)
+                                  );
+                                }
+                              }}
+                              disabled={
+                                isCurrentUserTempAdmin &&
+                                mode === "edit" &&
+                                user?.roles?.includes(role.value) &&
+                                (role.value === Role.ADMIN ||
+                                  role.value === Role.ACADEMIC_HEAD)
+                              }
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <label
+                              htmlFor={`role-${role.value}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {role.label}
+                            </label>
+                          </div>
                         );
-                        return;
-                      }
-                      form.setValue("role", value as Role);
-                    }}
-                    defaultValue={form.getValues("role")}
-                    disabled={
-                      isCurrentUserTempAdmin &&
-                      mode === "edit" &&
-                      (user?.role === "ADMIN" || user?.role === "ACADEMIC_HEAD")
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={Role.FACULTY}>Faculty</SelectItem>
-                      {/* Temp admins can only create FACULTY users */}
-                      {!isCurrentUserTempAdmin && (
-                        <>
-                          <SelectItem value={Role.ADMIN}>Admin</SelectItem>
-                          <SelectItem value={Role.ACADEMIC_HEAD}>
-                            Academic Head
-                          </SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.role && (
+                      })}
+                  </div>
+                  {form.formState.errors.roles && (
                     <p className="text-sm text-red-500">
-                      {form.formState.errors.role.message}
+                      {form.formState.errors.roles.message}
                     </p>
                   )}
                 </div>

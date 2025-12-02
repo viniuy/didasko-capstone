@@ -166,7 +166,9 @@ export default function EditProfileModal({
 
         <div>
           <p className="font-semibold text-xl text-[#124A69]">{user.name}</p>
-          <p className="text-sm text-gray-500">{formatRole(user.role)}</p>
+          <p className="text-sm text-gray-500">
+            {user.roles?.map((r) => formatRole(r)).join(", ") || "N/A"}
+          </p>
         </div>
 
         <div className="flex justify-between mt-4">

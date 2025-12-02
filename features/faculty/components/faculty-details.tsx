@@ -28,7 +28,7 @@ interface FacultyMember {
   department: string;
   workType: WorkType;
   image: string | null;
-  role: Role;
+  roles: Role[];
   coursesTeaching: Course[];
 }
 
@@ -180,7 +180,7 @@ export default function FacultyDetails({
             <p className="text-gray-600">{faculty.department}</p>
             <div className="flex items-center space-x-2 mt-1">
               <span className="px-2 py-1 text-xs rounded-full bg-[#124A69] text-white">
-                {sanitizeText(faculty.role)}
+                {sanitizeText(faculty.roles?.join(", ") || "N/A")}
               </span>
               <span className="px-2 py-1 text-xs rounded-full bg-[#FAEDCB] text-[#124A69]">
                 {sanitizeText(faculty.workType)}

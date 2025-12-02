@@ -91,11 +91,14 @@ export function BreakGlassWidget() {
   // Filter faculty to only FACULTY role
   const facultyList = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return [];
-    return facultyData.filter((user: FacultyMember) => user.role === "FACULTY");
+    return facultyData.filter((user: FacultyMember) =>
+      user.roles?.includes("FACULTY")
+    );
   }, [facultyData]);
 
   // Only show for Academic Head
-  if (session?.user?.role !== Role.ACADEMIC_HEAD) {
+  const userRoles = session?.user?.roles || [];
+  if (!userRoles.includes(Role.ACADEMIC_HEAD)) {
     return null;
   }
 

@@ -57,7 +57,7 @@ async function initializeFaculty(facultyMember: FacultyMember) {
       email: facultyMember.email,
       department: facultyMember.department,
       workType: facultyMember.workType,
-      role: facultyMember.role,
+      roles: [facultyMember.role],
       status: "ACTIVE",
     },
   });

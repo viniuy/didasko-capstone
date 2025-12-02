@@ -14,7 +14,7 @@ model User {
   email             String             @unique
   department        String
   workType          WorkType           @map("work_type")
-  role              Role
+  roles             Role[]
   image             String?
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
@@ -194,7 +194,7 @@ model Event {
   date        DateTime
   fromTime    String?
   toTime      String?
-  role        Role
+  roles       Role[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -479,7 +479,7 @@ model BreakGlassSession {
   activatedAt        DateTime  @default(now()) @map("activated_at")
   expiresAt          DateTime? @map("expires_at")
   activatedBy        String?   @map("activated_by")
-  originalRole       Role      @map("original_role")
+  originalRoles      Role[]    @map("original_roles")
   promotionCode      String    @map("promotion_code")
   secretCode         String    @map("secret_code")
   promotionCodePlain String?   @map("promotion_code_plain") @db.VarChar(50)

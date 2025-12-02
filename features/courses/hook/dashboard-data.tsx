@@ -7,11 +7,17 @@ export async function getDashboardData() {
   });
 
   const fullTimeCount = await prisma.user.count({
-    where: { workType: WorkType.FULL_TIME, role: Role.FACULTY },
+    where: { 
+      workType: WorkType.FULL_TIME, 
+      roles: { has: Role.FACULTY }
+    },
   });
 
   const partTimeCount = await prisma.user.count({
-    where: { workType: WorkType.PART_TIME, role: Role.FACULTY },
+    where: { 
+      workType: WorkType.PART_TIME, 
+      roles: { has: Role.FACULTY }
+    },
   });
 
   const activeCount = await prisma.user.count({

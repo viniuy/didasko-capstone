@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         reason: `User logged out: ${session.user.name} (${session.user.email})`,
         status: "SUCCESS",
         before: {
-          role: session.user.role,
+          roles: session.user.roles,
         },
         metadata: {
           logoutType: "manual",

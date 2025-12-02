@@ -34,24 +34,24 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         try {
           // Fetch full user info from DB only on initial login
-        const dbUser = await prisma.user.findUnique({
+          const dbUser = await prisma.user.findUnique({
             where: { email: user.email ?? "" },
-          select: { id: true, name: true, role: true, email: true },
-        });
+            select: { id: true, name: true, roles: true, email: true },
+          });
 
-        if (dbUser) {
-          token.id = dbUser.id;
-          token.name = dbUser.name;
-          token.role = dbUser.role;
-          token.email = dbUser.email;
+          if (dbUser) {
+            token.id = dbUser.id;
+            token.name = dbUser.name;
+            token.roles = dbUser.roles;
+            token.email = dbUser.email;
           } else {
             // Fallback to user data from OAuth provider
             token.id = user.id;
             token.name = user.name;
             token.email = user.email;
-        }
-      } catch (error) {
-        console.error("JWT callback error:", error);
+          }
+        } catch (error) {
+          console.error("JWT callback error:", error);
           // Fallback to user data from OAuth provider on error
           token.id = user.id;
           token.name = user.name;
@@ -69,8 +69,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.name = token.name as string;
         session.user.email = token.email as string;
-        session.user.role =
-          (token.role as "ADMIN" | "ACADEMIC_HEAD" | "FACULTY") || "FACULTY";
+        session.user.roles = (token.roles as Role[]) || [];
       }
       return session;
     },

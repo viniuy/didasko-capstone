@@ -29,17 +29,17 @@ export async function activateBreakGlass(
   reason: string,
   activatedBy: string
 ): Promise<{ secretCode: string; promotionCode: string }> {
-  // Get the faculty user to verify role and store original role
+  // Get the faculty user to verify role and store original roles
   const facultyUser = await prisma.user.findUnique({
     where: { id: facultyUserId },
-    select: { id: true, role: true, name: true, email: true },
+    select: { id: true, roles: true, name: true, email: true },
   });
 
   if (!facultyUser) {
     throw new Error("Faculty user not found");
   }
 
-  if (facultyUser.role !== "FACULTY") {
+  if (!facultyUser.roles.includes("FACULTY")) {
     throw new Error("Break-glass can only be activated for Faculty members");
   }
 
@@ -62,10 +62,13 @@ export async function activateBreakGlass(
   const encryptedSecretCode = await bcrypt.hash(secretCode, saltRounds);
   const encryptedPromotionCode = await bcrypt.hash(promotionCode, saltRounds);
 
-  // Temporarily change the user's role to ADMIN
+  // Temporarily add ADMIN role to user's roles (preserve existing roles)
+  const updatedRoles = facultyUser.roles.includes("ADMIN")
+    ? facultyUser.roles
+    : [...facultyUser.roles, "ADMIN"];
   await prisma.user.update({
     where: { id: facultyUserId },
-    data: { role: "ADMIN" },
+    data: { roles: updatedRoles },
   });
 
   // Create or update break-glass session with encrypted codes
@@ -78,7 +81,7 @@ export async function activateBreakGlass(
         userId: facultyUserId,
         reason,
         activatedBy,
-        originalRole: "FACULTY",
+        originalRoles: facultyUser.roles,
         expiresAt: null,
         secretCode: encryptedSecretCode,
         promotionCode: encryptedPromotionCode,
@@ -88,7 +91,7 @@ export async function activateBreakGlass(
         reason,
         activatedBy,
         activatedAt: new Date(),
-        originalRole: "FACULTY",
+        originalRoles: facultyUser.roles,
         expiresAt: null,
         secretCode: encryptedSecretCode,
         promotionCode: encryptedPromotionCode,
@@ -107,7 +110,7 @@ export async function activateBreakGlass(
           userId: facultyUserId,
           reason,
           activatedBy,
-          originalRole: "FACULTY",
+          originalRoles: facultyUser.roles,
           expiresAt: null,
           secretCode: encryptedSecretCode,
           promotionCode: encryptedPromotionCode,
@@ -116,7 +119,7 @@ export async function activateBreakGlass(
           reason,
           activatedBy,
           activatedAt: new Date(),
-          originalRole: "FACULTY",
+          originalRoles: facultyUser.roles,
           expiresAt: null,
           secretCode: encryptedSecretCode,
           promotionCode: encryptedPromotionCode,
@@ -138,13 +141,13 @@ export async function activateBreakGlass(
     reason: reason,
     before: {
       userId: facultyUserId,
-      role: "FACULTY",
+      roles: facultyUser.roles,
       name: facultyUser.name,
       email: facultyUser.email,
     },
     after: {
       userId: facultyUserId,
-      role: "ADMIN",
+      roles: updatedRoles,
       name: facultyUser.name,
       email: facultyUser.email,
     },
@@ -169,7 +172,7 @@ export async function deactivateBreakGlass(
   userId: string,
   deactivatedBy: string
 ): Promise<void> {
-  // Note: originalRole field exists in schema but Prisma client needs regeneration after migration
+  // Note: originalRoles field exists in schema but Prisma client needs regeneration after migration
   const session = (await (prisma.breakGlassSession as any).findUnique({
     where: { userId },
     select: {
@@ -179,13 +182,13 @@ export async function deactivateBreakGlass(
       activatedAt: true,
       expiresAt: true,
       activatedBy: true,
-      originalRole: true,
+      originalRoles: true,
       user: {
         select: {
           id: true,
           name: true,
           email: true,
-          role: true,
+          roles: true,
         },
       },
     },
@@ -196,20 +199,28 @@ export async function deactivateBreakGlass(
     activatedAt: Date;
     expiresAt: Date | null;
     activatedBy: string | null;
-    originalRole: "FACULTY" | "ADMIN" | "ACADEMIC_HEAD";
+    originalRoles: string[];
     user: {
       id: string;
       name: string;
       email: string;
-      role: string;
+      roles: string[];
     };
   } | null;
 
   if (session) {
-    // Restore the original role
+    // Restore the original roles (remove ADMIN if it was added)
+    const restoredRoles = session.originalRoles.filter(
+      (role) => role !== "ADMIN" || session.originalRoles.includes("ADMIN")
+    );
+    // If ADMIN was in original roles, keep it; otherwise remove it
+    const finalRoles = session.originalRoles.includes("ADMIN")
+      ? session.originalRoles
+      : session.originalRoles.filter((role) => role !== "ADMIN");
+
     await prisma.user.update({
       where: { id: userId },
-      data: { role: session.originalRole },
+      data: { roles: session.originalRoles },
     });
 
     // Delete the break-glass session
@@ -225,21 +236,21 @@ export async function deactivateBreakGlass(
       reason: session.reason || null,
       before: {
         userId: session.userId,
-        role: "ADMIN",
+        roles: session.user.roles,
         name: session.user.name,
         email: session.user.email,
         activatedBy: session.activatedBy,
       },
       after: {
         userId: session.userId,
-        role: session.originalRole,
+        roles: session.originalRoles,
         name: session.user.name,
         email: session.user.email,
       },
       status: "SUCCESS",
       metadata: {
         targetUserId: session.userId,
-        originalRole: session.originalRole,
+        originalRoles: session.originalRoles,
       },
     });
   }
@@ -275,7 +286,7 @@ export async function getBreakGlassSession(userId: string) {
           id: true,
           name: true,
           email: true,
-          role: true,
+          roles: true,
         },
       },
     },
@@ -307,7 +318,7 @@ export async function promoteToPermanentAdmin(
           id: true,
           name: true,
           email: true,
-          role: true,
+          roles: true,
         },
       },
     },
@@ -319,7 +330,7 @@ export async function promoteToPermanentAdmin(
       id: string;
       name: string;
       email: string;
-      role: string;
+      roles: string[];
     };
   } | null;
 
@@ -338,10 +349,13 @@ export async function promoteToPermanentAdmin(
     throw new Error("Invalid promotion code");
   }
 
-  // Update user role to permanent ADMIN (remove break-glass session)
+  // Update user roles to include permanent ADMIN (ensure ADMIN is in roles)
+  const updatedRoles = session.user.roles.includes("ADMIN")
+    ? session.user.roles
+    : [...session.user.roles, "ADMIN"];
   await prisma.user.update({
     where: { id: userId },
-    data: { role: "ADMIN" },
+    data: { roles: updatedRoles },
   });
 
   // Delete the break-glass session
@@ -357,14 +371,14 @@ export async function promoteToPermanentAdmin(
     reason: `Temporary admin promoted to permanent Admin`,
     before: {
       userId: session.userId,
-      role: "ADMIN",
+      roles: session.user.roles,
       name: session.user.name,
       email: session.user.email,
       isTemporary: true,
     },
     after: {
       userId: session.userId,
-      role: "ADMIN",
+      roles: updatedRoles,
       name: session.user.name,
       email: session.user.email,
       isTemporary: false,

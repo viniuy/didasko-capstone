@@ -28,7 +28,6 @@ interface ImportResult {
   }[];
 }
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -181,9 +180,16 @@ export async function POST(request: Request) {
             throw new Error(`Invalid work type: ${workType}`);
           }
 
-          // Convert role to enum
-          const roleEnum = role.toUpperCase().replace(/\s+/g, "_") as Role;
-          if (!Object.values(Role).includes(roleEnum)) {
+          // Convert role(s) to enum array
+          // Support comma-separated roles or single role
+          const roleStrings = role
+            .split(",")
+            .map((r) => r.trim().toUpperCase().replace(/\s+/g, "_"));
+          const roleEnums = roleStrings
+            .map((r) => r as Role)
+            .filter((r) => Object.values(Role).includes(r));
+
+          if (roleEnums.length === 0) {
             throw new Error(`Invalid role: ${role}`);
           }
 
@@ -200,7 +206,7 @@ export async function POST(request: Request) {
             email,
             department,
             workType: workTypeEnum,
-            role: roleEnum,
+            roles: roleEnums,
             status: statusEnum,
           });
 
@@ -211,7 +217,7 @@ export async function POST(request: Request) {
               email,
               department,
               workType: workTypeEnum,
-              role: roleEnum,
+              roles: roleEnums,
               status: statusEnum,
             },
           });
