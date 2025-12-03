@@ -29,9 +29,19 @@ export async function GET(request: NextRequest) {
     const DELETE_AFTER_UPLOAD =
       (process.env.AUDIT_EXPORT_DELETE_AFTER_UPLOAD || "true") === "true";
 
-    const cutoff = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
+    // Test mode: export logs from the past 1 hour instead of 7 days
+    const testMode = request.nextUrl.searchParams.get("testMode") === "true";
+    const daysToExport = testMode ? 1 / 24 : DAYS; // 1 hour for testing
+    const cutoff = new Date(Date.now() - daysToExport * 24 * 60 * 60 * 1000);
+
     console.log(
-      `[Audit Export Cron] Exporting logs created on or before ${cutoff.toISOString()}`
+      `[Audit Export Cron] Exporting logs created on or before ${cutoff.toISOString()} (testMode: ${testMode})`
+    );
+
+    // Count total logs for debugging
+    const totalLogs = await prisma.auditLog.count();
+    console.log(
+      `[Audit Export Cron] Total audit logs in database: ${totalLogs}`
     );
 
     // Fetch logs older than retention period
@@ -40,10 +50,24 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "asc" },
     });
 
+    console.log(
+      `[Audit Export Cron] Found ${
+        logs.length
+      } logs to export (cutoff: ${cutoff.toISOString()})`
+    );
+
     if (!logs || logs.length === 0) {
       console.log("[Audit Export Cron] No audit logs to export.");
       return NextResponse.json(
-        { message: "No audit logs to export.", exported: 0, deleted: 0 },
+        {
+          message: "No audit logs to export.",
+          exported: 0,
+          deleted: 0,
+          totalLogsInDb: totalLogs,
+          cutoffDate: cutoff.toISOString(),
+          retentionDays: testMode ? 1 / 24 : DAYS,
+          testMode,
+        },
         { status: 200 }
       );
     }
