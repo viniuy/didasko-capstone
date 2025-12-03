@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AnimatedContent from "@/components/ui/AnimatedContent";
@@ -75,6 +75,11 @@ export default function Notes() {
     createdAt: "",
   });
   const [openAdd, setOpenAdd] = useState(false);
+  const [openUnsavedChanges, setOpenUnsavedChanges] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"open" | "close" | null>(
+    null
+  );
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [newNote, setNewNote] = useState<Note>({
     id: "",
     title: "",
@@ -88,10 +93,48 @@ export default function Notes() {
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
 
+  // Track unsaved changes
+  useEffect(() => {
+    setHasUnsavedChanges(hasChanges(newNote));
+  }, [newNote]);
+
   // Extract notes from response
   const noteList = notesData?.notes || [];
   const totalNotes = notesData?.pagination?.total || noteList.length;
   const hasReachedMaxNotes = totalNotes >= MAX_NOTES_PER_USER;
+
+  // Function to check for unsaved changes
+  const hasChanges = (note: Note) => {
+    return note.title !== "" || note.description !== "";
+  };
+
+  // Function to reset new note form
+  const resetNewNoteForm = () => {
+    setNewNote({
+      id: "",
+      title: "",
+      description: "",
+      createdAt: "",
+    });
+    setHasUnsavedChanges(false);
+  };
+
+  // Function to handle unsaved changes response
+  const handleUnsavedChangesResponse = (keepChanges: boolean) => {
+    if (!keepChanges) {
+      resetNewNoteForm();
+    }
+
+    if (pendingAction === "open") {
+      setOpenAdd(true);
+    } else if (pendingAction === "close") {
+      // If keeping changes, re-open the modal; otherwise close it
+      setOpenAdd(keepChanges);
+    }
+
+    setOpenUnsavedChanges(false);
+    setPendingAction(null);
+  };
 
   // Function to show alert notifications
   const showAlert = (
@@ -148,7 +191,12 @@ export default function Notes() {
       );
       return;
     }
-    setOpenAdd(true);
+    if (hasUnsavedChanges) {
+      setPendingAction("open");
+      setOpenUnsavedChanges(true);
+    } else {
+      setOpenAdd(true);
+    }
   }
 
   const saveNewNote = async () => {
@@ -178,12 +226,7 @@ export default function Notes() {
         userId: session.user.id,
       });
       setOpenAdd(false);
-      setNewNote({
-        id: "",
-        title: "",
-        description: "",
-        createdAt: "",
-      });
+      resetNewNoteForm();
     } catch (error) {
       // Error is handled by the mutation hook
     }
@@ -459,7 +502,18 @@ export default function Notes() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={openAdd} onOpenChange={setOpenAdd}>
+      <AlertDialog
+        open={openAdd}
+        onOpenChange={(open) => {
+          // Check for unsaved changes first before any other conditions
+          if (!open && hasUnsavedChanges) {
+            setPendingAction("close");
+            setOpenUnsavedChanges(true);
+            return;
+          }
+          setOpenAdd(open);
+        }}
+      >
         <AlertDialogContent className="max-w-[425px] w-full h-[400px]">
           <AlertDialogHeader className="space-y-3">
             <AlertDialogTitle className="text-xl font-semibold">
@@ -518,6 +572,40 @@ export default function Notes() {
               disabled={!newNote.title.trim()}
             >
               Save
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={openUnsavedChanges}
+        onOpenChange={setOpenUnsavedChanges}
+      >
+        <AlertDialogContent className="">
+          <AlertDialogHeader className="">
+            <AlertDialogTitle className="text-xl font-semibold">
+              Unsaved Changes
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600">
+              You have unsaved changes. Do you want to keep or discard them?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel
+              onClick={() => {
+                handleUnsavedChangesResponse(false);
+              }}
+              className="border-0 bg-gray-100 hover:bg-gray-200 text-gray-900"
+            >
+              Exit without saving
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleUnsavedChangesResponse(true);
+              }}
+              className="bg-[#124A69] hover:bg-[#0a2f42] text-white"
+            >
+              Continue editing
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

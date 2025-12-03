@@ -55,11 +55,13 @@ import {
 export default function UpcomingEvents() {
   const { data: session, status } = useSession();
   const userRoles = session?.user?.roles || [];
-  const userRole = userRoles.includes(Role.ADMIN)
-    ? Role.ADMIN
-    : userRoles.includes(Role.ACADEMIC_HEAD)
-    ? Role.ACADEMIC_HEAD
-    : userRoles[0] || Role.FACULTY;
+  const userRole = (
+    userRoles.includes(Role.ADMIN)
+      ? Role.ADMIN
+      : userRoles.includes(Role.ACADEMIC_HEAD)
+      ? Role.ACADEMIC_HEAD
+      : userRoles[0]
+  ) as Role | undefined;
   const todayRef = useRef<HTMLDivElement>(null);
   const hasFetchedRef = useRef(false);
 
@@ -565,6 +567,14 @@ export default function UpcomingEvents() {
   // Function to confirm save
   async function confirmSave() {
     if (!eventsToSave) return;
+
+    if (!canManageEvents) {
+      toast.error("Only Academic Head or Admin can manage events");
+      setOpenConfirmSave(false);
+      setEventsToSave(null);
+      return;
+    }
+
     setIsSaving(true);
     setHasAttemptedSave(true);
     setAlert({ show: false, title: "", description: "", variant: "success" });
