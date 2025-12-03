@@ -124,7 +124,6 @@ interface CsvRow {
   Email: string;
   Department: string;
   "Work Type": string;
-  Role: string;
   Status: string;
   [key: string]: string;
 }
@@ -148,7 +147,6 @@ const EXPECTED_HEADERS = [
   "Email",
   "Department",
   "Work Type",
-  "Role",
   "Status",
 ];
 
@@ -501,7 +499,7 @@ export function AdminDataTable({
       const worksheet = workbook.addWorksheet("Template");
 
       // Title
-      worksheet.mergeCells("A1:F1");
+      worksheet.mergeCells("A1:E1");
       const titleRow = worksheet.getCell("A1");
       titleRow.value = "USER MANAGEMENT TEMPLATE";
       titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
@@ -514,14 +512,14 @@ export function AdminDataTable({
       worksheet.getRow(1).height = 30;
 
       // Date row
-      worksheet.mergeCells("A2:F2");
+      worksheet.mergeCells("A2:E2");
       const dateRow = worksheet.getCell("A2");
       dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
       dateRow.font = { italic: true, size: 11 };
       dateRow.alignment = { vertical: "middle", horizontal: "center" };
 
       // Instructions
-      worksheet.mergeCells("A3:F3");
+      worksheet.mergeCells("A3:E3");
       const instructionTitle = worksheet.getCell("A3");
       instructionTitle.value = "IMPORTANT INSTRUCTIONS";
       instructionTitle.font = {
@@ -539,8 +537,8 @@ export function AdminDataTable({
         "5. Do not modify or delete the header row",
         "6. Delete these instruction rows before importing",
         "7. Work Type must be exactly: Full Time or Part Time",
-        "8. Role must be exactly: Admin, Faculty, or Academic Head",
-        "9. Status must be exactly: Active or Archived",
+        "8. Status must be exactly: Active or Archived",
+        "9. IMPORTANT: Imported users are automatically assigned the Faculty role",
       ];
 
       instructions.forEach((instruction, index) => {
@@ -584,7 +582,6 @@ export function AdminDataTable({
           "john.smith@alabang.sti.edu.ph",
           "IT Department",
           "Full Time",
-          "Faculty",
           "Active",
         ],
         [
@@ -592,7 +589,6 @@ export function AdminDataTable({
           "jane.doe@alabang.sti.edu.ph",
           "Mathematics Department",
           "Part Time",
-          "Faculty",
           "Active",
         ],
         [
@@ -600,7 +596,6 @@ export function AdminDataTable({
           "robert.johnson@alabang.sti.edu.ph",
           "Computer Science Department",
           "Full Time",
-          "Academic Head",
           "Active",
         ],
       ];
@@ -740,7 +735,6 @@ export function AdminDataTable({
         "Email",
         "Department",
         "Work Type",
-        "Role",
         "Status",
       ];
 
@@ -1055,6 +1049,25 @@ export function AdminDataTable({
 
             let newRoles: Role[];
             if (checked) {
+              // Prevent having both ADMIN and ACADEMIC_HEAD roles
+              if (
+                role === Role.ADMIN &&
+                userRoles.includes(Role.ACADEMIC_HEAD)
+              ) {
+                toast.error(
+                  "A user cannot have both Admin and Academic Head roles. Please remove Academic Head role first."
+                );
+                return;
+              }
+              if (
+                role === Role.ACADEMIC_HEAD &&
+                userRoles.includes(Role.ADMIN)
+              ) {
+                toast.error(
+                  "A user cannot have both Admin and Academic Head roles. Please remove Admin role first."
+                );
+                return;
+              }
               newRoles = [...userRoles, role];
             } else {
               // Ensure at least one role remains
@@ -1140,15 +1153,30 @@ export function AdminDataTable({
                         tableData.filter((user) =>
                           user.roles?.includes(Role.ACADEMIC_HEAD)
                         ).length <= 1;
+                      // Prevent checking ADMIN if user has ACADEMIC_HEAD, and vice versa
+                      const isMutuallyExclusive =
+                        (role.value === Role.ADMIN &&
+                          userRoles.includes(Role.ACADEMIC_HEAD)) ||
+                        (role.value === Role.ACADEMIC_HEAD &&
+                          userRoles.includes(Role.ADMIN));
                       const isDisabled =
                         isDisabledForTemp ||
                         isDisabledForSelf ||
                         isLastAdmin ||
-                        isLastAcademicHead;
+                        isLastAcademicHead ||
+                        isMutuallyExclusive;
 
                       // Determine tooltip message based on why it's disabled
                       let tooltipMessage = "";
-                      if (isLastAdmin) {
+                      if (isMutuallyExclusive) {
+                        if (role.value === Role.ADMIN) {
+                          tooltipMessage =
+                            "A user cannot have both Admin and Academic Head roles. Please remove Academic Head role first.";
+                        } else {
+                          tooltipMessage =
+                            "A user cannot have both Admin and Academic Head roles. Please remove Admin role first.";
+                        }
+                      } else if (isLastAdmin) {
                         tooltipMessage =
                           "Cannot remove Admin role. At least one Admin must exist in the system.";
                       } else if (isLastAcademicHead) {
@@ -1170,6 +1198,7 @@ export function AdminDataTable({
                             handleRoleToggle(role.value, checked as boolean)
                           }
                           disabled={isDisabled}
+                          className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]"
                         />
                       );
 
@@ -1432,7 +1461,7 @@ export function AdminDataTable({
       const worksheet = workbook.addWorksheet("Users");
 
       // Title row
-      worksheet.mergeCells("A1:H1");
+      worksheet.mergeCells("A1:G1");
       const titleRow = worksheet.getCell("A1");
       titleRow.value = "USER MANAGEMENT DATA";
       titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
@@ -1445,7 +1474,7 @@ export function AdminDataTable({
       worksheet.getRow(1).height = 30;
 
       // Date row
-      worksheet.mergeCells("A2:H2");
+      worksheet.mergeCells("A2:G2");
       const dateRow = worksheet.getCell("A2");
       dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
       dateRow.font = { italic: true, size: 11 };
@@ -1480,7 +1509,6 @@ export function AdminDataTable({
           user.email || "",
           user.department || "",
           formatEnumValue(user.workType),
-          user.roles?.map((r) => formatEnumValue(r)).join(", ") || "",
           formatEnumValue(user.status),
         ]);
 
@@ -1508,7 +1536,6 @@ export function AdminDataTable({
         { width: 20 },
         { width: 30 },
         { width: 20 },
-        { width: 15 },
         { width: 15 },
         { width: 15 },
       ];
@@ -1778,11 +1805,6 @@ export function AdminDataTable({
                         {formatEnumValue(user.workType)}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-900">
-                        {user.roles
-                          ?.map((r) => formatEnumValue(r))
-                          .join(", ") || ""}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
                         {formatEnumValue(user.status)}
                       </td>
                     </tr>
@@ -1790,7 +1812,7 @@ export function AdminDataTable({
                   {tableData.length > MAX_PREVIEW_ROWS && (
                     <tr className="border-t bg-gray-50">
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="px-4 py-3 text-sm text-gray-600 text-center font-medium"
                       >
                         + {tableData.length - MAX_PREVIEW_ROWS} more{" "}
@@ -1844,6 +1866,13 @@ export function AdminDataTable({
             </DialogDescription>
           </DialogHeader>
           <div className="mt-6 space-y-6">
+            <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> Imported users are automatically assigned
+                the Faculty role. Roles can be changed later in the user
+                management table.
+              </p>
+            </div>
             <div className="flex items-center gap-4">
               <input
                 type="file"
@@ -1918,9 +1947,6 @@ export function AdminDataTable({
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {row["Work Type"]}
-                          </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {row["Role"]}
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {row["Status"]}

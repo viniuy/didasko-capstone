@@ -101,7 +101,8 @@ export async function POST(request: Request) {
         const fullname = row["Full Name"]?.trim();
         const department = row["Department"]?.trim();
         const workType = row["Work Type"]?.trim();
-        const role = row["Role"]?.trim();
+        // Role is no longer in import - default to FACULTY
+        const role = "FACULTY";
         const status = row["Status"]?.trim();
 
         if (!email.endsWith("@alabang.sti.edu.ph")) {
@@ -121,21 +122,13 @@ export async function POST(request: Request) {
           return;
         }
 
-        // Validate required fields
-        if (
-          !email ||
-          !fullname ||
-          !department ||
-          !workType ||
-          !role ||
-          !status
-        ) {
+        // Validate required fields (role is no longer required - defaults to FACULTY)
+        if (!email || !fullname || !department || !workType || !status) {
           console.log(`Row ${rowNumber}: Missing required fields`, {
             email,
             fullname,
             department,
             workType,
-            role,
             status,
           });
           result.errors.push({
@@ -180,18 +173,8 @@ export async function POST(request: Request) {
             throw new Error(`Invalid work type: ${workType}`);
           }
 
-          // Convert role(s) to enum array
-          // Support comma-separated roles or single role
-          const roleStrings = role
-            .split(",")
-            .map((r) => r.trim().toUpperCase().replace(/\s+/g, "_"));
-          const roleEnums = roleStrings
-            .map((r) => r as Role)
-            .filter((r) => Object.values(Role).includes(r));
-
-          if (roleEnums.length === 0) {
-            throw new Error(`Invalid role: ${role}`);
-          }
+          // All imported users are automatically assigned FACULTY role
+          const roleEnums = [Role.FACULTY];
 
           // Convert status to enum
           const statusEnum = status

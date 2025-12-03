@@ -22,8 +22,9 @@ import {
 import { Plus } from "lucide-react";
 import toast from "react-hot-toast";
 import { editCourse, checkCourseSlugExists } from "@/lib/actions/courses";
-import { CourseStatus } from "@prisma/client";
+import { CourseStatus, Role } from "@prisma/client";
 import type { UserRole } from "@/lib/permission";
+import { useUsers } from "@/lib/hooks/queries";
 
 interface Course {
   id: string;
@@ -81,6 +82,13 @@ export function CourseSheet({
   const setOpen = controlledOnOpenChange || setInternalOpen;
 
   const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch all users to check if user is the last academic head
+  const { data: allUsersData } = useUsers();
+  const allUsers: Array<{
+    id: string;
+    roles?: Role[];
+  }> = Array.isArray(allUsersData) ? allUsersData : allUsersData?.users || [];
 
   // Function to get the current academic year based on the date
   const getCurrentAcademicYear = (): string => {
@@ -287,12 +295,33 @@ export function CourseSheet({
           status: CourseStatus.ACTIVE,
         });
       } else if (course) {
+        // Prevent archiving if user is the last academic head
+        if (
+          formData.status === CourseStatus.ARCHIVED &&
+          course.status === CourseStatus.ACTIVE
+        ) {
+          const currentUser = allUsers.find((u) => u.id === userId);
+          if (currentUser?.roles?.includes(Role.ACADEMIC_HEAD)) {
+            const academicHeadCount = allUsers.filter((u) =>
+              u.roles?.includes(Role.ACADEMIC_HEAD)
+            ).length;
+            if (academicHeadCount <= 1) {
+              toast.error(
+                "Cannot archive course. At least one Academic Head must exist in the system."
+              );
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+
         // For edit mode: Update existing course
         const result = await editCourse(course.id, courseData);
 
         if (result?.success) {
           toast.success("Course updated successfully");
           if (onSuccess) onSuccess();
+          // Close the sheet after successful edit
           setOpen(false);
           if (onClose) onClose();
         } else {
@@ -568,6 +597,21 @@ export function CourseSheet({
                 onValueChange={(value) =>
                   handleChange("status", value as CourseStatus)
                 }
+                disabled={
+                  mode === "edit" &&
+                  course?.status === CourseStatus.ACTIVE &&
+                  formData.status === CourseStatus.ACTIVE &&
+                  (() => {
+                    const currentUser = allUsers.find((u) => u.id === userId);
+                    if (currentUser?.roles?.includes(Role.ACADEMIC_HEAD)) {
+                      const academicHeadCount = allUsers.filter((u) =>
+                        u.roles?.includes(Role.ACADEMIC_HEAD)
+                      ).length;
+                      return academicHeadCount <= 1;
+                    }
+                    return false;
+                  })()
+                }
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -577,6 +621,25 @@ export function CourseSheet({
                   <SelectItem value="ARCHIVED">Archived</SelectItem>
                 </SelectContent>
               </Select>
+              {mode === "edit" &&
+                course?.status === CourseStatus.ACTIVE &&
+                (() => {
+                  const currentUser = allUsers.find((u) => u.id === userId);
+                  if (currentUser?.roles?.includes(Role.ACADEMIC_HEAD)) {
+                    const academicHeadCount = allUsers.filter((u) =>
+                      u.roles?.includes(Role.ACADEMIC_HEAD)
+                    ).length;
+                    if (academicHeadCount <= 1) {
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Cannot archive course. At least one Academic Head must
+                          exist in the system.
+                        </p>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
             </div>
           </div>
 

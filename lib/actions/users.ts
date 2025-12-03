@@ -67,6 +67,17 @@ export async function addUser(userData: AddUserParams) {
       }
     }
 
+    // Prevent having both ADMIN and ACADEMIC_HEAD roles
+    const hasAdmin = userData.roles.includes("ADMIN");
+    const hasAcademicHead = userData.roles.includes("ACADEMIC_HEAD");
+    if (hasAdmin && hasAcademicHead) {
+      return {
+        success: false,
+        error:
+          "A user cannot have both Admin and Academic Head roles simultaneously.",
+      };
+    }
+
     // Check if email already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: userData.email },
@@ -205,6 +216,60 @@ export async function editUser(
       }
     }
 
+    // Prevent having both ADMIN and ACADEMIC_HEAD roles
+    if (data.roles) {
+      const hasAdmin = data.roles.includes("ADMIN");
+      const hasAcademicHead = data.roles.includes("ACADEMIC_HEAD");
+      if (hasAdmin && hasAcademicHead) {
+        return {
+          success: false,
+          error:
+            "A user cannot have both Admin and Academic Head roles simultaneously.",
+        };
+      }
+
+      const userHadAdmin = userBefore.roles.includes("ADMIN");
+      const userHadAcademicHead = userBefore.roles.includes("ACADEMIC_HEAD");
+      const userWillHaveAdmin = data.roles.includes("ADMIN");
+      const userWillHaveAcademicHead = data.roles.includes("ACADEMIC_HEAD");
+
+      // Check if removing admin role
+      if (userHadAdmin && !userWillHaveAdmin) {
+        const adminCount = await prisma.user.count({
+          where: {
+            roles: {
+              has: "ADMIN",
+            },
+          },
+        });
+        if (adminCount <= 1) {
+          return {
+            success: false,
+            error:
+              "Cannot remove Admin role. At least one Admin must exist in the system.",
+          };
+        }
+      }
+
+      // Check if removing academic head role
+      if (userHadAcademicHead && !userWillHaveAcademicHead) {
+        const academicHeadCount = await prisma.user.count({
+          where: {
+            roles: {
+              has: "ACADEMIC_HEAD",
+            },
+          },
+        });
+        if (academicHeadCount <= 1) {
+          return {
+            success: false,
+            error:
+              "Cannot remove Academic Head role. At least one Academic Head must exist in the system.",
+          };
+        }
+      }
+    }
+
     // Check if email already exists (if email is being changed)
     if (data.email) {
       const existingUser = await prisma.user.findFirst({
@@ -238,7 +303,7 @@ export async function editUser(
         JSON.stringify(data.roles.sort()) !==
           JSON.stringify(userBefore.roles.sort());
 
-      if (rolesChanged) {
+      if (rolesChanged && data.roles) {
         action = "USER_ROLE_CHANGED";
         reason = `User roles changed: ${updatedUser.name} (${
           updatedUser.email

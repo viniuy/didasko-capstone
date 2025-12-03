@@ -26,10 +26,21 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
 import { useSession } from "next-auth/react";
-import { useBreakGlassStatus } from "@/lib/hooks/queries";
+import { useBreakGlassStatus, useUsers } from "@/lib/hooks/queries";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Available departments
-const DEPARTMENTS = ["IT Department", "BA Department", "HM Department"];
+const DEPARTMENTS = [
+  "IT Department",
+  "BA Department",
+  "HM Department",
+  "TM Department",
+];
 
 const userSchema = z.object({
   name: z
@@ -97,20 +108,68 @@ export function UserSheet({
   const { data: breakGlassData } = useBreakGlassStatus(session?.user?.id);
   const isCurrentUserTempAdmin = !!breakGlassData?.isActive;
 
-  const initialFormData = {
+  // Fetch all users to check if user is the last admin/academic head
+  const { data: allUsersData } = useUsers();
+  const allUsers: Array<{
+    id: string;
+    roles?: Role[];
+  }> = Array.isArray(allUsersData) ? allUsersData : allUsersData?.users || [];
+
+  const initialFormData: z.infer<typeof userSchema> = {
     name: mode === "edit" ? user?.name || "" : "",
     email: mode === "edit" ? user?.email || "" : "",
     department:
       mode === "edit" ? user?.department || DEPARTMENTS[0] : DEPARTMENTS[0],
-    workType: mode === "edit" ? user?.workType || "FULL_TIME" : "FULL_TIME",
-    roles: mode === "edit" ? user?.roles || ["FACULTY"] : ["FACULTY"],
-    status: mode === "edit" ? user?.status || "ACTIVE" : "ACTIVE",
+    workType:
+      mode === "edit"
+        ? (user?.workType as "FULL_TIME" | "PART_TIME" | "CONTRACT") ||
+          "FULL_TIME"
+        : "FULL_TIME",
+    roles:
+      mode === "edit"
+        ? (user?.roles as ("ADMIN" | "FACULTY" | "ACADEMIC_HEAD")[]) || [
+            "FACULTY",
+          ]
+        : ["FACULTY"],
+    status:
+      mode === "edit"
+        ? (user?.status as "ACTIVE" | "ARCHIVED") || "ACTIVE"
+        : "ACTIVE",
   };
 
   const form = useForm<z.infer<typeof userSchema>>({
     resolver: zodResolver(userSchema),
     defaultValues: initialFormData,
   });
+
+  // Reset form and open sheet when user prop changes (for edit mode)
+  useEffect(() => {
+    if (mode === "edit" && user) {
+      setOpen(true);
+      form.reset({
+        name: user.name || "",
+        email: user.email || "",
+        department: user.department || DEPARTMENTS[0],
+        workType:
+          (user.workType as "FULL_TIME" | "PART_TIME" | "CONTRACT") ||
+          "FULL_TIME",
+        roles: (user.roles as ("ADMIN" | "FACULTY" | "ACADEMIC_HEAD")[]) || [
+          "FACULTY",
+        ],
+        status: (user.status as "ACTIVE" | "ARCHIVED") || "ACTIVE",
+      });
+    } else if (mode === "add") {
+      // Reset form for add mode
+      form.reset({
+        name: "",
+        email: "",
+        department: DEPARTMENTS[0],
+        workType: "FULL_TIME",
+        roles: ["FACULTY"],
+        status: "ACTIVE",
+      });
+    }
+  }, [user?.id, mode, form]);
 
   const onSubmit = async (values: z.infer<typeof userSchema>) => {
     const toastId = toast.loading(
@@ -119,6 +178,22 @@ export function UserSheet({
 
     try {
       setIsSubmitting(true);
+
+      // Prevent temporary admins from adding users with ADMIN or ACADEMIC_HEAD roles
+      if (isCurrentUserTempAdmin && mode === "add") {
+        const hasAdminOrHeadRole =
+          values.roles.includes(Role.ADMIN) ||
+          values.roles.includes(Role.ACADEMIC_HEAD);
+
+        if (hasAdminOrHeadRole) {
+          toast.error(
+            "Temporary admins cannot add users with Admin or Academic Head roles",
+            { id: toastId }
+          );
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
       if (mode === "add") {
         const result = await addUser(values);
@@ -139,8 +214,9 @@ export function UserSheet({
           email: values.email,
           department: values.department,
           workType: values.workType,
-          roles: values.roles,
-          status: values.status,
+          // Don't update roles and status in edit mode - they're managed in the table
+          // roles: values.roles,
+          // status: values.status,
         });
         toast.success("User updated successfully!", { id: toastId });
         setOpen(false);
@@ -238,6 +314,7 @@ export function UserSheet({
                   placeholder="Enter full name"
                   className={form.formState.errors.name ? "border-red-500" : ""}
                   maxLength={100}
+                  disabled={isSubmitting}
                 />
                 <div className="flex justify-between">
                   <div className="text-xs text-muted-foreground">
@@ -272,6 +349,7 @@ export function UserSheet({
                   className={
                     form.formState.errors.email ? "border-red-500" : ""
                   }
+                  disabled={isSubmitting}
                 />
                 {form.formState.errors.email && (
                   <p className="text-sm text-red-500">
@@ -290,6 +368,7 @@ export function UserSheet({
                       form.setValue("department", value)
                     }
                     defaultValue={form.getValues("department")}
+                    disabled={isSubmitting}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select department" />
@@ -318,6 +397,7 @@ export function UserSheet({
                       form.setValue("workType", value as WorkType)
                     }
                     defaultValue={form.getValues("workType")}
+                    disabled={isSubmitting}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select work type" />
@@ -339,111 +419,139 @@ export function UserSheet({
                 </div>
               </div>
 
-              <div className="flex flex-row gap-2">
-                <div className="space-y-1 flex-1">
-                  <Label htmlFor="roles">
-                    Roles <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="space-y-2 border rounded-md p-3">
-                    {[
-                      { value: Role.FACULTY, label: "Faculty" },
-                      { value: Role.ADMIN, label: "Admin" },
-                      { value: Role.ACADEMIC_HEAD, label: "Academic Head" },
-                    ]
-                      .filter(
-                        (role) =>
-                          !isCurrentUserTempAdmin || role.value === Role.FACULTY
-                      )
-                      .map((role) => {
-                        const currentRoles = form.watch("roles") || [];
-                        const isChecked = currentRoles.includes(role.value);
-                        return (
-                          <div
-                            key={role.value}
-                            className="flex items-center space-x-2"
-                          >
-                            <input
-                              type="checkbox"
-                              id={`role-${role.value}`}
-                              checked={isChecked}
-                              onChange={(e) => {
-                                const currentRoles =
-                                  form.getValues("roles") || [];
-                                if (e.target.checked) {
-                                  if (
-                                    isCurrentUserTempAdmin &&
-                                    (role.value === Role.ADMIN ||
-                                      role.value === Role.ACADEMIC_HEAD)
-                                  ) {
-                                    toast.error(
-                                      "Temporary admins cannot assign Admin or Academic Head roles"
-                                    );
-                                    return;
-                                  }
-                                  form.setValue("roles", [
-                                    ...currentRoles,
-                                    role.value,
-                                  ]);
-                                } else {
-                                  form.setValue(
-                                    "roles",
-                                    currentRoles.filter((r) => r !== role.value)
-                                  );
-                                }
-                              }}
-                              disabled={
-                                isCurrentUserTempAdmin &&
-                                mode === "edit" &&
-                                user?.roles?.includes(role.value) &&
-                                (role.value === Role.ADMIN ||
-                                  role.value === Role.ACADEMIC_HEAD)
-                              }
-                              className="h-4 w-4 rounded border-gray-300"
-                            />
-                            <label
-                              htmlFor={`role-${role.value}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                            >
-                              {role.label}
-                            </label>
-                          </div>
-                        );
-                      })}
-                  </div>
-                  {form.formState.errors.roles && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.roles.message}
-                    </p>
-                  )}
-                </div>
+              {mode === "add" && (
+                <div className="flex flex-row gap-2">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="roles">
+                      Roles <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="space-y-2 border rounded-md p-3">
+                      {[
+                        { value: Role.FACULTY, label: "Faculty" },
+                        { value: Role.ADMIN, label: "Admin" },
+                        { value: Role.ACADEMIC_HEAD, label: "Academic Head" },
+                      ]
+                        .filter((role) => {
+                          // In add mode, hide ADMIN/ACADEMIC_HEAD for temp admins
+                          if (isCurrentUserTempAdmin && mode === "add") {
+                            return role.value === Role.FACULTY;
+                          }
+                          return true;
+                        })
+                        .map((role) => {
+                          const currentRoles = form.watch("roles") || [];
+                          const isChecked = currentRoles.includes(role.value);
+                          const isAdminOrHead =
+                            role.value === Role.ADMIN ||
+                            role.value === Role.ACADEMIC_HEAD;
 
-                <div className="space-y-1 flex-1">
-                  <Label htmlFor="status">
-                    Status <span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    onValueChange={(value) =>
-                      form.setValue("status", value as UserStatus)
-                    }
-                    defaultValue={form.getValues("status")}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={UserStatus.ACTIVE}>Active</SelectItem>
-                      <SelectItem value={UserStatus.ARCHIVED}>
-                        Archived
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.status && (
-                    <p className="text-sm text-red-500">
-                      {form.formState.errors.status.message}
-                    </p>
-                  )}
+                          return (
+                            <div
+                              key={role.value}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
+                                id={`role-${role.value}`}
+                                checked={isChecked}
+                                onCheckedChange={(checked) => {
+                                  const currentRoles =
+                                    form.getValues("roles") || [];
+                                  if (checked) {
+                                    if (
+                                      isCurrentUserTempAdmin &&
+                                      isAdminOrHead
+                                    ) {
+                                      toast.error(
+                                        "Temporary admins cannot assign Admin or Academic Head roles"
+                                      );
+                                      return;
+                                    }
+                                    // Prevent having both ADMIN and ACADEMIC_HEAD roles
+                                    if (
+                                      role.value === Role.ADMIN &&
+                                      currentRoles.includes(Role.ACADEMIC_HEAD)
+                                    ) {
+                                      toast.error(
+                                        "A user cannot have both Admin and Academic Head roles. Please remove Academic Head role first."
+                                      );
+                                      return;
+                                    }
+                                    if (
+                                      role.value === Role.ACADEMIC_HEAD &&
+                                      currentRoles.includes(Role.ADMIN)
+                                    ) {
+                                      toast.error(
+                                        "A user cannot have both Admin and Academic Head roles. Please remove Admin role first."
+                                      );
+                                      return;
+                                    }
+                                    form.setValue("roles", [
+                                      ...currentRoles,
+                                      role.value,
+                                    ]);
+                                  } else {
+                                    form.setValue(
+                                      "roles",
+                                      currentRoles.filter(
+                                        (r) => r !== role.value
+                                      )
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  isSubmitting ||
+                                  (isCurrentUserTempAdmin && isAdminOrHead)
+                                }
+                                className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]"
+                              />
+                              <label
+                                htmlFor={`role-${role.value}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                              >
+                                {role.label}
+                              </label>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    {form.formState.errors.roles && (
+                      <p className="text-sm text-red-500">
+                        {form.formState.errors.roles.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor="status">
+                      Status <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      onValueChange={(value) =>
+                        form.setValue("status", value as UserStatus)
+                      }
+                      defaultValue={form.getValues("status")}
+                      disabled={isSubmitting}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={UserStatus.ACTIVE}>
+                          Active
+                        </SelectItem>
+                        <SelectItem value={UserStatus.ARCHIVED}>
+                          Archived
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form.formState.errors.status && (
+                      <p className="text-sm text-red-500">
+                        {form.formState.errors.status.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
