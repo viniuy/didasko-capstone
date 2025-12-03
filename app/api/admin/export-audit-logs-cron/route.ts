@@ -51,22 +51,33 @@ export async function GET(request: NextRequest) {
     );
 
     // Count total logs for debugging
+    // Count total logs for debugging
     const totalLogs = await prisma.auditLog.count();
     console.log(
       `[Audit Export Cron] Total audit logs in database: ${totalLogs}`
     );
 
-    // Fetch logs older than retention period
-    const logs = await prisma.auditLog.findMany({
-      where: { createdAt: { lte: cutoff } },
-      orderBy: { createdAt: "asc" },
-    });
-
-    console.log(
-      `[Audit Export Cron] Found ${
-        logs.length
-      } logs to export (cutoff: ${cutoff.toISOString()})`
-    );
+    // Fetch logs: if FIRST_RUN export ALL logs, otherwise export logs older than cutoff
+    let logs;
+    if (FIRST_RUN) {
+      console.log(
+        "[Audit Export Cron] FIRST_RUN enabled — fetching ALL audit logs."
+      );
+      logs = await prisma.auditLog.findMany({ orderBy: { createdAt: "asc" } });
+      console.log(
+        `[Audit Export Cron] Found ${logs.length} logs to export (FIRST_RUN: all logs)`
+      );
+    } else {
+      logs = await prisma.auditLog.findMany({
+        where: { createdAt: { lte: cutoff } },
+        orderBy: { createdAt: "asc" },
+      });
+      console.log(
+        `[Audit Export Cron] Found ${
+          logs.length
+        } logs to export (cutoff: ${cutoff.toISOString()})`
+      );
+    }
 
     if (!logs || logs.length === 0) {
       console.log("[Audit Export Cron] No audit logs to export.");
