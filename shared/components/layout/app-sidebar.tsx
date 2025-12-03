@@ -75,6 +75,17 @@ const academicHeadItems = [
   { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
 ];
 
+const pureAcademicHeadItems = [
+  {
+    title: "Dashboard",
+    url: "/dashboard/academic-head",
+    icon: LayoutDashboard,
+  },
+  { title: "Courses", url: "/main/course", icon: BookOpen },
+  { title: "Faculty Load", url: "/main/faculty-load", icon: CalendarClock },
+  { title: "Audit Logs", url: "/main/logs", icon: Activity },
+];
+
 const facultyItems = [
   { title: "Dashboard", url: "/dashboard/faculty", icon: LayoutDashboard },
   { title: "Courses", url: "/main/course", icon: BookOpen },
@@ -258,6 +269,8 @@ export function AppSidebar() {
   const selectedRole = session?.user?.selectedRole;
   const isAcademicHead = userRoles.includes("ACADEMIC_HEAD");
   const isFaculty = userRoles.includes("FACULTY");
+  const hasMultipleRoles = isAdmin && isFaculty;
+  const isPureAcademicHead = isAcademicHead && !isFaculty;
 
   // Check if user is a temporary admin (has active break-glass session)
   const { data: breakGlassStatus } = useBreakGlassStatus(session?.user?.id);
@@ -270,11 +283,16 @@ export function AppSidebar() {
 
   // For admins, show menu items based on selectedRole if available
   let items = adminItems;
-  if (isAcademicHead) {
+  if (isPureAcademicHead) {
+    items = pureAcademicHeadItems;
+  } else if (isAcademicHead && isFaculty) {
     items = academicHeadItems;
-  } else if (isFaculty || (isAdmin && selectedRole === "FACULTY")) {
+  } else if (isFaculty || (hasMultipleRoles && selectedRole === "FACULTY")) {
     items = facultyItems;
   } else if (isAdmin && selectedRole === "ADMIN") {
+    items = adminItems;
+  } else if (isAdmin) {
+    // Pure admin without faculty role
     items = adminItems;
   }
 
@@ -628,12 +646,12 @@ export function AppSidebar() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle className="text-xl font-semibold">
-                  {isAdmin
+                  {hasMultipleRoles
                     ? "What would you like to do?"
                     : "Are you sure you want to logout?"}
                 </AlertDialogTitle>
                 <AlertDialogDescription className="text-gray-600">
-                  {isAdmin && !isTempAdmin
+                  {hasMultipleRoles && !isTempAdmin
                     ? selectedRole === "FACULTY"
                       ? "You can switch back to Admin view or logout completely."
                       : "You can switch to Faculty view or logout completely."
@@ -647,7 +665,7 @@ export function AppSidebar() {
                 >
                   Cancel
                 </AlertDialogCancel>
-                {isAdmin && !isTempAdmin && (
+                {hasMultipleRoles && !isTempAdmin && (
                   <AlertDialogAction
                     onClick={() => {
                       const newRole =

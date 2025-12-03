@@ -9,6 +9,7 @@ import { getCourses } from "@/lib/services";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { redirect } from "next/navigation";
+import { hasAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,11 @@ export default async function AttendancePage() {
 
   if (!session?.user) {
     redirect("/");
+  }
+
+  // Check permission to access attendance
+  if (!hasAccess(session.user, "CAN_ACCESS_ATTENDANCE")) {
+    redirect("/403");
   }
 
   // Fetch active courses for the current user on the server

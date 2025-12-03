@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import type { UserRole } from "@/lib/permission";
 import { authOptions } from "@/lib/auth-options";
 import { CourseDataTableWrapper } from "@/features/courses/components/course-data-table-wrapper";
+import { hasAccess } from "@/lib/permissions";
 
 // Route segment config for performance
 export const dynamic = "force-dynamic";
@@ -21,10 +22,20 @@ export default async function CourseDashboardPage() {
     redirect("/"); // Redirect to your sign-in page
   }
 
+  // Check permission to access courses (view or create)
+  if (!hasAccess(session.user, "CAN_VIEW_COURSES")) {
+    redirect("/403");
+  }
+
   // Extract user info from session
   const userId = session.user.id;
   const userRoles = session.user.roles || [];
-  const userRole = (userRoles[0] || "FACULTY") as UserRole;
+  // Prioritize FACULTY role if user has both ACADEMIC_HEAD and FACULTY
+  const userRole = (userRoles.includes("FACULTY")
+    ? "FACULTY"
+    : userRoles.includes("ACADEMIC_HEAD")
+    ? "ACADEMIC_HEAD"
+    : "FACULTY") as UserRole;
 
   // Redirect if no roles assigned
   if (userRoles.length === 0) {

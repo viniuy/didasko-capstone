@@ -134,17 +134,11 @@ export function StudentCard({
                       className={`w-full rounded-full px-4 py-1.5 text-sm font-medium border ${
                         statusStyles[student.status]
                       } ${
-                        isInCooldown ||
-                        disableStatusChange ||
-                        isSavingRfidAttendance
+                        isInCooldown || disableStatusChange
                           ? "opacity-50 cursor-not-allowed"
                           : ""
                       }`}
-                      disabled={
-                        isInCooldown ||
-                        disableStatusChange ||
-                        isSavingRfidAttendance
-                      }
+                      disabled={isInCooldown || disableStatusChange}
                     >
                       {student.status === "NOT_SET"
                         ? "Select status"
@@ -161,41 +155,25 @@ export function StudentCard({
               <DropdownMenuContent align="center">
                 <DropdownMenuItem
                   onClick={() => onStatusChange(index, "PRESENT")}
-                  disabled={
-                    isInCooldown ||
-                    disableStatusChange ||
-                    isSavingRfidAttendance
-                  }
+                  disabled={isInCooldown || disableStatusChange}
                 >
                   Present
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => onStatusChange(index, "LATE")}
-                  disabled={
-                    isInCooldown ||
-                    disableStatusChange ||
-                    isSavingRfidAttendance
-                  }
+                  disabled={isInCooldown || disableStatusChange}
                 >
                   Late
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => onStatusChange(index, "ABSENT")}
-                  disabled={
-                    isInCooldown ||
-                    disableStatusChange ||
-                    isSavingRfidAttendance
-                  }
+                  disabled={isInCooldown || disableStatusChange}
                 >
                   Absent
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => onStatusChange(index, "EXCUSED")}
-                  disabled={
-                    isInCooldown ||
-                    disableStatusChange ||
-                    isSavingRfidAttendance
-                  }
+                  disabled={isInCooldown || disableStatusChange}
                 >
                   Excused
                 </DropdownMenuItem>

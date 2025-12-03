@@ -5,9 +5,16 @@ import { Role } from "@prisma/client";
  * Maps permission keys to arrays of roles that have access
  */
 export const Permissions = {
-  CAN_ACCESS_FACULTY_DASHBOARD: ["ADMIN", "ACADEMIC_HEAD", "FACULTY"] as Role[],
+  CAN_ACCESS_FACULTY_DASHBOARD: ["FACULTY"] as Role[],
   CAN_ACCESS_ADMIN_DASHBOARD: ["ADMIN"] as Role[],
   CAN_ACCESS_ACADEMIC_HEAD_DASHBOARD: ["ACADEMIC_HEAD"] as Role[],
+  CAN_ACCESS_GRADING: ["FACULTY"] as Role[],
+  CAN_ACCESS_ATTENDANCE: ["FACULTY"] as Role[],
+  CAN_ACCESS_COURSES: ["FACULTY"] as Role[],
+  CAN_ACCESS_FACULTY_LOAD: ["ACADEMIC_HEAD"] as Role[],
+  CAN_VIEW_COURSES: ["ACADEMIC_HEAD", "FACULTY"] as Role[],
+  CAN_CREATE_COURSES: ["FACULTY"] as Role[],
+  CAN_ACCESS_AUDIT_LOGS: ["ADMIN", "ACADEMIC_HEAD"] as Role[],
 } as const;
 
 /**

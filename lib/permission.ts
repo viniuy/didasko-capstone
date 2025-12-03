@@ -23,16 +23,16 @@ export function getCoursePermissions(userRole: UserRole): CoursePermissions {
   return {
     canManageStudents: isFaculty,
     canImportStudents: isFaculty,
-    canImportCourses: true,
+    canImportCourses: isFaculty, // Only faculty can import courses
     canExportData: true,
 
     canViewAllCourses: isAcademicHead,
     canFilterByFaculty: isAcademicHead,
 
-    canCreateCourse: true,
-    canEditOwnCourse: true,
-    canDeleteOwnCourse: true,
-    canArchiveOwnCourse: true, // Both roles can archive their own courses
+    canCreateCourse: isFaculty, // Only faculty can create courses
+    canEditOwnCourse: isFaculty, // Only faculty can edit courses
+    canDeleteOwnCourse: isFaculty, // Only faculty can delete courses
+    canArchiveOwnCourse: isFaculty, // Only faculty can archive courses
   };
 }
 

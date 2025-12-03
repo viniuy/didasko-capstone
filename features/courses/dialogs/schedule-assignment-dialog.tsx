@@ -153,6 +153,10 @@ export function ScheduleAssignmentDialog({
   }, [open, currentCourse, mode, currentIndex]);
 
   const addSchedule = () => {
+    if (currentSchedules.length >= 3) {
+      toast.error("Maximum of 3 schedules allowed per course");
+      return;
+    }
     setCurrentSchedules([
       ...currentSchedules,
       { day: "", fromTime: "", toTime: "" },
@@ -321,7 +325,7 @@ export function ScheduleAssignmentDialog({
       const validSchedules = currentSchedules.filter(
         (s) => s.day && s.fromTime && s.toTime
       );
-      
+
       const updatedSchedules = {
         ...allSchedules,
         [currentIndex]: validSchedules.map((s) => ({
@@ -331,7 +335,7 @@ export function ScheduleAssignmentDialog({
         })),
       };
       setAllSchedules(updatedSchedules);
-      
+
       // Go to previous course
       setCurrentIndex(currentIndex - 1);
       // Restore schedules for previous course if they exist
@@ -767,10 +771,13 @@ export function ScheduleAssignmentDialog({
               variant="outline"
               className="w-full border-dashed border-2 hover:border-[#124A69] hover:bg-blue-50"
               onClick={addSchedule}
-              disabled={isSubmitting}
+              disabled={isSubmitting || currentSchedules.length >= 3}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Another Schedule Slot
+              {currentSchedules.length >= 3 && (
+                <span className="ml-2 text-xs text-gray-500">(Max: 3)</span>
+              )}
             </Button>
           </div>
 
@@ -792,22 +799,33 @@ export function ScheduleAssignmentDialog({
               )}
             </div>
             <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={handleCancel}
-              disabled={isSubmitting}
-              className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
-              title={mode === "edit" ? "Cancel" : "Cancel Creation"}
-            >
-              {mode === "edit" ? "Cancel" : "Cancel Creation"}
-            </Button>
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isSubmitting}
+                className="px-6 text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 min-w-0 truncate"
+                title={mode === "edit" ? "Cancel" : "Cancel Creation"}
+              >
+                {mode === "edit" ? "Cancel" : "Cancel Creation"}
+              </Button>
 
-            <Button
-              className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
-              onClick={handleNext}
-              disabled={isSubmitting}
-              title={
-                isSubmitting
+              <Button
+                className="bg-[#124A69] hover:bg-[#0D3A54] text-white px-8 flex-shrink-0 min-w-0 truncate"
+                onClick={handleNext}
+                disabled={isSubmitting}
+                title={
+                  isSubmitting
+                    ? mode === "edit"
+                      ? "Updating..."
+                      : "Creating..."
+                    : mode === "import" && currentIndex < courses.length - 1
+                    ? "Next Course →"
+                    : mode === "edit"
+                    ? "Update Schedules"
+                    : "Create Course"
+                }
+              >
+                {isSubmitting
                   ? mode === "edit"
                     ? "Updating..."
                     : "Creating..."
@@ -815,19 +833,8 @@ export function ScheduleAssignmentDialog({
                   ? "Next Course →"
                   : mode === "edit"
                   ? "Update Schedules"
-                  : "Create Course"
-              }
-            >
-              {isSubmitting
-                ? mode === "edit"
-                  ? "Updating..."
-                  : "Creating..."
-                : mode === "import" && currentIndex < courses.length - 1
-                ? "Next Course →"
-                : mode === "edit"
-                ? "Update Schedules"
-                : "Create Course"}
-            </Button>
+                  : "Create Course"}
+              </Button>
             </div>
           </div>
         </div>

@@ -1322,8 +1322,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         // Clear saving state
         setSavingStudents(new Set());
 
-        // Dispatch event to update right sidebar
-        dispatchAttendanceUpdate();
+        // Dispatch event to update right sidebar (only if RFID scanning is not active)
+        if (!isScanning) {
+          dispatchAttendanceUpdate();
+        }
       } catch (error) {
         console.error("Error saving attendance:", error);
         toast.dismiss("error-toast");
@@ -2534,7 +2536,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     setIsInGracePeriod(false);
 
     const now = new Date();
-    
+
     // Reconstruct pendingAttendanceUpdates from current studentList
     const reconstructedPendingUpdates: {
       [studentId: string]: {
@@ -2557,9 +2559,9 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
     });
 
     // NEW: Check for orphaned scanned students (removed from course but still in localStorage)
-    const currentStudentIds = new Set(studentList.map(s => s.id));
+    const currentStudentIds = new Set(studentList.map((s) => s.id));
     let orphanedStudents: string[] = [];
-    
+
     try {
       const savedScannedStatuses = localStorage.getItem(
         getStorageKey(`rfidScannedStatuses:${selectedDateStr}`)
@@ -2567,7 +2569,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
       const savedTimeInMap = localStorage.getItem(
         getStorageKey(`rfidTimeInMap:${selectedDateStr}`)
       );
-      
+
       if (savedScannedStatuses && savedTimeInMap) {
         const scannedStatuses = JSON.parse(savedScannedStatuses) as {
           [studentId: string]: AttendanceStatus;
@@ -2575,7 +2577,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         const timeInMap = JSON.parse(savedTimeInMap) as {
           [studentId: string]: string;
         };
-        
+
         // Find students that were scanned but are no longer in the course
         Object.keys(scannedStatuses).forEach((studentId) => {
           if (!currentStudentIds.has(studentId) && timeInMap[studentId]) {
@@ -2596,7 +2598,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           duration: 5000,
         }
       );
-      
+
       // Clean up orphaned data from localStorage
       try {
         const savedScannedStatuses = localStorage.getItem(
@@ -2605,7 +2607,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
         const savedTimeInMap = localStorage.getItem(
           getStorageKey(`rfidTimeInMap:${selectedDateStr}`)
         );
-        
+
         if (savedScannedStatuses && savedTimeInMap) {
           const scannedStatuses = JSON.parse(savedScannedStatuses) as {
             [studentId: string]: AttendanceStatus;
@@ -2613,13 +2615,13 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           const timeInMap = JSON.parse(savedTimeInMap) as {
             [studentId: string]: string;
           };
-          
+
           // Remove orphaned students from localStorage
           orphanedStudents.forEach((studentId) => {
             delete scannedStatuses[studentId];
             delete timeInMap[studentId];
           });
-          
+
           localStorage.setItem(
             getStorageKey(`rfidScannedStatuses:${selectedDateStr}`),
             JSON.stringify(scannedStatuses)
@@ -2953,11 +2955,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           isSelected={selectedStudents.includes(student.id)}
           onSelect={isSelecting ? handleSelectStudent : undefined}
           isSelecting={isSelecting}
-          disableStatusChange={
-            isSelecting ||
-            savingStudents.has(student.id) ||
-            !!attendanceStartTime
-          }
+          disableStatusChange={isSelecting || savingStudents.has(student.id)}
           isSavingRfidAttendance={isSavingRfidAttendance}
           isLoading={savingStudents.has(student.id) || isDateLoading}
         />
@@ -3963,22 +3961,6 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      )}
-
-      {/* Floating RFID Button */}
-      {attendanceStartTime && !showTimeoutModal && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <Button
-            onClick={() => setShowTimeoutModal(true)}
-            className="bg-[#124A69] hover:bg-[#0D3A54] text-white rounded-full w-16 h-16 shadow-lg"
-            size="icon"
-          >
-            <div className="text-center">
-              <div className="text-xs font-bold">RFID</div>
-              <div className="text-xs">Tap</div>
-            </div>
-          </Button>
-        </div>
       )}
 
       {/* Time Setup Modal */}
