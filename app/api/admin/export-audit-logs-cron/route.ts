@@ -28,14 +28,26 @@ export async function GET(request: NextRequest) {
     const BUCKET = process.env.AUDIT_EXPORT_BUCKET || "audit-logs";
     const DELETE_AFTER_UPLOAD =
       (process.env.AUDIT_EXPORT_DELETE_AFTER_UPLOAD || "true") === "true";
+    const FIRST_RUN =
+      (process.env.AUDIT_EXPORT_FIRST_RUN || "false") === "true";
 
-    // Test mode: export logs from the past 1 hour instead of 7 days
+    // First run: export ALL logs. Subsequent runs: export logs from past N days.
     const testMode = request.nextUrl.searchParams.get("testMode") === "true";
-    const daysToExport = testMode ? 1 / 24 : DAYS; // 1 hour for testing
-    const cutoff = new Date(Date.now() - daysToExport * 24 * 60 * 60 * 1000);
+    let cutoff: Date;
+
+    if (testMode) {
+      cutoff = new Date(Date.now() - (1 / 24) * 24 * 60 * 60 * 1000); // 1 hour for testing
+    } else if (FIRST_RUN) {
+      // Export all logs: set cutoff to year 2000 (will match all logs)
+      cutoff = new Date("2000-01-01T00:00:00Z");
+      console.log("[Audit Export Cron] FIRST_RUN mode: exporting ALL logs");
+    } else {
+      // Normal run: export logs from past N days
+      cutoff = new Date(Date.now() - DAYS * 24 * 60 * 60 * 1000);
+    }
 
     console.log(
-      `[Audit Export Cron] Exporting logs created on or before ${cutoff.toISOString()} (testMode: ${testMode})`
+      `[Audit Export Cron] Exporting logs created on or before ${cutoff.toISOString()} (testMode: ${testMode}, firstRun: ${FIRST_RUN})`
     );
 
     // Count total logs for debugging
@@ -65,8 +77,9 @@ export async function GET(request: NextRequest) {
           deleted: 0,
           totalLogsInDb: totalLogs,
           cutoffDate: cutoff.toISOString(),
-          retentionDays: testMode ? 1 / 24 : DAYS,
+          retentionDays: FIRST_RUN ? "ALL (first run)" : DAYS,
           testMode,
+          firstRun: FIRST_RUN,
         },
         { status: 200 }
       );
