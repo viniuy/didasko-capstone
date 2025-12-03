@@ -96,47 +96,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build CSV
-    const headers = [
-      "id",
-      "createdAt",
-      "userId",
-      "action",
-      "module",
-      "before",
-      "after",
-      "reason",
-      "batchId",
-      "errorMessage",
-      "metadata",
-      "status",
+    // Build TXT format (plain text with readable structure)
+    const lines: string[] = [
+      "=== AUDIT LOGS EXPORT ===",
+      `Exported at: ${new Date().toISOString()}`,
+      `Total logs: ${logs.length}`,
+      "=".repeat(50),
+      "",
     ];
 
-    const rows: string[] = [headers.join(",")];
-
-    for (const r of logs) {
-      const row = [
-        escapeCsv(r.id),
-        escapeCsv(r.createdAt ? r.createdAt.toISOString() : ""),
-        escapeCsv(r.userId || ""),
-        escapeCsv(r.action || ""),
-        escapeCsv(r.module || ""),
-        escapeCsv(r.before || ""),
-        escapeCsv(r.after || ""),
-        escapeCsv(r.reason || ""),
-        escapeCsv(r.batchId || ""),
-        escapeCsv(r.errorMessage || ""),
-        escapeCsv(r.metadata || ""),
-        escapeCsv(r.status || ""),
-      ];
-      rows.push(row.join(","));
+    for (let i = 0; i < logs.length; i++) {
+      const r = logs[i];
+      lines.push(`--- Log ${i + 1} ---`);
+      lines.push(`ID: ${r.id}`);
+      lines.push(`Created: ${r.createdAt ? r.createdAt.toISOString() : "N/A"}`);
+      lines.push(`User ID: ${r.userId || "N/A"}`);
+      lines.push(`Action: ${r.action || "N/A"}`);
+      lines.push(`Module: ${r.module || "N/A"}`);
+      lines.push(`Reason: ${r.reason || "N/A"}`);
+      lines.push(`Batch ID: ${r.batchId || "N/A"}`);
+      lines.push(`Status: ${r.status || "N/A"}`);
+      lines.push(`Error Message: ${r.errorMessage || "N/A"}`);
+      if (r.before) lines.push(`Before: ${JSON.stringify(r.before)}`);
+      if (r.after) lines.push(`After: ${JSON.stringify(r.after)}`);
+      if (r.metadata) lines.push(`Metadata: ${JSON.stringify(r.metadata)}`);
+      lines.push("");
     }
 
-    const csv = rows.join("\n");
+    const txt = lines.join("\n");
 
     // Generate timestamped filename
     const timestamp = formatISO(new Date()).replace(/[:.]/g, "-");
-    const filename = `audit-logs-export-${timestamp}.csv`;
+    const filename = `audit-logs-export-${timestamp}.txt`;
     const filePath = `exports/${filename}`;
 
     console.log(
@@ -146,8 +137,8 @@ export async function GET(request: NextRequest) {
     // Upload to Supabase
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
-      .upload(filePath, Buffer.from(csv, "utf-8"), {
-        contentType: "text/csv",
+      .upload(filePath, Buffer.from(txt, "utf-8"), {
+        contentType: "text/plain",
         upsert: false,
       });
 
