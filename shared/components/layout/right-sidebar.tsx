@@ -19,7 +19,7 @@ export default function Rightsidebar() {
 
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsLargeScreen(window.innerWidth >= 1024);
+      setIsLargeScreen(window.innerWidth >= 1280);
     };
 
     checkScreenSize(); // Check on mount
@@ -74,7 +74,7 @@ export default function Rightsidebar() {
       <div
         className={`fixed top-0 right-0 z-40 h-screen bg-[#124A69] border-l p-2 sm:p-3 md:p-4 pt-2 flex flex-col transition-all duration-300 overflow-hidden
           ${open ? "translate-x-0" : "translate-x-full"}
-          lg:translate-x-0
+          xl:translate-x-0
           w-[85vw] sm:w-[80vw] md:w-[360px] lg:w-[360px]
         `}
       >
@@ -158,7 +158,7 @@ export default function Rightsidebar() {
 
       {open && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 xl:hidden"
           onClick={() => setOpen(false)}
         />
       )}

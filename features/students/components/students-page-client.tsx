@@ -1215,7 +1215,7 @@ export function StudentsPageClient({
   };
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
+    <div className="relative min-h-screen w-full overflow-auto">
       <Header />
       <AppSidebar />
 
@@ -1249,7 +1249,7 @@ export function StudentsPageClient({
         autoComplete="off"
       />
 
-      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
+      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-x-auto">
         <div className="flex flex-col flex-grow px-4">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
@@ -1261,10 +1261,10 @@ export function StudentsPageClient({
           </div>
 
           <div className="flex-1 overflow-y-auto pb-6 flex">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl ">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl w-full">
               {/* Student Directory */}
               <Card
-                className={`lg:col-span-1 flex flex-col ${
+                className={`md:col-span-1 lg:col-span-1 flex flex-col ${
                   windowHeight < 890 ? "max-h-[600px]" : ""
                 }`}
               >
@@ -1549,29 +1549,29 @@ export function StudentsPageClient({
 
               {/* Form Section */}
               <Card
-                className={`lg:col-span-1 flex flex-col ${
+                className={`md:col-span-1 lg:col-span-1 flex flex-col ${
                   windowHeight < 890 ? "max-h-[600px]" : ""
                 }`}
               >
                 <CardHeader>
                   <CardTitle>Student Details</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
+                <CardContent className="flex-1 overflow-y-auto min-h-0">
                   {renderFormSection()}
                 </CardContent>
               </Card>
 
               {/* ID Preview */}
               <Card
-                className={`lg:col-span-1 flex flex-col ${
+                className={`md:col-span-1 lg:col-span-1 flex flex-col ${
                   windowHeight < 890 ? "max-h-[600px]" : ""
                 }`}
               >
                 <CardHeader>
                   <CardTitle>ID Preview</CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto">
-                  <div className="bg-white border-2 border-gray-300 rounded-lg shadow-sm overflow-hidden">
+                <CardContent className="flex-1 overflow-y-auto min-h-0">
+                  <div className="bg-white border-2 border-gray-300 rounded-lg shadow-sm overflow-hidden md:mx-auto md:max-w-[420px]">
                     <div
                       className={`bg-[#FEF100] flex flex-col items-center justify-center ${
                         windowHeight < 890 ? "h-[72px]" : "h-20"

@@ -1625,14 +1625,17 @@ export function AdminDataTable({
         </div>
       </div>
 
-      <div className="relative min-h-[610px] max-h-[610px] flex flex-col">
-        <div className="flex-1 rounded-md border overflow-x-auto">
+      <div className="relative min-h-[300px] md:min-h-[610px] flex flex-col">
+        <div className="flex-1 rounded-md border overflow-x-auto overflow-y-auto">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="whitespace-nowrap">
+                    <TableHead
+                      key={header.id}
+                      className="whitespace-normal md:whitespace-nowrap"
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -1657,7 +1660,7 @@ export function AdminDataTable({
                 table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell key={cell.id} className="break-words">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -1680,8 +1683,8 @@ export function AdminDataTable({
           </Table>
         </div>
 
-        <div className="flex items-center justify-end w-full mt-2 -mb-3">
-          <span className="text-sm text-gray-600 w-1300">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end w-full mt-2 -mb-3 gap-2">
+          <span className="text-sm text-gray-600 mr-4 w-100">
             {table.getState().pagination.pageIndex *
               table.getState().pagination.pageSize +
               1}
@@ -1693,7 +1696,7 @@ export function AdminDataTable({
             )}{" "}
             of {table.getFilteredRowModel().rows.length} users
           </span>
-          <Pagination>
+          <Pagination className="flex justify-end">
             <PaginationContent>
               <PaginationItem>
                 <PaginationPrevious
@@ -1769,7 +1772,7 @@ export function AdminDataTable({
           </DialogHeader>
 
           <div className="mt-6 border rounded-lg">
-            <div className="max-h-[450px] overflow-auto">
+            <div className="max-h-[450px] overflow-auto overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
@@ -1779,7 +1782,7 @@ export function AdminDataTable({
                     {EXPECTED_HEADERS.map((header) => (
                       <th
                         key={header}
-                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-nowrap"
+                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-normal md:whitespace-nowrap"
                       >
                         {header}
                       </th>
@@ -1919,14 +1922,14 @@ export function AdminDataTable({
                     {previewData.length === 1 ? "row" : "rows"} from import file
                   </p>
                 </div>
-                <div className="max-h-[350px] overflow-auto">
+                <div className="max-h-[350px] overflow-auto overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
                         {EXPECTED_HEADERS.map((header) => (
                           <th
                             key={header}
-                            className="px-4 py-2 text-left text-sm font-medium text-gray-500"
+                            className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap"
                           >
                             {header}
                           </th>
@@ -2120,7 +2123,7 @@ export function AdminDataTable({
                 </div>
 
                 {importStatus.detailedFeedback?.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden max-w-[2100px]">
+                  <div className="border rounded-lg overflow-hidden max-w-full">
                     <div className="bg-gray-50 p-4 border-b">
                       <h3 className="font-medium text-gray-700">
                         Detailed Import Feedback
@@ -2129,20 +2132,20 @@ export function AdminDataTable({
                         Status of each row processed during import.
                       </p>
                     </div>
-                    <div className="max-h-[300px] overflow-auto">
+                    <div className="max-h-[300px] overflow-auto overflow-x-auto">
                       <table className="w-full border-collapse">
                         <thead className="bg-gray-50 sticky top-0">
                           <tr>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
                               Row
                             </th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
                               Email
                             </th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
                               Status
                             </th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500">
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
                               Message
                             </th>
                           </tr>

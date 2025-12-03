@@ -52,7 +52,7 @@ export default async function GradebookCoursePage({
     <div className="relative h-screen w-screen overflow-hidden">
       <Header />
       <AppSidebar />
-      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
+      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
         <div className="flex flex-col flex-grow px-4">
           <div className="flex-1 p-4 ">
             {/* Header - shown immediately */}

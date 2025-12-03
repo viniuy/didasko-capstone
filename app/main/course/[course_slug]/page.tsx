@@ -50,7 +50,7 @@ export default async function CourseDashboardPage({
       <Header />
       <AppSidebar />
 
-      <main className="h-full w-full lg:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
+      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex flex-col flex-grow px-4">
           {/* Course Dashboard Component with Suspense */}
           <div className="mb-4 overflow-y-auto">
