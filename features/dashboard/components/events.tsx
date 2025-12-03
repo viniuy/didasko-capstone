@@ -354,7 +354,8 @@ export default function UpcomingEvents() {
       setAlert({ show: false, title: "", description: "", variant: "success" });
       setHasAttemptedSave(false);
     } else if (pendingAction === "close") {
-      setOpenAdd(false);
+      // If keeping changes, re-open the modal; otherwise close it
+      setOpenAdd(keepChanges);
     }
 
     setOpenUnsavedChanges(false);
@@ -1045,22 +1046,23 @@ export default function UpcomingEvents() {
       <AlertDialog
         open={openAdd}
         onOpenChange={(open) => {
-          if (!open && (isSaving || alert.show || !hasAttemptedSave)) {
-            return;
-          }
+          // Check for unsaved changes first before any other conditions
           if (!open && hasUnsavedChanges) {
             setPendingAction("close");
             setOpenUnsavedChanges(true);
-          } else {
-            setOpenAdd(open);
-            if (open) {
-              setAlert({
-                show: false,
-                title: "",
-                description: "",
-                variant: "success",
-              });
-            }
+            return;
+          }
+          if (!open && (isSaving || alert.show || !hasAttemptedSave)) {
+            return;
+          }
+          setOpenAdd(open);
+          if (open) {
+            setAlert({
+              show: false,
+              title: "",
+              description: "",
+              variant: "success",
+            });
           }
         }}
       >
@@ -1491,8 +1493,8 @@ export default function UpcomingEvents() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
             <AlertDialogDescription>
-              You have unsaved changes in your event form. Would you like to
-              keep these changes?
+              You have unsaved changes in your event form. Are you sure you want
+              to exit?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1500,13 +1502,13 @@ export default function UpcomingEvents() {
               onClick={() => handleUnsavedChangesResponse(false)}
               className="bg-gray-100 text-gray-700 hover:bg-gray-200 h-8 text-xs"
             >
-              Discard Changes
+              Exit without saving
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => handleUnsavedChangesResponse(true)}
               className="bg-[#124A69] text-white hover:bg-[#0a2f42] h-8 text-xs"
             >
-              Keep Changes
+              Continue editing
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
