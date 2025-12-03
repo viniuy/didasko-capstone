@@ -8,7 +8,6 @@ import {
   ScheduleResponse,
 } from "@/shared/types/schedule";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -42,7 +41,7 @@ export async function GET(request: Request) {
     // Verify the user exists
     const user = await prisma.user.findUnique({
       where: { id: facultyId },
-      select: { id: true, email: true, role: true },
+      select: { id: true, email: true, roles: true },
     });
 
     console.log("Found user:", user);

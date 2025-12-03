@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { format } from "date-fns";
 import { Role } from "@prisma/client";
-import { useAuditLogs, useExportLogs } from "@/lib/hooks/queries/useAuditLogs";
+import { useAuditLogs } from "@/lib/hooks/queries/useAuditLogs";
 import { useFaculty } from "@/lib/hooks/queries";
 import {
   Table,
@@ -42,9 +42,10 @@ import {
   Activity,
   Download,
   Filter,
+  Eye,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { ExportModal } from "../modal/export-modal";
+import { AuditExportsModal } from "./AuditExportsModal";
 import { AuditLogsFilterSheet } from "./AuditLogsFilterSheet";
 import {
   Pagination,
@@ -125,7 +126,8 @@ function AuditLogsTableComponent({
   const isAcademicHead = userRole === "ACADEMIC_HEAD";
   const [searchAction, setSearchAction] = useState("");
   const [selectedModule, setSelectedModule] = useState("all");
-  const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  const [exportsModalOpen, setExportsModalOpen] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [windowHeight, setWindowHeight] = useState(800);
@@ -177,7 +179,6 @@ function AuditLogsTableComponent({
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
-  const exportLogsMutation = useExportLogs();
 
   // Extract faculty from React Query
   const faculty = useMemo(() => {
@@ -618,23 +619,6 @@ function AuditLogsTableComponent({
     );
   };
 
-  // Handle export with filters
-  const handleExport = async (filters: {
-    startDate?: Date;
-    endDate?: Date;
-    actions?: string[];
-    modules?: string[];
-    faculty?: string[];
-  }): Promise<AuditLog[]> => {
-    try {
-      const data = await exportLogsMutation.mutateAsync(filters);
-      return data;
-    } catch (error) {
-      console.error("Export error:", error);
-      throw error;
-    }
-  };
-
   // Show loading spinner if loading (initial load or refetching for date range)
   if (isLoading || (shouldRefetch && isLoadingLogs)) {
     return <LoadingSpinner />;
@@ -644,18 +628,23 @@ function AuditLogsTableComponent({
     <>
       <Card className="p-4 flex-1 sm:p-6 bg-white shadow-sm border border-gray-200">
         {/* Filters and Export */}
-        <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
-          <div className="flex-1 flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            {" "}
-            <div>
-              <h2 className="pb-1 text-xl sm:text-2xl font-bold text-[#124A69]">
-                Audit Logs
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {userRole === Role.ADMIN
-                  ? "All system activity logs"
-                  : "Course and faculty management logs"}
-              </p>
+        <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center justify-between">
+          <div className="flex-1 flex flex-col gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-3">
+              <div>
+                <h2 className="pb-1 text-xl sm:text-2xl font-bold text-[#124A69]">
+                  Audit Logs
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {userRole === Role.ADMIN
+                    ? "All system activity logs"
+                    : "Course and faculty management logs"}
+                </p>
+              </div>
+              <Badge className="bg-green-50 text-green-700 border border-green-200 h-fit whitespace-nowrap text-xs sm:text-sm">
+                <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                Auto-exported weekly
+              </Badge>
             </div>
           </div>
 
@@ -750,11 +739,11 @@ function AuditLogsTableComponent({
             </Button>
 
             <Button
-              onClick={() => setExportModalOpen(true)}
-              className="bg-[#124A69] hover:bg-[#0a2f42] text-white w-full sm:w-auto text-sm sm:text-base"
+              onClick={() => setExportsModalOpen(true)}
+              className="border-white text-white bg-[#124A69]  hover:bg-[#0a2f42] w-full sm:w-auto text-sm sm:text-base"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Export
+              <Eye className="w-4 h-4 mr-2" />
+              View Exports
             </Button>
           </div>
         </div>
@@ -1110,16 +1099,10 @@ function AuditLogsTableComponent({
         )}
       </Card>
 
-      {/* Export Modal */}
-      <ExportModal
-        open={exportModalOpen}
-        onOpenChange={setExportModalOpen}
-        logs={filteredAndSortedLogs}
-        onExport={handleExport}
-        availableActions={allPossibleActions}
-        availableModules={allPossibleModules}
-        availableFaculty={faculty}
-        isLoadingFaculty={isLoadingFaculty}
+      {/* Audit Exports Modal */}
+      <AuditExportsModal
+        open={exportsModalOpen}
+        onOpenChange={setExportsModalOpen}
       />
 
       {/* Filter Sheet */}

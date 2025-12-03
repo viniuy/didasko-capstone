@@ -19,8 +19,8 @@ export async function GET(request: Request) {
     // Optimized: Use _count instead of loading all courses/students to reduce query time
     const users = await prisma.user.findMany({
       where: {
-        role: {
-          in: ["FACULTY", "ACADEMIC_HEAD"],
+        roles: {
+          hasSome: ["FACULTY", "ACADEMIC_HEAD"],
         },
       },
       select: {
@@ -29,12 +29,13 @@ export async function GET(request: Request) {
         email: true,
         department: true,
         workType: true,
-        role: true,
+        roles: true,
         image: true,
+        // Return only lightweight course info and relation counts to avoid
+        // loading large nested arrays (schedules/students) which can be
+        // expensive for faculty with many courses or large classes.
         coursesTeaching: {
-          where: {
-            status: "ACTIVE",
-          },
+          where: { status: "ACTIVE" },
           select: {
             id: true,
             code: true,
@@ -43,17 +44,10 @@ export async function GET(request: Request) {
             slug: true,
             semester: true,
             status: true,
-            schedules: {
+            _count: {
               select: {
-                id: true,
-                day: true,
-                fromTime: true,
-                toTime: true,
-              },
-            },
-            students: {
-              select: {
-                id: true,
+                students: true,
+                schedules: true,
               },
             },
           },

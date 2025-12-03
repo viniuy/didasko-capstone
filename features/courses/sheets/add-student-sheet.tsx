@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Search, AlertCircle, Loader2, Users } from "lucide-react";
+import { FixedSizeList as List } from "react-window";
 import { Student } from "../types/types";
 import { getInitials } from "../utils/initials";
 import { useStudents } from "@/lib/hooks/queries";
@@ -30,35 +31,30 @@ export const AddStudentSheet = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Search optimization constants
-  const MIN_SEARCH_LENGTH = 2; // Require at least 2 characters
-  const SEARCH_DEBOUNCE_MS = 800; // Debounce time
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit] = useState(50);
 
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Only update debounced query if minimum length met or clearing search
-      if (
-        searchQuery.trim().length >= MIN_SEARCH_LENGTH ||
-        searchQuery.trim().length === 0
-      ) {
-        setDebouncedSearchQuery(searchQuery.trim());
-      }
-    }, SEARCH_DEBOUNCE_MS);
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // React Query hook with search
-  // Only fetch when there's a debounced search query (to avoid loading all students)
+  // Reset to first page when debounced search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchQuery]);
+
+  // React Query hook - load students immediately, with optional search filter
   const { data: studentsData, isLoading: isSearching } = useStudents({
-    filters: debouncedSearchQuery
-      ? {
-          search: debouncedSearchQuery,
-          limit: 50,
-        }
-      : undefined,
+    filters: {
+      search: debouncedSearchQuery,
+      limit,
+      page: currentPage,
+    },
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
@@ -84,11 +80,19 @@ export const AddStudentSheet = ({
       .filter((s: Student) => s.rfid_id && !enrolledStudentIds.includes(s.id));
   }, [studentsData, enrolledStudentIds]);
 
+  // Pagination info from server response (if provided)
+  const pagination = useMemo(() => {
+    if (!studentsData || Array.isArray(studentsData)) return null;
+    return studentsData.pagination || null;
+  }, [studentsData]);
+
   // Reset search when sheet closes
+  // Reset search and page when sheet closes
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery("");
       setDebouncedSearchQuery("");
+      setCurrentPage(1);
     }
   }, [isOpen]);
 
@@ -143,78 +147,73 @@ export const AddStudentSheet = ({
                 <Loader2 className="w-6 h-6 animate-spin text-[#124A69] mb-2" />
                 <p className="text-sm text-gray-500">Searching students...</p>
               </div>
-            ) : debouncedSearchQuery === "" ? (
-              <div className="p-8 text-center text-gray-500">
-                <Search className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p className="font-medium">Start searching</p>
-                <p className="text-sm mt-1">
-                  Enter at least {MIN_SEARCH_LENGTH} characters to search for
-                  students
-                </p>
-                {searchQuery.trim().length > 0 &&
-                  searchQuery.trim().length < MIN_SEARCH_LENGTH && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      Type {MIN_SEARCH_LENGTH - searchQuery.trim().length} more
-                      character
-                      {MIN_SEARCH_LENGTH - searchQuery.trim().length > 1
-                        ? "s"
-                        : ""}{" "}
-                      to search
-                    </p>
-                  )}
-              </div>
             ) : searchResults.length > 0 ? (
-              searchResults.map((student: Student) => (
-                <div
-                  key={student.id}
-                  className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
+              <div className="w-full">
+                <List
+                  height={320}
+                  itemCount={searchResults.length}
+                  itemSize={80}
+                  width="100%"
                 >
-                  <div className="flex items-center gap-3 w-[calc(100%-3rem)]">
-                    <Avatar className="h-10 w-10 flex-shrink-0">
-                      <AvatarImage
-                        src={student.image}
-                        alt={student.firstName}
-                      />
-                      <AvatarFallback className="bg-[#124A69] text-white text-sm">
-                        {getInitials(student.firstName, student.lastName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0 max-w-[calc(100%-3rem)]">
-                      <p
-                        className="font-medium text-gray-900 truncate"
-                        title={`${student.lastName}, ${student.firstName} ${
-                          student.middleInitial
-                            ? `${student.middleInitial}.`
-                            : ""
-                        }`}
+                  {({ index, style }) => {
+                    const student = searchResults[index];
+                    return (
+                      <div
+                        key={student.id}
+                        style={style}
+                        className="flex items-center justify-between p-4 border-b last:border-b-0 hover:bg-gray-50 transition-colors"
                       >
-                        {student.lastName}, {student.firstName}{" "}
-                        {student.middleInitial
-                          ? `${student.middleInitial}.`
-                          : ""}
-                      </p>
-                      <p
-                        className="text-sm text-gray-500 truncate"
-                        title={`${student.studentId} • RFID: ${student.rfid_id}`}
-                      >
-                        {student.studentId} • RFID: {student.rfid_id}
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleSelect(student)}
-                    disabled={isSubmitting}
-                    className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      "Add"
-                    )}
-                  </Button>
-                </div>
-              ))
+                        <div className="flex items-center gap-3 w-[calc(100%-3rem)]">
+                          <Avatar className="h-10 w-10 flex-shrink-0">
+                            <AvatarImage
+                              src={student.image}
+                              alt={student.firstName}
+                            />
+                            <AvatarFallback className="bg-[#124A69] text-white text-sm">
+                              {getInitials(student.firstName, student.lastName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0 max-w-[calc(100%-3rem)]">
+                            <p
+                              className="font-medium text-gray-900 truncate"
+                              title={`${student.lastName}, ${
+                                student.firstName
+                              } ${
+                                student.middleInitial
+                                  ? `${student.middleInitial}.`
+                                  : ""
+                              }`}
+                            >
+                              {student.lastName}, {student.firstName}{" "}
+                              {student.middleInitial
+                                ? `${student.middleInitial}.`
+                                : ""}
+                            </p>
+                            <p
+                              className="text-sm text-gray-500 truncate"
+                              title={`${student.studentId} • RFID: ${student.rfid_id}`}
+                            >
+                              {student.studentId} • RFID: {student.rfid_id}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleSelect(student)}
+                          disabled={isSubmitting}
+                          className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                        >
+                          {isSubmitting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Add"
+                          )}
+                        </Button>
+                      </div>
+                    );
+                  }}
+                </List>
+              </div>
             ) : (
               <div className="p-8 text-center text-gray-500">
                 <Users className="w-12 h-12 mx-auto mb-2 text-gray-400" />
@@ -223,6 +222,44 @@ export const AddStudentSheet = ({
                   Try adjusting your search or make sure the student has RFID
                   registration
                 </p>
+              </div>
+            )}
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between p-3 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Page {pagination.page} of {pagination.totalPages} (
+                  {pagination.total} total)
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setCurrentPage(Math.max(1, (pagination.page || 1) - 1))
+                    }
+                    disabled={(pagination.page || 1) <= 1 || isSearching}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setCurrentPage(
+                        Math.min(
+                          pagination.totalPages || 1,
+                          (pagination.page || 1) + 1
+                        )
+                      )
+                    }
+                    disabled={
+                      (pagination.page || 1) >= (pagination.totalPages || 1) ||
+                      isSearching
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </div>

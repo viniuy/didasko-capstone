@@ -9,7 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Scan, Plus, Edit, Upload, Download } from "lucide-react";
+import {
+  Scan,
+  Plus,
+  Edit,
+  Upload,
+  Download,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -24,6 +32,7 @@ import { useStudents } from "@/lib/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/hooks/queries/queryKeys";
 import { useRouter, useSearchParams } from "next/navigation";
+import { FixedSizeList as List } from "react-window";
 
 interface Student {
   id: string;
@@ -71,6 +80,9 @@ export function StudentsPageClient({
 
   // State management
   const [searchQuery, setSearchQuery] = React.useState(initialSearch || "");
+  const [debouncedSearch, setDebouncedSearch] = React.useState(
+    initialSearch || ""
+  );
   const [currentPage, setCurrentPage] = React.useState(
     Number(searchParams.get("page")) || 1
   );
@@ -78,6 +90,15 @@ export function StudentsPageClient({
   const [windowHeight, setWindowHeight] = React.useState(
     typeof window !== "undefined" ? window.innerHeight : 1000
   );
+
+  // Debounce search query (500ms delay for server-side search)
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1); // Reset to page 1 on search change
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Current view state
   const [viewMode, setViewMode] = React.useState<ViewMode>("idle");
@@ -114,29 +135,32 @@ export function StudentsPageClient({
   const lastRfidInputTimeRef = React.useRef<number>(0);
   const rfidInputBufferRef = React.useRef<string>("");
 
-  // Load all students initially (no search filter - we'll filter locally)
+  // Load students with server-side search and pagination (only fetch current page)
   const { data: studentsData, isLoading } = useStudents({
     filters: {
-      page: 1,
-      limit: 1000, // Load a large batch initially
-      // No search filter - we'll filter locally
+      page: currentPage,
+      limit,
+      search: debouncedSearch || undefined, // Server-side search
     },
-    initialData: {
-      students: initialStudents,
-      pagination: initialPagination || {
-        total: initialStudents.length,
-        page: 1,
-        limit: 1000,
-        totalPages: 1,
-      },
-    },
-    refetchOnMount: false, // Don't refetch if we have data
+    initialData:
+      currentPage === 1
+        ? {
+            students: initialStudents,
+            pagination: initialPagination || {
+              total: initialStudents.length,
+              page: 1,
+              limit,
+              totalPages: Math.ceil(initialStudents.length / limit),
+            },
+          }
+        : undefined,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
 
-  // Extract all students from query data
-  const allStudents = React.useMemo(() => {
-    if (!studentsData) return initialStudents;
+  // Extract students from query data
+  const students = React.useMemo(() => {
+    if (!studentsData) return [];
     const studentList = Array.isArray(studentsData)
       ? studentsData
       : studentsData.students || [];
@@ -149,71 +173,13 @@ export function StudentsPageClient({
       studentImage: s.image,
       studentId: s.studentId,
     }));
-  }, [studentsData, initialStudents]);
+  }, [studentsData]);
 
-  // Filter students locally based on search query and apply pagination
-  const students = React.useMemo(() => {
-    let filtered = allStudents;
-
-    // Apply local search filter if search query exists
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
-      filtered = allStudents.filter((student: Student) => {
-        const fullName = `${student.firstName} ${student.lastName} ${
-          student.middleInitial || ""
-        }`.toLowerCase();
-        const lastNameFirst =
-          `${student.lastName}, ${student.firstName}`.toLowerCase();
-        const studentId = student.studentId?.toLowerCase() || "";
-        const rfidId = student.rfid_id?.toString().toLowerCase() || "";
-
-        return (
-          fullName.includes(query) ||
-          lastNameFirst.includes(query) ||
-          studentId.includes(query) ||
-          rfidId.includes(query)
-        );
-      });
-    }
-
-    // Apply pagination to filtered results
-    const startIndex = (currentPage - 1) * limit;
-    const endIndex = startIndex + limit;
-    return filtered.slice(startIndex, endIndex);
-  }, [allStudents, searchQuery, currentPage, limit]);
-
-  // Calculate pagination based on filtered results
+  // Get pagination info from response
   const pagination = React.useMemo(() => {
-    let totalStudents = allStudents.length;
-
-    // If searching, count filtered students
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
-      totalStudents = allStudents.filter((student: Student) => {
-        const fullName = `${student.firstName} ${student.lastName} ${
-          student.middleInitial || ""
-        }`.toLowerCase();
-        const lastNameFirst =
-          `${student.lastName}, ${student.firstName}`.toLowerCase();
-        const studentId = student.studentId?.toLowerCase() || "";
-        const rfidId = student.rfid_id?.toString().toLowerCase() || "";
-
-        return (
-          fullName.includes(query) ||
-          lastNameFirst.includes(query) ||
-          studentId.includes(query) ||
-          rfidId.includes(query)
-        );
-      }).length;
-    }
-
-    return {
-      total: totalStudents,
-      page: currentPage,
-      limit,
-      totalPages: Math.ceil(totalStudents / limit),
-    };
-  }, [allStudents, searchQuery, currentPage, limit]);
+    if (!studentsData) return null;
+    return Array.isArray(studentsData) ? null : studentsData.pagination || null;
+  }, [studentsData]);
 
   // Adjust limit based on window height for low viewport laptops (max 30)
   React.useEffect(() => {
@@ -279,60 +245,6 @@ export function StudentsPageClient({
   // Search optimization constants
   const MIN_SEARCH_LENGTH = 2; // Require at least 2 characters
   const SEARCH_DEBOUNCE_MS = 800; // Increased debounce time
-
-  // Local storage cache for recently viewed students
-  const CACHE_KEY = "recent_students";
-  const MAX_CACHED = 100;
-
-  // Helper function to cache recently viewed students
-  const cacheStudent = React.useCallback((student: Student) => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      const recentStudents: Student[] = cached ? JSON.parse(cached) : [];
-
-      // Remove if already exists
-      const filtered = recentStudents.filter((s) => s.id !== student.id);
-      // Add to front
-      filtered.unshift(student);
-      // Keep only last MAX_CACHED
-      const toCache = filtered.slice(0, MAX_CACHED);
-
-      localStorage.setItem(CACHE_KEY, JSON.stringify(toCache));
-    } catch (e) {
-      // Ignore localStorage errors
-    }
-  }, []);
-
-  // Helper function to get cached students
-  const getCachedStudents = React.useCallback((): Student[] => {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      return cached ? JSON.parse(cached) : [];
-    } catch {
-      return [];
-    }
-  }, []);
-
-  // Prefetch next page when current page loads
-  React.useEffect(() => {
-    if (studentsData && pagination && currentPage < pagination.totalPages) {
-      queryClient.prefetchQuery({
-        queryKey: queryKeys.students.list({
-          page: currentPage + 1,
-          limit,
-          search: searchQuery || undefined,
-        }),
-        queryFn: async () => {
-          return await studentsService.getStudents({
-            page: currentPage + 1,
-            limit,
-            search: searchQuery || undefined,
-          });
-        },
-        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-      });
-    }
-  }, [currentPage, limit, searchQuery, pagination, queryClient, studentsData]);
 
   // Helper function to truncate student names for toast messages
   const truncateName = (
@@ -408,9 +320,6 @@ export function StudentsPageClient({
     setIsScanning(false);
     lastRfidInputTimeRef.current = 0;
     rfidInputBufferRef.current = "";
-
-    // Cache the student for quick access
-    cacheStudent(student);
   };
 
   // Handle "Add Student" button
@@ -615,8 +524,8 @@ export function StudentsPageClient({
 
     // Wait for complete RFID (at least 10 characters)
     if (value.length >= 10) {
-      // Check if RFID is already assigned in local data (check all students, not just current page)
-      const existingStudent = allStudents.find(
+      // Check if RFID is in current page view first
+      const existingStudent = students.find(
         (s: Student) => s.rfid_id && String(s.rfid_id) === value
       );
 
@@ -655,8 +564,8 @@ export function StudentsPageClient({
         }
       }
 
-      // If searching and no student found locally, search in database by rfid_id only
-      if (viewMode === "searching-rfid") {
+      // If searching and no student found locally, always search in database by rfid_id
+      if (viewMode === "searching-rfid" || !existingStudent) {
         // Show loading toast
         const loadingToastId = toast.loading("Searching for student...");
 
@@ -1203,6 +1112,53 @@ export function StudentsPageClient({
     );
   };
 
+  // Virtual list item renderer for efficient rendering of large lists
+  const StudentListItem = React.memo(
+    ({ index, style }: { index: number; style: React.CSSProperties }) => {
+      const student = students[index];
+      if (!student) return null;
+
+      return (
+        <div style={style} className="px-2 py-1">
+          <div
+            className={`p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
+              selectedStudent?.id === student.id
+                ? "bg-muted border-[#124A69]"
+                : ""
+            }`}
+            onClick={() => handleSelectStudent(student)}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p
+                  className="font-semibold truncate"
+                  title={`${student.lastName}, ${student.firstName} ${
+                    student.middleInitial || ""
+                  }`.trim()}
+                >
+                  {student.lastName}, {student.firstName}{" "}
+                  {student.middleInitial}
+                </p>
+                <p className="text-sm text-muted-foreground truncate">
+                  ID: {student.studentId}
+                </p>
+                {student.rfid_id ? (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ RFID: {student.rfid_id}
+                  </p>
+                ) : (
+                  <p className="text-xs text-orange-600 mt-1">⚠ No RFID</p>
+                )}
+              </div>
+              <Edit className="w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+  );
+  StudentListItem.displayName = "StudentListItem";
+
   // Get display image for preview
   const getPreviewImage = () => {
     if (formData.studentImage instanceof File) {
@@ -1215,7 +1171,7 @@ export function StudentsPageClient({
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-auto">
+    <div className="relative min-h-screen w-full overflow-hidden">
       <Header />
       <AppSidebar />
 
@@ -1250,7 +1206,7 @@ export function StudentsPageClient({
       />
 
       <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-x-auto">
-        <div className="flex flex-col flex-grow px-4">
+        <div className="flex flex-col flex-grow px-4 ">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold tracking-tight text-[#A0A0A0]">
               Student Management
@@ -1260,7 +1216,7 @@ export function StudentsPageClient({
             </h1>
           </div>
 
-          <div className="flex-1 overflow-y-auto pb-6 flex">
+          <div className="flex-1 overflow-y-auto pb-6 flex justify-center">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl w-full">
               {/* Student Directory */}
               <Card
@@ -1460,7 +1416,7 @@ export function StudentsPageClient({
                   </Dialog>
 
                   <div
-                    className={`space-y-2 overflow-y-auto ${
+                    className={`border rounded-lg overflow-hidden flex flex-col flex-1 ${
                       windowHeight < 890 ? "max-h-[250px]" : "max-h-[400px]"
                     }`}
                   >
@@ -1469,44 +1425,14 @@ export function StudentsPageClient({
                         Loading...
                       </p>
                     ) : students.length > 0 ? (
-                      students.map((student: Student) => (
-                        <div
-                          key={student.id}
-                          className={`p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
-                            selectedStudent?.id === student.id
-                              ? "bg-muted border-[#124A69]"
-                              : ""
-                          }`}
-                          onClick={() => handleSelectStudent(student)}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className="font-semibold truncate"
-                                title={`${student.lastName}, ${
-                                  student.firstName
-                                } ${student.middleInitial || ""}`.trim()}
-                              >
-                                {student.lastName}, {student.firstName}{" "}
-                                {student.middleInitial}
-                              </p>
-                              <p className="text-sm text-muted-foreground truncate">
-                                ID: {student.studentId}
-                              </p>
-                              {student.rfid_id ? (
-                                <p className="text-xs text-green-600 mt-1">
-                                  ✓ RFID: {student.rfid_id}
-                                </p>
-                              ) : (
-                                <p className="text-xs text-orange-600 mt-1">
-                                  ⚠ No RFID
-                                </p>
-                              )}
-                            </div>
-                            <Edit className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      ))
+                      <List
+                        height={windowHeight < 890 ? 250 : 400}
+                        itemCount={students.length}
+                        itemSize={120}
+                        width="100%"
+                      >
+                        {StudentListItem}
+                      </List>
                     ) : (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         No students found
