@@ -5,15 +5,22 @@ import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
 import VantaBackground from "@/shared/components/VantaBackground";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 
 export default function AdminLogin() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check for error in URL params (from NextAuth callback)
+  const authError = searchParams.get("error");
 
   const handleAdminLogin = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const result = await signIn("azure-ad", {
         callbackUrl: "/dashboard/admin",
         redirect: false,
@@ -21,8 +28,17 @@ export default function AdminLogin() {
 
       if (result?.error) {
         console.error("Sign in error:", result.error);
-        // You can add error toast notification here
-        throw new Error(result.error);
+        // Map NextAuth errors to user-friendly messages
+        if (result.error === "AccessDenied") {
+          setError(
+            "Access denied. You are not authorized to access this portal."
+          );
+        } else if (result.error === "OAuthCallback") {
+          setError("Authentication failed. Please try again.");
+        } else {
+          setError("Sign in failed. Please contact your administrator.");
+        }
+        return;
       }
 
       if (result?.ok) {
@@ -30,7 +46,7 @@ export default function AdminLogin() {
       }
     } catch (err) {
       console.error("Login failed:", err);
-      // You can add error toast notification here
+      setError("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -68,6 +84,38 @@ export default function AdminLogin() {
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">
                 Sign In
               </h2>
+
+              {/* Error Message from URL params */}
+              {authError && (
+                <div className="w-full mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-red-800 text-sm">
+                      Authentication Error
+                    </p>
+                    <p className="text-sm text-red-700 mt-1">
+                      {authError === "AccessDenied"
+                        ? "Access denied. You are not authorized to access this portal."
+                        : authError === "OAuthCallback"
+                        ? "Authentication failed. Please try again."
+                        : "Sign in failed. Please contact your administrator."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message from state */}
+              {error && (
+                <div className="w-full mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-red-800 text-sm">
+                      Sign In Failed
+                    </p>
+                    <p className="text-sm text-red-700 mt-1">{error}</p>
+                  </div>
+                </div>
+              )}
 
               <button
                 className="flex items-center justify-center bg-[#124A69] text-white px-6 py-3 rounded-md w-full shadow-md hover:bg-[#0D3A54] transition disabled:opacity-50 disabled:cursor-not-allowed"
