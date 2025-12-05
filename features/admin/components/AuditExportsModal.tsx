@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { format } from "date-fns";
+import { Role } from "@prisma/client";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Download, AlertCircle, Loader2 } from "lucide-react";
+import { Download, AlertCircle, Loader2, ShieldAlert } from "lucide-react";
 
 interface Export {
   name: string;
@@ -31,11 +32,13 @@ interface Export {
 interface AuditExportsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  userRole: Role;
 }
 
 export function AuditExportsModal({
   open,
   onOpenChange,
+  userRole,
 }: AuditExportsModalProps) {
   const [exports, setExports] = useState<Export[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,10 +46,10 @@ export function AuditExportsModal({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
+    if (open && userRole !== Role.ACADEMIC_HEAD) {
       fetchExports();
     }
-  }, [open]);
+  }, [open, userRole]);
 
   const fetchExports = async () => {
     setIsLoading(true);
@@ -117,112 +120,140 @@ export function AuditExportsModal({
           </DialogDescription>
         </DialogHeader>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-red-800">Error</p>
-              <p className="text-sm text-red-700">{error}</p>
+        {userRole === Role.ACADEMIC_HEAD ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 flex flex-col items-center justify-center gap-4">
+            <ShieldAlert className="w-12 h-12 text-yellow-600" />
+            <div className="text-center">
+              <p className="font-semibold text-yellow-900 text-lg mb-2">
+                Access Restricted
+              </p>
+              <p className="text-sm text-yellow-800">
+                Academic Head is not allowed to view exported logs since it
+                contains all logs.
+              </p>
+              <p className="text-sm text-yellow-800 mt-2">
+                Please see Admin for the exported audit logs.
+              </p>
             </div>
           </div>
-        )}
-
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#124A69] animate-spin mb-3" />
-            <p className="text-gray-600">Loading exports...</p>
-          </div>
-        ) : exports.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-lg">
-            <Download className="w-10 h-10 text-gray-400 mb-3" />
-            <p className="text-gray-600 font-medium">
-              No exports available yet
-            </p>
-            <p className="text-sm text-gray-500 mt-1">
-              Weekly exports will appear here once the cron job runs.
-            </p>
-          </div>
         ) : (
-          <div className="overflow-x-auto border rounded-lg">
-            <Table>
-              <TableHeader className="bg-[#124A69]">
-                <TableRow>
-                  <TableHead className="text-white">File Name</TableHead>
-                  <TableHead className="text-white">Created At</TableHead>
-                  <TableHead className="text-white text-right">Size</TableHead>
-                  <TableHead className="text-white text-right">
-                    Action
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {exports.map((exportFile) => (
-                  <TableRow
-                    key={exportFile.name}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <TableCell className="font-mono text-sm break-words">
-                      {exportFile.name}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {format(new Date(exportFile.created_at), "MMM dd, yyyy")}
-                      <br />
-                      <span className="text-xs text-gray-500">
-                        {format(new Date(exportFile.created_at), "HH:mm:ss")}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="outline">
-                        {formatFileSize(exportFile.size)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {exportFile.downloadUrl ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownload(exportFile)}
-                          disabled={downloadingId === exportFile.name}
-                          className="border-[#124A69] text-[#124A69] hover:bg-blue-50"
-                        >
-                          {downloadingId === exportFile.name ? (
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                          ) : (
-                            <Download className="w-4 h-4 mr-1" />
-                          )}
-                          {downloadingId === exportFile.name
-                            ? "Downloading..."
-                            : "Download"}
-                        </Button>
-                      ) : (
-                        <Badge variant="secondary">Unavailable</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+          <>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-red-800">Error</p>
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              </div>
+            )}
 
-        <div className="flex justify-end gap-2 mt-4">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="border-gray-300"
-          >
-            Close
-          </Button>
-          {!isLoading && exports.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={fetchExports}
-              className="border-[#124A69] text-[#124A69] hover:bg-blue-50"
-            >
-              Refresh
-            </Button>
-          )}
-        </div>
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-[#124A69] animate-spin mb-3" />
+                <p className="text-gray-600">Loading exports...</p>
+              </div>
+            ) : exports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 bg-gray-50 rounded-lg">
+                <Download className="w-10 h-10 text-gray-400 mb-3" />
+                <p className="text-gray-600 font-medium">
+                  No exports available yet
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Weekly exports will appear here once the cron job runs.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border rounded-lg">
+                <Table>
+                  <TableHeader className="bg-[#124A69]">
+                    <TableRow>
+                      <TableHead className="text-white">File Name</TableHead>
+                      <TableHead className="text-white">Created At</TableHead>
+                      <TableHead className="text-white text-right">
+                        Size
+                      </TableHead>
+                      <TableHead className="text-white text-right">
+                        Action
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {exports.map((exportFile) => (
+                      <TableRow
+                        key={exportFile.name}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <TableCell className="font-mono text-sm break-words">
+                          {exportFile.name}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {format(
+                            new Date(exportFile.created_at),
+                            "MMM dd, yyyy"
+                          )}
+                          <br />
+                          <span className="text-xs text-gray-500">
+                            {format(
+                              new Date(exportFile.created_at),
+                              "HH:mm:ss"
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline">
+                            {formatFileSize(exportFile.size)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {exportFile.downloadUrl ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownload(exportFile)}
+                              disabled={downloadingId === exportFile.name}
+                              className="border-[#124A69] text-[#124A69] hover:bg-blue-50"
+                            >
+                              {downloadingId === exportFile.name ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <Download className="w-4 h-4 mr-1" />
+                              )}
+                              {downloadingId === exportFile.name
+                                ? "Downloading..."
+                                : "Download"}
+                            </Button>
+                          ) : (
+                            <Badge variant="secondary">Unavailable</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="border-gray-300"
+              >
+                Close
+              </Button>
+              {!isLoading && exports.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={fetchExports}
+                  className="border-[#124A69] text-[#124A69] hover:bg-blue-50"
+                >
+                  Refresh
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

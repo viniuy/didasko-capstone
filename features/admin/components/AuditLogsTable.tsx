@@ -674,21 +674,90 @@ function AuditLogsTableComponent({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="range"
-                  selected={{
-                    from: localDateRange.from,
-                    to: localDateRange.to,
-                  }}
-                  onSelect={(range: { from?: Date; to?: Date } | undefined) => {
-                    setLocalDateRange({
-                      from: range?.from,
-                      to: range?.to,
-                    });
-                  }}
-                  numberOfMonths={2}
-                  className="[&_button[data-range-start='true']]:!bg-[#124A69] [&_button[data-range-start='true']]:!text-white [&_button[data-range-end='true']]:!bg-[#124A69] [&_button[data-range-end='true']]:!text-white"
-                />
+                <div className="flex flex-col sm:flex-row">
+                  {/* Quick presets sidebar */}
+                  <div className="p-3 border-b sm:border-b-0 sm:border-r bg-gray-50">
+                    <div className="text-xs font-semibold text-gray-600 mb-2 px-2">
+                      Quick Select
+                    </div>
+                    <div className="flex flex-row sm:flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs h-8 w-full hover:bg-[#124A69]/10"
+                        onClick={() => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const endOfToday = new Date(today);
+                          endOfToday.setHours(23, 59, 59, 999);
+                          setLocalDateRange({
+                            from: today,
+                            to: endOfToday,
+                          });
+                        }}
+                      >
+                        Today
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs h-8 w-full hover:bg-[#124A69]/10"
+                        onClick={() => {
+                          const today = new Date();
+                          const yesterday = new Date(today);
+                          yesterday.setDate(today.getDate() - 1);
+                          yesterday.setHours(0, 0, 0, 0);
+                          const endOfYesterday = new Date(yesterday);
+                          endOfYesterday.setHours(23, 59, 59, 999);
+                          setLocalDateRange({
+                            from: yesterday,
+                            to: endOfYesterday,
+                          });
+                        }}
+                      >
+                        Yesterday
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="justify-start text-xs h-8 w-full hover:bg-[#124A69]/10"
+                        onClick={() => {
+                          const today = new Date();
+                          const last7Days = new Date(today);
+                          last7Days.setDate(today.getDate() - 7);
+                          last7Days.setHours(0, 0, 0, 0);
+                          today.setHours(23, 59, 59, 999);
+                          setLocalDateRange({
+                            from: last7Days,
+                            to: today,
+                          });
+                        }}
+                      >
+                        This Week
+                      </Button>
+                    </div>
+                  </div>
+                  {/* Calendar */}
+                  <div>
+                    <Calendar
+                      mode="range"
+                      selected={{
+                        from: localDateRange.from,
+                        to: localDateRange.to,
+                      }}
+                      onSelect={(
+                        range: { from?: Date; to?: Date } | undefined
+                      ) => {
+                        setLocalDateRange({
+                          from: range?.from,
+                          to: range?.to,
+                        });
+                      }}
+                      numberOfMonths={2}
+                      className="[&_button[data-range-start='true']]:!bg-[#124A69] [&_button[data-range-start='true']]:!text-white [&_button[data-range-end='true']]:!bg-[#124A69] [&_button[data-range-end='true']]:!text-white"
+                    />
+                  </div>
+                </div>
                 <div className="flex items-center gap-2 p-3 border-t">
                   <Button
                     variant="outline"
@@ -1103,6 +1172,7 @@ function AuditLogsTableComponent({
       <AuditExportsModal
         open={exportsModalOpen}
         onOpenChange={setExportsModalOpen}
+        userRole={userRole}
       />
 
       {/* Filter Sheet */}

@@ -389,35 +389,38 @@ export function AdminDataTable({
   const refreshTableData = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      // Invalidate and refetch users using the hook
+      // Single invalidation - React Query will auto-refetch
       await queryClient.invalidateQueries({
         queryKey: queryKeys.admin.users(),
       });
-      await refetchUsers();
     } catch (error) {
       console.error("Error refreshing table data:", error);
     } finally {
       setIsRefreshing(false);
     }
-  }, [queryClient, refetchUsers]);
+  }, [queryClient]);
 
   const handleRoleChange = useCallback(
     async (userId: string, newRoles: Role[]) => {
       try {
         setIsRoleUpdating((prev) => ({ ...prev, [userId]: true }));
+
+        // Optimistic update
+        const previousData = tableData;
+        setTableData((prevData) =>
+          prevData.map((user) =>
+            user.id === userId ? { ...user, roles: newRoles } : user
+          )
+        );
+
         const result = await editUser(userId, { roles: newRoles });
 
         if (result.success) {
-          setTableData((prevData) =>
-            prevData.map((user) =>
-              user.id === userId ? { ...user, roles: newRoles } : user
-            )
-          );
-          // Invalidate and refetch users to update stats
-          await queryClient.invalidateQueries({
+          // Single invalidation - React Query will auto-refetch
+          queryClient.invalidateQueries({
             queryKey: queryKeys.admin.users(),
           });
-          await refetchUsers();
+
           toast.success(
             `Roles updated to ${newRoles.map(formatEnumValue).join(", ")}`,
             {
@@ -426,6 +429,8 @@ export function AdminDataTable({
             }
           );
         } else {
+          // Revert optimistic update on error
+          setTableData(previousData);
           throw new Error(result.error || "Failed to update roles");
         }
       } catch (error) {
@@ -436,7 +441,7 @@ export function AdminDataTable({
         setIsRoleUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    [queryClient, refetchUsers]
+    [queryClient, tableData]
   );
 
   const handleStatusChange = useCallback(
@@ -445,12 +450,17 @@ export function AdminDataTable({
       if (newStatus === "ARCHIVED") {
         const userToArchive = tableData.find((user) => user.id === userId);
         if (userToArchive?.roles?.includes(Role.ACADEMIC_HEAD)) {
-          const academicHeadCount = tableData.filter((user) =>
-            user.roles?.includes(Role.ACADEMIC_HEAD)
+          // Count non-archived academic heads excluding the one being archived
+          const activeAcademicHeadCount = tableData.filter(
+            (user) =>
+              user.roles?.includes(Role.ACADEMIC_HEAD) &&
+              user.status === "ACTIVE" &&
+              user.id !== userId
           ).length;
-          if (academicHeadCount <= 1) {
+
+          if (activeAcademicHeadCount < 1) {
             toast.error(
-              "Cannot archive user. At least one Academic Head must exist in the system."
+              "Cannot archive user. At least one active Academic Head must exist in the system."
             );
             return;
           }
@@ -459,24 +469,30 @@ export function AdminDataTable({
 
       try {
         setIsStatusUpdating((prev) => ({ ...prev, [userId]: true }));
+
+        // Optimistic update
+        const previousData = tableData;
+        setTableData((prevData) =>
+          prevData.map((user) =>
+            user.id === userId ? { ...user, status: newStatus } : user
+          )
+        );
+
         const result = await editUser(userId, { status: newStatus });
 
         if (result.success) {
-          setTableData((prevData) =>
-            prevData.map((user) =>
-              user.id === userId ? { ...user, status: newStatus } : user
-            )
-          );
-          // Invalidate and refetch users to update stats (active/archived counts)
-          await queryClient.invalidateQueries({
+          // Single invalidation - React Query will auto-refetch
+          queryClient.invalidateQueries({
             queryKey: queryKeys.admin.users(),
           });
-          await refetchUsers();
+
           toast.success(`Status updated to ${formatEnumValue(newStatus)}`, {
             duration: 3000,
             position: "top-center",
           });
         } else {
+          // Revert optimistic update on error
+          setTableData(previousData);
           throw new Error(result.error || "Failed to update status");
         }
       } catch (error) {
@@ -487,7 +503,7 @@ export function AdminDataTable({
         setIsStatusUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    [queryClient, refetchUsers, tableData]
+    [queryClient, tableData]
   );
 
   //Done
@@ -985,12 +1001,14 @@ export function AdminDataTable({
           const isDisabledForTempAdmin =
             isCurrentUserTempAdmin && isTargetAdminOrHead;
 
-          // Prevent self-demotion: disable role editing for current user if they have ADMIN role
-          const isSelfWithAdmin = isCurrentUser && currentUserHasAdmin;
-
           const handleRoleToggle = (role: Role, checked: boolean) => {
             // Prevent self-demotion: don't allow removing ADMIN role from self
-            if (isSelfWithAdmin && role === Role.ADMIN && !checked) {
+            if (
+              isCurrentUser &&
+              currentUserHasAdmin &&
+              role === Role.ADMIN &&
+              !checked
+            ) {
               toast.error("You cannot remove your own Admin role");
               return;
             }
@@ -1095,9 +1113,7 @@ export function AdminDataTable({
                   variant="outline"
                   className="w-[180px] justify-start"
                   disabled={
-                    isRoleUpdating[row.original.id] ||
-                    isDisabledForTempAdmin ||
-                    isSelfWithAdmin
+                    isRoleUpdating[row.original.id] || isDisabledForTempAdmin
                   }
                 >
                   {isRoleUpdating[row.original.id] ? (
@@ -1108,9 +1124,7 @@ export function AdminDataTable({
                   ) : (
                     <>
                       <span className="truncate">{displayText}</span>
-                      {!isSelfWithAdmin && (
-                        <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
-                      )}
+                      <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
                     </>
                   )}
                 </Button>
@@ -1136,7 +1150,8 @@ export function AdminDataTable({
                           role.value === Role.ACADEMIC_HEAD);
                       // Prevent self-demotion: disable unchecking ADMIN role for self
                       const isDisabledForSelf =
-                        isSelfWithAdmin &&
+                        isCurrentUser &&
+                        currentUserHasAdmin &&
                         role.value === Role.ADMIN &&
                         isChecked;
                       // Prevent removing last admin
@@ -1171,10 +1186,10 @@ export function AdminDataTable({
                       if (isMutuallyExclusive) {
                         if (role.value === Role.ADMIN) {
                           tooltipMessage =
-                            "A user cannot have both Admin and Academic Head roles. Please remove Academic Head role first.";
+                            "Cannot assign Admin role while user has Academic Head role. Please remove Academic Head role first.";
                         } else {
                           tooltipMessage =
-                            "A user cannot have both Admin and Academic Head roles. Please remove Admin role first.";
+                            "Cannot assign Academic Head role while user has Admin role. Please remove Admin role first.";
                         }
                       } else if (isLastAdmin) {
                         tooltipMessage =
@@ -1250,8 +1265,13 @@ export function AdminDataTable({
           // Check if user is the last academic head
           const isLastAcademicHead =
             row.original.roles?.includes(Role.ACADEMIC_HEAD) &&
-            tableData.filter((user) => user.roles?.includes(Role.ACADEMIC_HEAD))
-              .length <= 1;
+            row.original.status === "ACTIVE" &&
+            tableData.filter(
+              (user) =>
+                user.roles?.includes(Role.ACADEMIC_HEAD) &&
+                user.status === "ACTIVE" &&
+                user.id !== row.original.id
+            ).length < 1;
 
           const isStatusDisabled =
             isStatusUpdating[row.original.id] ||
@@ -1262,7 +1282,7 @@ export function AdminDataTable({
           let statusTooltipMessage = "";
           if (isLastAcademicHead && row.original.status === "ACTIVE") {
             statusTooltipMessage =
-              "Cannot archive user. At least one Academic Head must exist in the system.";
+              "Cannot archive user. At least one active Academic Head must exist in the system.";
           } else if (isSelfWithAdmin && row.original.status === "ACTIVE") {
             statusTooltipMessage = "You cannot archive yourself";
           }
@@ -1279,7 +1299,7 @@ export function AdminDataTable({
                 // Prevent archiving last academic head
                 if (isLastAcademicHead && value === "ARCHIVED") {
                   toast.error(
-                    "Cannot archive user. At least one Academic Head must exist in the system."
+                    "Cannot archive user. At least one active Academic Head must exist in the system."
                   );
                   return;
                 }
