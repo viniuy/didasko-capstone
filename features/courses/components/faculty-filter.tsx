@@ -17,6 +17,7 @@ interface FacultyFilterProps {
   onChange: (facultyIds: string[]) => void;
   currentUserId: string;
   disabled?: boolean;
+  userRoles?: string[];
 }
 
 export function FacultyFilter({
@@ -25,10 +26,15 @@ export function FacultyFilter({
   onChange,
   currentUserId,
   disabled = false,
+  userRoles = [],
 }: FacultyFilterProps) {
   const { data: session } = useSession();
   const currentUser = session?.user;
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Detect if user is pure Academic Head (ACADEMIC_HEAD role without FACULTY role)
+  const isPureAcademicHead =
+    userRoles.includes("ACADEMIC_HEAD") && !userRoles.includes("FACULTY");
 
   // Get the selected faculty ID (should be single selection)
   const selectedFacultyId =
@@ -43,7 +49,8 @@ export function FacultyFilter({
     if (!selectedFacultyId) {
       return "No faculty selected";
     }
-    if (selectedFacultyId === currentUserId) {
+    // For pure Academic Head, don't show "My Courses"
+    if (!isPureAcademicHead && selectedFacultyId === currentUserId) {
       return `My Courses${currentUser?.name ? ` (${currentUser.name})` : ""}`;
     }
     const faculty = faculties.find((f) => f.id === selectedFacultyId);
@@ -62,10 +69,12 @@ export function FacultyFilter({
   });
 
   // Check if "My Courses" should be shown based on search
+  // Don't show "My Courses" for pure Academic Head
   const shouldShowMyCourses =
-    !searchQuery ||
-    (currentUser?.name &&
-      currentUser.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    !isPureAcademicHead &&
+    (!searchQuery ||
+      (currentUser?.name &&
+        currentUser.name.toLowerCase().includes(searchQuery.toLowerCase())));
 
   return (
     <div className="space-y-3">

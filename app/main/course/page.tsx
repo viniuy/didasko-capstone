@@ -49,7 +49,11 @@ export default async function CourseDashboardPage() {
 
       <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex flex-col flex-grow px-4 overflow-y-auto">
-          <CourseDataTableWrapper userRole={userRole} userId={userId} />
+          <CourseDataTableWrapper
+            userRole={userRole}
+            userId={userId}
+            userRoles={userRoles}
+          />
         </div>
 
         {/* Right Sidebar */}

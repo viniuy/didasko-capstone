@@ -142,6 +142,7 @@ interface CourseDataTableProps {
   courses: Course[];
   userRole: UserRole;
   userId: string;
+  userRoles?: string[];
   onCourseAdded?: () => void;
 }
 
@@ -525,10 +526,17 @@ export function CourseDataTable({
   courses: initialCourses,
   userRole,
   userId,
+  userRoles = [],
   onCourseAdded,
 }: CourseDataTableProps) {
   // Get permissions based on role
   const permissions = useMemo(() => getCoursePermissions(userRole), [userRole]);
+
+  // Detect if user is pure Academic Head (ACADEMIC_HEAD role without FACULTY role)
+  const isPureAcademicHead = useMemo(
+    () => userRoles.includes("ACADEMIC_HEAD") && !userRoles.includes("FACULTY"),
+    [userRoles]
+  );
 
   // Responsive items per page
   const itemsPerPage = useItemsPerPage();
@@ -537,7 +545,11 @@ export function CourseDataTable({
   const [tableData, setTableData] = useState<Course[]>(initialCourses);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [facultyFilter, setFacultyFilter] = useState<string[]>([userId]);
+  // For pure Academic Head, initialize with empty array to show all faculty courses
+  // For others (Faculty or Academic Head with Faculty role), initialize with their own userId
+  const [facultyFilter, setFacultyFilter] = useState<string[]>(
+    isPureAcademicHead ? [] : [userId]
+  );
   const [sectionFilter, setSectionFilter] = useState<string[]>([]);
   const [dayFilter, setDayFilter] = useState<string>("ALL");
   const [roomFilter, setRoomFilter] = useState<string>("");
@@ -553,9 +565,11 @@ export function CourseDataTable({
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showRedirectingMessage, setShowRedirectingMessage] = useState(false);
   const router = useRouter();
-  const [tempFacultyFilter, setTempFacultyFilter] = useState<string[]>([
-    userId,
-  ]);
+  // For pure Academic Head, initialize temp filter with empty array
+  // For others, initialize with their own userId
+  const [tempFacultyFilter, setTempFacultyFilter] = useState<string[]>(
+    isPureAcademicHead ? [] : [userId]
+  );
   const [tempSectionFilter, setTempSectionFilter] = useState<string[]>([]);
   const [tempDayFilter, setTempDayFilter] = useState<string>("ALL");
   const [tempRoomFilter, setTempRoomFilter] = useState<string>("");
@@ -785,6 +799,10 @@ export function CourseDataTable({
 
       // For ACADEMIC_HEAD, count courses matching the selected faculty filter (single selection)
       if (userRole === "ACADEMIC_HEAD") {
+        // For pure Academic Head with empty filter, don't count any courses
+        // (they're viewing all courses, not creating new ones for themselves)
+        if (isPureAcademicHead && facultyFilter.length === 0) return false;
+        // For Academic Head with FACULTY role, or when a specific faculty is selected
         if (facultyFilter.length === 0) return false;
         const selectedFacultyId = facultyFilter[0];
         return course.facultyId === selectedFacultyId;
@@ -793,7 +811,14 @@ export function CourseDataTable({
       // For regular faculty, only count courses belonging to the current user
       return course.facultyId === userId;
     }).length;
-  }, [tableData, userRole, userId, facultyFilter, faculties]);
+  }, [
+    tableData,
+    userRole,
+    userId,
+    facultyFilter,
+    faculties,
+    isPureAcademicHead,
+  ]);
 
   const hasReachedMaxActiveCourses = activeCoursesCount >= MAX_ACTIVE_COURSES;
 
@@ -803,6 +828,11 @@ export function CourseDataTable({
   const baseFilteredCourses = useMemo(() => {
     // For Academic Head with single faculty selection (radio button)
     if (userRole === "ACADEMIC_HEAD") {
+      // For pure Academic Head (no FACULTY role), empty filter means show all faculty courses
+      if (isPureAcademicHead && facultyFilter.length === 0) {
+        return tableData;
+      }
+      // For Academic Head with FACULTY role, or when a specific faculty is selected
       if (facultyFilter.length === 0) {
         return [];
       }
@@ -819,7 +849,14 @@ export function CourseDataTable({
       userId,
       facultyFilter[0] || userId
     );
-  }, [tableData, userRole, userId, facultyFilter, faculties]);
+  }, [
+    tableData,
+    userRole,
+    userId,
+    facultyFilter,
+    faculties,
+    isPureAcademicHead,
+  ]);
 
   // Helper function to convert time string to minutes for comparison
   // Handles both "HH:MM" (24-hour) and "HH:MM AM/PM" (12-hour) formats
@@ -2096,6 +2133,8 @@ export function CourseDataTable({
 
         // For ACADEMIC_HEAD, count courses matching the selected faculty filter (single selection)
         if (userRole === "ACADEMIC_HEAD") {
+          // For pure Academic Head with empty filter, don't count any courses
+          if (isPureAcademicHead && facultyFilter.length === 0) return false;
           if (facultyFilter.length === 0) return false;
           const selectedFacultyId = facultyFilter[0];
           return c.facultyId === selectedFacultyId;
@@ -2190,6 +2229,7 @@ export function CourseDataTable({
     userId,
     facultyFilter,
     faculties,
+    isPureAcademicHead,
   ]);
 
   const handleScheduleAssignmentComplete = useCallback(
@@ -2839,6 +2879,8 @@ export function CourseDataTable({
                           text={
                             isViewingOtherFaculty
                               ? `No Courses for ${facultyName}`
+                              : isPureAcademicHead
+                              ? "Welcome to Course Management"
                               : "Welcome to your Course Management"
                           }
                           className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#124A69]"
@@ -2861,6 +2903,8 @@ export function CourseDataTable({
                         <p className="text-lg sm:text-xl text-gray-600 mb-4">
                           {isViewingOtherFaculty
                             ? `${facultyName} has no active courses yet.`
+                            : isPureAcademicHead
+                            ? "Get started by clicking the Filter button and view faculty active courses"
                             : hasReachedMaxActiveCourses
                             ? `Maximum limit of ${MAX_ACTIVE_COURSES} active courses reached. Please archive some courses before adding new ones.`
                             : "Get started by adding your first course!"}
@@ -3259,6 +3303,7 @@ export function CourseDataTable({
                         selectedFacultyIds={tempFacultyFilter}
                         onChange={setTempFacultyFilter}
                         currentUserId={userId}
+                        userRoles={userRoles}
                       />
                     </div>
                   )}
