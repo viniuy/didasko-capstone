@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
 import VantaBackground from "@/shared/components/VantaBackground";
@@ -8,7 +8,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 
-export default function AdminLogin() {
+function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -167,5 +167,19 @@ export default function AdminLogin() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminLogin() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-full items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69]"></div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }
