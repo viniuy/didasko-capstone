@@ -589,9 +589,8 @@ export function AppSidebar() {
                   </>
                 )}
 
-                {/* Audit Logs - Only for ACADEMIC_HEAD and ADMIN (but not when admin is in faculty view) */}
-                {(isAcademicHead ||
-                  (isAdmin && selectedRole !== "FACULTY")) && (
+                {/* Audit Logs - Only for ACADEMIC_HEAD (not ADMIN, as they already have it in adminItems) */}
+                {isAcademicHead && !isAdmin && (
                   <SidebarMenuItem>
                     <Link
                       href="/main/logs"

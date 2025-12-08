@@ -1645,10 +1645,12 @@ export function AdminDataTable({
         </div>
       </div>
 
-      <div className="relative min-h-[300px] md:min-h-[610px] flex flex-col">
-        <div className="flex-1 rounded-md border overflow-x-auto overflow-y-auto">
+      {/* Table and Pagination Container */}
+      <div className="flex flex-col" style={{ height: "calc(100vh - 320px)" }}>
+        {/* Table container with controlled height */}
+        <div className="flex-1 rounded-md border overflow-auto min-h-0">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
@@ -1703,8 +1705,9 @@ export function AdminDataTable({
           </Table>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end w-full mt-2 -mb-3 gap-2">
-          <span className="text-sm text-gray-600 mr-4 w-100">
+        {/* Pagination - fixed at bottom */}
+        <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-between sm:justify-end w-full mt-4 gap-3 py-2 bg-white border-t">
+          <span className="text-sm text-gray-600 order-2 sm:order-1 sm:mr-4 w-100">
             {table.getState().pagination.pageIndex *
               table.getState().pagination.pageSize +
               1}
@@ -1716,15 +1719,15 @@ export function AdminDataTable({
             )}{" "}
             of {table.getFilteredRowModel().rows.length} users
           </span>
-          <Pagination className="flex justify-end">
-            <PaginationContent>
+          <Pagination className="order-1 sm:order-2 flex justify-end">
+            <PaginationContent className="flex-wrap justify-center gap-1">
               <PaginationItem>
                 <PaginationPrevious
                   onClick={() => table.previousPage()}
                   className={
                     !table.getCanPreviousPage()
                       ? "pointer-events-none opacity-50"
-                      : ""
+                      : "cursor-pointer"
                   }
                 />
               </PaginationItem>
@@ -1733,11 +1736,11 @@ export function AdminDataTable({
                   <PaginationLink
                     onClick={() => table.setPageIndex(i)}
                     isActive={table.getState().pagination.pageIndex === i}
-                    className={
+                    className={`cursor-pointer ${
                       table.getState().pagination.pageIndex === i
                         ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
                         : ""
-                    }
+                    }`}
                   >
                     {i + 1}
                   </PaginationLink>
@@ -1749,7 +1752,7 @@ export function AdminDataTable({
                   className={
                     !table.getCanNextPage()
                       ? "pointer-events-none opacity-50"
-                      : ""
+                      : "cursor-pointer"
                   }
                 />
               </PaginationItem>
