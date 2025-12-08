@@ -74,43 +74,41 @@ export async function POST(request: Request) {
       data: { rfid_id: rfidInt },
     });
 
-    // Log RFID assignment
-    try {
-      const isReassignment = studentBefore.rfid_id !== null;
-      await logAction({
-        userId: session.user.id,
-        action: isReassignment
-          ? "STUDENT_RFID_REASSIGNED"
-          : "STUDENT_RFID_ASSIGNED",
-        module: "Student",
-        reason: `RFID ${rfidInt} ${
-          isReassignment ? "reassigned" : "assigned"
-        } to student: ${updatedStudent.firstName} ${updatedStudent.lastName} (${
-          updatedStudent.studentId
-        })`,
-        status: "SUCCESS",
-        before: {
-          studentId: studentBefore.studentId,
-          name: `${studentBefore.firstName} ${studentBefore.lastName}`,
-          rfid_id: studentBefore.rfid_id,
-        },
-        after: {
-          studentId: updatedStudent.studentId,
-          name: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
-          rfid_id: updatedStudent.rfid_id,
-        },
-        metadata: {
-          entityType: "Student",
-          entityId: updatedStudent.id,
-          entityName: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
-          rfidCardNumber: rfidInt,
-          isReassignment,
-        },
-      });
-    } catch (error) {
+    // Log RFID assignment (fire-and-forget to avoid blocking response)
+    const isReassignment = studentBefore.rfid_id !== null;
+    logAction({
+      userId: session.user.id,
+      action: isReassignment
+        ? "STUDENT_RFID_REASSIGNED"
+        : "STUDENT_RFID_ASSIGNED",
+      module: "Student",
+      reason: `RFID ${rfidInt} ${
+        isReassignment ? "reassigned" : "assigned"
+      } to student: ${updatedStudent.firstName} ${updatedStudent.lastName} (${
+        updatedStudent.studentId
+      })`,
+      status: "SUCCESS",
+      before: {
+        studentId: studentBefore.studentId,
+        name: `${studentBefore.firstName} ${studentBefore.lastName}`,
+        rfid_id: studentBefore.rfid_id,
+      },
+      after: {
+        studentId: updatedStudent.studentId,
+        name: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
+        rfid_id: updatedStudent.rfid_id,
+      },
+      metadata: {
+        entityType: "Student",
+        entityId: updatedStudent.id,
+        entityName: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
+        rfidCardNumber: rfidInt,
+        isReassignment,
+      },
+    }).catch((error) => {
       console.error("Error logging RFID assignment:", error);
       // Don't fail RFID assignment if logging fails
-    }
+    });
 
     return NextResponse.json(
       { message: "RFID successfully assigned.", student: updatedStudent },
@@ -119,11 +117,10 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error assigning RFID:", error);
 
-    // Log failure
-    try {
-      const session = await getServerSession(authOptions);
+    // Log failure (fire-and-forget)
+    getServerSession(authOptions).then((session) => {
       if (session?.user) {
-        await logAction({
+        logAction({
           userId: session.user.id,
           action: "STUDENT_RFID_ASSIGNED",
           module: "Student",
@@ -135,11 +132,11 @@ export async function POST(request: Request) {
             attemptedRfid: body.rfid,
             attemptedStudentId: body.studentId,
           },
+        }).catch((logError) => {
+          console.error("Error logging RFID assignment failure:", logError);
         });
       }
-    } catch (logError) {
-      console.error("Error logging RFID assignment failure:", logError);
-    }
+    });
 
     if (error instanceof PrismaClientKnownRequestError) {
       return NextResponse.json(

@@ -94,6 +94,7 @@ export function StudentsPageClient({
   // Debounce search query (500ms delay for server-side search)
   React.useEffect(() => {
     const timer = setTimeout(() => {
+      console.log("🔍 Search query changed:", searchQuery);
       setDebouncedSearch(searchQuery);
       setCurrentPage(1); // Reset to page 1 on search change
     }, 500);
@@ -143,7 +144,7 @@ export function StudentsPageClient({
       search: debouncedSearch || undefined, // Server-side search
     },
     initialData:
-      currentPage === 1
+      currentPage === 1 && !debouncedSearch
         ? {
             students: initialStudents,
             pagination: initialPagination || {
@@ -157,6 +158,11 @@ export function StudentsPageClient({
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
+
+  // Debug: Log when search params change
+  React.useEffect(() => {
+    console.log("📊 Search params:", { currentPage, limit, debouncedSearch });
+  }, [currentPage, limit, debouncedSearch]);
 
   // Extract students from query data
   const students = React.useMemo(() => {
@@ -187,16 +193,11 @@ export function StudentsPageClient({
       const height = window.innerHeight;
       setWindowHeight(height);
       const newLimit = height < 930 ? 30 : 50;
-      setLimit((prevLimit) => {
-        if (prevLimit !== newLimit) {
-          // Reset to page 1 when limit changes
-          const params = new URLSearchParams(window.location.search);
-          params.set("page", "1");
-          router.push(`/main/students?${params.toString()}`);
-          return newLimit;
-        }
-        return prevLimit;
-      });
+
+      if (limit !== newLimit) {
+        setLimit(newLimit);
+        setCurrentPage(1); // Reset to page 1 when limit changes (local state only)
+      }
     };
 
     // Set initial value
@@ -501,17 +502,43 @@ export function StudentsPageClient({
     const currentTime = Date.now();
     const timeSinceLastInput = currentTime - lastRfidInputTimeRef.current;
 
-    // If there's a delay > 400ms between characters, it's likely manual typing - reject it
-    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 400) {
+    // RFID scanners input all digits in < 100ms total
+    // If there's a delay > 100ms between characters, it's manual typing - reject it
+    if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 100) {
       // Reset - this is manual typing, not RFID scan
-      e.target.value = rfidInputBufferRef.current;
+      e.target.value = "";
+      rfidInputBufferRef.current = "";
+      lastRfidInputTimeRef.current = 0;
+      setScannedRfid("");
       showErrorToast("Please use RFID scanner. Manual input is disabled.");
       return;
     }
 
     const value = e.target.value.replace(/\D/g, ""); // Only numbers
-    lastRfidInputTimeRef.current = currentTime;
-    rfidInputBufferRef.current = value;
+
+    // Additional check: If input is too slow (< 5 chars in first 200ms), reject
+    if (value.length === 1) {
+      // First character - start timer
+      lastRfidInputTimeRef.current = currentTime;
+      rfidInputBufferRef.current = value;
+    } else if (value.length > 0 && value.length < 5) {
+      // Check if we're getting chars fast enough (should be < 200ms for first 5 chars)
+      const timeSinceStart = currentTime - lastRfidInputTimeRef.current;
+      if (timeSinceStart > 200) {
+        // Too slow - this is manual typing
+        e.target.value = "";
+        rfidInputBufferRef.current = "";
+        lastRfidInputTimeRef.current = 0;
+        setScannedRfid("");
+        showErrorToast("Input too slow. Please use RFID scanner.");
+        return;
+      }
+      lastRfidInputTimeRef.current = currentTime;
+      rfidInputBufferRef.current = value;
+    } else {
+      lastRfidInputTimeRef.current = currentTime;
+      rfidInputBufferRef.current = value;
+    }
 
     // Add 10ms delay before processing
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -524,7 +551,7 @@ export function StudentsPageClient({
 
     // Wait for complete RFID (at least 10 characters)
     if (value.length >= 10) {
-      // Check if RFID is in current page view first
+      // Check if RFID is already assigned to another student
       const existingStudent = students.find(
         (s: Student) => s.rfid_id && String(s.rfid_id) === value
       );
@@ -564,8 +591,8 @@ export function StudentsPageClient({
         }
       }
 
-      // If searching and no student found locally, always search in database by rfid_id
-      if (viewMode === "searching-rfid" || !existingStudent) {
+      // ONLY search database if we're in search mode
+      if (viewMode === "searching-rfid") {
         // Show loading toast
         const loadingToastId = toast.loading("Searching for student...");
 
@@ -1175,26 +1202,11 @@ export function StudentsPageClient({
       <Header />
       <AppSidebar />
 
-      {/* Hidden RFID input - disabled keyboard input, only accepts rapid RFID scans */}
+      {/* Hidden RFID input - only accepts rapid scans from RFID scanner */}
       <input
         ref={rfidInputRef}
         type="text"
         onChange={handleRfidInput}
-        onKeyDown={(e) => {
-          // Only prevent navigation/editing keys, but allow character input
-          // The timing check in onChange will differentiate RFID from manual typing
-          if (
-            e.key === "Backspace" ||
-            e.key === "Delete" ||
-            e.key === "ArrowLeft" ||
-            e.key === "ArrowRight"
-          ) {
-            e.preventDefault();
-            return false;
-          }
-          // Allow all other keys (including single characters) to pass through
-          // The onChange handler will check timing to reject manual typing
-        }}
         onPaste={(e) => {
           // Prevent paste
           e.preventDefault();
@@ -1203,6 +1215,7 @@ export function StudentsPageClient({
         className="absolute -left-[9999px]"
         placeholder="RFID input"
         autoComplete="off"
+        readOnly={!isScanning} // Make read-only when not actively scanning
       />
 
       <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-x-auto">
@@ -1428,7 +1441,7 @@ export function StudentsPageClient({
                       <List
                         height={windowHeight < 890 ? 250 : 400}
                         itemCount={students.length}
-                        itemSize={120}
+                        itemSize={100}
                         width="100%"
                       >
                         {StudentListItem}

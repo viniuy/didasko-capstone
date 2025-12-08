@@ -96,7 +96,7 @@ model Student {
   studentId        String            @unique
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
-  rfid_id          Int?              @unique
+  rfid_id          BigInt?           @unique
   assessmentScores AssessmentScore[]
   attendance       Attendance[]
   gradeScores      GradeScore[]

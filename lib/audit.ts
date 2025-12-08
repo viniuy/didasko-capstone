@@ -9,12 +9,18 @@ function getAuditPrisma(): PrismaClient {
   if (!auditPrisma) {
     auditPrisma = new PrismaClient({
       log: process.env.NODE_ENV === "development" ? ["error"] : [],
-      // Use connection pooling to share connections efficiently
+      // Use connection pooling with timeout to prevent hanging connections
       datasources: {
         db: {
           url: process.env.DATABASE_URL,
         },
       },
+    });
+
+    // Add connection timeout to prevent hanging
+    auditPrisma.$connect().catch((error) => {
+      console.error("[Audit] Failed to connect to database:", error);
+      auditPrisma = null; // Reset to allow retry on next call
     });
 
     // Clean up on process termination
