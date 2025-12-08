@@ -30,13 +30,35 @@ function LoginForm() {
         console.error("Sign in error:", result.error);
         // Map NextAuth errors to user-friendly messages
         if (result.error === "AccessDenied") {
+          setError("Access denied. Please contact your administrator.");
+        } else if (result.error === "AccountNotFound") {
+          setError("Account not found. Please contact your administrator.");
+        } else if (result.error === "AccountArchived") {
           setError(
-            "Access denied. You are not authorized to access this portal."
+            "Your account has been archived. Please contact your administrator."
           );
         } else if (result.error === "OAuthCallback") {
-          setError("Authentication failed. Please try again.");
+          setError("Failed to connect to Microsoft 365. Please try again.");
+        } else if (result.error === "OAuthSignin") {
+          setError(
+            "Sign-in failed. Please check your connection and try again."
+          );
+        } else if (result.error === "OAuthAccountNotLinked") {
+          setError("Account not linked. Please use your authorized STI email.");
+        } else if (result.error === "EmailSignin") {
+          setError(
+            "Email verification failed. Please contact your administrator."
+          );
+        } else if (result.error === "CredentialsSignin") {
+          setError("Invalid credentials. Please try again.");
+        } else if (result.error === "SessionRequired") {
+          setError("Session expired. Please sign in again.");
+        } else if (result.error === "Default") {
+          setError(
+            "Authentication error. Please try again or contact support."
+          );
         } else {
-          setError("Sign in failed. Please contact your administrator.");
+          setError("Authentication failed. Please contact your administrator.");
         }
         return;
       }
@@ -46,7 +68,7 @@ function LoginForm() {
       }
     } catch (err) {
       console.error("Login failed:", err);
-      setError("An unexpected error occurred. Please try again.");
+      setError("Unexpected error. Please check your connection and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -95,10 +117,26 @@ function LoginForm() {
                     </p>
                     <p className="text-sm text-red-700 mt-1">
                       {authError === "AccessDenied"
-                        ? "Access denied. You are not authorized to access this portal."
+                        ? "Access denied. Please contact your administrator."
+                        : authError === "AccountNotFound"
+                        ? "Account not found. Please contact your administrator."
+                        : authError === "AccountArchived"
+                        ? "Your account has been archived. Please contact your administrator."
                         : authError === "OAuthCallback"
-                        ? "Authentication failed. Please try again."
-                        : "Sign in failed. Please contact your administrator."}
+                        ? "Failed to connect to Microsoft 365. Please try again."
+                        : authError === "OAuthSignin"
+                        ? "Sign-in failed. Please check your connection and try again."
+                        : authError === "OAuthAccountNotLinked"
+                        ? "Account not linked. Please use your authorized STI email."
+                        : authError === "EmailSignin"
+                        ? "Email verification failed. Please contact your administrator."
+                        : authError === "CredentialsSignin"
+                        ? "Invalid credentials. Please try again."
+                        : authError === "SessionRequired"
+                        ? "Session expired. Please sign in again."
+                        : authError === "Default"
+                        ? "Authentication error. Please try again or contact support."
+                        : "Authentication failed. Please contact your administrator."}
                     </p>
                   </div>
                 </div>

@@ -28,6 +28,41 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
+    async signIn({ user }) {
+      try {
+        // Check if user exists and verify their status
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email ?? "" },
+          select: { status: true },
+        });
+
+        // User not found in database
+        if (!dbUser) {
+          throw new Error("AccountNotFound");
+        }
+
+        // User account is archived
+        if (dbUser.status === "ARCHIVED") {
+          throw new Error("AccountArchived");
+        }
+
+        // User is active, allow sign in
+        return true;
+      } catch (error) {
+        // Re-throw our custom errors
+        if (
+          error instanceof Error &&
+          (error.message === "AccountNotFound" ||
+            error.message === "AccountArchived")
+        ) {
+          throw error;
+        }
+        // For other errors, log and deny access
+        console.error("SignIn callback error:", error);
+        throw new Error("AccessDenied");
+      }
+    },
+
     async jwt({ token, user }) {
       // Only fetch from DB on initial login (when user is provided)
       // This prevents connection pool exhaustion from querying on every token refresh
