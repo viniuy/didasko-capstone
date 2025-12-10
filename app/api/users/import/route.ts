@@ -4,6 +4,7 @@ import { Role, WorkType, UserStatus } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { logAction, generateBatchId } from "@/lib/audit";
+import { isValidDepartment } from "@/lib/constants/departments";
 
 interface ImportResult {
   success: boolean;
@@ -142,6 +143,24 @@ export async function POST(request: Request) {
             email: email || "N/A",
             status: "skipped",
             message: "Missing required fields",
+          });
+          return;
+        }
+
+        // Validate department
+        if (!isValidDepartment(department)) {
+          console.log(`Row ${rowNumber}: Invalid department: ${department}`);
+          result.errors.push({
+            row: rowNumber,
+            email,
+            message: `Invalid department: ${department}. Must be one of: IT Department, BA Department, HM Department, TM Department, GE Department`,
+          });
+          result.skipped++;
+          result.detailedFeedback.push({
+            row: rowNumber,
+            email,
+            status: "skipped",
+            message: "Invalid department",
           });
           return;
         }

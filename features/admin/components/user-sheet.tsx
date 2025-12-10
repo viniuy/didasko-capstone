@@ -33,14 +33,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-// Available departments
-const DEPARTMENTS = [
-  "IT Department",
-  "BA Department",
-  "HM Department",
-  "TM Department",
-];
+import { DEPARTMENTS } from "@/lib/constants/departments";
 
 const userSchema = z.object({
   name: z

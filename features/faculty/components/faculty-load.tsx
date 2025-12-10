@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { DEPARTMENTS } from "@/lib/constants/departments";
 
 interface Course {
   id: string;
@@ -103,12 +104,10 @@ export default function FacultyLoad() {
   };
 
   // Department options
-  const departmentOptions = [
-    { value: "IT Department", label: "IT Department" },
-    { value: "BA Department", label: "BA Department" },
-    { value: "TM Department", label: "TM Department" },
-    { value: "HM Department", label: "HM Department" },
-  ];
+  const departmentOptions = DEPARTMENTS.map((dept) => ({
+    value: dept,
+    label: dept,
+  }));
 
   return (
     <div className="h-full flex flex-col min-h-[600px] max-h-screen overflow-y-auto sm:max-h-full">
