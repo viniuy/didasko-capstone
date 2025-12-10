@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // GET - Fetch all students or filter by query params
 
@@ -53,7 +54,20 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ students });
+    const response = { students };
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(response),
+      });
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Error fetching students:", error);
     return NextResponse.json(

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getCourseStudentsWithAttendance } from "@/lib/services";
 import { prisma } from "@/lib/prisma";
+import { encryptResponse } from "@/lib/crypto-server";
 //@ts-ignore
 
 // Route segment config for pre-compilation and performance
@@ -28,6 +29,17 @@ export async function GET(request: Request, { params }: { params }) {
 
     if (!result) {
       return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(result),
+      });
     }
 
     return NextResponse.json(result);
@@ -214,13 +226,26 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({
+    const response = {
       total: body.length,
       imported,
       skipped,
       errors,
       detailedFeedback,
-    });
+    };
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(response),
+      });
+    }
+
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error("Import failed:", error);
     return NextResponse.json(
@@ -326,12 +351,25 @@ export async function DELETE(
       }),
     ]);
 
-    return NextResponse.json({
+    const response = {
       success: true,
       message: `Successfully removed ${studentIds.length} student${
         studentIds.length > 1 ? "s" : ""
       }`,
-    });
+    };
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(response),
+      });
+    }
+
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error("Error removing students:", error);
     return NextResponse.json(

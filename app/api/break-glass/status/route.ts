@@ -5,6 +5,7 @@ import { getBreakGlassSession, isBreakGlassActive } from "@/lib/breakGlass";
 import { requireAdmin, handleAuthError } from "@/lib/authz";
 import { withLogging } from "@/lib/withLogging";
 import { prisma } from "@/lib/prisma";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -63,11 +64,24 @@ export const GET = withLogging(
             })
           : activeSessions;
 
-        return NextResponse.json({
+        const response = {
           isActive: activeSessions.length > 0,
           sessions: finalSessions,
           session: finalSessions[0] || null, // For backward compatibility
-        });
+        };
+
+        // Check if client requested encryption
+        const wantsEncryption =
+          req.headers.get("X-Encrypted-Response") === "true";
+
+        if (wantsEncryption) {
+          return NextResponse.json({
+            encrypted: true,
+            data: encryptResponse(response),
+          });
+        }
+
+        return NextResponse.json(response);
       } else {
         // For other roles, check specific user
         const targetUserId = userId || session.user.id;
@@ -80,10 +94,23 @@ export const GET = withLogging(
         const isActive = await isBreakGlassActive(targetUserId);
         const sessionData = await getBreakGlassSession(targetUserId);
 
-        return NextResponse.json({
+        const response = {
           isActive,
           session: sessionData,
-        });
+        };
+
+        // Check if client requested encryption
+        const wantsEncryption =
+          req.headers.get("X-Encrypted-Response") === "true";
+
+        if (wantsEncryption) {
+          return NextResponse.json({
+            encrypted: true,
+            data: encryptResponse(response),
+          });
+        }
+
+        return NextResponse.json(response);
       }
     } catch (error) {
       return handleAuthError(error);

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { canViewLog } from "@/lib/roles";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -41,7 +42,10 @@ export async function GET(request: NextRequest) {
     const where: any = {};
 
     // Apply module filter for ACADEMIC_HEAD (not ADMIN)
-    if (userRoles.includes(Role.ACADEMIC_HEAD) && !userRoles.includes(Role.ADMIN)) {
+    if (
+      userRoles.includes(Role.ACADEMIC_HEAD) &&
+      !userRoles.includes(Role.ADMIN)
+    ) {
       where.module = {
         in: [
           "Course Management",
@@ -139,14 +143,27 @@ export async function GET(request: NextRequest) {
 
     totalPages = Math.ceil(totalCount / effectivePageSize);
 
-    return NextResponse.json({
+    const response = {
       logs,
       currentPage: shouldPaginate ? page : 1,
       totalPages,
       totalCount,
       pageSize: effectivePageSize,
       hasMore: effectiveSkip + effectivePageSize < totalCount,
-    });
+    };
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(response),
+      });
+    }
+
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error("Error fetching audit logs:", error);
     return NextResponse.json(
