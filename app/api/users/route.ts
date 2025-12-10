@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { logAction } from "@/lib/audit";
 import { canManageUser } from "@/lib/roles";
 import { isTemporaryAdmin } from "@/lib/breakGlass";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -44,7 +45,20 @@ export const GET = withLogging(
         return NextResponse.json({ error: "User not found" }, { status: 404 });
       }
 
-      return NextResponse.json(filters.email ? users[0] : users);
+      const response = filters.email ? users[0] : users;
+
+      // Check if client requested encryption
+      const wantsEncryption =
+        req.headers.get("X-Encrypted-Response") === "true";
+
+      if (wantsEncryption) {
+        return NextResponse.json({
+          encrypted: true,
+          data: encryptResponse(response),
+        });
+      }
+
+      return NextResponse.json(response);
     } catch (error) {
       return handleAuthError(error);
     }
@@ -130,6 +144,17 @@ export const POST = withLogging(
             user.email
           })`,
         });
+
+        // Check if client requested encryption
+        const wantsEncryption =
+          req.headers.get("X-Encrypted-Response") === "true";
+
+        if (wantsEncryption) {
+          return NextResponse.json({
+            encrypted: true,
+            data: encryptResponse(user),
+          });
+        }
 
         return NextResponse.json(user);
       } catch (error: any) {

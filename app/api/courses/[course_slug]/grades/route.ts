@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getGrades, saveGrades, deleteGrades } from "@/lib/services";
 import { prisma } from "@/lib/prisma";
+import { encryptResponse } from "@/lib/crypto-server";
 //@ts-ignore
 
 // Route segment config for pre-compilation and performance
@@ -59,6 +60,17 @@ export async function GET(request: Request, { params }: { params }) {
       groupId: groupId || undefined,
       studentIds: studentIds,
     });
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(grades),
+      });
+    }
 
     return NextResponse.json(grades);
   } catch (error: any) {
@@ -121,6 +133,17 @@ export async function POST(request: NextRequest, { params }: { params }) {
         isRecitationCriteria,
       });
 
+      // Check if client requested encryption
+      const wantsEncryption =
+        request.headers.get("X-Encrypted-Response") === "true";
+
+      if (wantsEncryption) {
+        return NextResponse.json({
+          encrypted: true,
+          data: encryptResponse(createdGrades),
+        });
+      }
+
       return NextResponse.json(createdGrades);
     } catch (error: any) {
       if (error.message.includes("not found")) {
@@ -162,7 +185,20 @@ export async function DELETE(request: Request, { params }: { params }) {
 
     try {
       await deleteGrades(course_slug, { criteriaId, date });
-      return NextResponse.json({ message: "Grades deleted successfully" });
+      const response = { message: "Grades deleted successfully" };
+
+      // Check if client requested encryption
+      const wantsEncryption =
+        request.headers.get("X-Encrypted-Response") === "true";
+
+      if (wantsEncryption) {
+        return NextResponse.json({
+          encrypted: true,
+          data: encryptResponse(response),
+        });
+      }
+
+      return NextResponse.json(response);
     } catch (error: any) {
       if (error.message.includes("not found")) {
         return NextResponse.json({ error: error.message }, { status: 404 });

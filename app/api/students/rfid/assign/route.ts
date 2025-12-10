@@ -4,6 +4,7 @@ import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { logAction } from "@/lib/audit";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -110,10 +111,26 @@ export async function POST(request: Request) {
       // Don't fail RFID assignment if logging fails
     });
 
-    return NextResponse.json(
-      { message: "RFID successfully assigned.", student: updatedStudent },
-      { status: 200 }
-    );
+    const response = {
+      message: "RFID successfully assigned.",
+      student: updatedStudent,
+    };
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json(
+        {
+          encrypted: true,
+          data: encryptResponse(response),
+        },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json(response, { status: 200 });
   } catch (error) {
     console.error("Error assigning RFID:", error);
 

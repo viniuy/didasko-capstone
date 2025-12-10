@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStudents, createStudent } from "@/lib/services";
 import { Student, StudentCreateInput } from "@/shared/types/student";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -18,6 +19,17 @@ export async function GET(request: Request) {
     };
 
     const result = await getStudents(filters);
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(result),
+      });
+    }
 
     return NextResponse.json(result);
   } catch (error) {
@@ -72,6 +84,17 @@ export async function POST(request: Request) {
         rfid_id,
         courseId,
       });
+
+      // Check if client requested encryption
+      const wantsEncryption =
+        request.headers.get("X-Encrypted-Response") === "true";
+
+      if (wantsEncryption) {
+        return NextResponse.json({
+          encrypted: true,
+          data: encryptResponse(student),
+        });
+      }
 
       return NextResponse.json(student as Student);
     } catch (error: any) {

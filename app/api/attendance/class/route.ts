@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
+import { encryptResponse } from "@/lib/crypto-server";
 
 /**
  * GET /api/attendance/class
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true, role: true },
+      select: { id: true, roles: true },
     });
 
     if (!user) {
@@ -131,7 +132,7 @@ export async function GET(request: Request) {
       absent: students.filter((s) => s.status === "ABSENT").length,
     };
 
-    return NextResponse.json({
+    const response = {
       students,
       filters: filterData,
       meta: {
@@ -139,7 +140,20 @@ export async function GET(request: Request) {
         pageSize,
         total: totalStudents,
       },
-    });
+    };
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(response),
+      });
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error("Error in GET /api/attendance/class:", error);
     return NextResponse.json(

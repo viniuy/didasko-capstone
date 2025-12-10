@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RfidScanInput, RfidScanResponse } from "@/shared/types/student";
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -41,7 +42,20 @@ export async function GET(request: Request) {
     });
 
     if (student) {
-      return NextResponse.json({ student });
+      const response = { student };
+
+      // Check if client requested encryption
+      const wantsEncryption =
+        request.headers.get("X-Encrypted-Response") === "true";
+
+      if (wantsEncryption) {
+        return NextResponse.json({
+          encrypted: true,
+          data: encryptResponse(response),
+        });
+      }
+
+      return NextResponse.json(response);
     }
 
     return NextResponse.json(
@@ -100,20 +114,46 @@ export async function POST(request: Request) {
         student.firstName,
         student.lastName
       );
-      return NextResponse.json({
+      const response = {
         found: true,
         assigned: true,
         student,
         message: `RFID "${rfidUid}" is already assigned to ${student.firstName} ${student.lastName}`,
-      } as RfidScanResponse);
+      } as RfidScanResponse;
+
+      // Check if client requested encryption
+      const wantsEncryption =
+        request.headers.get("X-Encrypted-Response") === "true";
+
+      if (wantsEncryption) {
+        return NextResponse.json({
+          encrypted: true,
+          data: encryptResponse(response),
+        });
+      }
+
+      return NextResponse.json(response);
     }
 
     console.log("RFID not assigned:", rfidUid);
-    return NextResponse.json({
+    const notFoundResponse = {
       found: false,
       assigned: false,
       message: `RFID "${rfidUid}" is not assigned to any student.`,
-    } as RfidScanResponse);
+    } as RfidScanResponse;
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(notFoundResponse),
+      });
+    }
+
+    return NextResponse.json(notFoundResponse);
   } catch (error) {
     console.error("Error scanning RFID:", error);
     return NextResponse.json(

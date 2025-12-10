@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
+import { encryptResponse } from "@/lib/crypto-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,6 +27,20 @@ export async function PUT(request: Request, { params }: { params }) {
       where: { id: rfid_id },
       data: { image: imageUrl },
     });
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json(
+        {
+          encrypted: true,
+          data: encryptResponse(updatedStudent),
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
     return NextResponse.json(updatedStudent, {
       headers: { "Cache-Control": "no-store" },

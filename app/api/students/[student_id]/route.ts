@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
-
+import { encryptResponse } from "@/lib/crypto-server";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -30,6 +30,17 @@ export async function GET(
 
     if (!student) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
+    }
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(student),
+      });
     }
 
     return NextResponse.json(student);
@@ -146,6 +157,17 @@ export async function PUT(request: Request, context: any) {
         },
       },
     });
+
+    // Check if client requested encryption
+    const wantsEncryption =
+      request.headers.get("X-Encrypted-Response") === "true";
+
+    if (wantsEncryption) {
+      return NextResponse.json({
+        encrypted: true,
+        data: encryptResponse(updatedStudent),
+      });
+    }
 
     return NextResponse.json(updatedStudent);
   } catch (error) {
