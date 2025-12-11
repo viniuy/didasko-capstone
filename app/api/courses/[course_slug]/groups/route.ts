@@ -31,13 +31,30 @@ export async function POST(request: Request, context: { params }) {
         leaderId,
       });
 
+      // Serialize BigInt fields to strings
+      const serializedGroup = {
+        ...group,
+        students: group.students?.map((student: any) => ({
+          ...student,
+          rfid_id: student.rfid_id ? String(student.rfid_id) : null,
+        })),
+        leader: group.leader
+          ? {
+              ...group.leader,
+              rfid_id: group.leader.rfid_id
+                ? String(group.leader.rfid_id)
+                : null,
+            }
+          : null,
+      };
+
       // Revalidate the cache for this course's pages
       revalidatePath(`/main/grading/reporting/${course_slug}`);
 
       // Add a small delay to ensure DB transaction completes
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      return NextResponse.json(group, {
+      return NextResponse.json(serializedGroup, {
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
         },
@@ -49,10 +66,21 @@ export async function POST(request: Request, context: { params }) {
       if (error.message.includes("not found")) {
         return NextResponse.json({ error: error.message }, { status: 404 });
       }
+      console.error("Error in inner catch (createGroup):", {
+        message: error.message,
+        stack: error.stack,
+        course_slug,
+        body,
+      });
       throw error;
     }
   } catch (error: any) {
-    console.error("Error creating group:", error);
+    const params = await Promise.resolve(context.params);
+    console.error("Error creating group (outer catch):", {
+      message: error.message,
+      stack: error.stack,
+      course_slug: params?.course_slug,
+    });
     return NextResponse.json(
       { error: error.message || "Failed to create group" },
       { status: 500 }

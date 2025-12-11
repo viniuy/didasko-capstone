@@ -122,8 +122,8 @@ export function GroupGrid({
   const currentGroups = groups.slice(startIndex, endIndex);
 
   return (
-    <div className="flex flex-col gap-8 px-2 sm:px-4">
-      <div className="grid grid-cols-4 gap-3 sm:gap-4 items-start justify-center">
+    <div className="flex flex-col gap-6 sm:gap-8 px-2 sm:px-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 items-start justify-center">
         {currentGroups.map((group) => (
           <GroupCard
             key={group.id}
@@ -141,7 +141,7 @@ export function GroupGrid({
         {currentPage === totalPages &&
           !hasSearchQuery &&
           ungroupedStudentCount > 0 && (
-            <div className="flex flex-col gap-2 sm:gap-6 items-center justify-center sm:ml-9 mt-3">
+            <div className="flex flex-col gap-3 sm:gap-4 md:gap-6 items-center justify-center md:ml-9 mt-2 sm:mt-3">
               <AddGroupModal
                 courseCode={courseCode}
                 excludedStudentIds={excludedStudentIds}
@@ -164,13 +164,13 @@ export function GroupGrid({
           )}
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end w-full mt-4 -mb-3 gap-4">
-        <span className="text-xs sm:text-sm text-gray-600 order-2 sm:order-1 w-full">
+      <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end w-full mt-3 sm:mt-4 -mb-3 gap-3 sm:gap-4">
+        <span className="text-xs sm:text-sm text-gray-600 order-2 sm:order-1 w-full text-center sm:text-left">
           Showing {startIndex + 1}-{Math.min(endIndex, groups.length)} of{" "}
           {groups.length} groups
         </span>
         <Pagination className="order-1 sm:order-2 justify-end">
-          <PaginationContent className="flex-wrap justify-center">
+          <PaginationContent className="flex-wrap justify-center gap-1">
             <PaginationItem>
               <PaginationPrevious
                 onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
@@ -180,7 +180,7 @@ export function GroupGrid({
               />
             </PaginationItem>
             {[...Array(totalPages)].map((_, i) => (
-              <PaginationItem key={i} className="hidden sm:inline-block">
+              <PaginationItem key={i} className="hidden md:inline-block">
                 <PaginationLink
                   isActive={currentPage === i + 1}
                   onClick={() => setCurrentPage(i + 1)}
@@ -194,9 +194,9 @@ export function GroupGrid({
                 </PaginationLink>
               </PaginationItem>
             ))}
-            {/* Mobile: Show only current page number */}
-            <PaginationItem className="sm:hidden">
-              <span className="px-3 py-2 text-sm">
+            {/* Mobile/Tablet: Show only current page number */}
+            <PaginationItem className="md:hidden">
+              <span className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm">
                 {currentPage} / {totalPages}
               </span>
             </PaginationItem>

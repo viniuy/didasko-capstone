@@ -88,11 +88,22 @@ export function useCreateGroup() {
         leaderId?: string;
       };
     }) => {
-      const { data } = await axios.post(
-        `/courses/${courseSlug}/groups`,
-        groupData
-      );
-      return data;
+      try {
+        const { data } = await axios.post(
+          `/courses/${courseSlug}/groups`,
+          groupData
+        );
+        return data;
+      } catch (error: any) {
+        console.error("useCreateGroup error:", {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          courseSlug,
+          groupData,
+        });
+        throw error;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
@@ -110,7 +121,12 @@ export function useCreateGroup() {
       toast.success("Group created successfully");
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.error || "Failed to create group");
+      const errorMessage =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to create group";
+      console.error("useCreateGroup onError:", errorMessage);
+      toast.error(errorMessage);
     },
   });
 }
