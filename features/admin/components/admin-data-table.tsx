@@ -224,7 +224,13 @@ export function AdminDataTable({
   const [tableData, setTableData] = useState<User[]>(initialUsers || []);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showExportPreview, setShowExportPreview] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportFilters, setExportFilters] = useState({
+    department: "all",
+    status: "all",
+    workType: "all",
+    role: "all",
+  });
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
@@ -1444,32 +1450,46 @@ export function AdminDataTable({
   //Done
   const handleExport = useCallback(async () => {
     try {
+      // Filter data based on export filters
+      let filteredData = [...tableData];
+
+      if (exportFilters.department !== "all") {
+        filteredData = filteredData.filter(
+          (user) => user.department === exportFilters.department
+        );
+      }
+
+      if (exportFilters.status !== "all") {
+        filteredData = filteredData.filter(
+          (user) => user.status === exportFilters.status
+        );
+      }
+
+      if (exportFilters.workType !== "all") {
+        filteredData = filteredData.filter(
+          (user) => user.workType === exportFilters.workType
+        );
+      }
+
+      if (exportFilters.role !== "all") {
+        filteredData = filteredData.filter((user) =>
+          user.roles?.includes(exportFilters.role as Role)
+        );
+      }
+
+      if (filteredData.length === 0) {
+        toast.error("No users match the selected filters");
+        return;
+      }
+
       // Log export operation
       try {
-        // Extract filter values from table state
-        const emailFilter = table.getColumn("email")?.getFilterValue() as
-          | string
-          | undefined;
-        const roleFilter = columnFilters.find((f) => f.id === "role")?.value as
-          | string
-          | undefined;
-        const departmentFilter = columnFilters.find(
-          (f) => f.id === "department"
-        )?.value as string | undefined;
-        const statusFilter = columnFilters.find((f) => f.id === "status")
-          ?.value as string | undefined;
-
         await fetch("/api/users/export", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            count: tableData.length,
-            filters: {
-              search: emailFilter || null,
-              role: roleFilter || null,
-              department: departmentFilter || null,
-              status: statusFilter || null,
-            },
+            count: filteredData.length,
+            filters: exportFilters,
           }),
         });
       } catch (error) {
@@ -1523,7 +1543,7 @@ export function AdminDataTable({
       });
 
       // Data rows
-      tableData.forEach((user: User) => {
+      filteredData.forEach((user: User) => {
         const row = worksheet.addRow([
           user.name || "",
           user.email || "",
@@ -1569,13 +1589,19 @@ export function AdminDataTable({
       }.xlsx`;
       saveAs(blob, filename);
 
-      toast.success("User data exported successfully");
-      setShowExportPreview(false);
+      toast.success(`Successfully exported ${filteredData.length} users`);
+      setShowExportDialog(false);
+      setExportFilters({
+        department: "all",
+        status: "all",
+        workType: "all",
+        role: "all",
+      });
     } catch (error) {
       console.error("Export error:", error);
       toast.error("Failed to export data");
     }
-  }, [tableData, table, columnFilters]);
+  }, [tableData, exportFilters]);
 
   return (
     <div className="space-y-4">
@@ -1625,21 +1651,21 @@ export function AdminDataTable({
             variant="outline"
             onClick={() => setShowImportPreview(true)}
             title="Import Users"
-            className="w-full sm:w-auto"
+            className="justify-center lg:justify-start px-3"
           >
-            Import
-            <Download className="h-4 w-4 ml-2" />
+            <Download className="h-4 w-4 lg:mr-2" />
+            <span className="hidden lg:inline">Import</span>
           </Button>
           <Button
             variant="outline"
-            onClick={handleExport}
+            onClick={() => setShowExportDialog(true)}
             title="Export Users"
-            className="w-full sm:w-auto"
+            className="justify-center lg:justify-start px-3"
           >
-            Export
-            <Upload className="h-4 w-4 ml-2" />
+            <Upload className="h-4 w-4 lg:mr-2" />
+            <span className="hidden lg:inline">Export</span>
           </Button>
-          <div className="w-full sm:w-auto">
+          <div>
             <UserSheet mode="add" onSuccess={refreshTableData} />
           </div>
         </div>
@@ -1782,96 +1808,282 @@ export function AdminDataTable({
         />
       )}
 
-      <Dialog open={showExportPreview} onOpenChange={setShowExportPreview}>
-        <DialogContent className="w-[90vw] max-w-[1200px] p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-[#124A69]">
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="w-[95vw] sm:w-[550px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="space-y-3">
+            <DialogTitle className="text-2xl font-bold text-[#124A69] flex items-center gap-2">
+              <Download className="h-6 w-6" />
               Export Users to Excel
             </DialogTitle>
-            <DialogDescription>
-              Preview of {tableData.length}{" "}
-              {tableData.length === 1 ? "user" : "users"} to be exported
+            <DialogDescription className="text-base">
+              Apply filters below to export specific users, or leave all filters
+              set to "All" to export everyone.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-6 border rounded-lg">
-            <div className="max-h-[450px] overflow-auto overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b">
-                      #
-                    </th>
-                    {EXPECTED_HEADERS.map((header) => (
-                      <th
-                        key={header}
-                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b whitespace-normal md:whitespace-nowrap"
-                      >
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableData.slice(0, MAX_PREVIEW_ROWS).map((user, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2 text-xs text-gray-500">
-                        {index + 1}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {user.name}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {user.email}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {user.department}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {formatEnumValue(user.workType)}
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-900">
-                        {formatEnumValue(user.status)}
-                      </td>
-                    </tr>
-                  ))}
-                  {tableData.length > MAX_PREVIEW_ROWS && (
-                    <tr className="border-t bg-gray-50">
-                      <td
-                        colSpan={6}
-                        className="px-4 py-3 text-sm text-gray-600 text-center font-medium"
-                      >
-                        + {tableData.length - MAX_PREVIEW_ROWS} more{" "}
-                        {tableData.length - MAX_PREVIEW_ROWS === 1
-                          ? "user"
-                          : "users"}{" "}
-                        will be exported
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          <div className="space-y-6 py-6">
+            {/* Filters Section */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Filter Options
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Department Filter */}
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="export-department"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Department
+                  </Label>
+                  <Select
+                    value={exportFilters.department}
+                    onValueChange={(value) =>
+                      setExportFilters((prev) => ({
+                        ...prev,
+                        department: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="export-department"
+                      className="w-full bg-white"
+                    >
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        <span className="font-medium">All Departments</span>
+                      </SelectItem>
+                      {Array.from(
+                        new Set(tableData.map((user) => user.department))
+                      )
+                        .sort()
+                        .map((dept) => (
+                          <SelectItem key={dept} value={dept}>
+                            {dept}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Status Filter */}
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="export-status"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Status
+                  </Label>
+                  <Select
+                    value={exportFilters.status}
+                    onValueChange={(value) =>
+                      setExportFilters((prev) => ({ ...prev, status: value }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="export-status"
+                      className="w-full bg-white"
+                    >
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        <span className="font-medium">All Statuses</span>
+                      </SelectItem>
+                      <SelectItem value="ACTIVE">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                          Active
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="ARCHIVED">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-gray-500" />
+                          Archived
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Work Type Filter */}
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="export-worktype"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Work Type
+                  </Label>
+                  <Select
+                    value={exportFilters.workType}
+                    onValueChange={(value) =>
+                      setExportFilters((prev) => ({ ...prev, workType: value }))
+                    }
+                  >
+                    <SelectTrigger
+                      id="export-worktype"
+                      className="w-full bg-white"
+                    >
+                      <SelectValue placeholder="Select work type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        <span className="font-medium">All Work Types</span>
+                      </SelectItem>
+                      <SelectItem value="FULL_TIME">Full Time</SelectItem>
+                      <SelectItem value="PART_TIME">Part Time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Role Filter */}
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="export-role"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Role
+                  </Label>
+                  <Select
+                    value={exportFilters.role}
+                    onValueChange={(value) =>
+                      setExportFilters((prev) => ({ ...prev, role: value }))
+                    }
+                  >
+                    <SelectTrigger id="export-role" className="w-full bg-white">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        <span className="font-medium">All Roles</span>
+                      </SelectItem>
+                      <SelectItem value="FACULTY">Faculty</SelectItem>
+                      <SelectItem value="ADMIN">Admin</SelectItem>
+                      <SelectItem value="ACADEMIC_HEAD">
+                        Academic Head
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary Section */}
+            <div className="border-t pt-4">
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+                      <Upload className="h-4 w-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                      Export Summary
+                    </h4>
+                    <p className="text-2xl font-bold text-blue-700">
+                      {(() => {
+                        let filtered = [...tableData];
+
+                        if (exportFilters.department !== "all") {
+                          filtered = filtered.filter(
+                            (u) => u.department === exportFilters.department
+                          );
+                        }
+                        if (exportFilters.status !== "all") {
+                          filtered = filtered.filter(
+                            (u) => u.status === exportFilters.status
+                          );
+                        }
+                        if (exportFilters.workType !== "all") {
+                          filtered = filtered.filter(
+                            (u) => u.workType === exportFilters.workType
+                          );
+                        }
+                        if (exportFilters.role !== "all") {
+                          filtered = filtered.filter((u) =>
+                            u.roles?.includes(exportFilters.role as Role)
+                          );
+                        }
+
+                        return filtered.length;
+                      })()}{" "}
+                      <span className="text-lg font-medium">
+                        {(() => {
+                          let filtered = [...tableData];
+                          if (exportFilters.department !== "all") {
+                            filtered = filtered.filter(
+                              (u) => u.department === exportFilters.department
+                            );
+                          }
+                          if (exportFilters.status !== "all") {
+                            filtered = filtered.filter(
+                              (u) => u.status === exportFilters.status
+                            );
+                          }
+                          if (exportFilters.workType !== "all") {
+                            filtered = filtered.filter(
+                              (u) => u.workType === exportFilters.workType
+                            );
+                          }
+                          if (exportFilters.role !== "all") {
+                            filtered = filtered.filter((u) =>
+                              u.roles?.includes(exportFilters.role as Role)
+                            );
+                          }
+                          return filtered.length === 1 ? "user" : "users";
+                        })()}
+                      </span>
+                    </p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      will be exported to Excel
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6 flex justify-between items-center">
-            <p className="text-sm text-gray-600">
-              Total users to export:{" "}
-              <span className="font-semibold">{tableData.length}</span>
-            </p>
-            <div className="flex gap-3">
+          <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-3 pt-4 border-t">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setExportFilters({
+                  department: "all",
+                  status: "all",
+                  workType: "all",
+                  role: "all",
+                });
+              }}
+              className="text-sm text-gray-600 hover:text-gray-900 w-full sm:w-auto"
+            >
+              Reset Filters
+            </Button>
+            <div className="flex gap-3 w-full sm:w-auto">
               <Button
                 variant="outline"
-                onClick={() => setShowExportPreview(false)}
+                onClick={() => {
+                  setShowExportDialog(false);
+                  setExportFilters({
+                    department: "all",
+                    status: "all",
+                    workType: "all",
+                    role: "all",
+                  });
+                }}
+                className="flex-1 sm:flex-none"
               >
                 Cancel
               </Button>
               <Button
-                className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                className="bg-[#124A69] hover:bg-[#0D3A54] text-white flex items-center gap-2 flex-1 sm:flex-none"
                 onClick={handleExport}
               >
-                <Download className="h-4 w-4 mr-2" />
-                Export to Excel
+                <Download className="h-4 w-4" />
+                <span>Export</span>
               </Button>
             </div>
           </div>
@@ -1879,27 +2091,29 @@ export function AdminDataTable({
       </Dialog>
       <Dialog open={showImportPreview} onOpenChange={setShowImportPreview}>
         <DialogContent
-          className={`p-4 sm:p-6 h-auto ${
-            previewData.length > 0 ? "w-[65vw]" : "w-[40vw]"
-          }`}
+          className={`p-4 sm:p-6 h-auto w-[95vw] sm:w-[90vw] ${
+            previewData.length > 0
+              ? "md:w-[85vw] lg:w-[65vw]"
+              : "md:w-[60vw] lg:w-[40vw]"
+          } max-w-[1400px]`}
         >
           <DialogHeader className="w-full">
-            <DialogTitle className="text-xl font-semibold text-[#124A69]">
+            <DialogTitle className="text-lg sm:text-xl font-semibold text-[#124A69]">
               Import Users
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               Please upload a file following the template format below:
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-6 space-y-6">
-            <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
-              <p className="text-sm text-blue-800">
+          <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
+            <div className="bg-blue-50 border-l-4 border-blue-400 p-3 sm:p-4 rounded">
+              <p className="text-xs sm:text-sm text-blue-800">
                 <strong>Note:</strong> Imported users are automatically assigned
                 the Faculty role. Roles can be changed later in the user
                 management table.
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -1910,14 +2124,14 @@ export function AdminDataTable({
               <Button
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 bg-white hover:bg-gray-50"
+                className="flex items-center justify-center sm:justify-start gap-2 bg-white hover:bg-gray-50 w-full sm:w-auto"
               >
                 <Upload className="h-4 w-4" />
-                Choose File
+                <span className="hidden sm:inline">Choose File</span>
               </Button>
               {selectedFile && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-xs sm:text-sm text-gray-600 truncate max-w-[200px] sm:max-w-none">
                     {selectedFile.name}
                   </span>
                   <Badge
@@ -1935,24 +2149,24 @@ export function AdminDataTable({
             </div>
 
             {previewData.length > 0 ? (
-              <div className="border rounded-lg w-full">
-                <div className="bg-gray-50 p-4 border-b">
-                  <h3 className="font-medium text-gray-700">
+              <div className="border rounded-lg w-full overflow-hidden">
+                <div className="bg-gray-50 p-3 sm:p-4 border-b">
+                  <h3 className="text-sm sm:text-base font-medium text-gray-700">
                     Preview Import Data
                   </h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500">
                     Showing {previewData.length}{" "}
                     {previewData.length === 1 ? "row" : "rows"} from import file
                   </p>
                 </div>
-                <div className="max-h-[350px] overflow-auto overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead className="bg-gray-50 sticky top-0">
+                <div className="max-h-[250px] sm:max-h-[350px] overflow-auto">
+                  <table className="w-full border-collapse min-w-[600px]">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
                         {EXPECTED_HEADERS.map((header) => (
                           <th
                             key={header}
-                            className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap"
+                            className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500 whitespace-nowrap"
                           >
                             {header}
                           </th>
@@ -1962,19 +2176,19 @@ export function AdminDataTable({
                     <tbody>
                       {previewData.map((row, index) => (
                         <tr key={index} className="border-t hover:bg-gray-50">
-                          <td className="px-4 py-2 text-sm text-gray-900">
+                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
                             {row["Full Name"]}
                           </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
+                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
                             {row["Email"]}
                           </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
+                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
                             {row["Department"]}
                           </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
+                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
                             {row["Work Type"]}
                           </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
+                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
                             {row["Status"]}
                           </td>
                         </tr>
@@ -1984,14 +2198,14 @@ export function AdminDataTable({
                 </div>
               </div>
             ) : (
-              <div className="text-center p-6 border rounded-lg bg-gray-50">
-                <p className="text-gray-500">
+              <div className="text-center p-4 sm:p-6 border rounded-lg bg-gray-50">
+                <p className="text-xs sm:text-sm text-gray-500">
                   No preview available. Please select a file to import.
                 </p>
               </div>
             )}
 
-            <div className="flex justify-end gap-4">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -2002,19 +2216,21 @@ export function AdminDataTable({
                   setImportProgress(null);
                 }}
                 disabled={!!importProgress}
+                className="w-full sm:w-auto text-sm"
               >
                 Cancel
               </Button>
               <Button
                 variant="outline"
                 onClick={handleImportTemplate}
-                className="bg-white hover:bg-gray-50"
+                className="bg-white hover:bg-gray-50 w-full sm:w-auto text-sm flex items-center justify-center sm:justify-start gap-2"
                 disabled={!!importProgress}
               >
-                Download Template
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Template</span>
               </Button>
               <Button
-                className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                className="bg-[#124A69] hover:bg-[#0D3A54] text-white w-full sm:w-auto text-sm flex items-center justify-center sm:justify-start gap-2"
                 onClick={handleImport}
                 disabled={
                   !selectedFile ||
@@ -2023,9 +2239,10 @@ export function AdminDataTable({
                   importUsersMutation.isPending
                 }
               >
-                {importUsersMutation.isPending
-                  ? "Importing..."
-                  : "Import Users"}
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {importUsersMutation.isPending ? "Importing..." : "Import"}
+                </span>
               </Button>
             </div>
           </div>
