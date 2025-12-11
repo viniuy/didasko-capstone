@@ -88,11 +88,11 @@ const pureAcademicHeadItems = [
 const facultyItems = [
   { title: "Dashboard", url: "/dashboard/faculty", icon: LayoutDashboard },
   { title: "Courses", url: "/main/course", icon: BookOpen },
-  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
+  { title: "Class Record", url: "/main/grading/class-record", icon: BookUser },
 ];
 
 const gradingSubItems = [
-  { title: "Class Record", url: "/main/grading/class-record", icon: BookUser },
+  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
   { title: "Reporting", url: "/main/grading/reporting", icon: Presentation },
   { title: "Recitation", url: "/main/grading/recitation", icon: BookCheck },
 ];
