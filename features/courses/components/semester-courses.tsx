@@ -77,32 +77,36 @@ const CourseCard = ({
   };
 
   return (
-    <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[320px] sm:max-w-[360px] md:max-w-[320px] lg:max-w-[380px] xl:max-w-[440px] flex flex-col justify-between h-38">
+    <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between">
       <div>
         <CardHeader className="-mt-4 flex justify-between items-center">
-          <CardTitle className="text-2xl font-bold">{course.code}</CardTitle>
-          <BookOpenText size={50} />
+          <CardTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold">
+            {course.code}
+          </CardTitle>
+          <BookOpenText className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-12 lg:h-12" />
         </CardHeader>
         <CardContent>
-          <p className="text-sm">Section {course.section}</p>
-          <p className="text-sm font-semibold">
+          <p className="text-[11px] sm:text-xs md:text-sm">
+            Section {course.section}
+          </p>
+          <p className="text-[11px] sm:text-xs md:text-sm font-semibold">
             Total Number of Absents:{" "}
             {course.attendanceStats?.lastAttendanceAbsents ??
               course.attendanceStats?.totalAbsents ??
               0}
           </p>
-          <p className="text-xs text-gray-400">
+          <p className="text-[9px] sm:text-[10px] md:text-xs text-gray-400">
             {course.attendanceStats?.lastAttendanceDate
               ? `Last attendance: ${new Date(
                   course.attendanceStats.lastAttendanceDate
                 ).toLocaleDateString()}`
               : "No attendance yet"}
           </p>
-          <div className="flex justify-end -mt-4">
+          <div className="flex justify-end mt-2 -mb-3">
             <Button
               onClick={handleClick}
               variant="secondary"
-              className="bg-[#FAEDCB] text-black text-sm min-w-[120px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-[#FAEDCB] text-black text-[11px] sm:text-xs md:text-sm min-w-[120px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isRedirecting || isDisabled}
             >
               {isRedirecting ? (
@@ -131,20 +135,20 @@ const CourseCard = ({
 
 // Loading Skeleton Component
 const LoadingSkeleton = ({ index }: { index: number }) => (
-  <Card className="bg-white text-[#124A69] rounded-lg shadow-md w-full max-w-[320px] sm:max-w-[360px] md:max-w-[320px] lg:max-w-[380px] xl:max-w-[440px] flex flex-col justify-between h-45">
+  <Card className="bg-white text-[#124A69] rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between">
     <div>
       <div className="-mt-7 p-4 flex justify-between items-center">
-        <Skeleton className="h-7 w-3/4 bg-gray-200" />
-        <Skeleton className="h-[50px] w-[50px] rounded-full bg-gray-200" />
+        <Skeleton className="h-6 w-3/4 bg-gray-200" />
+        <Skeleton className="h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 rounded-full bg-gray-200" />
       </div>
       <div className="p-4 -mt-8 space-y-2">
-        <Skeleton className="h-4 w-1/4 bg-gray-200" />
-        <Skeleton className="h-4 w-2/5 bg-gray-200" />
-        <Skeleton className="h-3 w-1/2 bg-gray-200" />
+        <Skeleton className="h-3 w-1/4 bg-gray-200" />
+        <Skeleton className="h-3 w-2/5 bg-gray-200" />
+        <Skeleton className="h-2 w-1/2 bg-gray-200" />
       </div>
     </div>
     <div className="flex justify-end -mt-9 p-2">
-      <Skeleton className="h-8 w-28 bg-gray-200 rounded-md" />
+      <Skeleton className="h-7 w-28 bg-gray-200 rounded-md" />
     </div>
   </Card>
 );
@@ -157,7 +161,9 @@ const useItemsPerPage = () => {
     const updateItemsPerPage = () => {
       const width = window.innerWidth;
 
-      if (width < 1600) {
+      if (width < 860) {
+        setItemsPerPage(1);
+      } else if (width < 1600) {
         setItemsPerPage(2);
       } else if (width >= 2500) {
         setItemsPerPage(5);

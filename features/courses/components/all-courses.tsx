@@ -52,34 +52,36 @@ const CourseCard = ({
       : `/grading/reporting/${course.slug}`;
 
   return (
-    <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between h-38">
+    <Card className="bg-[#124A69] text-white rounded-lg shadow-md w-full max-w-[440px] flex flex-col justify-between ">
       <div>
         <CardHeader className="-mt-4 flex justify-between items-center">
-          <CardTitle className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold">
+          <CardTitle className="text-sm sm:text-base md:text-lg lg:text-xl font-bold">
             {course.code}
           </CardTitle>
-          <BookOpenText className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-[50px] lg:h-[50px]" />
+          <BookOpenText className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 lg:w-12 lg:h-12" />
         </CardHeader>
         <CardContent>
-          <p className="text-xs sm:text-sm">Section {course.section}</p>
-          <p className="text-xs sm:text-sm font-semibold">
+          <p className="text-[11px] sm:text-xs md:text-sm">
+            Section {course.section}
+          </p>
+          <p className="text-[11px] sm:text-xs md:text-sm font-semibold">
             Total Number of Absents:{" "}
             {course.latestAbsents ?? course.attendanceStats?.totalAbsents ?? 0}
           </p>
-          <p className="text-[10px] sm:text-xs text-gray-400">
+          <p className="text-[9px] sm:text-[10px] md:text-xs text-gray-400">
             {course.attendanceStats?.lastAttendanceDate
               ? `Last attendance: ${new Date(
                   course.attendanceStats.lastAttendanceDate
                 ).toLocaleDateString()}`
               : "No attendance yet"}
           </p>
-          <div className="flex justify-end -mt-4">
+          <div className="flex justify-end mt-2 -mb-3">
             <Button
               asChild
               variant="secondary"
-              className="bg-[#FAEDCB] text-black text-xs sm:text-sm"
+              className="bg-[#FAEDCB] text-black text-[11px] sm:text-xs md:text-sm"
             >
-              <Link href={href}>View Details</Link>
+              <Link href={href}>View Attendance</Link>
             </Button>
           </div>
         </CardContent>
