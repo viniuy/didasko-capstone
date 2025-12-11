@@ -56,99 +56,95 @@ const getTutorialSteps = (savedTerms: Set<Term>): TutorialStep[] => {
   const baseSteps: TutorialStep[] = [
     {
       target: "[data-tutorial='term-tabs-settings']",
-      title: "Step 1: Select a Term",
+      title: "Select Term",
       content:
-        "Choose which term you want to configure. Each term (PRELIM, MIDTERM, PREFINALS, FINALS) can have different weights and assessments. Start with PRELIM to get started!",
+        "Choose which term to configure. Each term can have different weights and assessments. Start with PRELIM!",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='weight-distribution']",
-      title: "Step 2: Set Grade Weight Distribution",
+      title: "Set Grade Weights",
       content:
-        "Adjust the percentage weights for PT/Lab, Quizzes, and Exam. They MUST add up to exactly 100%! Try entering values now - the total will update in real-time. This determines how much each category contributes to the final grade.",
+        "Adjust PT/Lab, Quiz, and Exam weights. They MUST total 100%. This determines each category's contribution to final grade.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='pt-section']",
-      title: "Step 3: Configure PT/Lab Assessments",
+      title: "Configure PT/Lab",
       content:
-        "Add, edit, or remove PT/Lab assessments. You can add up to 6 PT/Lab assessments. Let's explore the different fields you can configure.",
+        "Add, edit, or remove PT/Lab assessments. Up to 6 assessments allowed.",
       placement: "top",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='pt-name']",
-      title: "Step 3a: Assessment Name",
+      title: "Assessment Name",
       content:
-        "Enter the name for your PT/Lab assessment (e.g., PT1, Lab1). This name will appear in the grade table. Maximum 5 characters.",
+        "Enter PT/Lab name (e.g., PT1, Lab1). Max 5 characters. Appears in grade table.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='pt-max-score']",
-      title: "Step 3b: Max Score",
-      content:
-        "Set the maximum score for this assessment (0-200). If you link this to existing criteria (Recitation, Group Reporting, Individual Reporting), the max score will be automatically calculated and this field will be disabled.",
+      title: "Max Score",
+      content: "Set max score (0-200). Auto-calculated if linked to criteria.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='pt-base-scoring']",
-      title: "Step 3c: Base Scoring (Transmutation)",
+      title: "Base Scoring",
       content:
-        "Set the transmutation base score (0-75). This is used for base scoring calculations. Only PT/Lab and Quizzes support base scoring - the Exam does not.",
+        "Set transmutation base (0-75). Used for scoring calculations. PT/Lab and Quizzes only.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='quiz-section']",
-      title: "Step 4: Configure Quiz Assessments",
+      title: "Configure Quizzes",
       content:
-        "Same as PT/Lab - add multiple quizzes (up to 6), set max scores, schedule dates, and link to existing criteria. You can also set transmutation base scoring for quizzes. Each quiz can be enabled or disabled independently.",
+        "Add up to 6 quizzes. Set scores, dates, and link to criteria. Enable/disable independently.",
       placement: "top",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='quiz-name']",
-      title: "Step 4a: Quiz Name",
-      content:
-        "Enter the name for your quiz assessment (e.g., Q1, Quiz1). This name will appear in the grade table. Maximum 5 characters.",
+      title: "Quiz Name",
+      content: "Enter quiz name (e.g., Q1, Quiz1). Max 5 characters.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='quiz-max-score']",
-      title: "Step 4b: Quiz Max Score",
-      content:
-        "Set the maximum score for this quiz (0-200). If linked to criteria, the max score will be auto-calculated and this field will be disabled.",
+      title: "Quiz Max Score",
+      content: "Set max score (0-200). Auto-calculated if linked to criteria.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='quiz-base-scoring']",
-      title: "Step 4c: Quiz Base Scoring",
-      content:
-        "Set the transmutation base score for this quiz (0-75). This is used for base scoring calculations in the grade computation.",
+      title: "Quiz Base Scoring",
+      content: "Set transmutation base (0-75) for grade computation.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='exam-section']",
-      title: "Step 5: Configure Final Exam",
+      title: "Configure Exam",
       content:
-        "Set up your final exam. This is REQUIRED and must be enabled for each term. Unlike PT/Lab and Quizzes, the Exam cannot have transmutation base scoring. You can link it to criteria and set the max score.",
+        "Set up final exam. REQUIRED for each term. No transmutation for exams.",
       placement: "top",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
     {
       target: "[data-tutorial='term-save-button']",
-      title: "Step 6: Save Your Configuration",
+      title: "Save Configuration",
       content:
-        "Click here to save this term's configuration. The system will validate all settings before saving. If there are errors, they'll be shown at the top. Remember to save before switching to another term! Once saved, you'll be able to access this term in the main class record.",
+        "Save this term's settings. Validates before saving. Errors shown at top. Save before switching terms!",
       placement: "top",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     },
   ];
 
@@ -156,11 +152,11 @@ const getTutorialSteps = (savedTerms: Set<Term>): TutorialStep[] => {
   if (savedTerms.has("PRELIM")) {
     baseSteps.push({
       target: "[data-tutorial='term-tabs-settings']",
-      title: "Step 7: Accessing Saved Terms",
+      title: "Access Saved Terms",
       content:
-        "Great! You've saved PRELIM. Now you can access the PRELIM tab in the main class record to start entering grades. To access MIDTERM, PREFINALS, and FINALS, you need to save their configurations first. Each term must be saved individually.",
+        "PRELIM saved! Access it in main class record. Save other terms (MIDTERM, PREFINALS, FINALS) to access them.",
       placement: "bottom",
-      spotlightPadding: 8,
+      spotlightPadding: 6,
     });
   }
 

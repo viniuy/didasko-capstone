@@ -13,7 +13,9 @@ import {
   ClipboardPaste,
   Lightbulb,
   ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import {
   Pagination,
@@ -50,51 +52,50 @@ import {
 const tutorialSteps: TutorialStep[] = [
   {
     target: "[data-tutorial='search-bar']",
-    title: "Step 1: Search Students",
-    content:
-      "Quickly find students by typing their name here. The table will filter automatically as you type!",
+    title: "Search Students",
+    content: "Type student names to filter the table automatically.",
     placement: "bottom",
-    spotlightPadding: 8,
+    spotlightPadding: 6,
   },
   {
     target: "[data-tutorial='settings-button']",
-    title: "Step 2: Configure Settings",
+    title: "Configure Settings",
     content:
-      "Click here to set up assessments, weights, and dates for each term. You must configure settings before you can start entering grades. You can customize PT/Lab, Quizzes, and Exams for each term!",
+      "Set up assessments, weights, and dates for each term. Configure settings before entering grades.",
     placement: "bottom",
-    spotlightPadding: 8,
+    spotlightPadding: 6,
   },
   {
     target: "[data-tutorial='paste-grades-button']",
-    title: "Step 3: Paste Grades Quickly",
+    title: "Paste Grades",
     content:
-      "Copy grades from Excel and paste them in bulk! This saves tons of time when entering multiple grades. Simply copy a column of grades from Excel and paste them here. Note: This feature is only available after you've saved your class record settings.",
+      "Copy grades from Excel and paste in bulk. Available after saving settings.",
     placement: "bottom",
-    spotlightPadding: 8,
+    spotlightPadding: 6,
   },
   {
     target: "[data-tutorial='export-button']",
-    title: "Step 4: Export to Excel",
+    title: "Export to Excel",
     content:
-      "Download all grades as an Excel file. You can export either a summary view (final grades only) or a detailed view (all assessment scores). Perfect for backup or sharing with administration! Note: This feature is only available after you've saved your class record settings.",
+      "Download grades as Excel file. Choose summary or detailed view. Available after saving settings.",
     placement: "bottom",
-    spotlightPadding: 8,
+    spotlightPadding: 6,
   },
   {
     target: "[data-tutorial='term-tabs']",
-    title: "Step 5: Switch Between Terms",
+    title: "Switch Terms",
     content:
-      "Navigate between Prelims, Midterm, Pre-Finals, Finals, and Summary view. Each term has its own grades! You can only access terms that you've configured and saved in the Settings. The Summary view shows your final computed grades across all terms.",
+      "Navigate between Prelims, Midterm, Pre-Finals, Finals, and Summary. Each term has separate grades.",
     placement: "bottom",
-    spotlightPadding: 8,
+    spotlightPadding: 6,
   },
   {
     target: "[data-tutorial='grade-table']",
-    title: "Step 6: Enter Grades",
+    title: "Enter Grades",
     content:
-      "Click on any cell to enter grades. Scores that are below 75% will be highlighted in red. Grades are auto-saved after 1 second of inactivity. You can see validation errors if a score exceeds the max score. The system also supports base scoring (transmutation) for PT/Lab and Quizzes.",
+      "Click cells to enter grades. Scores below 75% are highlighted red. Grades auto-save after 1 second.",
     placement: "top",
-    spotlightPadding: 8,
+    spotlightPadding: 6,
   },
 ];
 
@@ -436,6 +437,8 @@ export function ClassRecordTable({
   const [summarySelectedTerm, setSummarySelectedTerm] = useState<Term | "ALL">(
     "ALL"
   );
+
+  const router = useRouter();
 
   const pendingScoresRef = useRef<
     Map<
@@ -1635,11 +1638,22 @@ export function ClassRecordTable({
     return (
       <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg shadow-sm min-h-[400px] sm:min-h-[600px] md:min-h-[770px] max-h-[90vh] flex flex-col">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-[#124A69]">
-              {courseCode}
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-600">{courseSection}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+              aria-label="Go back"
+            >
+              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+            </button>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[#124A69]">
+                {courseCode}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600">
+                {courseSection}
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="relative w-full sm:w-auto">
@@ -1717,10 +1731,10 @@ export function ClassRecordTable({
         </div>
 
         <div className="w-full overflow-x-auto flex-1 min-h-0">
-          <table className="table-fixed w-full min-w-[700px] border border-gray-300">
+          <table className="table-fixed w-full min-w-[600px] sm:min-w-[700px] border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
-                <th className="w-[30%] border border-gray-300 px-4 py-2 text-left font-medium text-gray-700"></th>
+                <th className="w-[35%] sm:w-[30%] border border-gray-300 px-2 sm:px-4 py-1.5 sm:py-2 text-left text-xs sm:text-sm font-medium text-gray-700"></th>
                 {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const)
                   .filter(
                     (term) =>
@@ -1730,7 +1744,7 @@ export function ClassRecordTable({
                   .map((term) => (
                     <th
                       key={term}
-                      className="w-[14%] border border-gray-300 px-2 py-2 text-center font-medium text-gray-700"
+                      className="w-[13%] sm:w-[14%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700"
                       colSpan={2}
                     >
                       {term}
@@ -1738,14 +1752,14 @@ export function ClassRecordTable({
                   ))}
                 {summarySelectedTerm === "ALL" && (
                   <th
-                    className="w-[14%] border border-gray-300 px-2 py-2 text-center font-medium text-gray-700"
+                    className="w-[13%] sm:w-[14%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700"
                     colSpan={2}
                   >
                     FINAL GRADE
                   </th>
                 )}
               </tr>
-              <tr className="bg-gray-50 text-xs">
+              <tr className="bg-gray-50 text-[10px] sm:text-xs">
                 <th className="border border-gray-300"></th>
                 {(["PRELIM", "MIDTERM", "PREFINALS", "FINALS"] as const)
                   .filter(
@@ -1755,16 +1769,20 @@ export function ClassRecordTable({
                   )
                   .map((term) => (
                     <React.Fragment key={term}>
-                      <th className="border border-gray-300 px-2 py-1">
+                      <th className="border border-gray-300 px-1 sm:px-2 py-1">
                         {TERM_WEIGHTS[term] * 100}%
                       </th>
-                      <th className="border border-gray-300 px-2 py-1">EQV</th>
+                      <th className="border border-gray-300 px-1 sm:px-2 py-1">
+                        EQV
+                      </th>
                     </React.Fragment>
                   ))}
                 {summarySelectedTerm === "ALL" && (
                   <>
-                    <th className="border border-gray-300 px-2 py-1">GRADE</th>
-                    <th className="border border-gray-300 px-2 py-1">
+                    <th className="border border-gray-300 px-1 sm:px-2 py-1">
+                      GRADE
+                    </th>
+                    <th className="border border-gray-300 px-1 sm:px-2 py-1">
                       REMARKS
                     </th>
                   </>
@@ -1789,29 +1807,29 @@ export function ClassRecordTable({
                     }`}
                   >
                     <td
-                      className={`border px-2 py-2 ${
+                      className={`border px-1.5 sm:px-2 py-1.5 sm:py-2 ${
                         selectedStudentId === student.id
                           ? "bg-[#124A69] text-white border-white"
                           : "border-gray-300"
                       }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
                         {student.image ? (
                           <img
                             src={student.image}
                             alt={studentName(student)}
-                            className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                            className="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover flex-shrink-0"
                           />
                         ) : (
                           <div
-                            className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
                               selectedStudentId === student.id
                                 ? "bg-white"
                                 : "bg-[#124A69]"
                             }`}
                           >
                             <span
-                              className={`text-[10px] font-semibold ${
+                              className={`text-[9px] sm:text-[10px] font-semibold ${
                                 selectedStudentId === student.id
                                   ? "text-[#124A69]"
                                   : "text-white"
@@ -1823,7 +1841,7 @@ export function ClassRecordTable({
                           </div>
                         )}
                         <span
-                          className={`text-sm truncate ${
+                          className={`text-xs sm:text-sm truncate ${
                             selectedStudentId === student.id
                               ? "text-white"
                               : "text-gray-700"
@@ -1845,42 +1863,46 @@ export function ClassRecordTable({
                         return (
                           <React.Fragment key={term}>
                             <td
-                              className={`border py-3 text-center ${
+                              className={`border py-2 sm:py-3 text-center px-1 ${
                                 isSelected ? "border-white" : "border-gray-300"
                               }`}
                             >
-                              <input
-                                type="text"
-                                className={`w-14 h-8 text-center border rounded text-sm ${
-                                  isSelected
-                                    ? "border-white text-white bg-transparent"
-                                    : "border-gray-200"
-                                }`}
-                                value={termGrade?.totalPercent || "-"}
-                                readOnly
-                                onClick={(e) => e.stopPropagation()}
-                              />
+                              <div className="flex items-center justify-center">
+                                <input
+                                  type="text"
+                                  className={`w-full max-w-[44px] sm:max-w-[56px] h-7 sm:h-8 text-center border rounded text-xs sm:text-sm ${
+                                    isSelected
+                                      ? "border-white text-white bg-transparent"
+                                      : "border-gray-200"
+                                  }`}
+                                  value={termGrade?.totalPercent || "-"}
+                                  readOnly
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
                             </td>
                             <td
-                              className={`border py-3 text-center ${
+                              className={`border py-2 sm:py-3 text-center px-1 ${
                                 isSelected ? "border-white" : "border-gray-300"
                               }`}
                             >
-                              <input
-                                type="text"
-                                className={`w-14 h-8 text-center border rounded text-sm ${
-                                  isSelected
-                                    ? termGrade?.numericGrade === "(error)"
-                                      ? "border-white text-white bg-red-500"
-                                      : "border-white text-white bg-transparent"
-                                    : termGrade?.numericGrade === "(error)"
-                                    ? "border-gray-200 bg-red-500 text-white"
-                                    : "border-gray-200"
-                                }`}
-                                value={termGrade?.numericGrade || "-"}
-                                readOnly
-                                onClick={(e) => e.stopPropagation()}
-                              />
+                              <div className="flex items-center justify-center">
+                                <input
+                                  type="text"
+                                  className={`w-full max-w-[44px] sm:max-w-[56px] h-7 sm:h-8 text-center border rounded text-xs sm:text-sm ${
+                                    isSelected
+                                      ? termGrade?.numericGrade === "(error)"
+                                        ? "border-white text-white bg-red-500"
+                                        : "border-white text-white bg-transparent"
+                                      : termGrade?.numericGrade === "(error)"
+                                      ? "border-gray-200 bg-red-500 text-white"
+                                      : "border-gray-200"
+                                  }`}
+                                  value={termGrade?.numericGrade || "-"}
+                                  readOnly
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
                             </td>
                           </React.Fragment>
                         );
@@ -1888,48 +1910,50 @@ export function ClassRecordTable({
                     {summarySelectedTerm === "ALL" && (
                       <>
                         <td
-                          className={`border py-3 text-center ${
+                          className={`border py-2 sm:py-3 text-center px-1 ${
                             selectedStudentId === student.id
                               ? "border-white"
                               : "border-gray-300"
                           }`}
                         >
-                          <input
-                            type="text"
-                            className={`w-14 h-8 text-center border rounded text-sm font-medium ${
-                              selectedStudentId === student.id
-                                ? finalGrade &&
-                                  finalGrade.grade &&
-                                  !isNaN(parseFloat(finalGrade.grade)) &&
-                                  parseFloat(finalGrade.grade) > 3.0
-                                  ? "border-white text-red-500 bg-transparent"
-                                  : "border-white text-white bg-transparent"
-                                : finalGrade &&
-                                  finalGrade.grade &&
-                                  !isNaN(parseFloat(finalGrade.grade)) &&
-                                  parseFloat(finalGrade.grade) > 3.0
-                                ? "text-red-500 border-gray-200"
-                                : "border-gray-200"
-                            }`}
-                            value={
-                              finalGrade?.grade &&
-                              !isNaN(parseFloat(finalGrade.grade))
-                                ? finalGrade.grade
-                                : "-"
-                            }
-                            readOnly
-                            onClick={(e) => e.stopPropagation()}
-                          />
+                          <div className="flex items-center justify-center">
+                            <input
+                              type="text"
+                              className={`w-full max-w-[44px] sm:max-w-[56px] h-7 sm:h-8 text-center border rounded text-xs sm:text-sm font-medium ${
+                                selectedStudentId === student.id
+                                  ? finalGrade &&
+                                    finalGrade.grade &&
+                                    !isNaN(parseFloat(finalGrade.grade)) &&
+                                    parseFloat(finalGrade.grade) > 3.0
+                                    ? "border-white text-red-500 bg-transparent"
+                                    : "border-white text-white bg-transparent"
+                                  : finalGrade &&
+                                    finalGrade.grade &&
+                                    !isNaN(parseFloat(finalGrade.grade)) &&
+                                    parseFloat(finalGrade.grade) > 3.0
+                                  ? "text-red-500 border-gray-200"
+                                  : "border-gray-200"
+                              }`}
+                              value={
+                                finalGrade?.grade &&
+                                !isNaN(parseFloat(finalGrade.grade))
+                                  ? finalGrade.grade
+                                  : "-"
+                              }
+                              readOnly
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
                         </td>
                         <td
-                          className={`border py-3 text-center ${
+                          className={`border py-2 sm:py-3 text-center px-1 sm:px-2 ${
                             selectedStudentId === student.id
                               ? "border-white"
                               : "border-gray-300"
                           }`}
                         >
                           <span
-                            className={`text-sm font-medium ${
+                            className={`text-xs sm:text-sm font-medium whitespace-nowrap ${
                               selectedStudentId === student.id
                                 ? finalGrade?.remarks === "PASSED"
                                   ? "text-green-600"
@@ -2143,11 +2167,20 @@ export function ClassRecordTable({
         />
       )}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#124A69]">
-            {courseCode}
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-600">{courseSection}</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-[#124A69]">
+              {courseCode}
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-600">{courseSection}</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {hasTermConfigs && (
