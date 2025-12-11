@@ -198,6 +198,7 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   const { data: coursesData, isLoading } = useActiveCourses({
     filters: session?.user?.id ? { facultyId: session.user.id } : undefined,
     initialData: initialCourses ? { courses: initialCourses } : undefined,
+    enabled: false, // Disable automatic fetching - only use initialData
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
@@ -273,6 +274,8 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   // Get grid class based on itemsPerPage
   const getGridClass = () => {
     switch (itemsPerPage) {
+      case 1:
+        return "grid-cols-1";
       case 2:
         return "grid-cols-1 sm:grid-cols-2";
       case 3:
@@ -295,8 +298,8 @@ export default function ActiveCourses({ type, initialCourses }: CoursesProps) {
   if (status === "loading" || isLoading) {
     return (
       <Card className="p-4 shadow-md rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {[...Array(3)].map((_, index) => (
+        <div className={`grid ${getGridClass()} gap-4`}>
+          {[...Array(itemsPerPage)].map((_, index) => (
             <LoadingSkeleton key={index} index={index} />
           ))}
         </div>

@@ -629,7 +629,11 @@ export function CourseDataTable({
     data: coursesData,
     isLoading: isLoadingCourses,
     refetch: refetchCourses,
-  } = useCourses();
+  } = useCourses(undefined, {
+    refetchOnMount: "always", // Always refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    staleTime: 0, // Data is immediately stale
+  });
   const { data: facultyData } = useFaculty();
   const bulkArchiveMutation = useBulkArchiveCourses();
 
@@ -640,8 +644,14 @@ export function CourseDataTable({
     () => coursesForStats.map((c) => c.slug),
     [coursesForStats]
   );
-  const { data: statsData, isLoading: isLoadingStats } =
-    useCoursesStatsBatch(courseSlugs);
+  const { data: statsData, isLoading: isLoadingStats } = useCoursesStatsBatch(
+    courseSlugs,
+    {
+      refetchOnMount: "always", // Always refetch when component mounts
+      refetchOnWindowFocus: true, // Refetch when window regains focus
+      staleTime: 0, // Data is immediately stale
+    }
+  );
 
   // Sync faculty data from React Query
   useEffect(() => {

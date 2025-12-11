@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStudents, createStudent } from "@/lib/services";
 import { Student, StudentCreateInput } from "@/shared/types/student";
 import { encryptResponse } from "@/lib/crypto-server";
+import { revalidateTag } from "next/cache";
 
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
@@ -84,6 +85,11 @@ export async function POST(request: Request) {
         rfid_id,
         courseId,
       });
+
+      // Revalidate Next.js cache for courses if student was added to a course
+      if (courseId) {
+        revalidateTag("courses");
+      }
 
       // Check if client requested encryption
       const wantsEncryption =

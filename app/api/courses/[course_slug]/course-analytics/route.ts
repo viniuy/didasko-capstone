@@ -311,7 +311,7 @@ export async function GET(
         firstName: student.firstName,
         middleInitial: student.middleInitial || undefined,
         image: student.image || undefined,
-        rfid_id: student.rfid_id || undefined,
+        rfid_id: student.rfid_id ? String(student.rfid_id) : undefined,
         attendanceRecords: studentAttendance
           .map((a) => ({
             id: a.id,
@@ -356,8 +356,20 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error fetching course analytics:", error);
+
+    // Log more details about the error
+    if (error instanceof Error) {
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+      });
+    }
+
     return NextResponse.json(
-      { error: "Failed to fetch course analytics" },
+      {
+        error: "Failed to fetch course analytics",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

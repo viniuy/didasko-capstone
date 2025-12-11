@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import { getCourseStudentsWithAttendance } from "@/lib/services";
 import { prisma } from "@/lib/prisma";
 import { encryptResponse } from "@/lib/crypto-server";
+import { revalidateTag } from "next/cache";
 //@ts-ignore
 
 // Route segment config for pre-compilation and performance
@@ -226,6 +227,9 @@ export async function POST(
       }
     }
 
+    // Revalidate Next.js cache for courses since student count changed
+    revalidateTag("courses");
+
     const response = {
       total: body.length,
       imported,
@@ -350,6 +354,9 @@ export async function DELETE(
         },
       }),
     ]);
+
+    // Revalidate Next.js cache for courses since student count changed
+    revalidateTag("courses");
 
     const response = {
       success: true,

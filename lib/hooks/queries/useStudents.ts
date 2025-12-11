@@ -133,6 +133,10 @@ export function useCreateStudent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.students.lists() });
       queryClient.invalidateQueries({ queryKey: queryKeys.students.all });
+      // Invalidate course queries to update student counts
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
       toast.success("Student created successfully");
     },
     onError: (error: any) => {
@@ -235,6 +239,10 @@ export function useImportStudentsToCourse() {
         queryKey: queryKeys.courses.analytics(variables.courseSlug),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.students.lists() });
+      // Invalidate course lists and stats to update student counts
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
 
       // Show appropriate message based on number of students
       const studentCount = variables.students?.length || 0;
@@ -315,6 +323,10 @@ export function useRemoveStudentsFromCourse() {
         queryKey: queryKeys.courses.analytics(variables.courseSlug),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.students.lists() });
+      // Invalidate course lists and stats to update student counts
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats.all });
 
       // Show appropriate message based on number of students
       const studentCount = variables.studentIds?.length || 0;

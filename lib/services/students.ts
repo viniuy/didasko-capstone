@@ -66,8 +66,14 @@ export async function getStudents(filters: {
     }),
   ]);
 
+  // Convert BigInt to string for JSON serialization
+  const serializedStudents = students.map((student) => ({
+    ...student,
+    rfid_id: student.rfid_id ? String(student.rfid_id) : null,
+  }));
+
   return {
-    students,
+    students: serializedStudents,
     pagination: {
       total,
       page,

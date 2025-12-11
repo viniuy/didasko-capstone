@@ -18,15 +18,23 @@ import {
 import toast from "react-hot-toast";
 
 // Query: Get all courses
-export function useCourses(filters?: {
-  facultyId?: string;
-  search?: string;
-  department?: string;
-  semester?: string;
-  code?: string;
-  section?: string;
-  status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
-}) {
+export function useCourses(
+  filters?: {
+    facultyId?: string;
+    search?: string;
+    department?: string;
+    semester?: string;
+    code?: string;
+    section?: string;
+    status?: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  },
+  options?: {
+    refetchOnMount?: boolean | "always";
+    refetchOnWindowFocus?: boolean;
+    staleTime?: number;
+    gcTime?: number;
+  }
+) {
   return useQuery({
     queryKey: queryKeys.courses.list(filters),
     queryFn: async ({ signal }) => {
@@ -122,8 +130,13 @@ export function useCourses(filters?: {
       return false;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff: 1s, 2s, 4s
-    staleTime: 0, // Always consider data stale - no caching
-    refetchOnWindowFocus: false, // Disable refetch on window focus
+    staleTime: options?.staleTime !== undefined ? options.staleTime : 0, // Always consider data stale - no caching (unless overridden)
+    refetchOnWindowFocus:
+      options?.refetchOnWindowFocus !== undefined
+        ? options.refetchOnWindowFocus
+        : false, // Disable refetch on window focus (unless overridden)
+    refetchOnMount: options?.refetchOnMount,
+    gcTime: options?.gcTime,
   });
 }
 
@@ -395,7 +408,15 @@ export function useCourseStats(courseSlug: string) {
 
 // Query: Get batch course stats (for multiple courses efficiently)
 // Uses a single API call instead of multiple individual calls
-export function useCoursesStatsBatch(courseSlugs: string[]) {
+export function useCoursesStatsBatch(
+  courseSlugs: string[],
+  options?: {
+    refetchOnMount?: boolean | "always";
+    refetchOnWindowFocus?: boolean;
+    staleTime?: number;
+    gcTime?: number;
+  }
+) {
   // Sort slugs for consistent cache key
   const sortedSlugs = useMemo(
     () => [...courseSlugs].sort().join(","),
@@ -430,8 +451,13 @@ export function useCoursesStatsBatch(courseSlugs: string[]) {
       }
     },
     enabled: courseSlugs.length > 0,
-    staleTime: 0, // Always consider data stale - no caching
-    refetchOnWindowFocus: false, // Disable refetch on window focus
+    staleTime: options?.staleTime !== undefined ? options.staleTime : 0, // Always consider data stale - no caching (unless overridden)
+    refetchOnWindowFocus:
+      options?.refetchOnWindowFocus !== undefined
+        ? options.refetchOnWindowFocus
+        : false, // Disable refetch on window focus (unless overridden)
+    refetchOnMount: options?.refetchOnMount,
+    gcTime: options?.gcTime,
     retry: 1,
   });
 }

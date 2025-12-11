@@ -5,6 +5,7 @@ import axios from "@/lib/axios";
 import { queryKeys } from "./queryKeys";
 import { UserCreateInput } from "@/shared/types/user";
 import toast from "react-hot-toast";
+import { useSession, signOut } from "next-auth/react";
 
 // Query: Get all users
 export function useUsers(options?: {
