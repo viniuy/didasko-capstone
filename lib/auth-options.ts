@@ -63,15 +63,19 @@ export const authOptions: NextAuthOptions = {
       }
     },
 
-    async jwt({ token, user }) {
-      // Only fetch from DB on initial login (when user is provided)
-      // This prevents connection pool exhaustion from querying on every token refresh
+    async jwt({ token, user, trigger }) {
+      // Initial login - fetch from DB
       if (user) {
         try {
-          // Fetch full user info from DB only on initial login
           const dbUser = await prisma.user.findUnique({
             where: { email: user.email ?? "" },
-            select: { id: true, name: true, roles: true, email: true },
+            select: {
+              id: true,
+              name: true,
+              roles: true,
+              email: true,
+              status: true,
+            },
           });
 
           if (dbUser) {
@@ -79,22 +83,45 @@ export const authOptions: NextAuthOptions = {
             token.name = dbUser.name;
             token.roles = dbUser.roles;
             token.email = dbUser.email;
+            token.status = dbUser.status;
           } else {
-            // Fallback to user data from OAuth provider
             token.id = user.id;
             token.name = user.name;
             token.email = user.email;
           }
         } catch (error) {
           console.error("JWT callback error:", error);
-          // Fallback to user data from OAuth provider on error
           token.id = user.id;
           token.name = user.name;
           token.email = user.email;
         }
       }
-      // On subsequent token refreshes, use cached token data (no DB query)
-      // This prevents connection pool timeouts
+
+      // ALWAYS fetch fresh data on each session access (page load, API call)
+      // This ensures role/status changes are reflected immediately
+      if (!user && token.id) {
+        try {
+          const freshUser = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              roles: true,
+              status: true,
+            },
+          });
+
+          if (freshUser) {
+            token.name = freshUser.name;
+            token.email = freshUser.email;
+            token.roles = freshUser.roles;
+            token.status = freshUser.status;
+          }
+        } catch (error) {
+          // Keep existing token on error
+        }
+      }
 
       return token;
     },
@@ -105,6 +132,7 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name as string;
         session.user.email = token.email as string;
         session.user.roles = (token.roles as Role[]) || [];
+        session.user.status = token.status as string;
       }
       return session;
     },

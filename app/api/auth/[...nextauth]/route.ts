@@ -3,6 +3,7 @@ import AzureADProvider from "next-auth/providers/azure-ad";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { logAction } from "@/lib/audit";
+import crypto from "crypto";
 
 // Lazy initialization: only validate and create provider at runtime, not during build
 // This prevents Next.js from trying to fetch OpenID config during build
@@ -79,6 +80,11 @@ const handler = NextAuth({
             status: true,
             department: true,
             image: true,
+            userSessions: {
+              where: {
+                expiresAt: { gt: new Date() },
+              },
+            },
           },
         });
 
@@ -130,6 +136,16 @@ const handler = NextAuth({
         user.id = dbUser.id;
         user.roles = dbUser.roles;
         user.name = dbUser.name;
+
+        // Invalidate all existing sessions for this user (single session enforcement)
+        if (dbUser.userSessions.length > 0) {
+          await prisma.userSession.deleteMany({
+            where: { userId: dbUser.id },
+          });
+          console.log(
+            `🔄 Invalidated ${dbUser.userSessions.length} existing session(s) for user ${dbUser.id}`
+          );
+        }
 
         // Link Azure AD account with idempotency protection and transaction
         if (account?.provider === "azure-ad" && account.providerAccountId) {
@@ -293,11 +309,48 @@ const handler = NextAuth({
 
     /** JWT callback - attach roles and department */
     async jwt({ token, user, trigger, session }) {
+      // Initial login - create new session token and store it
       if (user) {
         token.id = user.id;
         token.roles = user.roles as Role[];
         token.email = user.email;
         token.name = user.name;
+
+        // Generate unique session token
+        const sessionToken = crypto.randomBytes(32).toString("hex");
+        token.sessionToken = sessionToken;
+
+        // Store session in database
+        try {
+          await prisma.userSession.create({
+            data: {
+              userId: user.id,
+              sessionToken: sessionToken,
+              expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            },
+          });
+          console.log(`✅ New session created for user ${user.id}`);
+        } catch (error) {
+          console.error("Error creating session:", error);
+        }
+      }
+
+      // Verify session is still valid on every request
+      if (token.sessionToken && token.id && !user) {
+        try {
+          const validSession = await prisma.userSession.findUnique({
+            where: { sessionToken: token.sessionToken as string },
+          });
+
+          // If session doesn't exist or expired, mark for redirect
+          if (!validSession || validSession.expiresAt < new Date()) {
+            console.log(`❌ Session invalidated for user ${token.id}`);
+            token.sessionExpired = true;
+            return token; // Return token with expired flag
+          }
+        } catch (error) {
+          console.error("Error verifying session:", error);
+        }
       }
 
       // Allow session.update() to override selectedRole
@@ -305,26 +358,28 @@ const handler = NextAuth({
         token.selectedRole = session.selectedRole;
       }
 
-      // Fallback sync from DB if missing
-      if (token?.email && (!token?.roles || token.roles.length === 0)) {
+      // ALWAYS fetch fresh data on each session access (page load, API call)
+      // This ensures role/status changes are reflected immediately for all users
+      if (!user && token.id) {
         try {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: token.email },
+          const freshUser = await prisma.user.findUnique({
+            where: { id: token.id as string },
             select: {
               id: true,
               roles: true,
               name: true,
               image: true,
               department: true,
+              status: true,
             },
           });
 
-          if (dbUser) {
-            token.id = dbUser.id;
-            token.roles = dbUser.roles as Role[];
-            token.name = dbUser.name;
-            token.image = dbUser.image;
-            token.department = dbUser.department;
+          if (freshUser) {
+            token.roles = freshUser.roles as Role[];
+            token.name = freshUser.name;
+            token.image = freshUser.image;
+            token.department = freshUser.department;
+            token.status = freshUser.status;
           }
         } catch (err) {
           console.error("JWT DB fetch error:", err);
@@ -336,6 +391,15 @@ const handler = NextAuth({
 
     /** Session callback - include all user data */
     async session({ session, token }) {
+      // Check if session was invalidated (logged in elsewhere)
+      if (token.sessionExpired) {
+        // Return null session to trigger client-side redirect
+        return {
+          ...session,
+          error: "SessionExpired",
+        } as any;
+      }
+
       if (session.user && token) {
         session.user.id = token.id as string;
         session.user.roles = (token.roles as Role[]) || [];
@@ -345,6 +409,10 @@ const handler = NextAuth({
         session.user.email = token.email;
         session.user.department =
           typeof token.department === "string" ? token.department : null;
+        session.user.status =
+          typeof token.status === "string" ? token.status : null;
+        session.user.sessionToken =
+          typeof token.sessionToken === "string" ? token.sessionToken : null;
 
         if (token.selectedRole) {
           session.user.selectedRole = token.selectedRole;
@@ -361,6 +429,22 @@ const handler = NextAuth({
         `${baseUrl}/redirecting`,
       ];
       return safeUrls.includes(url) ? url : `${baseUrl}/redirecting`;
+    },
+  },
+
+  events: {
+    async signOut({ token }) {
+      // Delete session from database on sign out
+      if (token?.sessionToken) {
+        try {
+          await prisma.userSession.deleteMany({
+            where: { sessionToken: token.sessionToken as string },
+          });
+          console.log(`🚪 Session deleted on sign out`);
+        } catch (error) {
+          console.error("Error deleting session on signout:", error);
+        }
+      }
     },
   },
 

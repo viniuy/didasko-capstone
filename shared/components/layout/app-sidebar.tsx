@@ -286,13 +286,15 @@ export function AppSidebar() {
     items = pureAcademicHeadItems;
   } else if (isAcademicHead && isFaculty) {
     items = academicHeadItems;
-  } else if (isFaculty || (hasMultipleRoles && selectedRole === "FACULTY")) {
+  } else if (isAdmin && selectedRole === "FACULTY") {
+    // Admin explicitly switched to Faculty view
     items = facultyItems;
-  } else if (isAdmin && selectedRole === "ADMIN") {
-    items = adminItems;
   } else if (isAdmin) {
-    // Pure admin without faculty role
+    // Admin (default view, even if they have Faculty role)
     items = adminItems;
+  } else if (isFaculty) {
+    // Pure Faculty without Admin role
+    items = facultyItems;
   }
 
   // Filter out "Students" for temporary admin
@@ -315,7 +317,9 @@ export function AppSidebar() {
         ADMIN: "/dashboard/admin",
         FACULTY: "/dashboard/faculty",
       };
-      router.push(roleMap[newRole]);
+
+      // Force navigation to role dashboard
+      window.location.href = roleMap[newRole];
     } catch (error) {
       console.error("Role switch error:", error);
       toast.error("Failed to switch role");
@@ -518,7 +522,8 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 ))}
 
-                {(isFaculty || (isAdmin && selectedRole === "FACULTY")) && (
+                {((isFaculty && !isAdmin) ||
+                  (isAdmin && selectedRole === "FACULTY")) && (
                   <>
                     <SidebarMenuItem>
                       <Collapsible

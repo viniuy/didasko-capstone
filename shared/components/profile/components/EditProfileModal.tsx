@@ -24,6 +24,7 @@ interface EditProfileModalProps {
     id: string;
     name: string;
     role: string;
+    roles?: string[];
     image: string | null;
   };
 }
@@ -167,7 +168,8 @@ export default function EditProfileModal({
         <div>
           <p className="font-semibold text-xl text-[#124A69]">{user.name}</p>
           <p className="text-sm text-gray-500">
-            {user.roles?.map((r) => formatRole(r)).join(", ") || "N/A"}
+            {user.roles?.map((r) => formatRole(r)).join(", ") ||
+              formatRole(user.role)}
           </p>
         </div>
 
