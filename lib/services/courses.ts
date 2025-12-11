@@ -418,11 +418,11 @@ export async function getCourseStudentsWithAttendance(
   const allGradeScores =
     studentIds.length > 0
       ? await prisma.gradeScore.findMany({
-    where: {
+          where: {
             courseId: courseWithData.id,
-      studentId: { in: studentIds },
-    },
-    orderBy: { createdAt: "desc" },
+            studentId: { in: studentIds },
+          },
+          orderBy: { createdAt: "desc" },
           take: 1000, // Limit to prevent excessive data
         })
       : [];
@@ -447,7 +447,7 @@ export async function getCourseStudentsWithAttendance(
       lastName: student.lastName,
       middleInitial: student.middleInitial,
       image: student.image || undefined,
-      rfid_id: student.rfid_id ?? null, // Include rfid_id in the response
+      rfid_id: student.rfid_id ? String(student.rfid_id) : null, // Convert BigInt to String for JSON serialization
       status: student.attendance[0]?.status || "NOT_SET",
       attendanceRecords: student.attendance,
       reportingScore: latestGradeScore?.reportingScore ?? 0,
