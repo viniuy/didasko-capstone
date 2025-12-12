@@ -1,5 +1,14 @@
 "use client";
 import React from "react";
+
+// Utility: Convert string to Title Case (capitalize first letter of each word)
+function toTitleCase(str: string) {
+  return str
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 import STI_logo from "@/public/stilogo.png";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import Header from "@/shared/components/layout/header";
@@ -398,9 +407,9 @@ export function StudentsPageClient({
       const values = line.split(",");
       return {
         studentId: values[0]?.trim() || "",
-        lastName: values[1]?.trim() || "",
-        firstName: values[2]?.trim() || "",
-        middleInitial: values[3]?.trim() || "",
+        lastName: toTitleCase(values[1]?.trim() || ""),
+        firstName: toTitleCase(values[2]?.trim() || ""),
+        middleInitial: toTitleCase(values[3]?.trim() || ""),
       };
     });
 
@@ -427,9 +436,9 @@ export function StudentsPageClient({
         const values = line.split(",");
         const studentData = {
           studentId: values[0]?.trim(),
-          lastName: values[1]?.trim(),
-          firstName: values[2]?.trim(),
-          middleInitial: values[3]?.trim() || undefined,
+          lastName: toTitleCase(values[1]?.trim() || ""),
+          firstName: toTitleCase(values[2]?.trim() || ""),
+          middleInitial: toTitleCase(values[3]?.trim() || "") || undefined,
         };
 
         if (
