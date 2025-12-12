@@ -115,9 +115,7 @@ export default async function FacultyDashboard() {
             </div>
           </div>
 
-          <div className="hidden lg:block">
-            <Rightsidebar />
-          </div>
+          <Rightsidebar />
         </main>
       </div>
     </SidebarProvider>

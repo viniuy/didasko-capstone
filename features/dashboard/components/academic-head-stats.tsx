@@ -61,7 +61,7 @@ export default function AcademicHeadStats({
                 >
                   <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                     <div className="relative flex-shrink-0">
-                      <div className="absolute -top-0.5 sm:-top-1 -left-0.5 sm:-left-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#124A69] rounded-full text-[9px] sm:text-[10px] text-white flex items-center justify-center font-bold">
+                      <div className="absolute z-1 -top-0.5 sm:-top-1 -left-0.5 sm:-left-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#124A69] rounded-full text-[9px] sm:text-[10px] text-white flex items-center justify-center font-bold">
                         {index + 1}
                       </div>
                       <Avatar className="h-10 w-10 sm:h-12 sm:w-12 ring-2 ring-[#124A69]/10">

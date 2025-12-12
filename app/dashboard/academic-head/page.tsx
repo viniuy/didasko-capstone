@@ -44,10 +44,10 @@ export default async function AcademicHeadDashboard() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">
-      <AppSidebar />
       <Header />
+      <AppSidebar />
 
-      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-0 sm:pl-12 md:pl-16 lg:pl-[4rem] xl:pl-[5rem] transition-all overflow-y-auto pb-8 sm:pb-12 lg:pb-16">
+      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
         <div className="flex-1 px-2 sm:px-4 md:px-6">
           <div className="flex flex-col flex-grow">
             <div className="px-2 sm:px-4">
@@ -67,9 +67,7 @@ export default async function AcademicHeadDashboard() {
           </div>
         </div>
 
-        <div className="hidden lg:block">
-          <Rightsidebar />
-        </div>
+        <Rightsidebar />
       </main>
     </div>
   );
