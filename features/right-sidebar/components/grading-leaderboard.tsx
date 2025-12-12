@@ -90,7 +90,7 @@ const StudentRankCard = ({ student }: { student: StudentGrade }) => {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0 overflow-hidden">
-              <h3 className="text-sm font-semibold text-white truncate max-w-[170px]">
+              <h3 className="text-sm font-semibold text-white truncate max-w-[160px]">
                 {student.studentName}
               </h3>
               <p className="text-xs text-white/60 truncate">

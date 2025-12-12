@@ -117,13 +117,6 @@ export default function FacultyLoad() {
       {!selectedTeacher && (
         <div className="bg-white rounded-lg shadow-md flex-shrink-0">
           <div className="flex items-center gap-3 px-3 sm:px-4 py-3 border-b">
-            {/* Title */}
-            <div className="flex flex-col mr-2">
-              <span className="text-base sm:text-lg font-bold text-[#124A69] leading-tight">
-                Faculty Load
-              </span>
-            </div>
-
             {/* Search */}
             <div className="relative w-full sm:w-80">
               <svg
@@ -190,7 +183,7 @@ export default function FacultyLoad() {
                   <label className="text-sm font-medium text-gray-700">
                     Department
                   </label>
-                  <div className="space-y-3 border rounded-lg p-4 bg-white">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-3 gap-3 border rounded-lg p-4 bg-white">
                     {departmentOptions.map((option) => (
                       <label
                         key={option.value}

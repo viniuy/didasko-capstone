@@ -1084,6 +1084,11 @@ export function ClassRecordTable({
       return null;
 
     // Check if any term grade is invalid (has "-" or is NaN)
+    const prelimPercent = parseFloat(prelimGrade.totalPercent);
+    const midtermPercent = parseFloat(midtermGrade.totalPercent);
+    const preFinalsPercent = parseFloat(preFinalsGrade.totalPercent);
+    const finalsPercent = parseFloat(finalsGrade.totalPercent);
+
     const prelimNum = parseFloat(prelimGrade.numericGrade);
     const midtermNum = parseFloat(midtermGrade.numericGrade);
     const preFinalsNum = parseFloat(preFinalsGrade.numericGrade);
@@ -1103,20 +1108,29 @@ export function ClassRecordTable({
       return null;
     }
 
-    const finalWeighted =
+    // Calculate final percentage (weighted average of term percentages)
+    const finalPercentage =
+      prelimPercent * TERM_WEIGHTS.PRELIM +
+      midtermPercent * TERM_WEIGHTS.MIDTERM +
+      preFinalsPercent * TERM_WEIGHTS.PREFINALS +
+      finalsPercent * TERM_WEIGHTS.FINALS;
+
+    // Calculate final numeric grade (weighted average of term numeric grades)
+    const finalNumericGrade =
       prelimNum * TERM_WEIGHTS.PRELIM +
       midtermNum * TERM_WEIGHTS.MIDTERM +
       preFinalsNum * TERM_WEIGHTS.PREFINALS +
       finalsNum * TERM_WEIGHTS.FINALS;
 
-    // Double-check the result is valid
-    if (isNaN(finalWeighted)) {
+    // Double-check the results are valid
+    if (isNaN(finalPercentage) || isNaN(finalNumericGrade)) {
       return null;
     }
 
     return {
-      grade: finalWeighted.toFixed(2),
-      remarks: finalWeighted <= 3.0 ? "PASSED" : "FAILED",
+      percentage: finalPercentage.toFixed(2),
+      grade: finalNumericGrade.toFixed(2),
+      remarks: finalNumericGrade <= 3.0 ? "PASSED" : "FAILED",
     };
   };
 
@@ -1753,7 +1767,10 @@ export function ClassRecordTable({
                 {summarySelectedTerm === "ALL" && (
                   <>
                     <th className="w-[8%] sm:w-[9%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700">
-                      GRADE
+                      FINAL GRADE
+                    </th>
+                    <th className="w-[8%] sm:w-[9%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700">
+                      EQV
                     </th>
                     <th className="w-[10%] sm:w-[11%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700">
                       REMARKS
@@ -1781,6 +1798,7 @@ export function ClassRecordTable({
                   ))}
                 {summarySelectedTerm === "ALL" && (
                   <>
+                    <th className="border border-gray-300 px-1 sm:px-2 py-1"></th>
                     <th className="border border-gray-300 px-1 sm:px-2 py-1"></th>
                     <th className="border border-gray-300 px-1 sm:px-2 py-1"></th>
                   </>
@@ -1907,6 +1925,32 @@ export function ClassRecordTable({
                       })}
                     {summarySelectedTerm === "ALL" && (
                       <>
+                        <td
+                          className={`border py-2 sm:py-3 text-center px-1 ${
+                            selectedStudentId === student.id
+                              ? "border-white"
+                              : "border-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-center justify-center">
+                            <input
+                              type="text"
+                              className={`w-full max-w-[44px] sm:max-w-[56px] h-7 sm:h-8 text-center border rounded text-xs sm:text-sm font-medium ${
+                                selectedStudentId === student.id
+                                  ? "border-white text-white bg-transparent"
+                                  : "border-gray-200"
+                              }`}
+                              value={
+                                finalGrade?.percentage &&
+                                !isNaN(parseFloat(finalGrade.percentage))
+                                  ? finalGrade.percentage
+                                  : "-"
+                              }
+                              readOnly
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </td>
                         <td
                           className={`border py-2 sm:py-3 text-center px-1 ${
                             selectedStudentId === student.id

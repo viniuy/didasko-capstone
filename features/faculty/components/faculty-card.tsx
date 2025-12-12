@@ -17,7 +17,7 @@ const FacultyCard: React.FC<FacultyCardProps> = ({
 }) => {
   return (
     <Card
-      className="hover:shadow-md transition-shadow cursor-pointer h-[300px]"
+      className="hover:shadow-md transition-shadow cursor-pointer min-h-[390px]"
       onClick={() => onDepartmentClick(department)}
     >
       <CardContent className="p-4 sm:p-2">

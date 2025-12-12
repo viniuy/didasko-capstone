@@ -122,7 +122,7 @@ export function GroupCard({
             <p className="text-xs sm:text-sm text-gray-600 text-center">
               Leader:
             </p>
-            <p className="text-sm sm:text-base font-semibold text-[#124A69] text-center truncate max-w-full">
+            <p className="text-sm sm:text-base font-semibold text-[#124A69] text-center truncate max-w-[200px]">
               {group.leader.firstName}
               {group.leader.middleInitial
                 ? ` ${group.leader.middleInitial}.`

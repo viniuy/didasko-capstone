@@ -68,6 +68,8 @@ const FacultyList: React.FC<FacultyListProps> = ({
     const handleResize = () => {
       if (window.innerHeight < 940) {
         setMaxItemsPerPage(4);
+      } else if (window.innerHeight < 1080) {
+        setMaxItemsPerPage(4);
       } else {
         setMaxItemsPerPage(8);
       }
@@ -146,9 +148,9 @@ const FacultyList: React.FC<FacultyListProps> = ({
             {currentFaculty.map((faculty: any) => (
               <div
                 key={faculty.id}
-                className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow mt-5 h-fit"
+                className="bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow mt-5 min-h-[300px] flex flex-col"
               >
-                <div className="flex flex-col items-center space-y-4">
+                <div className="flex flex-col items-center space-y-4 flex-1">
                   {/* Profile Picture */}
                   <div className="w-24 h-24 rounded-full overflow-hidden bg-[#124A69] flex items-center justify-center text-white">
                     {faculty.image ? (
@@ -179,15 +181,15 @@ const FacultyList: React.FC<FacultyListProps> = ({
                   >
                     {faculty.department}
                   </p>
-
-                  {/* View Schedule Button */}
-                  <button
-                    onClick={() => handleViewSchedule(faculty)}
-                    className="w-full bg-[#124A69] text-white px-4 py-2 rounded-full hover:bg-[#0D3A54] transition-colors text-sm font-medium"
-                  >
-                    View Faculty Load
-                  </button>
                 </div>
+
+                {/* View Schedule Button */}
+                <button
+                  onClick={() => handleViewSchedule(faculty)}
+                  className="w-full bg-[#124A69] text-white px-4 py-2 rounded-full hover:bg-[#0D3A54] transition-colors text-sm font-medium mt-4"
+                >
+                  View Faculty Load
+                </button>
               </div>
             ))}
           </div>
