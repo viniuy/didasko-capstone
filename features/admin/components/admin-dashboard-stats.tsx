@@ -136,7 +136,7 @@ export function AdminDashboardStats({
             </div>
           </CardContent>
         </Card>
-        <Card className="hover:shadow-md transition-shadow border-[#124A69] border-2">
+        <Card className="hover:shadow-md transition-shadow border-2">
           <CardHeader className="flex flex-col items-center space-y-0 ">
             <div className="h-8 w-8 rounded-full bg-[#124A69] flex items-center justify-center mb-2">
               <Users className="h-4 w-4 text-white" />

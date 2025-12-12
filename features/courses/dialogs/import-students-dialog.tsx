@@ -354,7 +354,7 @@ export function StudentImportDialog({
                   }
                 >
                   <div className="flex flex-col items-center justify-center gap-3 text-center">
-                    <Upload
+                    <Download
                       className={`h-10 w-10 ${
                         isDragging ? "text-[#124A69]" : "text-gray-400"
                       }`}
@@ -382,7 +382,7 @@ export function StudentImportDialog({
               {/* Selected File Info */}
               {selectedFile && (
                 <div className="flex items-center gap-2 p-3 bg-white border rounded-lg">
-                  <Upload className="h-4 w-4 text-gray-400" />
+                  <Download className="h-4 w-4 text-gray-400" />
                   <span className="text-sm text-gray-700 truncate flex-1">
                     {selectedFile.name}
                   </span>
