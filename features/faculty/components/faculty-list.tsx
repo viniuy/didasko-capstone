@@ -37,6 +37,7 @@ interface FacultyMember {
   workType: WorkType;
   image: string | null;
   role: Role;
+  roles: Role[];
   coursesTeaching: Course[];
 }
 

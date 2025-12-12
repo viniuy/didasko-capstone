@@ -72,7 +72,7 @@ const academicHeadItems = [
   },
   { title: "Courses", url: "/main/course", icon: BookOpen },
   { title: "Faculty", url: "/main/faculty-load", icon: CalendarClock },
-  { title: "Attendance", url: "/main/attendance", icon: CalendarCheck },
+  { title: "Class Record", url: "/main/grading/class-record", icon: BookUser },
 ];
 
 const pureAcademicHeadItems = [
