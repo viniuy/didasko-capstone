@@ -70,7 +70,7 @@ export async function addEvent(data: EventData) {
         date: normalizedDate,
         fromTime: fromTime || null,
         toTime: toTime || null,
-        role: userRole,
+        roles: [userRole],
       },
     });
 

@@ -65,6 +65,7 @@ export default function Notes() {
   const [openDelete, setOpenDelete] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const noteRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const [openEdit, setOpenEdit] = useState(false);
@@ -220,15 +221,18 @@ export default function Notes() {
     }
 
     try {
+      setIsSaving(true);
       await createNoteMutation.mutateAsync({
         title: newNote.title,
         description: newNote.description || null,
         userId: session.user.id,
       });
-      setOpenAdd(false);
       resetNewNoteForm();
+      setOpenAdd(false);
     } catch (error) {
       // Error is handled by the mutation hook
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -506,7 +510,8 @@ export default function Notes() {
         open={openAdd}
         onOpenChange={(open) => {
           // Check for unsaved changes first before any other conditions
-          if (!open && hasUnsavedChanges) {
+          // But don't check if we're currently saving
+          if (!open && hasUnsavedChanges && !isSaving) {
             setPendingAction("close");
             setOpenUnsavedChanges(true);
             return;

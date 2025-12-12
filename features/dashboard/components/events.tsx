@@ -592,11 +592,11 @@ export default function UpcomingEvents() {
             onSuccess: (message) => {
               toast.success("Event created successfully");
               refreshEvents();
-              setIsSaving(false);
-              setOpenAdd(false);
+              resetNewEventForm(); // Clear the form first
               setOpenConfirmSave(false);
               setEventsToSave(null);
-              resetNewEventForm(); // Clear the form
+              setIsSaving(false);
+              setOpenAdd(false);
             },
             onError: (error) => {
               setAlert({
@@ -1056,8 +1056,13 @@ export default function UpcomingEvents() {
       <AlertDialog
         open={openAdd}
         onOpenChange={(open) => {
+          // Don't close if confirmation dialog is open
+          if (!open && openConfirmSave) {
+            return;
+          }
           // Check for unsaved changes first before any other conditions
-          if (!open && hasUnsavedChanges) {
+          // But don't check if we're currently saving (closing via save button)
+          if (!open && hasUnsavedChanges && !isSaving) {
             setPendingAction("close");
             setOpenUnsavedChanges(true);
             return;
@@ -1346,7 +1351,10 @@ export default function UpcomingEvents() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={saveNewEvent}
+              onClick={(e) => {
+                e.preventDefault();
+                saveNewEvent();
+              }}
               className="bg-[#124A69] text-white hover:bg-[#0a2f42] h-8 text-xs"
               disabled={
                 !newEvent.title || !newEvent.date || !!timeError || isSaving
@@ -1358,7 +1366,14 @@ export default function UpcomingEvents() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={openConfirmSave} onOpenChange={setOpenConfirmSave}>
+      <AlertDialog
+        open={openConfirmSave}
+        onOpenChange={(open) => {
+          // Don't allow closing by clicking outside during save
+          if (!open && isSaving) return;
+          setOpenConfirmSave(open);
+        }}
+      >
         <AlertDialogContent className="max-h-[80vh] flex flex-col">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Event Details</AlertDialogTitle>
