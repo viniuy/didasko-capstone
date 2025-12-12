@@ -44,6 +44,9 @@ export default function Header() {
   // Academic Heads (with or without Faculty role) should not see temp admin badge
   // We need to fetch for ADMIN users too because they might be temporary admins
   const userRoles = session?.user?.roles || [];
+
+  // Disable role picking for current user (if present)
+  const isCurrentUser = (userId: string) => userId === session?.user?.id;
   const shouldFetchBreakGlass = !userRoles.includes("ACADEMIC_HEAD");
   const { data: breakGlassStatus, isLoading: isLoadingBreakGlass } =
     useBreakGlassStatus(shouldFetchBreakGlass ? session?.user?.id : undefined, {
@@ -339,34 +342,6 @@ export default function Header() {
 
         {/* Right Section */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-          {/* Admin: Request Faculty Role (only if not already FACULTY) */}
-          {userRoles.includes("ADMIN") && !userRoles.includes("FACULTY") && (
-            <>
-              <div className="relative">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowRequestDialog(true)}
-                  className="text-sm"
-                  disabled={pendingCount > 0 || createRequest.isPending}
-                >
-                  {pendingCount > 0
-                    ? `Request Pending (${pendingCount})`
-                    : "Request Faculty Role"}
-                </Button>
-                {hasOwnPending && (
-                  <span
-                    className="absolute -top-1 -right-2 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-600 text-white text-[10px] font-semibold"
-                    aria-label="You have a pending request"
-                    title="You have a pending request"
-                  >
-                    !
-                  </span>
-                )}
-              </div>
-            </>
-          )}
-
           {/* (Moved) Academic Head pending-requests badge is rendered next to BreakGlassCompact */}
         </div>
       </div>

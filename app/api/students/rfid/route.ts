@@ -42,7 +42,15 @@ export async function GET(request: Request) {
     });
 
     if (student) {
-      const response = { student };
+      // Convert BigInt to string for JSON serialization
+      const safeStudent = {
+        ...student,
+        rfid_id:
+          student.rfid_id !== null && student.rfid_id !== undefined
+            ? String(student.rfid_id)
+            : null,
+      };
+      const response = { student: safeStudent };
 
       // Check if client requested encryption
       const wantsEncryption =

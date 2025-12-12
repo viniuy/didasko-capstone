@@ -514,7 +514,6 @@ export function StudentsPageClient({
     // RFID scanners input all digits in < 100ms total
     // If there's a delay > 100ms between characters, it's manual typing - reject it
     if (lastRfidInputTimeRef.current > 0 && timeSinceLastInput > 100) {
-      // Reset - this is manual typing, not RFID scan
       e.target.value = "";
       rfidInputBufferRef.current = "";
       lastRfidInputTimeRef.current = 0;
@@ -527,14 +526,11 @@ export function StudentsPageClient({
 
     // Additional check: If input is too slow (< 5 chars in first 200ms), reject
     if (value.length === 1) {
-      // First character - start timer
       lastRfidInputTimeRef.current = currentTime;
       rfidInputBufferRef.current = value;
     } else if (value.length > 0 && value.length < 5) {
-      // Check if we're getting chars fast enough (should be < 200ms for first 5 chars)
       const timeSinceStart = currentTime - lastRfidInputTimeRef.current;
       if (timeSinceStart > 200) {
-        // Too slow - this is manual typing
         e.target.value = "";
         rfidInputBufferRef.current = "";
         lastRfidInputTimeRef.current = 0;
@@ -549,7 +545,6 @@ export function StudentsPageClient({
       rfidInputBufferRef.current = value;
     }
 
-    // Add 10ms delay before processing
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     if (scanTimeoutRef.current) {
@@ -566,7 +561,6 @@ export function StudentsPageClient({
       );
 
       if (existingStudent) {
-        // If we're searching via RFID, load the student
         if (viewMode === "searching-rfid") {
           const truncatedName = truncateName(
             existingStudent.firstName,
@@ -581,8 +575,6 @@ export function StudentsPageClient({
           if (rfidInputRef.current) rfidInputRef.current.value = "";
           return;
         }
-
-        // If we're assigning RFID or creating, show error
         if (viewMode === "assigning-rfid" || viewMode === "creating") {
           const truncatedName = truncateName(
             existingStudent.firstName,
@@ -602,15 +594,18 @@ export function StudentsPageClient({
 
       // ONLY search database if we're in search mode
       if (viewMode === "searching-rfid") {
-        // Show loading toast
         const loadingToastId = toast.loading("Searching for student...");
-
         try {
-          // Search in database using the RFID-specific endpoint (searches only by rfid_id, not studentId)
-          const searchResult = await studentsService.getByRfid(value);
-
+          // Always send as string (API expects stringified number)
+          const searchResult = await studentsService.getByRfid(String(value));
+          // Accept both { student } and { found, student } response shapes
+          let foundStudent = null;
           if (searchResult?.student) {
-            const foundStudent = searchResult.student;
+            foundStudent = searchResult.student;
+          } else if (searchResult?.found && searchResult.found.student) {
+            foundStudent = searchResult.found.student;
+          }
+          if (foundStudent) {
             const mappedStudent: Student = {
               id: foundStudent.id,
               rfid_id: foundStudent.rfid_id
@@ -626,7 +621,6 @@ export function StudentsPageClient({
               mappedStudent.firstName,
               mappedStudent.lastName
             );
-            // Replace loading toast with success
             toast.success(`Found student: ${truncatedName}`, {
               id: loadingToastId,
             });
@@ -636,11 +630,9 @@ export function StudentsPageClient({
             lastRfidInputTimeRef.current = 0;
             rfidInputBufferRef.current = "";
             if (rfidInputRef.current) rfidInputRef.current.value = "";
-            // Refresh the students list to include this student
             await fetchStudents();
             return;
           } else {
-            // Replace loading toast with error
             toast.error(`No student found with RFID "${value}"`, {
               id: loadingToastId,
             });
@@ -653,7 +645,6 @@ export function StudentsPageClient({
           }
         } catch (error) {
           console.error("Error searching for RFID:", error);
-          // Replace loading toast with error
           toast.error(`No student found with RFID "${value}"`, {
             id: loadingToastId,
           });
@@ -666,15 +657,12 @@ export function StudentsPageClient({
         }
       }
 
-      // Valid RFID scanned for assignment or creation
       if (viewMode === "assigning-rfid" || viewMode === "creating") {
         showSuccessToast(`RFID "${value}" scanned successfully!`);
         setIsScanning(false);
-        // Update scannedRfid state for the visible input
         setScannedRfid(value);
       }
     } else {
-      // Reset timeout if input stops (only for scanning modes, not manual input)
       if (viewMode === "assigning-rfid" || viewMode === "searching-rfid") {
         scanTimeoutRef.current = setTimeout(() => {
           if (value.length > 0 && value.length < 10) {

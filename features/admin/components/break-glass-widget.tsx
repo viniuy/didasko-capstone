@@ -91,11 +91,15 @@ export function BreakGlassWidget() {
   const activateMutation = useActivateBreakGlass();
   const deactivateMutation = useDeactivateBreakGlass();
 
-  // Filter faculty to only FACULTY role
+  // Show all eligible faculty (FACULTY and ACADEMIC_HEAD, but not permanent ADMIN)
   const facultyList = useMemo(() => {
     if (!facultyData || !Array.isArray(facultyData)) return [];
-    return facultyData.filter((user: FacultyMember) =>
-      user.roles?.includes("FACULTY")
+    return facultyData.filter(
+      (user: FacultyMember) =>
+        Array.isArray(user.roles) &&
+        (user.roles.includes("FACULTY") ||
+          user.roles.includes("ACADEMIC_HEAD")) &&
+        !user.roles.includes("ADMIN")
     );
   }, [facultyData]);
 
