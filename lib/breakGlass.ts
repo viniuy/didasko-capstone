@@ -138,9 +138,9 @@ export async function activateBreakGlass(
     }
   }
 
-  // Log the activation
+  // Log the activation (set userId to facultyUserId so audit logs show the promoted faculty)
   await logAction({
-    userId: activatedBy,
+    userId: facultyUserId,
     action: "BREAK_GLASS_ACTIVATED",
     module: "Security",
     reason: reason,

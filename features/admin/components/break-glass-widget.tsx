@@ -36,14 +36,17 @@ import {
   useBreakGlassStatus,
   useActivateBreakGlass,
   useDeactivateBreakGlass,
-  useFaculty,
 } from "@/lib/hooks/queries";
+import { useFaculty } from "@/lib/hooks/queries/useAdmin";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useUserImages } from "./admin-data-table";
 
 interface FacultyMember {
   id: string;
   name: string;
   email: string;
   role: string;
+  image?: string | null;
 }
 
 type BreakGlassSession = {
@@ -95,6 +98,20 @@ export function BreakGlassWidget() {
       user.roles?.includes("FACULTY")
     );
   }, [facultyData]);
+
+  // Get user images from Supabase
+  const { imageMap } = useUserImages();
+
+  // Helper to get initials (copied from admin-data-table)
+  const getInitials = (name: string) => {
+    const parts = name.split(" ");
+    if (parts.length === 3) {
+      return (parts[0][0] + parts[1][0] + parts[2][0]).toUpperCase();
+    } else if (parts.length === 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0][0].toUpperCase();
+  };
 
   // Only show for Academic Head
   const userRoles = session?.user?.roles || [];
@@ -285,17 +302,28 @@ export function BreakGlassWidget() {
                         No faculty members available
                       </div>
                     ) : (
-                      facultyList.map((faculty) => (
-                        <SelectItem key={faculty.id} value={faculty.id}>
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            <span>{faculty.name}</span>
-                            <span className="text-xs text-gray-500">
-                              ({faculty.email})
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))
+                      facultyList.map((faculty) => {
+                        const imageUrl = imageMap[faculty.id];
+                        return (
+                          <SelectItem key={faculty.id} value={faculty.id}>
+                            <div className="flex items-center gap-2">
+                              <Avatar>
+                                <AvatarImage
+                                  src={imageUrl}
+                                  alt={faculty.name}
+                                />
+                                <AvatarFallback>
+                                  {getInitials(faculty.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{faculty.name}</span>
+                              <span className="text-xs text-gray-500">
+                                ({faculty.email})
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })
                     )}
                   </SelectContent>
                 </Select>
