@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, ClipboardList } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -33,6 +33,8 @@ import {
 import { BreakGlassCompact } from "@/features/admin/components/break-glass-compact";
 
 export default function Header() {
+  // Track which request is being approved (by id)
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const { data: session } = useSession();
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [promotionCode, setPromotionCode] = useState("");
@@ -181,7 +183,7 @@ export default function Header() {
           />
           {/* Break-Glass Compact - Only show for Academic Head and permanent Admin, not temporary Admin */}
           {!isChecking && !isTempAdmin && <BreakGlassCompact />}
-          {/* Academic Head: single compact badge (moved next to BreakGlassCompact) */}
+          {/* Academic Head: icon badge for pending requests (like BreakGlassCompact) */}
           {!isChecking && userRoles.includes("ACADEMIC_HEAD") && (
             <button
               onClick={() => setShowRequestsListDialog(true)}
@@ -195,19 +197,18 @@ export default function Header() {
                   ? `${pendingCount} pending faculty requests`
                   : "Pending Requests"
               }
-              className={`ml-3 sm:ml-4 relative z-20 inline-flex items-center justify-center h-6 w-6 rounded-full transition-shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#124A69] ${
-                pendingCount > 0
-                  ? "bg-[#124A69] text-white"
-                  : "bg-gray-200 text-gray-600"
-              }`}
+              className={`ml-3 sm:ml-4 relative z-20 flex items-center justify-center h-8 w-8 rounded-full transition-shadow focus:outline-none focus:ring-2 focus:ring-offset-2 hover:bg-gray-200`}
+              tabIndex={0}
             >
-              <span className="sr-only">Pending Requests</span>
-              {pendingCount > 0 ? (
-                <span className="text-[11px] font-semibold leading-none">
-                  {pendingCount}
+              <ClipboardList className="w-3 h-3 text-gray-500" />
+              {/* Dot or count indicator */}
+              {pendingCount > 0 && (
+                <span
+                  className="absolute top-1 right-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-600 text-white text-[10px] font-bold shadow"
+                  style={{ minWidth: 16 }}
+                >
+                  {pendingCount < 10 ? pendingCount : "9+"}
                 </span>
-              ) : (
-                <span className="h-2 w-2 rounded-full block" />
               )}
             </button>
           )}
@@ -541,51 +542,68 @@ export default function Header() {
             ) : (
               (facultyRequests || [])
                 .filter((r: any) => r.status === "PENDING")
-                .map((r: any) => (
-                  <div
-                    key={r.id}
-                    className="p-3 border rounded flex items-start justify-between gap-3"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium">
-                        {r.admin?.name || "Unknown"}{" "}
-                        <span className="text-xs text-gray-500">
-                          ({r.admin?.email})
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Expires: {new Date(r.expiresAt).toLocaleString()}
-                      </div>
-                      {r.note && (
-                        <div className="text-sm italic text-gray-500">
-                          "{r.note}"
+                .map((r: any) => {
+                  const isApproving = approvingId === r.id;
+                  return (
+                    <div
+                      key={r.id}
+                      className="p-3 border rounded flex items-start justify-between gap-3"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">
+                          {r.admin?.name || "Unknown"}{" "}
+                          <span className="text-xs text-gray-500">
+                            ({r.admin?.email})
+                          </span>
                         </div>
-                      )}
+                        <div className="text-sm text-gray-600">
+                          Expires: {new Date(r.expiresAt).toLocaleString()}
+                        </div>
+                        {r.note && (
+                          <div className="text-sm italic text-gray-500">
+                            "{r.note}"
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 flex flex-col gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 text-white"
+                          disabled={isApproving}
+                          onClick={async () => {
+                            setApprovingId(r.id);
+                            try {
+                              await approveRequest.mutateAsync(r.id);
+                              refetchRequests();
+                            } finally {
+                              setApprovingId(null);
+                            }
+                          }}
+                        >
+                          {isApproving ? (
+                            <span className="flex items-center gap-2">
+                              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                              Approving...
+                            </span>
+                          ) : (
+                            "Approve"
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={isApproving}
+                          onClick={async () => {
+                            await rejectRequest.mutateAsync(r.id);
+                            refetchRequests();
+                          }}
+                        >
+                          Reject
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex-shrink-0 flex flex-col gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-green-600 text-white"
-                        onClick={async () => {
-                          await approveRequest.mutateAsync(r.id);
-                          refetchRequests();
-                        }}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={async () => {
-                          await rejectRequest.mutateAsync(r.id);
-                          refetchRequests();
-                        }}
-                      >
-                        Reject
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
             )}
             {(!facultyRequests ||
               facultyRequests.filter((r: any) => r.status === "PENDING")
@@ -598,6 +616,7 @@ export default function Header() {
             <Button
               variant="ghost"
               onClick={() => setShowRequestsListDialog(false)}
+              disabled={!!approvingId}
             >
               Close
             </Button>

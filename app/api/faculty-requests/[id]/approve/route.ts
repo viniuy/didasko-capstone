@@ -46,6 +46,21 @@ export const POST = withLogging(
         },
       });
 
+      // Promote the requested admin to ADMIN and FACULTY roles (if not already)
+      const adminUser = await prisma.user.findUnique({
+        where: { id: existing.adminId },
+      });
+      if (adminUser) {
+        // Ensure both ADMIN and FACULTY are present
+        const newRoles = Array.from(
+          new Set([...(adminUser.roles || []), "ADMIN", "FACULTY"])
+        );
+        await prisma.user.update({
+          where: { id: existing.adminId },
+          data: { roles: newRoles },
+        });
+      }
+
       return NextResponse.json({ request: updated });
     } catch (error) {
       return handleAuthError(error);

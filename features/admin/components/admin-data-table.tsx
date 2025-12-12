@@ -32,7 +32,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import toast from "react-hot-toast";
 import {
   MoreHorizontal,
@@ -44,7 +43,6 @@ import {
   ChevronDown,
   ArrowUpDown,
   ShieldCheck,
-  Calendar as CalendarIcon,
 } from "lucide-react";
 import { UserSheet } from "./user-sheet";
 import { editUser } from "@/lib/actions/users";
@@ -264,9 +262,7 @@ export function AdminDataTable({
   // Row-level faculty request dialog
   const [showRowRequestDialog, setShowRowRequestDialog] = useState(false);
   const [rowRequestUser, setRowRequestUser] = useState<User | null>(null);
-  const [rowRequestExpiresAt, setRowRequestExpiresAt] = useState<
-    Date | undefined
-  >(undefined);
+  const [rowRequestExpiresAt, setRowRequestExpiresAt] = useState("");
   const [rowRequestNote, setRowRequestNote] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<Role | null>(null);
   const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
@@ -408,17 +404,14 @@ export function AdminDataTable({
     }
 
     try {
-      // Set expiry to end of selected day to cover the whole day
-      const expires = new Date(rowRequestExpiresAt as Date);
-      expires.setHours(23, 59, 59, 999);
-      const iso = expires.toISOString();
+      const iso = new Date(rowRequestExpiresAt).toISOString();
       await createFacultyRequest.mutateAsync({
         expiresAt: iso,
         note: rowRequestNote,
       });
       setShowRowRequestDialog(false);
       setRowRequestUser(null);
-      setRowRequestExpiresAt(undefined);
+      setRowRequestExpiresAt("");
       setRowRequestNote("");
       // Refresh data
       await refetchFacultyRequests?.();
@@ -1179,7 +1172,9 @@ export function AdminDataTable({
                   variant="outline"
                   className="w-[180px] justify-start"
                   disabled={
-                    isRoleUpdating[row.original.id] || isDisabledForTempAdmin
+                    isRoleUpdating[row.original.id] ||
+                    isDisabledForTempAdmin ||
+                    isCurrentUser
                   }
                 >
                   {isRoleUpdating[row.original.id] ? (
@@ -2648,33 +2643,39 @@ export function AdminDataTable({
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Expires At</Label>
+              <Label htmlFor="rowExpiresAt">Expires At</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className={`w-full justify-start text-left font-normal ${
-                      !rowRequestExpiresAt ? "text-muted-foreground" : ""
-                    }`}
+                    className={
+                      "w-full justify-start text-left font-normal" +
+                      (rowRequestExpiresAt ? "" : " text-muted-foreground")
+                    }
                   >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {rowRequestExpiresAt ? (
-                      format(rowRequestExpiresAt, "PPP")
-                    ) : (
-                      <span>Pick expiry date</span>
-                    )}
+                    {rowRequestExpiresAt
+                      ? new Date(rowRequestExpiresAt).toLocaleString()
+                      : "Pick expiration date"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={rowRequestExpiresAt}
-                    onSelect={(date: Date | undefined) =>
-                      setRowRequestExpiresAt(date)
+                    selected={
+                      rowRequestExpiresAt
+                        ? new Date(rowRequestExpiresAt)
+                        : undefined
                     }
-                    disabled={{
-                      before: new Date(new Date().setHours(0, 0, 0, 0)),
+                    onSelect={(date) => {
+                      if (date) {
+                        // Set to ISO string for consistency
+                        setRowRequestExpiresAt(date.toISOString());
+                      }
                     }}
+                    disabled={(date) =>
+                      date < new Date(new Date().setHours(0, 0, 0, 0))
+                    }
+                    initialFocus
                   />
                 </PopoverContent>
               </Popover>

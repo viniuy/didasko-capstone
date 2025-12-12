@@ -91,19 +91,19 @@ export const POST = withLogging(
       // Only Admins can request self-assignment
       requireAdmin(session.user);
 
-      // Don't allow requesting if user already has FACULTY role
-      try {
-        const currentRoles = Array.isArray(session.user.roles)
-          ? session.user.roles
-          : [];
-        if (currentRoles.includes("FACULTY")) {
-          return NextResponse.json(
-            { error: "User already has FACULTY role" },
-            { status: 400 }
-          );
-        }
-      } catch (e) {
-        // Continue if roles aren't available — server will still enforce DB checks
+      // Don't allow requesting if user already has FACULTY role (check DB, not just session)
+      const dbUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+      });
+      if (
+        dbUser &&
+        Array.isArray(dbUser.roles) &&
+        dbUser.roles.includes("FACULTY")
+      ) {
+        return NextResponse.json(
+          { error: "User already has FACULTY role" },
+          { status: 400 }
+        );
       }
 
       // Prevent duplicate pending requests
