@@ -106,13 +106,13 @@ export function ImportDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`p-4 sm:p-6 h-auto transition-all ${
+        className={`p-4 sm:p-6 max-h-[90vh] overflow-hidden flex flex-col transition-all ${
           previewData.length > 0
             ? "w-[90vw] max-w-[1200px]"
             : "w-[90vw] max-w-[500px]"
         }`}
       >
-        <DialogHeader className="w-full">
+        <DialogHeader className="w-full flex-shrink-0">
           <DialogTitle className="text-xl font-semibold text-[#124A69]">
             Import Courses
           </DialogTitle>
@@ -122,7 +122,7 @@ export function ImportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-6 space-y-6 flex-1 overflow-y-auto">
           {/* File Upload Section */}
           <input
             type="file"
@@ -197,7 +197,7 @@ export function ImportDialog({
 
           {/* Preview Section */}
           {previewData.length > 0 ? (
-            <div className="border rounded-lg w-full">
+            <div className="border rounded-lg w-full flex-shrink-0">
               <div className="bg-gray-50 p-4 border-b">
                 <h3 className="font-medium text-gray-700">
                   Preview Import Data
@@ -208,8 +208,8 @@ export function ImportDialog({
                   {previewData.length === 1 ? "row" : "rows"}
                 </p>
               </div>
-              <div className="max-h-[400px] overflow-auto">
-                <table className="w-full border-collapse">
+              <div className="max-h-[300px] md:max-h-[400px] overflow-auto">
+                <table className="w-full border-collapse min-w-[800px]">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 border-b">
@@ -292,7 +292,7 @@ export function ImportDialog({
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-col-reverse sm:flex-row justify-between gap-3">
+          <div className="flex flex-col-reverse sm:flex-row justify-between gap-3 flex-shrink-0 pt-4 border-t bg-white sticky bottom-0">
             <Button
               variant="outline"
               onClick={onDownloadTemplate}

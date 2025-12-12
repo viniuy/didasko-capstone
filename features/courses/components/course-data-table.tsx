@@ -2861,11 +2861,19 @@ export function CourseDataTable({
             {isInitialLoading ||
             isLoading ||
             !hasLoadedOnce ||
-            isLoadingCourses ? (
+            isLoadingCourses ||
+            isEditingCourse ||
+            isEditingSchedule ? (
               <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69] mb-4"></div>
-                  <p className="text-sm text-gray-600">Loading courses...</p>
+                  <p className="text-sm text-gray-600">
+                    {isEditingCourse && !isEditingSchedule
+                      ? "Saving course..."
+                      : isEditingSchedule
+                      ? "Saving schedule..."
+                      : "Loading courses..."}
+                  </p>
                 </div>
               </div>
             ) : activeCoursesCount === 0 ? (

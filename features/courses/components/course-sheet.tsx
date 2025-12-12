@@ -433,7 +433,9 @@ export function CourseSheet({
                   id="section"
                   value={formData.section}
                   onChange={(e) => {
-                    const value = removeEmojis(e.target.value).toUpperCase();
+                    const value = removeEmojis(e.target.value)
+                      .replace(/\s/g, "")
+                      .toUpperCase();
                     handleChange("section", value);
                   }}
                   placeholder="e.g., BSIT-711"
