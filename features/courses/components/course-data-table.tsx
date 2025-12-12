@@ -29,6 +29,7 @@ import {
   Archive,
   Filter,
   X,
+  Download,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -2814,7 +2815,7 @@ export function CourseDataTable({
                           : "Import courses"
                       }
                     >
-                      <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <Download className="h-3 w-3 sm:h-4 sm:w-4" />
                       <span className="hidden xl:inline">Import</span>
                     </Button>
                   )}
@@ -2857,7 +2858,10 @@ export function CourseDataTable({
             </div>
 
             {/* Content Area - Conditionally Rendered */}
-            {isInitialLoading || isLoading || !hasLoadedOnce ? (
+            {isInitialLoading ||
+            isLoading ||
+            !hasLoadedOnce ||
+            isLoadingCourses ? (
               <div className="space-y-4 sm:space-y-6 md:space-y-8 overflow-visible">
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#124A69] mb-4"></div>
