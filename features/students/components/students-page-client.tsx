@@ -556,8 +556,12 @@ export function StudentsPageClient({
     // Wait for complete RFID (at least 10 characters)
     if (value.length >= 10) {
       // Check if RFID is already assigned to another student
+      const normalizeRfid = (rfid: string | null) =>
+        rfid ? rfid.replace(/^0+/, "") : "";
+      const normalizedValue = value.replace(/^0+/, "");
       const existingStudent = students.find(
-        (s: Student) => s.rfid_id && String(s.rfid_id) === value
+        (s: Student) =>
+          s.rfid_id && normalizeRfid(String(s.rfid_id)) === normalizedValue
       );
 
       if (existingStudent) {

@@ -75,8 +75,27 @@ export async function POST(request: Request) {
       data: { rfid_id: rfidInt },
     });
 
+    // Prisma may return BigInt for `rfid_id`. JSON serialization of BigInt
+    // will throw, so create safe (stringified) copies for logging and
+    // response payloads.
+    const studentBeforeSafe = studentBefore
+      ? {
+          ...studentBefore,
+          rfid_id:
+            studentBefore.rfid_id === null
+              ? null
+              : String(studentBefore.rfid_id),
+        }
+      : null;
+
+    const updatedStudentSafe = {
+      ...updatedStudent,
+      rfid_id:
+        updatedStudent.rfid_id === null ? null : String(updatedStudent.rfid_id),
+    };
+
     // Log RFID assignment (fire-and-forget to avoid blocking response)
-    const isReassignment = studentBefore.rfid_id !== null;
+    const isReassignment = studentBefore?.rfid_id !== null;
     logAction({
       userId: session.user.id,
       action: isReassignment
@@ -89,21 +108,23 @@ export async function POST(request: Request) {
         updatedStudent.studentId
       })`,
       status: "SUCCESS",
-      before: {
-        studentId: studentBefore.studentId,
-        name: `${studentBefore.firstName} ${studentBefore.lastName}`,
-        rfid_id: studentBefore.rfid_id,
-      },
+      before: studentBeforeSafe
+        ? {
+            studentId: studentBeforeSafe.studentId,
+            name: `${studentBeforeSafe.firstName} ${studentBeforeSafe.lastName}`,
+            rfid_id: studentBeforeSafe.rfid_id,
+          }
+        : undefined,
       after: {
-        studentId: updatedStudent.studentId,
-        name: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
-        rfid_id: updatedStudent.rfid_id,
+        studentId: updatedStudentSafe.studentId,
+        name: `${updatedStudentSafe.firstName} ${updatedStudentSafe.lastName}`,
+        rfid_id: updatedStudentSafe.rfid_id,
       },
       metadata: {
         entityType: "Student",
-        entityId: updatedStudent.id,
-        entityName: `${updatedStudent.firstName} ${updatedStudent.lastName}`,
-        rfidCardNumber: rfidInt,
+        entityId: updatedStudentSafe.id,
+        entityName: `${updatedStudentSafe.firstName} ${updatedStudentSafe.lastName}`,
+        rfidCardNumber: String(rfidInt),
         isReassignment,
       },
     }).catch((error) => {
@@ -113,7 +134,7 @@ export async function POST(request: Request) {
 
     const response = {
       message: "RFID successfully assigned.",
-      student: updatedStudent,
+      student: updatedStudentSafe,
     };
 
     // Check if client requested encryption
@@ -134,26 +155,37 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error assigning RFID:", error);
 
-    // Log failure (fire-and-forget)
-    getServerSession(authOptions).then((session) => {
-      if (session?.user) {
-        logAction({
-          userId: session.user.id,
-          action: "STUDENT_RFID_ASSIGNED",
-          module: "Student",
-          reason: `Failed to assign RFID to student`,
-          status: "FAILED",
-          errorMessage:
-            error instanceof Error ? error.message : "Unknown error",
-          metadata: {
-            attemptedRfid: body.rfid,
-            attemptedStudentId: body.studentId,
-          },
-        }).catch((logError) => {
-          console.error("Error logging RFID assignment failure:", logError);
+    // Log failure (fire-and-forget, never throw)
+    try {
+      getServerSession(authOptions)
+        .then((session) => {
+          if (session?.user) {
+            logAction({
+              userId: session.user.id,
+              action: "STUDENT_RFID_ASSIGNED",
+              module: "Student",
+              reason: `Failed to assign RFID to student`,
+              status: "FAILED",
+              errorMessage:
+                error instanceof Error ? error.message : "Unknown error",
+              metadata: {
+                attemptedRfid: body.rfid,
+                attemptedStudentId: body.studentId,
+              },
+            }).catch((logError) => {
+              console.error("Error logging RFID assignment failure:", logError);
+            });
+          }
+        })
+        .catch((sessionError) => {
+          console.error(
+            "Error getting server session for logging:",
+            sessionError
+          );
         });
-      }
-    });
+    } catch (logOuterError) {
+      console.error("Error in logging failure handler:", logOuterError);
+    }
 
     if (error instanceof PrismaClientKnownRequestError) {
       return NextResponse.json(
