@@ -1,6 +1,7 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Loader2 } from "lucide-react";
 
 interface GroupHeaderProps {
   courseCode: string;
@@ -8,6 +9,14 @@ interface GroupHeaderProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   hasNoSearchResults?: boolean;
+  // whether the course currently has any groups
+  hasGroups?: boolean;
+  // selection controls
+  selectionMode?: boolean;
+  selectedCount?: number;
+  onToggleSelectionMode?: () => void;
+  onDeleteSelected?: () => void;
+  deleting?: boolean;
 }
 
 export function GroupHeader({
@@ -16,6 +25,12 @@ export function GroupHeader({
   searchQuery,
   onSearchChange,
   hasNoSearchResults = false,
+  hasGroups = true,
+  selectionMode = false,
+  selectedCount = 0,
+  onToggleSelectionMode,
+  onDeleteSelected,
+  deleting = false,
 }: GroupHeaderProps) {
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b bg-[#F5F6FA] rounded-t-lg">
@@ -34,12 +49,14 @@ export function GroupHeader({
           <path d="M15 18l-6-6 6-6" />
         </svg>
       </Button>
+
       <div className="flex flex-col mr-4">
         <span className="text-lg font-bold text-[#124A69] leading-tight">
           {courseCode}
         </span>
         <span className="text-sm text-gray-500">{courseSection}</span>
       </div>
+
       <div className="flex-1 flex items-center gap-2">
         <div className="relative w-64">
           <svg
@@ -59,6 +76,45 @@ export function GroupHeader({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
+      </div>
+
+      {/* Selection controls on the right */}
+      <div className="flex items-center gap-2">
+        <div className="text-sm text-gray-600 hidden sm:block">
+          {/** keep small meta here if needed */}
+        </div>
+        {hasGroups && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant={selectionMode ? undefined : "outline"}
+              onClick={() => onToggleSelectionMode?.()}
+              className={`h-9 px-3 ${
+                selectionMode
+                  ? "bg-[#124A69] text-white hover:bg-[#0D3A54] border-none"
+                  : ""
+              }`}
+            >
+              {selectionMode ? "Cancel" : "Select groups"}
+            </Button>
+
+            {selectionMode && (
+              <Button
+                className="h-9 bg-red-600 text-white flex items-center gap-2"
+                onClick={() => onDeleteSelected?.()}
+                disabled={!(selectedCount && selectedCount > 0) || deleting}
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  `Delete (${selectedCount})`
+                )}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

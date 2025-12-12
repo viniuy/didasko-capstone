@@ -9,7 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "react-hot-toast";
-import { useCreateGroup } from "@/lib/hooks/queries";
+import axios from "@/lib/axios";
+// Note: we intentionally avoid using `useCreateGroup` here because its
+// react-query mutation shows a toast per-success. For the randomizer bulk
+// creation we want a single consolidated toast, so we call the API directly
+// and rely on the parent `onGroupsCreated` callback to refresh data.
 
 interface Student {
   id: string;
@@ -27,6 +31,8 @@ interface RandomizerShakeProps {
   excludedStudentIds: string[];
   courseCode: string;
   onGroupsCreated: () => void;
+  // Starting group number for created groups (prevents duplicates)
+  nextGroupNumber?: number;
 }
 
 export function WheelRandomizer({
@@ -34,6 +40,7 @@ export function WheelRandomizer({
   excludedStudentIds,
   courseCode,
   onGroupsCreated,
+  nextGroupNumber = 1,
 }: RandomizerShakeProps) {
   const [open, setOpen] = useState(false);
   const [groupSize, setGroupSize] = useState(4); // Minimum is 2, but default to 4
@@ -168,39 +175,36 @@ export function WheelRandomizer({
     setGroupNames(defaultNames);
   };
 
-  // React Query hook
-  const createGroupMutation = useCreateGroup();
-
   const createGroups = async () => {
     try {
       setIsCreating(true);
       console.log("🎲 Creating groups:", assignedGroups.length);
 
-      // Create all groups in parallel
+      // Create all groups in parallel using the axios instance directly so
+      // we don't trigger the per-mutation `useCreateGroup` success toast.
       await Promise.all(
         assignedGroups.map((group, i) =>
-          createGroupMutation.mutateAsync({
-            courseSlug: courseCode,
-            groupData: {
-              groupNumber: i + 1,
-              groupName: groupNames[i] || `Random Group ${i + 1}`,
-              studentIds: group.map((s) => s.id),
-              leaderId: group[0].id,
-            },
+          axios.post(`/courses/${courseCode}/groups`, {
+            groupNumber: i + nextGroupNumber,
+            groupName: groupNames[i] || `Random Group ${i + nextGroupNumber}`,
+            studentIds: group.map((s) => s.id),
+            leaderId: group[0].id,
           })
         )
       );
 
-      // Make sure the callback is awaited
+      // Make sure the parent refresh callback is awaited
       await onGroupsCreated();
 
       toast.success(`${assignedGroups.length} groups created successfully! 🎉`);
       setOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error creating groups:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create groups"
-      );
+      const msg =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to create groups";
+      toast.error(msg);
     } finally {
       setIsCreating(false);
     }

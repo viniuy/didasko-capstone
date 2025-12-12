@@ -25,6 +25,10 @@ interface GroupCardProps {
   isRedirecting?: boolean;
   isDisabled?: boolean;
   onNavigate?: () => void;
+  // Selection for bulk actions
+  showSelect?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (groupId: string) => void;
 }
 
 export function GroupCard({
@@ -34,6 +38,9 @@ export function GroupCard({
   isRedirecting = false,
   isDisabled = false,
   onNavigate,
+  showSelect = false,
+  isSelected = false,
+  onToggleSelect,
 }: GroupCardProps) {
   const [showConfirmDialog, setShowConfirmDialog] = React.useState(false);
   const router = useRouter();
@@ -80,14 +87,27 @@ export function GroupCard({
             </div>
           </div>
         )}
-        <button
-          onClick={() => setShowConfirmDialog(true)}
-          className="absolute top-2 right-2 p-1.5 sm:p-1 rounded-full hover:bg-red-100 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Delete group"
-          disabled={isDeleting}
-        >
-          <Trash2 className="h-5 w-5 sm:h-4 sm:w-4 text-red-500" />
-        </button>
+        {/* Selection checkbox for bulk actions */}
+        {showSelect ? (
+          <label className="absolute left-3 top-3 z-20">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect && onToggleSelect(group.id)}
+              className="w-4 h-4 rounded border-gray-300 text-[#124A69] focus:ring-[#124A69] focus:ring-2 focus:ring-offset-0 cursor-pointer accent-[#124A69]"
+              aria-label={`Select group ${group.number}`}
+            />
+          </label>
+        ) : (
+          <button
+            onClick={() => setShowConfirmDialog(true)}
+            className="absolute top-2 right-2 p-1.5 sm:p-1 rounded-full hover:bg-red-100 transition-colors touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Delete group"
+            disabled={isDeleting}
+          >
+            <Trash2 className="h-5 w-5 sm:h-4 sm:w-4 text-red-500" />
+          </button>
+        )}
         <div className="mb-3 sm:mb-4">
           <svg
             className="h-16 w-16 sm:h-20 sm:w-20 text-gray-400"

@@ -5,6 +5,7 @@ import { WheelRandomizer } from "./randomizer-button";
 import { Loader2 } from "lucide-react";
 import { Group } from "@/shared/types/groups";
 import { AttendanceStatus } from "@prisma/client";
+// Note: selection controls are lifted to parent; delete handled by parent
 import {
   Pagination,
   PaginationContent,
@@ -39,6 +40,11 @@ interface GroupGridProps {
   groupMeta: GroupMeta;
   totalStudents: number;
   hasSearchQuery?: boolean;
+  // selection props lifted to parent
+  selectionMode?: boolean;
+  selectedGroupIds?: string[];
+  toggleSelectGroup?: (groupId: string) => void;
+  deleteSelected?: () => void;
 }
 
 export function GroupGrid({
@@ -53,7 +59,12 @@ export function GroupGrid({
   groupMeta,
   totalStudents,
   hasSearchQuery = false,
+  selectionMode = false,
+  selectedGroupIds = [],
+  toggleSelectGroup,
+  deleteSelected,
 }: GroupGridProps) {
+  // selection mode state
   const [currentPage, setCurrentPage] = useState(1);
   const [redirectingGroupId, setRedirectingGroupId] = useState<string | null>(
     null
@@ -150,6 +161,7 @@ export function GroupGrid({
           excludedStudentIds={excludedStudentIds}
           courseCode={courseCode}
           onGroupsCreated={onGroupAdded}
+          nextGroupNumber={nextGroupNumber}
         />
       </div>
     );
@@ -157,7 +169,21 @@ export function GroupGrid({
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentGroups = groups.slice(startIndex, endIndex);
+
+  // Sort groups by numeric `number` when possible so grid is ordered by group number
+  const sortedGroups = [...groups].sort((a, b) => {
+    const na = Number(a.number);
+    const nb = Number(b.number);
+    const aIsNum = !isNaN(na);
+    const bIsNum = !isNaN(nb);
+
+    if (aIsNum && bIsNum) return na - nb;
+    if (aIsNum) return -1;
+    if (bIsNum) return 1;
+    return (a.number ?? "").localeCompare(b.number ?? "");
+  });
+
+  const currentGroups = sortedGroups.slice(startIndex, endIndex);
 
   // Show add button on current page if:
   // 1. We should show add button (ungrouped students exist)
@@ -183,6 +209,9 @@ export function GroupGrid({
               redirectingGroupId !== null && redirectingGroupId !== group.id
             }
             onNavigate={() => setRedirectingGroupId(group.id)}
+            showSelect={selectionMode}
+            isSelected={selectedGroupIds.includes(group.id)}
+            onToggleSelect={(id: string) => toggleSelectGroup?.(id)}
           />
         ))}
         {showAddButtonOnCurrentPage && (
@@ -203,6 +232,7 @@ export function GroupGrid({
                 excludedStudentIds={excludedStudentIds}
                 courseCode={courseCode}
                 onGroupsCreated={onGroupAdded}
+                nextGroupNumber={nextGroupNumber}
               />
             )}
           </div>

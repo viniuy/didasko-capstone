@@ -7,6 +7,17 @@ import Rightsidebar from "@/shared/components/layout/right-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { format } from "date-fns";
 import { GroupHeader } from "@/features/groups/components/group-header";
+import toast from "react-hot-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { GroupGrid } from "@/features/groups/components/group-grid";
 import type { GroupMeta, Group, Course } from "@/features/groups/types";
 import { groupsService } from "@/lib/services/client";
@@ -43,6 +54,11 @@ export function GroupManagementPageClient({
   const [groups, setGroups] = useState<Group[]>(initialGroups);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [groupMeta, setGroupMeta] = useState<GroupMeta>(initialGroupMeta);
+  // Selection state lifted to page so header can control it
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
 
   // Filter groups based on search query
   const filteredGroups = groups.filter((group) => {
@@ -94,6 +110,55 @@ export function GroupManagementPageClient({
     }
   };
 
+  const toggleSelectGroup = (groupId: string) => {
+    setSelectedGroupIds((prev) =>
+      prev.includes(groupId)
+        ? prev.filter((id) => id !== groupId)
+        : [...prev, groupId]
+    );
+  };
+
+  const deleteSelected = async () => {
+    if (selectedGroupIds.length === 0) return;
+    setShowBulkDeleteConfirm(false);
+    setIsDeletingSelected(true);
+    try {
+      setIsLoading(true);
+      const failed: string[] = [];
+      for (const gid of selectedGroupIds) {
+        try {
+          await groupsService.delete(courseSlug, gid);
+        } catch (err) {
+          failed.push(gid);
+          console.error("failed to delete", gid, err);
+        }
+      }
+
+      // refresh regardless to show partial success
+      await refreshData();
+
+      if (failed.length === 0) {
+        toast.success(
+          `Deleted ${selectedGroupIds.length} group(s). Grades of students will still remain in the class records.`
+        );
+      } else if (failed.length < selectedGroupIds.length) {
+        toast.success(
+          `Deleted ${
+            selectedGroupIds.length - failed.length
+          } group(s). Some deletions failed. Grades of students will still remain in the class records.`
+        );
+        toast.error(`${failed.length} group(s) failed to delete`);
+      } else {
+        toast.error(`Failed to delete selected groups`);
+      }
+    } finally {
+      setIsLoading(false);
+      setIsDeletingSelected(false);
+      setSelectedGroupIds([]);
+      setSelectionMode(false);
+    }
+  };
+
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="relative h-screen w-screen overflow-hidden">
@@ -123,6 +188,18 @@ export function GroupManagementPageClient({
                   hasNoSearchResults={
                     searchQuery.length > 0 && filteredGroups.length === 0
                   }
+                  hasGroups={groups.length > 0}
+                  selectionMode={selectionMode}
+                  selectedCount={selectedGroupIds.length}
+                  onToggleSelectionMode={() => {
+                    setSelectionMode((s) => {
+                      const next = !s;
+                      if (!next) setSelectedGroupIds([]);
+                      return next;
+                    });
+                  }}
+                  onDeleteSelected={() => setShowBulkDeleteConfirm(true)}
+                  deleting={isDeletingSelected}
                 />
 
                 <div className="p-6">
@@ -138,8 +215,49 @@ export function GroupManagementPageClient({
                     groupMeta={groupMeta}
                     totalStudents={students.length}
                     hasSearchQuery={searchQuery.length > 0}
+                    selectionMode={selectionMode}
+                    selectedGroupIds={selectedGroupIds}
+                    toggleSelectGroup={toggleSelectGroup}
+                    deleteSelected={deleteSelected}
                   />
                 </div>
+                {/* Bulk delete confirmation dialog */}
+                <AlertDialog
+                  open={showBulkDeleteConfirm}
+                  onOpenChange={(open) => {
+                    setShowBulkDeleteConfirm(open);
+                    if (!open) {
+                      document.body.style.removeProperty("pointer-events");
+                    }
+                  }}
+                >
+                  <AlertDialogContent className="sm:max-w-[425px]">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-[#124A69] text-xl font-bold">
+                        Delete {selectedGroupIds.length} selected group(s)?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="text-gray-500">
+                        This action will permanently delete the selected groups.
+                        This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2 sm:gap-2">
+                      <AlertDialogCancel
+                        onClick={() => setShowBulkDeleteConfirm(false)}
+                        className="border-gray-200"
+                      >
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteSelected()}
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        disabled={isDeletingSelected}
+                      >
+                        {isDeletingSelected ? "Deleting..." : "Delete"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </div>
           </div>
