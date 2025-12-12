@@ -1,5 +1,8 @@
 "use client";
 import React from "react";
+import { useSession } from "next-auth/react";
+import { hasAccess } from "@/lib/permissions";
+import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import FacultyLoad from "@/features/faculty/components/faculty-load";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -9,6 +12,23 @@ import { format } from "date-fns";
 
 export default function FacultyLoadPage() {
   const [open, setOpen] = React.useState(false);
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    if (status === "loading") return;
+    if (!session?.user || !hasAccess(session.user, "CAN_ACCESS_FACULTY_LOAD")) {
+      router.replace("/403");
+    }
+  }, [session, status, router]);
+
+  if (
+    status === "loading" ||
+    !session?.user ||
+    !hasAccess(session.user, "CAN_ACCESS_FACULTY_LOAD")
+  ) {
+    return null;
+  }
 
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
