@@ -71,7 +71,7 @@ export function GroupCard({
 
   return (
     <>
-      <Card className="w-full sm:w-65 min-h-[280px] sm:min-h-[320px] p-4 sm:p-6 flex flex-col items-center shadow-lg relative mx-auto max-w-[280px] sm:max-w-none">
+      <Card className="w-full sm:w-65 min-h-[380px] p-4 sm:p-6 flex flex-col items-center shadow-lg relative mx-auto max-w-[380px] sm:max-w-none">
         {isDeleting && (
           <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-lg z-10 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">

@@ -58,8 +58,16 @@ export function GroupGrid({
   const [redirectingGroupId, setRedirectingGroupId] = useState<string | null>(
     null
   );
-  const itemsPerPage = 4;
-  const totalPages = Math.ceil((groups.length + 1) / itemsPerPage);
+
+  // Calculate ungrouped students count first
+  const ungroupedStudentCount = totalStudents - excludedStudentIds.length;
+
+  const itemsPerPage = 2;
+  // Calculate total pages: if we have ungrouped students and no search query, add 1 for the add button page
+  const shouldShowAddButton = !hasSearchQuery && ungroupedStudentCount > 0;
+  const totalPages = shouldShowAddButton
+    ? Math.ceil(groups.length / itemsPerPage) + 1
+    : Math.ceil(groups.length / itemsPerPage);
 
   if (isLoading) {
     return (
@@ -68,9 +76,6 @@ export function GroupGrid({
       </div>
     );
   }
-
-  // Calculate ungrouped students count
-  const ungroupedStudentCount = totalStudents - excludedStudentIds.length;
 
   if (groups.length === 0) {
     // Don't show add group and randomizer buttons if there's a search query
@@ -121,48 +126,54 @@ export function GroupGrid({
   const endIndex = startIndex + itemsPerPage;
   const currentGroups = groups.slice(startIndex, endIndex);
 
+  // Check if current page should show the add button
+  const isAddButtonPage =
+    shouldShowAddButton &&
+    currentPage === totalPages &&
+    currentGroups.length === 0;
+
   return (
     <div className="flex flex-col gap-6 sm:gap-8 px-2 sm:px-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 items-start justify-center">
-        {currentGroups.map((group) => (
-          <GroupCard
-            key={group.id}
-            group={group}
+      {isAddButtonPage ? (
+        // Show only add button and randomizer on dedicated page
+        <div className="flex flex-col gap-6 items-center justify-center min-h-[300px]">
+          <AddGroupModal
             courseCode={courseCode}
-            courseSection={courseSection}
-            onGroupDeleted={onGroupAdded}
-            isRedirecting={redirectingGroupId === group.id}
-            isDisabled={
-              redirectingGroupId !== null && redirectingGroupId !== group.id
-            }
-            onNavigate={() => setRedirectingGroupId(group.id)}
+            excludedStudentIds={excludedStudentIds}
+            nextGroupNumber={nextGroupNumber}
+            onGroupAdded={onGroupAdded}
+            isValidationNeeded={false}
+            totalStudents={totalStudents}
+            students={students}
+            groupMeta={groupMeta}
           />
-        ))}
-        {currentPage === totalPages &&
-          !hasSearchQuery &&
-          ungroupedStudentCount > 0 && (
-            <div className="flex flex-col gap-3 sm:gap-4 md:gap-6 items-center justify-center md:ml-9 mt-2 sm:mt-3">
-              <AddGroupModal
-                courseCode={courseCode}
-                excludedStudentIds={excludedStudentIds}
-                nextGroupNumber={nextGroupNumber}
-                onGroupAdded={onGroupAdded}
-                isValidationNeeded={false}
-                totalStudents={totalStudents}
-                students={students}
-                groupMeta={groupMeta}
-              />
-              {ungroupedStudentCount > 4 && (
-                <WheelRandomizer
-                  students={students}
-                  excludedStudentIds={excludedStudentIds}
-                  courseCode={courseCode}
-                  onGroupsCreated={onGroupAdded}
-                />
-              )}
-            </div>
+          {ungroupedStudentCount > 4 && (
+            <WheelRandomizer
+              students={students}
+              excludedStudentIds={excludedStudentIds}
+              courseCode={courseCode}
+              onGroupsCreated={onGroupAdded}
+            />
           )}
-      </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 md:gap-6 items-start justify-center">
+          {currentGroups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              courseCode={courseCode}
+              courseSection={courseSection}
+              onGroupDeleted={onGroupAdded}
+              isRedirecting={redirectingGroupId === group.id}
+              isDisabled={
+                redirectingGroupId !== null && redirectingGroupId !== group.id
+              }
+              onNavigate={() => setRedirectingGroupId(group.id)}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end w-full mt-3 sm:mt-4 -mb-3 gap-3 sm:gap-4">
         <span className="text-xs sm:text-sm text-gray-600 order-2 sm:order-1 w-full text-center sm:text-left">

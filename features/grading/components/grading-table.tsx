@@ -3302,23 +3302,50 @@ export function GradingTable({
                           className={
                             currentPage === 1
                               ? "pointer-events-none opacity-50"
-                              : "hover:bg-gray-100"
+                              : ""
                           }
                         />
                       </PaginationItem>
-                      {[...Array(totalPages)].map((_, i) => (
+                      {(() => {
+                        // Show only 3 pages maximum: first, current (if in middle), and last
+                        const pages: (number | string)[] = [];
+
+                        if (totalPages <= 3) {
+                          // Show all pages if 3 or less
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i);
+                          }
+                        } else if (currentPage <= 2) {
+                          // At the beginning: 1 2 … last
+                          pages.push(1, 2, "…", totalPages);
+                        } else if (currentPage >= totalPages - 1) {
+                          // At the end: 1 … second-to-last last
+                          pages.push(1, "…", totalPages - 1, totalPages);
+                        } else {
+                          // In the middle: 1 … current … last
+                          pages.push(1, "…", currentPage, "…", totalPages);
+                        }
+
+                        return pages;
+                      })().map((item, i) => (
                         <PaginationItem key={i}>
-                          <PaginationLink
-                            isActive={currentPage === i + 1}
-                            onClick={() => setCurrentPage(i + 1)}
-                            className={`${
-                              currentPage === i + 1
-                                ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
-                                : "hover:bg-gray-100"
-                            }`}
-                          >
-                            {i + 1}
-                          </PaginationLink>
+                          {item === "…" ? (
+                            <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                              …
+                            </span>
+                          ) : (
+                            <PaginationLink
+                              onClick={() => setCurrentPage(item as number)}
+                              isActive={currentPage === item}
+                              className={
+                                currentPage === item
+                                  ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                                  : ""
+                              }
+                            >
+                              {item}
+                            </PaginationLink>
+                          )}
                         </PaginationItem>
                       ))}
                       <PaginationItem>
@@ -3331,7 +3358,7 @@ export function GradingTable({
                           className={
                             currentPage === totalPages
                               ? "pointer-events-none opacity-50"
-                              : "hover:bg-gray-100"
+                              : ""
                           }
                         />
                       </PaginationItem>
