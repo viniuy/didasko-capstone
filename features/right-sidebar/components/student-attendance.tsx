@@ -75,7 +75,7 @@ const LeaderboardItem = ({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-sm font-semibold text-white truncate max-w-[200px]">
+            <h3 className="text-sm font-semibold text-white truncate max-w-[190px]">
               {student.studentName}
             </h3>
           </div>

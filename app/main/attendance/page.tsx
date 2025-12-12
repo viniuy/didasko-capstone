@@ -32,18 +32,16 @@ export default async function AttendancePage() {
   });
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
+    <div className="relative min-h-screen w-full bg-background overflow-x-hidden">
       <Header />
       <AppSidebar />
-
-      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-y-auto">
-        <div className="flex flex-col flex-grow px-2 sm:px-4 md:px-6 lg:px-8">
+      <main className="h-full w-full transition-all overflow-y-auto pt-2 pb-4">
+        <div className="max-w-screen-xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 flex flex-col flex-grow">
           <div className="space-y-2 md:space-y-6 lg:space-y-8">
             <div className="space-y-2">
-              <h1 className="pl-2 pb-1 text-xl sm:text-2xl font-bold text-muted-foreground">
+              <h1 className="pb-1 text-xl sm:text-2xl font-bold text-muted-foreground break-words">
                 Overview of Attendance
               </h1>
-
               <div className="grid gap-4 md:gap-6 lg:gap-8">
                 <SemesterCourses
                   type="attendance"
