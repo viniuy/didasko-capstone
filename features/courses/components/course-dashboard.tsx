@@ -16,7 +16,7 @@ import {
 import toast from "react-hot-toast";
 import {
   Search,
-  Upload,
+  Download,
   ArrowLeft,
   Users,
   UserX,
@@ -624,7 +624,7 @@ export function CourseDashboard({
                     } border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white`}
                     size={isSmallScreen ? "icon" : "default"}
                   >
-                    <Upload className="w-4 h-4" />
+                    <Download className="w-4 h-4" />
                     {!isSmallScreen && <span>Import Students</span>}
                   </Button>
                   <Button
@@ -778,7 +778,7 @@ export function CourseDashboard({
                           variant="outline"
                           className="border-[#124A69] text-[#124A69] hover:bg-[#124A69] hover:text-white gap-2"
                         >
-                          <Upload className="w-4 h-4" />
+                          <Download className="w-4 h-4" />
                           Import Students
                         </Button>
                       </div>

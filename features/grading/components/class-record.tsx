@@ -9,7 +9,7 @@ import {
   Search,
   Loader2,
   Settings,
-  Download,
+  Upload,
   ClipboardPaste,
   Lightbulb,
   ArrowRight,
@@ -1665,7 +1665,7 @@ export function ClassRecordTable({
                   const cleanedValue = removeEmojis(e.target.value);
                   setSearch(cleanedValue);
                 }}
-                className="pl-8 w-full sm:w-[200px] md:w-[240px] text-sm"
+                className="pl-8 w-full  text-sm"
               />
             </div>
             <Select
@@ -1708,7 +1708,7 @@ export function ClassRecordTable({
               onClick={() => setShowExportDialog(true)}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-[#124A69] text-white text-xs sm:text-sm rounded-lg hover:bg-[#0D3A54] transition-colors"
             >
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden xl:inline">Export</span>
             </button>
           </div>
@@ -1751,12 +1751,14 @@ export function ClassRecordTable({
                     </th>
                   ))}
                 {summarySelectedTerm === "ALL" && (
-                  <th
-                    className="w-[13%] sm:w-[14%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700"
-                    colSpan={2}
-                  >
-                    FINAL GRADE
-                  </th>
+                  <>
+                    <th className="w-[8%] sm:w-[9%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700">
+                      GRADE
+                    </th>
+                    <th className="w-[10%] sm:w-[11%] border border-gray-300 px-1 sm:px-2 py-1.5 sm:py-2 text-center text-xs sm:text-sm font-medium text-gray-700">
+                      REMARKS
+                    </th>
+                  </>
                 )}
               </tr>
               <tr className="bg-gray-50 text-[10px] sm:text-xs">
@@ -1779,12 +1781,8 @@ export function ClassRecordTable({
                   ))}
                 {summarySelectedTerm === "ALL" && (
                   <>
-                    <th className="border border-gray-300 px-1 sm:px-2 py-1">
-                      GRADE
-                    </th>
-                    <th className="border border-gray-300 px-1 sm:px-2 py-1">
-                      REMARKS
-                    </th>
+                    <th className="border border-gray-300 px-1 sm:px-2 py-1"></th>
+                    <th className="border border-gray-300 px-1 sm:px-2 py-1"></th>
                   </>
                 )}
               </tr>
@@ -1980,54 +1978,85 @@ export function ClassRecordTable({
 
         {/* Pagination */}
         {filtered.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
-            <div className="flex items-center gap-4 w-full sm:w-auto">
-              <span className="text-xs sm:text-sm text-gray-600 w-[300px]">
+          <div className="flex flex-col sm:flex-row justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3">
+            <div className="flex justify-start items-center gap-4 w-full sm:w-auto">
+              <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">
                 Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)}{" "}
                 of {filtered.length} student{filtered.length !== 1 ? "s" : ""}
               </span>
             </div>
-            <Pagination className="flex justify-end">
-              <PaginationContent className="flex-wrap">
-                <PaginationItem>
-                  <PaginationPrevious
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.max(prev - 1, 1))
-                    }
-                    className={
-                      currentPage === 1 ? "pointer-events-none opacity-50" : ""
-                    }
-                  />
-                </PaginationItem>
-                {Array.from({ length: totalPages }, (_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      onClick={() => setCurrentPage(i + 1)}
-                      isActive={currentPage === i + 1}
+            <div className="flex justify-end">
+              <Pagination className="flex justify-end w-full sm:w-auto">
+                <PaginationContent className="flex-wrap">
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      }
                       className={
-                        currentPage === i + 1
-                          ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                        currentPage === 1
+                          ? "pointer-events-none opacity-50"
                           : ""
                       }
-                    >
-                      {i + 1}
-                    </PaginationLink>
+                    />
                   </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                  {(() => {
+                    // Show only 3 pages maximum: first, current (if in middle), and last
+                    const pages: (number | string)[] = [];
+
+                    if (totalPages <= 3) {
+                      // Show all pages if 3 or less
+                      for (let i = 1; i <= totalPages; i++) {
+                        pages.push(i);
+                      }
+                    } else if (currentPage <= 2) {
+                      // At the beginning: 1 2 … last
+                      pages.push(1, 2, "…", totalPages);
+                    } else if (currentPage >= totalPages - 1) {
+                      // At the end: 1 … second-to-last last
+                      pages.push(1, "…", totalPages - 1, totalPages);
+                    } else {
+                      // In the middle: 1 … current … last
+                      pages.push(1, "…", currentPage, "…", totalPages);
                     }
-                    className={
-                      currentPage === totalPages
-                        ? "pointer-events-none opacity-50"
-                        : ""
-                    }
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+
+                    return pages;
+                  })().map((item, i) => (
+                    <PaginationItem key={i}>
+                      {item === "…" ? (
+                        <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                          …
+                        </span>
+                      ) : (
+                        <PaginationLink
+                          onClick={() => setCurrentPage(item as number)}
+                          isActive={currentPage === item}
+                          className={
+                            currentPage === item
+                              ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                              : ""
+                          }
+                        >
+                          {item}
+                        </PaginationLink>
+                      )}
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      }
+                      className={
+                        currentPage === totalPages
+                          ? "pointer-events-none opacity-50"
+                          : ""
+                      }
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
           </div>
         )}
 
@@ -2194,7 +2223,7 @@ export function ClassRecordTable({
               <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           )}
-          <div className="relative w-full sm:w-auto" data-tutorial="search-bar">
+          <div className="relative w-auto" data-tutorial="search-bar">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
             <Input
               placeholder="Search a name"
@@ -2204,40 +2233,42 @@ export function ClassRecordTable({
               disabled={!hasTermConfigs}
             />
           </div>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            data-tutorial="settings-button"
-            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
-          >
-            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
-            <span className="hidden xl:inline text-black">Settings</span>
-          </button>
-          <button
-            onClick={() => setIsPasteModalOpen(true)}
-            data-tutorial="paste-grades-button"
-            disabled={!hasTermConfigs}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-xs sm:text-sm rounded-lg transition-colors ${
-              hasTermConfigs
-                ? "text-[#124A69] hover:bg-[#124A69]/5"
-                : "text-gray-400 cursor-not-allowed opacity-50"
-            }`}
-          >
-            <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
-            <span className="hidden xl:inline text-black">Paste Grades</span>
-          </button>
-          <button
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white text-xs sm:text-sm rounded-lg transition-colors ${
-              hasTermConfigs
-                ? "bg-[#124A69] hover:bg-[#0D3A54]"
-                : "bg-gray-400 cursor-not-allowed"
-            }`}
-            onClick={() => setShowExportDialog(true)}
-            data-tutorial="export-button"
-            disabled={!hasTermConfigs}
-          >
-            <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden xl:inline">Export</span>
-          </button>
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              data-tutorial="settings-button"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-[#124A69] text-xs sm:text-sm rounded-lg hover:bg-[#124A69]/5 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
+              <span className="hidden xl:inline text-black">Settings</span>
+            </button>
+            <button
+              onClick={() => setIsPasteModalOpen(true)}
+              data-tutorial="paste-grades-button"
+              disabled={!hasTermConfigs}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-white border border-[#124A69]/30 text-xs sm:text-sm rounded-lg transition-colors ${
+                hasTermConfigs
+                  ? "text-[#124A69] hover:bg-[#124A69]/5"
+                  : "text-gray-400 cursor-not-allowed opacity-50"
+              }`}
+            >
+              <ClipboardPaste className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black" />
+              <span className="hidden xl:inline text-black">Paste Grades</span>
+            </button>
+            <button
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 text-white text-xs sm:text-sm rounded-lg transition-colors ${
+                hasTermConfigs
+                  ? "bg-[#124A69] hover:bg-[#0D3A54]"
+                  : "bg-gray-400 cursor-not-allowed"
+              }`}
+              onClick={() => setShowExportDialog(true)}
+              data-tutorial="export-button"
+              disabled={!hasTermConfigs}
+            >
+              <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xl:inline">Export</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2919,54 +2950,83 @@ export function ClassRecordTable({
 
       {/* Pagination for Term Grades */}
       {filtered.length > 0 && currentConfig && (
-        <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3 sm:gap-0">
+        <div className="flex flex-col sm:flex-row items-center justify-between mt-auto pt-3 sm:pt-4 border-t border-gray-200 gap-3">
           <div className="flex items-center gap-4 w-full sm:w-auto">
-            <span className="text-xs sm:text-sm text-gray-600 w-[300px]">
+            <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">
               Showing {startIndex + 1}-{Math.min(endIndex, filtered.length)} of{" "}
               {filtered.length} student{filtered.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <Pagination className="flex justify-end">
-            <PaginationContent className="flex-wrap">
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.max(prev - 1, 1))
-                  }
-                  className={
-                    currentPage === 1 ? "pointer-events-none opacity-50" : ""
-                  }
-                />
-              </PaginationItem>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <PaginationItem key={i}>
-                  <PaginationLink
-                    onClick={() => setCurrentPage(i + 1)}
-                    isActive={currentPage === i + 1}
+          <div className="flex justify-end">
+            <Pagination className="flex justify-center sm:justify-end w-full sm:w-auto">
+              <PaginationContent className="flex-wrap">
+                <PaginationItem>
+                  <PaginationPrevious
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
                     className={
-                      currentPage === i + 1
-                        ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                      currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                    }
+                  />
+                </PaginationItem>
+                {(() => {
+                  // Show only 3 pages maximum: first, current (if in middle), and last
+                  const pages: (number | string)[] = [];
+
+                  if (totalPages <= 3) {
+                    // Show all pages if 3 or less
+                    for (let i = 1; i <= totalPages; i++) {
+                      pages.push(i);
+                    }
+                  } else if (currentPage <= 2) {
+                    // At the beginning: 1 2 … last
+                    pages.push(1, 2, "…", totalPages);
+                  } else if (currentPage >= totalPages - 1) {
+                    // At the end: 1 … second-to-last last
+                    pages.push(1, "…", totalPages - 1, totalPages);
+                  } else {
+                    // In the middle: 1 … current … last
+                    pages.push(1, "…", currentPage, "…", totalPages);
+                  }
+
+                  return pages;
+                })().map((item, i) => (
+                  <PaginationItem key={i}>
+                    {item === "…" ? (
+                      <span className="px-2 text-gray-500 select-none text-xs sm:text-sm">
+                        …
+                      </span>
+                    ) : (
+                      <PaginationLink
+                        onClick={() => setCurrentPage(item as number)}
+                        isActive={currentPage === item}
+                        className={
+                          currentPage === item
+                            ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
+                            : ""
+                        }
+                      >
+                        {item}
+                      </PaginationLink>
+                    )}
+                  </PaginationItem>
+                ))}
+                <PaginationItem>
+                  <PaginationNext
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                    }
+                    className={
+                      currentPage === totalPages
+                        ? "pointer-events-none opacity-50"
                         : ""
                     }
-                  >
-                    {i + 1}
-                  </PaginationLink>
+                  />
                 </PaginationItem>
-              ))}
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                  }
-                  className={
-                    currentPage === totalPages
-                      ? "pointer-events-none opacity-50"
-                      : ""
-                  }
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+              </PaginationContent>
+            </Pagination>
+          </div>
         </div>
       )}
 
@@ -3213,7 +3273,7 @@ function ExportDialog({
             className="bg-[#124A69] hover:bg-[#0D3A54] text-white w-full sm:w-auto"
             onClick={() => onExport(selectedTerm, exportType)}
           >
-            <Download className="h-4 w-4 mr-2" />
+            <Upload className="h-4 w-4 mr-2" />
             Export to Excel
           </Button>
         </div>
