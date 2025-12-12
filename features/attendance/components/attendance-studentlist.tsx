@@ -3017,8 +3017,8 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
 
   return (
     <div className="flex flex-col h-screen ">
-      <div className="p-4 border-b bg-white">
-        <div className="flex items-center gap-2">
+      <div className="p-3 sm:p-4 border-b bg-white">
+        <div className="flex items-center gap-2 mb-3">
           <Link href="/main/attendance">
             <Button
               variant="ghost"
@@ -3031,23 +3031,23 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
           </Link>
           <div className="flex items-center gap-2">
             <div>
-              <h1 className="text-[#124A69] font-bold text-xl">
+              <h1 className="text-[#124A69] font-bold text-lg sm:text-xl">
                 {courseInfo?.title || "Course"}
               </h1>
-              <p className="text-gray-500 text-sm">
+              <p className="text-gray-500 text-xs sm:text-sm">
                 {courseInfo?.section || "N/A"}
               </p>
             </div>
           </div>
         </div>
-        <div className="p-3">
-          <div className="flex items-center gap-3 ml-6 grow">
-            <div className="flex items-center gap-3">
-              <div className="relative grow max-w-[300px]">
+        <div className="px-0 sm:px-3">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3 sm:ml-6 grow">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full lg:w-auto">
+              <div className="relative grow max-w-full sm:max-w-[300px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Search a name"
-                  className="w-full pl-9 pr-8 bg-white border-gray-200 rounded-full h-10"
+                  className="w-full pl-9 pr-8 bg-white border-gray-200 rounded-full h-9 sm:h-10 text-sm"
                   value={searchQuery}
                   onChange={handleSearch}
                   disabled={
@@ -3104,7 +3104,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className="rounded-full h-10 pl-3 pr-2 flex items-center gap-2 w-[230px] justify-between relative"
+                    className="rounded-full h-9 sm:h-10 pl-3 pr-2 flex items-center gap-2 w-full sm:w-[230px] justify-between relative text-xs sm:text-sm"
                     disabled={
                       isDateLoading ||
                       isUpdating ||
@@ -3218,7 +3218,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="rounded-full"
+                  className="rounded-full h-9 w-9 sm:h-10 sm:w-10"
                   disabled={
                     isUpdating ||
                     isDateLoading ||
@@ -3299,7 +3299,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="outline"
-                    className="rounded-full shadow-md bg-[#FAEDCB] border-gray-200 hover:bg-[#f1deb1]"
+                    className="rounded-full shadow-md bg-[#FAEDCB] border-gray-200 hover:bg-[#f1deb1] h-9 sm:h-10 text-xs sm:text-sm px-3 sm:px-4"
                     disabled={
                       isSaving ||
                       isUpdating ||
@@ -3307,7 +3307,10 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                       isAnyStudentSaving
                     }
                   >
-                    Mark Selected Students as...
+                    <span className="hidden sm:inline">
+                      Mark Selected Students as...
+                    </span>
+                    <span className="sm:hidden">Mark Selected...</span>
                   </Button>
                 </DropdownMenuTrigger>
 
@@ -3340,20 +3343,25 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               </DropdownMenu>
             )}
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto lg:ml-auto">
               {attendanceStartTime && isToday(selectedDate || new Date()) && (
                 <Button
-                  className="rounded-full bg-[#124A69] hover:bg-[#0a2f42] text-white"
+                  className="rounded-full bg-[#124A69] hover:bg-[#0a2f42] text-white h-9 sm:h-10 text-xs sm:text-sm px-3 sm:px-4 w-full sm:w-auto"
                   onClick={() => setShowTimeoutModal(true)}
                   disabled={isSavingRfidAttendance}
                 >
-                  Ongoing Attendance • Grace:{" "}
-                  {graceCountdown || `${graceMinutes}:00`}
+                  <span className="hidden sm:inline">
+                    Ongoing Attendance • Grace:{" "}
+                    {graceCountdown || `${graceMinutes}:00`}
+                  </span>
+                  <span className="sm:hidden">
+                    Grace: {graceCountdown || `${graceMinutes}:00`}
+                  </span>
                 </Button>
               )}
               <Button
                 onClick={toggleSelectMode}
-                className={`rounded-full flex items-center gap-2 transition-colors duration-200 ${
+                className={`rounded-full flex items-center gap-2 transition-colors duration-200 h-9 sm:h-10 text-xs sm:text-sm px-3 sm:px-4 flex-1 sm:flex-initial ${
                   isSelecting
                     ? "bg-white text-black border border-[#124A69] hover:bg-gray-100"
                     : "bg-[#124A69] text-white hover:bg-[#0D3A54]"
@@ -3367,13 +3375,20 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 }
               >
                 <MousePointerClick
-                  className={isSelecting ? "text-[#124A69]" : "text-white"}
+                  className={`h-4 w-4 ${
+                    isSelecting ? "text-[#124A69]" : "text-white"
+                  }`}
                 />
-                {isSelecting ? "Cancel Selection" : "Select Students"}
+                <span className="hidden sm:inline">
+                  {isSelecting ? "Cancel Selection" : "Select Students"}
+                </span>
+                <span className="sm:hidden">
+                  {isSelecting ? "Cancel" : "Select"}
+                </span>
               </Button>
               <Button
                 variant="outline"
-                className="rounded-full relative flex items-center gap-2 px-3"
+                className="rounded-full relative flex items-center gap-2 px-3 h-9 sm:h-10"
                 onClick={() => handleFilterOpen(true)}
                 disabled={
                   isUpdating ||
@@ -3386,7 +3401,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 }
               >
                 <Filter className="h-4 w-4" />
-                <span>Filter</span>
+                <span className="text-xs sm:text-sm">Filter</span>
                 {filters.status.length > 0 && (
                   <span className="absolute -top-1 -right-1 bg-[#124A69] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                     {filters.status.length}
@@ -3410,7 +3425,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
               />
               <Button
                 variant="outline"
-                className="rounded-full"
+                className="rounded-full h-9 sm:h-10 px-3 sm:px-4 flex items-center gap-2"
                 onClick={() => setShowExportPreview(true)}
                 title="Export to Excel"
                 disabled={
@@ -3424,7 +3439,7 @@ export default function StudentList({ courseSlug }: { courseSlug: string }) {
                 }
               >
                 <Download className="h-4 w-4" />
-                Export
+                <span className="text-xs sm:text-sm">Export</span>
               </Button>
             </div>
           </div>

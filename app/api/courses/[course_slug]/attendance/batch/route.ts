@@ -8,14 +8,17 @@ import { authOptions } from "@/lib/auth-options";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
-export async function POST(request: Request, { params }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ course_slug: string }> }
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { course_slug } = params;
+    const { course_slug } = await params;
 
     const body = await request.json();
     // Support both 'attendance' (from hook) and 'updates' (legacy) for backward compatibility
