@@ -47,7 +47,7 @@ export default async function AcademicHeadDashboard() {
       <Header />
       <AppSidebar />
 
-      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all">
+      <main className="h-full w-full xl:w-[calc(100%-22.5rem)] pl-[4rem] sm:pl-[5rem] transition-all overflow-x-auto">
         <div className="flex-1 px-2 sm:px-4 md:px-6">
           <div className="flex flex-col flex-grow">
             <div className="px-2 sm:px-4">
