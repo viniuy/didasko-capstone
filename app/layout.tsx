@@ -8,6 +8,7 @@ import { Toaster } from "react-hot-toast";
 import { Loading } from "@/shared/components/layout/Loading";
 import { NProgressProvider } from "@/shared/components/layout/NProgress";
 import { SessionExpiredChecker } from "@/shared/components/auth/SessionExpiredChecker";
+import { RoleChangeDetector } from "@/shared/components/auth/RoleChangeDetector";
 import ClickSpark from "@/components/ClickSpark";
 import "./globals.css";
 
@@ -90,6 +91,7 @@ export default function RootLayout({
             <QueryProvider>
               <AuthProvider>
                 <SessionExpiredChecker />
+                <RoleChangeDetector />
                 <Loading />
                 <Suspense fallback={null}>
                   <NProgressProvider />

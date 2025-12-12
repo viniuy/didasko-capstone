@@ -352,8 +352,33 @@ export async function editUser(
       // Don't fail user edit if logging fails
     }
 
+    // If roles changed, broadcast to trigger refresh for the affected user
+    const rolesChanged =
+      data.roles &&
+      JSON.stringify(data.roles.sort()) !==
+        JSON.stringify(userBefore.roles.sort());
+
+    if (rolesChanged) {
+      try {
+        // Broadcast role change event
+        await fetch(
+          `${
+            process.env.NEXTAUTH_URL || "http://localhost:3000"
+          }/api/users/role-changed`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: updatedUser.id }),
+          }
+        );
+      } catch (error) {
+        console.error("Error broadcasting role change:", error);
+        // Don't fail the edit if broadcast fails
+      }
+    }
+
     revalidatePath("/dashboard/admin");
-    return { success: true };
+    return { success: true, rolesChanged, userId: updatedUser.id };
   } catch (error) {
     console.error("Error editing user:", error);
     return { success: false, error: "Failed to edit user" };

@@ -219,7 +219,7 @@ export function AdminDashboardStats({
             <p className="text-xs text-gray-500 mt-1">Archived users</p>
           </CardContent>
         </Card>
-        <Card className="hover:shadow-md transition-shadow border-[#124A69] border-2">
+        <Card className="hover:shadow-md transition-shadow  border-2">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium text-[#124A69]">
               Total
