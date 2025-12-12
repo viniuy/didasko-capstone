@@ -27,6 +27,7 @@ model User {
   coursesTeaching   Course[]           @relation("FacultyCourses")
   criteria          Criteria[]
   notes             Note[]
+  facultyAssignmentRequests FacultyAssignmentRequest[]
 
   @@map("users")
 }
@@ -503,6 +504,29 @@ model BreakGlassSession {
 
   @@index([expiresAt])
   @@map("break_glass_sessions")
+}
+
+enum FacultyAssignmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model FacultyAssignmentRequest {
+  id            String                  @id @default(uuid())
+  adminId       String                  @map("admin_id")
+  expiresAt     DateTime                @map("expires_at")
+  requestedAt   DateTime @default(now()) @map("requested_at")
+  status        FacultyAssignmentStatus @default(PENDING)
+  approvedById  String?                 @map("approved_by")
+  decisionAt    DateTime?               @map("decision_at")
+  note          String?
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([status])
+  @@map("faculty_assignment_requests")
 }
 
 enum Role {

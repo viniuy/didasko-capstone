@@ -191,24 +191,26 @@ export function AppSidebar() {
   useEffect(() => {
     const fetchUserImage = async () => {
       if (!session?.user?.id) return;
-
-      const bucket = supabase.storage.from("user-images");
-      const possibleFiles = [`${session.user.id}.png`];
-
-      for (const filename of possibleFiles) {
+      // Use Supabase public URL directly. Some CDNs or storage backends
+      // block HEAD requests from the browser (CORS or unsupported method),
+      // which triggers "Failed to fetch" TypeErrors even when caught.
+      // To avoid noisy console errors, skip the HEAD probe and set the
+      // image URL directly. The <img> onError will fallback to the
+      // session image if the file is missing.
+      try {
+        const bucket = supabase.storage.from("user-images");
+        const filename = `${session.user.id}.png`;
         const { data } = bucket.getPublicUrl(filename);
-        try {
-          const res = await fetch(data.publicUrl, { method: "HEAD" });
-          if (res.ok) {
-            setUserImage(`${data.publicUrl}?t=${Date.now()}`);
-            return;
-          }
-        } catch (err) {
-          console.error("Error checking image:", err);
+        if (data?.publicUrl) {
+          setUserImage(`${data.publicUrl}?t=${Date.now()}`);
+          return;
         }
+      } catch (err) {
+        // If anything goes wrong with Supabase client, fall back gracefully
+        console.debug("Could not build public URL for user image:", err);
       }
 
-      // fallback
+      // fallback to session image (may be null)
       setUserImage(session?.user?.image || undefined);
     };
 
@@ -455,7 +457,13 @@ export function AppSidebar() {
           <SidebarHeader className="flex flex-row items-center gap-2 sm:gap-3 px-1 sm:px-2 mt-2 sm:mt-4 relative group">
             <div className="relative">
               <Avatar className="w-10 h-10 sm:w-12 sm:h-12 shrink-0">
-                <AvatarImage src={userImage} className="object-cover" />
+                <AvatarImage
+                  src={userImage}
+                  className="object-cover"
+                  onError={() =>
+                    setUserImage(session?.user?.image || undefined)
+                  }
+                />
                 <AvatarFallback className="text-base sm:text-xl">
                   {avatarInitial}
                 </AvatarFallback>

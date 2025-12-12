@@ -284,6 +284,21 @@ export async function editUser(
       if (existingUser) {
         return { success: false, error: "Email already exists" };
       }
+
+      // If the user is attempting to add FACULTY to their own account, block
+      // and instruct them to use the formal faculty-assignment request flow.
+      if (
+        data.roles &&
+        session?.user?.id === userId &&
+        !userBefore.roles.includes("FACULTY") &&
+        data.roles.includes("FACULTY")
+      ) {
+        return {
+          success: false,
+          error:
+            "To obtain the Faculty role, submit a faculty assignment request for Academic Head approval.",
+        };
+      }
     }
 
     // Update the user

@@ -148,6 +148,8 @@ export const queryKeys = {
     }) => [...queryKeys.admin.all, "users", filters] as const,
     faculty: (filters?: { department?: string; search?: string }) =>
       [...queryKeys.admin.all, "faculty", filters] as const,
+    facultyRequests: (filters?: { status?: string }) =>
+      [...queryKeys.admin.all, "facultyRequests", filters] as const,
     online: () => [...queryKeys.admin.all, "online"] as const,
     breakGlass: (userId?: string) =>
       userId

@@ -31,6 +31,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 import toast from "react-hot-toast";
 import {
   MoreHorizontal,
@@ -42,6 +44,7 @@ import {
   ChevronDown,
   ArrowUpDown,
   ShieldCheck,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { UserSheet } from "./user-sheet";
 import { editUser } from "@/lib/actions/users";
@@ -82,6 +85,8 @@ import {
   useBreakGlassStatus,
   usePromoteUser,
   useImportUsers,
+  useFacultyRequests,
+  useCreateFacultyRequest,
   queryKeys,
 } from "@/lib/hooks/queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -256,6 +261,13 @@ export function AdminDataTable({
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [userToPromote, setUserToPromote] = useState<User | null>(null);
   const [promotionCode, setPromotionCode] = useState("");
+  // Row-level faculty request dialog
+  const [showRowRequestDialog, setShowRowRequestDialog] = useState(false);
+  const [rowRequestUser, setRowRequestUser] = useState<User | null>(null);
+  const [rowRequestExpiresAt, setRowRequestExpiresAt] = useState<
+    Date | undefined
+  >(undefined);
+  const [rowRequestNote, setRowRequestNote] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<Role | null>(null);
   const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
   const [pageSize, setPageSize] = useState(10);
@@ -280,6 +292,12 @@ export function AdminDataTable({
   );
   const promoteUserMutation = usePromoteUser();
   const importUsersMutation = useImportUsers();
+  const {
+    data: facultyRequests = [],
+    isLoading: isLoadingRequests,
+    refetch: refetchFacultyRequests,
+  } = useFacultyRequests();
+  const createFacultyRequest = useCreateFacultyRequest();
 
   // Set current user temp admin status
   useEffect(() => {
@@ -365,6 +383,48 @@ export function AdminDataTable({
       await refreshTableData();
     } catch (error) {
       // Error is handled by the mutation hook
+    }
+  };
+
+  const handleCreateRowRequest = async () => {
+    if (!rowRequestUser) return;
+    if (!rowRequestExpiresAt) {
+      toast.error("Please select an expiration date");
+      return;
+    }
+
+    // Check pending
+    const pendingExists =
+      Array.isArray(facultyRequests) &&
+      facultyRequests.some(
+        (r: any) =>
+          r.status === "PENDING" &&
+          (r.adminId === rowRequestUser.id || r.admin?.id === rowRequestUser.id)
+      );
+
+    if (pendingExists) {
+      toast.error("You already have a pending request");
+      return;
+    }
+
+    try {
+      // Set expiry to end of selected day to cover the whole day
+      const expires = new Date(rowRequestExpiresAt as Date);
+      expires.setHours(23, 59, 59, 999);
+      const iso = expires.toISOString();
+      await createFacultyRequest.mutateAsync({
+        expiresAt: iso,
+        note: rowRequestNote,
+      });
+      setShowRowRequestDialog(false);
+      setRowRequestUser(null);
+      setRowRequestExpiresAt(undefined);
+      setRowRequestNote("");
+      // Refresh data
+      await refetchFacultyRequests?.();
+      await refreshTableData();
+    } catch (err) {
+      // handled by mutation
     }
   };
 
@@ -1401,6 +1461,30 @@ export function AdminDataTable({
                   >
                     <Pencil className="h-4 w-4" />
                     Edit User
+                  </DropdownMenuItem>
+                )}
+              {/* If this row is the current user, allow requesting Faculty role instead of editing roles */}
+              {row.original.id === session?.user?.id &&
+                session?.user?.roles?.includes(Role.ADMIN) &&
+                !session?.user?.roles?.includes(Role.FACULTY) && (
+                  <DropdownMenuItem
+                    className="flex items-center gap-2"
+                    onClick={() => {
+                      setRowRequestUser(row.original);
+                      setShowRowRequestDialog(true);
+                    }}
+                    disabled={
+                      Array.isArray(facultyRequests) &&
+                      facultyRequests.filter(
+                        (r: any) =>
+                          r.status === "PENDING" &&
+                          (r.adminId === row.original.id ||
+                            r.admin?.id === row.original.id)
+                      ).length > 0
+                    }
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    Request Faculty Role
                   </DropdownMenuItem>
                 )}
             </DropdownMenuContent>
@@ -2542,6 +2626,86 @@ export function AdminDataTable({
                   Promote
                 </>
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Row-level: Request Faculty Role Dialog */}
+      <Dialog
+        open={showRowRequestDialog}
+        onOpenChange={setShowRowRequestDialog}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-[#124A69]">
+              Request Faculty Role
+            </DialogTitle>
+            <DialogDescription>
+              Submit a request to be assigned the Faculty role. Choose an expiry
+              for the role.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Expires At</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`w-full justify-start text-left font-normal ${
+                      !rowRequestExpiresAt ? "text-muted-foreground" : ""
+                    }`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {rowRequestExpiresAt ? (
+                      format(rowRequestExpiresAt, "PPP")
+                    ) : (
+                      <span>Pick expiry date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={rowRequestExpiresAt}
+                    onSelect={(date: Date | undefined) =>
+                      setRowRequestExpiresAt(date)
+                    }
+                    disabled={{
+                      before: new Date(new Date().setHours(0, 0, 0, 0)),
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rowRequestNote">Note (optional)</Label>
+              <Input
+                id="rowRequestNote"
+                type="text"
+                value={rowRequestNote}
+                onChange={(e) => setRowRequestNote(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowRowRequestDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#124A69] text-white"
+              onClick={handleCreateRowRequest}
+              disabled={createFacultyRequest.isPending}
+            >
+              {createFacultyRequest.isPending
+                ? "Submitting..."
+                : "Submit Request"}
             </Button>
           </div>
         </DialogContent>

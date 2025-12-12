@@ -6,7 +6,10 @@ const axiosInstance = axios.create({
   baseURL: "/api", // This will be relative to your Next.js app
   headers: {
     "Content-Type": "application/json",
-    "X-Encrypted-Response": "true", // Request encrypted responses from server
+    // Temporarily request plain (non-encrypted) responses to avoid
+    // client/server encryption key mismatches during debugging.
+    // Set to "true" after confirming encryption keys match.
+    "X-Encrypted-Response": "false",
   },
   withCredentials: true, // This is important for handling cookies
   timeout: 30000, // 30 second default timeout

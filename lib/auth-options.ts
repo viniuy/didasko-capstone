@@ -115,7 +115,32 @@ export const authOptions: NextAuthOptions = {
           if (freshUser) {
             token.name = freshUser.name;
             token.email = freshUser.email;
-            token.roles = freshUser.roles;
+            // Start with DB roles
+            let effectiveRoles = Array.isArray(freshUser.roles)
+              ? [...freshUser.roles]
+              : [];
+
+            // If there is an approved, unexpired FacultyAssignmentRequest for this user,
+            // treat them as FACULTY for the duration (do not mutate DB roles here).
+            try {
+              const approved = await prisma.facultyAssignmentRequest.findFirst({
+                where: {
+                  adminId: freshUser.id,
+                  status: "APPROVED",
+                  expiresAt: { gt: new Date() },
+                },
+                orderBy: { decisionAt: "desc" },
+              });
+
+              if (approved && !effectiveRoles.includes("FACULTY")) {
+                effectiveRoles.push("FACULTY");
+              }
+            } catch (e) {
+              // If checking the request fails, fall back to DB roles
+              console.error("Error checking faculty assignment requests:", e);
+            }
+
+            token.roles = effectiveRoles;
             token.status = freshUser.status;
           }
         } catch (error) {

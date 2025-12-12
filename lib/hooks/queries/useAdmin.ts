@@ -308,3 +308,94 @@ export function useSelfPromote() {
     },
   });
 }
+
+// Query: Get faculty assignment requests
+export function useFacultyRequests(options?: {
+  initialData?: any;
+  refetchOnMount?: boolean;
+}) {
+  const { initialData, refetchOnMount = true } = options || {};
+
+  return useQuery({
+    queryKey: queryKeys.admin.facultyRequests(),
+    queryFn: async () => {
+      const { data } = await axios.get(`/faculty-requests`);
+      return data.requests || data;
+    },
+    initialData,
+    refetchOnMount,
+    refetchInterval: 30000,
+  });
+}
+
+// Mutation: Create faculty assignment request (Admin creates request)
+export function useCreateFacultyRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      expiresAt,
+      note,
+    }: {
+      expiresAt: string;
+      note?: string;
+    }) => {
+      const { data } = await axios.post(`/faculty-requests`, {
+        expiresAt,
+        note,
+      });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.admin.facultyRequests(),
+      });
+      toast.success("Faculty assignment request submitted");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || "Failed to submit request");
+    },
+  });
+}
+
+// Mutation: Approve faculty assignment request (Academic Head)
+export function useApproveFacultyRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await axios.post(`/faculty-requests/${id}/approve`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.admin.facultyRequests(),
+      });
+      toast.success("Request approved");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || "Failed to approve request");
+    },
+  });
+}
+
+// Mutation: Reject faculty assignment request (Academic Head)
+export function useRejectFacultyRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await axios.post(`/faculty-requests/${id}/reject`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.admin.facultyRequests(),
+      });
+      toast.success("Request rejected");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || "Failed to reject request");
+    },
+  });
+}
