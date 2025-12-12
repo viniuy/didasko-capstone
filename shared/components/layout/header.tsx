@@ -24,7 +24,8 @@ export default function Header() {
   const [promotionCode, setPromotionCode] = useState("");
 
   // React Query hooks
-  // Fetch break-glass status for all users except permanent ACADEMIC_HEAD
+  // Fetch break-glass status for all users except ACADEMIC_HEAD
+  // Academic Heads (with or without Faculty role) should not see temp admin badge
   // We need to fetch for ADMIN users too because they might be temporary admins
   const userRoles = session?.user?.roles || [];
   const shouldFetchBreakGlass = !userRoles.includes("ACADEMIC_HEAD");
@@ -44,7 +45,11 @@ export default function Header() {
     userRoles.includes("ADMIN") &&
     breakGlassStatus?.isActive === true &&
     breakGlassStatus?.session?.user?.id === session?.user?.id;
-  const isChecking = isLoadingBreakGlass || breakGlassStatus === undefined;
+
+  // For Academic Heads, we don't fetch break-glass status, so don't wait for it
+  const isChecking =
+    shouldFetchBreakGlass &&
+    (isLoadingBreakGlass || breakGlassStatus === undefined);
 
   // Close dialog when user is no longer a temporary admin
   useEffect(() => {

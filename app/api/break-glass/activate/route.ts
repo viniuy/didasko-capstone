@@ -21,7 +21,7 @@ export const POST = withLogging(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
-      // Only Academic Head can activate break-glass
+      // Only Academic Head can activate break-glass (with or without Faculty role)
       const userRoles = session.user.roles || [];
       if (!userRoles.includes("ACADEMIC_HEAD")) {
         return NextResponse.json(
