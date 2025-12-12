@@ -5,7 +5,6 @@ import { promoteToPermanentAdmin, isTemporaryAdmin } from "@/lib/breakGlass";
 import { withLogging } from "@/lib/withLogging";
 import { handleAuthError } from "@/lib/authz";
 
-
 // Route segment config for pre-compilation and performance
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

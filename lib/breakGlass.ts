@@ -29,6 +29,11 @@ export async function activateBreakGlass(
   reason: string,
   activatedBy: string
 ): Promise<{ secretCode: string; promotionCode: string }> {
+  // Prevent user from activating break-glass for themselves
+  if (facultyUserId === activatedBy) {
+    throw new Error("You cannot activate break-glass for yourself");
+  }
+
   // Get the faculty user to verify role and store original roles
   const facultyUser = await prisma.user.findUnique({
     where: { id: facultyUserId },
@@ -68,7 +73,7 @@ export async function activateBreakGlass(
     : [...facultyUser.roles, "ADMIN"];
   await prisma.user.update({
     where: { id: facultyUserId },
-    data: { roles: updatedRoles },
+    data: { roles: updatedRoles as any },
   });
 
   // Create or update break-glass session with encrypted codes
@@ -220,7 +225,7 @@ export async function deactivateBreakGlass(
 
     await prisma.user.update({
       where: { id: userId },
-      data: { roles: session.originalRoles },
+      data: { roles: session.originalRoles as any },
     });
 
     // Delete the break-glass session
@@ -355,7 +360,7 @@ export async function promoteToPermanentAdmin(
     : [...session.user.roles, "ADMIN"];
   await prisma.user.update({
     where: { id: userId },
-    data: { roles: updatedRoles },
+    data: { roles: updatedRoles as any },
   });
 
   // Delete the break-glass session

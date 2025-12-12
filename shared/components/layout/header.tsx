@@ -24,31 +24,27 @@ export default function Header() {
   const [promotionCode, setPromotionCode] = useState("");
 
   // React Query hooks
-  // Only fetch break-glass status for non-academic-head and non-admin users (they don't need it)
-  // Academic heads and admins use BreakGlassCompact component which fetches its own status
+  // Fetch break-glass status for all users except permanent ACADEMIC_HEAD
+  // We need to fetch for ADMIN users too because they might be temporary admins
   const userRoles = session?.user?.roles || [];
-  const shouldFetchBreakGlass =
-    !userRoles.includes("ACADEMIC_HEAD") && !userRoles.includes("ADMIN");
-  const { data: breakGlassStatus } = useBreakGlassStatus(
-    shouldFetchBreakGlass ? session?.user?.id : undefined,
-    { enabled: shouldFetchBreakGlass } // Disable query for academic heads and admins
-  );
+  const shouldFetchBreakGlass = !userRoles.includes("ACADEMIC_HEAD");
+  const { data: breakGlassStatus, isLoading: isLoadingBreakGlass } =
+    useBreakGlassStatus(shouldFetchBreakGlass ? session?.user?.id : undefined, {
+      enabled: shouldFetchBreakGlass && !!session?.user?.id,
+    });
   const selfPromoteMutation = useSelfPromote();
 
   // Only show "Temporary Admin" badge if:
   // 1. User's role is ADMIN (they were promoted from FACULTY to ADMIN via break-glass)
   // 2. AND there's an active break-glass session for them
   // Academic Head should NEVER see this badge - they activate break-glass for others, not themselves
-  // For ACADEMIC_HEAD, the API returns isActive=true if ANY session exists, so we must exclude them explicitly
   const isTempAdmin =
-    !userRoles.includes("ACADEMIC_HEAD") && // Explicitly exclude Academic Head first
+    !isLoadingBreakGlass &&
+    !userRoles.includes("ACADEMIC_HEAD") &&
     userRoles.includes("ADMIN") &&
-    !!breakGlassStatus?.isActive &&
-    // Verify the session is for the current user (not just any active session)
-    (breakGlassStatus?.session?.user?.id === session?.user?.id ||
-      // Fallback: if no user.id in session, but isActive is true and user is ADMIN
-      (breakGlassStatus?.isActive && !breakGlassStatus?.session?.user?.id));
-  const isChecking = breakGlassStatus === undefined;
+    breakGlassStatus?.isActive === true &&
+    breakGlassStatus?.session?.user?.id === session?.user?.id;
+  const isChecking = isLoadingBreakGlass || breakGlassStatus === undefined;
 
   // Close dialog when user is no longer a temporary admin
   useEffect(() => {

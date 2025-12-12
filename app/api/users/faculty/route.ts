@@ -17,11 +17,17 @@ export async function GET(request: Request) {
     }
 
     // Get faculty and academic head users
+    // Exclude users who have ADMIN role (permanent admins)
     // Optimized: Use _count instead of loading all courses/students to reduce query time
     const users = await prisma.user.findMany({
       where: {
         roles: {
           hasSome: ["FACULTY", "ACADEMIC_HEAD"],
+        },
+        NOT: {
+          roles: {
+            has: "ADMIN",
+          },
         },
       },
       select: {
