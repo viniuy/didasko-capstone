@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, {
   useState,
@@ -6,7 +6,7 @@ import React, {
   useRef,
   useEffect,
   useCallback,
-} from "react";
+} from 'react';
 import {
   Table,
   TableBody,
@@ -14,25 +14,25 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Role, WorkType, UserStatus } from "@prisma/client";
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Role, WorkType, UserStatus } from '@prisma/client';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import toast from "react-hot-toast";
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import toast from 'react-hot-toast';
 import {
   MoreHorizontal,
   Pencil,
@@ -43,9 +43,9 @@ import {
   ChevronDown,
   ArrowUpDown,
   ShieldCheck,
-} from "lucide-react";
-import { UserSheet } from "./user-sheet";
-import { editUser } from "@/lib/actions/users";
+} from 'lucide-react';
+import { UserSheet } from './user-sheet';
+import { editUser } from '@/lib/actions/users';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,22 +54,22 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from '@/components/ui/tooltip';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/svdialog";
-import ExcelJS from "exceljs";
-import { saveAs } from "file-saver";
+} from '@/components/ui/svdialog';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import {
   Pagination,
   PaginationContent,
@@ -77,7 +77,7 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
+} from '@/components/ui/pagination';
 import {
   useUsers,
   useBreakGlassStatus,
@@ -86,9 +86,9 @@ import {
   useFacultyRequests,
   useCreateFacultyRequest,
   queryKeys,
-} from "@/lib/hooks/queries";
-import { useQueryClient } from "@tanstack/react-query";
-import axios from "@/lib/axios";
+} from '@/lib/hooks/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import axios from '@/lib/axios';
 import {
   ColumnDef,
   flexRender,
@@ -101,11 +101,11 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   PaginationState,
-} from "@tanstack/react-table";
-import { supabase } from "@/lib/supabaseClient";
-import { useSession } from "next-auth/react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from '@tanstack/react-table';
+import { supabase } from '@/lib/supabaseClient';
+import { useSession } from 'next-auth/react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 interface User {
   id: string;
   name: string;
@@ -123,10 +123,10 @@ interface AdminDataTableProps {
 }
 
 interface CsvRow {
-  "Full Name": string;
+  'Full Name': string;
   Email: string;
   Department: string;
-  "Work Type": string;
+  'Work Type': string;
   Status: string;
   [key: string]: string;
 }
@@ -146,15 +146,15 @@ interface ImportStatus {
 
 const MAX_PREVIEW_ROWS = 100;
 const EXPECTED_HEADERS = [
-  "Full Name",
-  "Email",
-  "Department",
-  "Work Type",
-  "Status",
+  'Full Name',
+  'Email',
+  'Department',
+  'Work Type',
+  'Status',
 ];
 
 const getInitials = (name: string) => {
-  const parts = name.split(" ");
+  const parts = name.split(' ');
   if (parts.length === 3) {
     return (parts[0][0] + parts[1][0] + parts[2][0]).toUpperCase();
   } else if (parts.length === 2) {
@@ -176,29 +176,60 @@ export function useUserImages() {
       setError(null);
 
       try {
-        const bucket = supabase.storage.from("user-images");
+        // Validate Supabase configuration
+        if (!supabase) {
+          throw new Error('Supabase client not initialized');
+        }
 
-        const { data: files, error } = await bucket.list("", { limit: 1000 });
-        if (error) throw error;
+        const bucket = supabase.storage.from('user-images');
+
+        const { data: files, error } = await bucket.list('', { limit: 1000 });
+
+        if (error) {
+          console.error('Supabase storage error:', error);
+
+          // Check if it's a bucket not found error
+          if (
+            error.message?.includes('Bucket not found') ||
+            error.message?.includes('not found') ||
+            error.statusCode === '404'
+          ) {
+            console.warn(
+              '⚠️ user-images bucket not found. Please create it in Supabase Dashboard:\n' +
+                '1. Go to Storage in your Supabase project\n' +
+                "2. Create a new bucket named 'user-images'\n" +
+                '3. Set it to Public bucket\n' +
+                '4. Refresh this page',
+            );
+            // Gracefully handle missing bucket - don't show error to user
+            if (!cancelled) setImageMap({});
+            return;
+          }
+
+          throw new Error(
+            `Storage error: ${error.message || 'Unable to access user-images bucket'}`,
+          );
+        }
 
         if (!files || files.length === 0) {
-          console.warn("⚠️ No files found in user-images bucket.");
+          console.warn('⚠️ No files found in user-images bucket.');
           if (!cancelled) setImageMap({});
           return;
         }
 
-        console.log(files.map((f) => f.name));
+        console.log(`✅ Found ${files.length} user images`);
 
         const entries = files.map((file) => {
-          const userId = file.name.replace(/\.(png|jpg|jpeg)$/i, "");
+          const userId = file.name.replace(/\.(png|jpg|jpeg)$/i, '');
           const { data } = bucket.getPublicUrl(file.name);
           return [userId, `${data.publicUrl}?t=${Date.now()}`];
         });
 
         if (!cancelled) setImageMap(Object.fromEntries(entries));
       } catch (err: any) {
-        console.error("Error fetching user images:", err.message);
-        if (!cancelled) setError(err.message);
+        const errorMessage = err.message || 'Failed to fetch user images';
+        console.error('Error fetching user images:', errorMessage, err);
+        if (!cancelled) setError(errorMessage);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -211,14 +242,14 @@ export function useUserImages() {
       cancelled = true;
     };
   }, []);
-  console.log("User Images Map:", imageMap);
+
   return { imageMap, loading, error };
 }
 const formatEnumValue = (value: string) =>
   value
-    .split("_")
+    .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
+    .join(' ');
 
 export function AdminDataTable({
   users: initialUsers,
@@ -229,10 +260,10 @@ export function AdminDataTable({
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportFilters, setExportFilters] = useState({
-    department: "all",
-    status: "all",
-    workType: "all",
-    role: "all",
+    department: 'all',
+    status: 'all',
+    workType: 'all',
+    role: 'all',
   });
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [showImportStatus, setShowImportStatus] = useState(false);
@@ -248,7 +279,7 @@ export function AdminDataTable({
     hasError?: boolean;
   } | null>(null);
   const [isRoleUpdating, setIsRoleUpdating] = useState<Record<string, boolean>>(
-    {}
+    {},
   );
   const [isStatusUpdating, setIsStatusUpdating] = useState<
     Record<string, boolean>
@@ -258,12 +289,12 @@ export function AdminDataTable({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [userToPromote, setUserToPromote] = useState<User | null>(null);
-  const [promotionCode, setPromotionCode] = useState("");
+  const [promotionCode, setPromotionCode] = useState('');
   // Row-level faculty request dialog
   const [showRowRequestDialog, setShowRowRequestDialog] = useState(false);
   const [rowRequestUser, setRowRequestUser] = useState<User | null>(null);
-  const [rowRequestExpiresAt, setRowRequestExpiresAt] = useState("");
-  const [rowRequestNote, setRowRequestNote] = useState("");
+  const [rowRequestExpiresAt, setRowRequestExpiresAt] = useState('');
+  const [rowRequestNote, setRowRequestNote] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState<Role | null>(null);
   const [isCurrentUserTempAdmin, setIsCurrentUserTempAdmin] = useState(false);
   const [pageSize, setPageSize] = useState(10);
@@ -284,7 +315,7 @@ export function AdminDataTable({
     refetch: refetchUsers,
   } = useUsers();
   const { data: currentUserBreakGlass } = useBreakGlassStatus(
-    session?.user?.id
+    session?.user?.id,
   );
   const promoteUserMutation = usePromoteUser();
   const importUsersMutation = useImportUsers();
@@ -308,8 +339,8 @@ export function AdminDataTable({
     const primaryRole = userRoles.includes(Role.ADMIN)
       ? Role.ADMIN
       : userRoles.includes(Role.ACADEMIC_HEAD)
-      ? Role.ACADEMIC_HEAD
-      : userRoles[0] || Role.FACULTY;
+        ? Role.ACADEMIC_HEAD
+        : userRoles[0] || Role.FACULTY;
     setCurrentUserRole(primaryRole);
   }, [currentUserBreakGlass, session?.user?.roles]);
 
@@ -334,10 +365,10 @@ export function AdminDataTable({
     updatePageSize();
 
     // Listen for resize events
-    window.addEventListener("resize", updatePageSize);
+    window.addEventListener('resize', updatePageSize);
 
     return () => {
-      window.removeEventListener("resize", updatePageSize);
+      window.removeEventListener('resize', updatePageSize);
     };
   }, []);
 
@@ -349,21 +380,21 @@ export function AdminDataTable({
         queryKey: queryKeys.admin.breakGlass(userId),
         queryFn: async () => {
           const { data } = await axios.get(
-            `/break-glass/status?userId=${userId}`
+            `/break-glass/status?userId=${userId}`,
           );
           return data;
         },
       });
       return !!data?.isActive;
     } catch (error) {
-      console.error("Error checking temp admin status:", error);
+      console.error('Error checking temp admin status:', error);
       return false;
     }
   };
 
   const handlePromote = async () => {
     if (!userToPromote || !promotionCode.trim()) {
-      toast.error("Please enter the secret code");
+      toast.error('Please enter the secret code');
       return;
     }
 
@@ -374,7 +405,7 @@ export function AdminDataTable({
       });
 
       setShowPromoteDialog(false);
-      setPromotionCode("");
+      setPromotionCode('');
       setUserToPromote(null);
       await refreshTableData();
     } catch (error) {
@@ -385,7 +416,7 @@ export function AdminDataTable({
   const handleCreateRowRequest = async () => {
     if (!rowRequestUser) return;
     if (!rowRequestExpiresAt) {
-      toast.error("Please select an expiration date");
+      toast.error('Please select an expiration date');
       return;
     }
 
@@ -394,12 +425,13 @@ export function AdminDataTable({
       Array.isArray(facultyRequests) &&
       facultyRequests.some(
         (r: any) =>
-          r.status === "PENDING" &&
-          (r.adminId === rowRequestUser.id || r.admin?.id === rowRequestUser.id)
+          r.status === 'PENDING' &&
+          (r.adminId === rowRequestUser.id ||
+            r.admin?.id === rowRequestUser.id),
       );
 
     if (pendingExists) {
-      toast.error("You already have a pending request");
+      toast.error('You already have a pending request');
       return;
     }
 
@@ -411,8 +443,8 @@ export function AdminDataTable({
       });
       setShowRowRequestDialog(false);
       setRowRequestUser(null);
-      setRowRequestExpiresAt("");
-      setRowRequestNote("");
+      setRowRequestExpiresAt('');
+      setRowRequestNote('');
       // Refresh data
       await refetchFacultyRequests?.();
       await refreshTableData();
@@ -440,8 +472,8 @@ export function AdminDataTable({
   // Log error if users fetch fails
   useEffect(() => {
     if (usersError) {
-      console.error("Error fetching users:", usersError);
-      toast.error("Failed to fetch users");
+      console.error('Error fetching users:', usersError);
+      toast.error('Failed to fetch users');
     }
   }, [usersError]);
 
@@ -453,7 +485,7 @@ export function AdminDataTable({
         queryKey: queryKeys.admin.users(),
       });
     } catch (error) {
-      console.error("Error refreshing table data:", error);
+      console.error('Error refreshing table data:', error);
     } finally {
       setIsRefreshing(false);
     }
@@ -468,8 +500,8 @@ export function AdminDataTable({
         const previousData = tableData;
         setTableData((prevData) =>
           prevData.map((user) =>
-            user.id === userId ? { ...user, roles: newRoles } : user
-          )
+            user.id === userId ? { ...user, roles: newRoles } : user,
+          ),
         );
 
         const result = await editUser(userId, { roles: newRoles });
@@ -481,45 +513,45 @@ export function AdminDataTable({
           });
 
           toast.success(
-            `Roles updated to ${newRoles.map(formatEnumValue).join(", ")}`,
+            `Roles updated to ${newRoles.map(formatEnumValue).join(', ')}`,
             {
               duration: 3000,
-              position: "top-center",
-            }
+              position: 'top-center',
+            },
           );
         } else {
           // Revert optimistic update on error
           setTableData(previousData);
-          throw new Error(result.error || "Failed to update roles");
+          throw new Error(result.error || 'Failed to update roles');
         }
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to update roles"
+          error instanceof Error ? error.message : 'Failed to update roles',
         );
       } finally {
         setIsRoleUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    [queryClient, tableData]
+    [queryClient, tableData],
   );
 
   const handleStatusChange = useCallback(
     async (userId: string, newStatus: UserStatus) => {
       // Prevent archiving if user is the last academic head
-      if (newStatus === "ARCHIVED") {
+      if (newStatus === 'ARCHIVED') {
         const userToArchive = tableData.find((user) => user.id === userId);
         if (userToArchive?.roles?.includes(Role.ACADEMIC_HEAD)) {
           // Count non-archived academic heads excluding the one being archived
           const activeAcademicHeadCount = tableData.filter(
             (user) =>
               user.roles?.includes(Role.ACADEMIC_HEAD) &&
-              user.status === "ACTIVE" &&
-              user.id !== userId
+              user.status === 'ACTIVE' &&
+              user.id !== userId,
           ).length;
 
           if (activeAcademicHeadCount < 1) {
             toast.error(
-              "Cannot archive user. At least one active Academic Head must exist in the system."
+              'Cannot archive user. At least one active Academic Head must exist in the system.',
             );
             return;
           }
@@ -533,8 +565,8 @@ export function AdminDataTable({
         const previousData = tableData;
         setTableData((prevData) =>
           prevData.map((user) =>
-            user.id === userId ? { ...user, status: newStatus } : user
-          )
+            user.id === userId ? { ...user, status: newStatus } : user,
+          ),
         );
 
         const result = await editUser(userId, { status: newStatus });
@@ -547,22 +579,22 @@ export function AdminDataTable({
 
           toast.success(`Status updated to ${formatEnumValue(newStatus)}`, {
             duration: 3000,
-            position: "top-center",
+            position: 'top-center',
           });
         } else {
           // Revert optimistic update on error
           setTableData(previousData);
-          throw new Error(result.error || "Failed to update status");
+          throw new Error(result.error || 'Failed to update status');
         }
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "Failed to update status"
+          error instanceof Error ? error.message : 'Failed to update status',
         );
       } finally {
         setIsStatusUpdating((prev) => ({ ...prev, [userId]: false }));
       }
     },
-    [queryClient, tableData]
+    [queryClient, tableData],
   );
 
   //Done
@@ -571,49 +603,49 @@ export function AdminDataTable({
   const handleImportTemplate = useCallback(async () => {
     try {
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Template");
+      const worksheet = workbook.addWorksheet('Template');
 
       // Title
-      worksheet.mergeCells("A1:E1");
-      const titleRow = worksheet.getCell("A1");
-      titleRow.value = "USER MANAGEMENT TEMPLATE";
-      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      worksheet.mergeCells('A1:E1');
+      const titleRow = worksheet.getCell('A1');
+      titleRow.value = 'USER MANAGEMENT TEMPLATE';
+      titleRow.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
       titleRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF124A69' },
       };
-      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      titleRow.alignment = { vertical: 'middle', horizontal: 'center' };
       worksheet.getRow(1).height = 30;
 
       // Date row
-      worksheet.mergeCells("A2:E2");
-      const dateRow = worksheet.getCell("A2");
+      worksheet.mergeCells('A2:E2');
+      const dateRow = worksheet.getCell('A2');
       dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
       dateRow.font = { italic: true, size: 11 };
-      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+      dateRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
       // Instructions
-      worksheet.mergeCells("A3:E3");
-      const instructionTitle = worksheet.getCell("A3");
-      instructionTitle.value = "IMPORTANT INSTRUCTIONS";
+      worksheet.mergeCells('A3:E3');
+      const instructionTitle = worksheet.getCell('A3');
+      instructionTitle.value = 'IMPORTANT INSTRUCTIONS';
       instructionTitle.font = {
         bold: true,
         size: 12,
-        color: { argb: "FFD97706" },
+        color: { argb: 'FFD97706' },
       };
-      instructionTitle.alignment = { vertical: "middle", horizontal: "left" };
+      instructionTitle.alignment = { vertical: 'middle', horizontal: 'left' };
 
       const instructions = [
-        "1. All email addresses MUST be from @alabang.sti.edu.ph domain",
-        "2. Example: john.doe@alabang.sti.edu.ph",
-        "3. Do not include empty rows",
-        "4. All fields are required - do not leave any cell empty",
-        "5. Do not modify or delete the header row",
-        "6. Delete these instruction rows before importing",
-        "7. Work Type must be exactly: Full Time or Part Time",
-        "8. Status must be exactly: Active or Archived",
-        "9. IMPORTANT: Imported users are automatically assigned the Faculty role",
+        '1. All email addresses MUST be from @alabang.sti.edu.ph domain',
+        '2. Example: john.doe@alabang.sti.edu.ph',
+        '3. Do not include empty rows',
+        '4. All fields are required - do not leave any cell empty',
+        '5. Do not modify or delete the header row',
+        '6. Delete these instruction rows before importing',
+        '7. Work Type must be exactly: Full Time or Part Time',
+        '8. Status must be exactly: Active or Archived',
+        '9. IMPORTANT: Imported users are automatically assigned the Faculty role',
       ];
 
       instructions.forEach((instruction, index) => {
@@ -622,9 +654,9 @@ export function AdminDataTable({
         cell.value = instruction;
         cell.font = { size: 10 };
         cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFFFFACD" },
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFFACD' },
         };
       });
 
@@ -632,46 +664,46 @@ export function AdminDataTable({
 
       // Header
       const headerRow = worksheet.addRow(EXPECTED_HEADERS);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF124A69' },
       };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       headerRow.height = 25;
 
       headerRow.eachCell((cell) => {
         cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
         };
       });
 
       // Examples
       const examples = [
         [
-          "John A. Smith",
-          "john.smith@alabang.sti.edu.ph",
-          "IT Department",
-          "Full Time",
-          "Active",
+          'John A. Smith',
+          'john.smith@alabang.sti.edu.ph',
+          'IT Department',
+          'Full Time',
+          'Active',
         ],
         [
-          "Jane B. Doe",
-          "jane.doe@alabang.sti.edu.ph",
-          "Mathematics Department",
-          "Part Time",
-          "Active",
+          'Jane B. Doe',
+          'jane.doe@alabang.sti.edu.ph',
+          'Mathematics Department',
+          'Part Time',
+          'Active',
         ],
         [
-          "Robert C. Johnson",
-          "robert.johnson@alabang.sti.edu.ph",
-          "Computer Science Department",
-          "Full Time",
-          "Active",
+          'Robert C. Johnson',
+          'robert.johnson@alabang.sti.edu.ph',
+          'Computer Science Department',
+          'Full Time',
+          'Active',
         ],
       ];
 
@@ -679,17 +711,17 @@ export function AdminDataTable({
         const row = worksheet.addRow(example);
         row.eachCell((cell) => {
           cell.border = {
-            top: { style: "thin", color: { argb: "FFD3D3D3" } },
-            left: { style: "thin", color: { argb: "FFD3D3D3" } },
-            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
-            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+            top: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+            left: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+            bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+            right: { style: 'thin', color: { argb: 'FFD3D3D3' } },
           };
-          cell.alignment = { vertical: "middle" };
+          cell.alignment = { vertical: 'middle' };
         });
         row.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FFE8F4F8" },
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE8F4F8' },
         };
       });
 
@@ -704,17 +736,17 @@ export function AdminDataTable({
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const filename = `user_import_template_${
-        new Date().toISOString().split("T")[0]
+        new Date().toISOString().split('T')[0]
       }.xlsx`;
       saveAs(blob, filename);
 
-      toast.success("Template downloaded successfully");
+      toast.success('Template downloaded successfully');
     } catch (error) {
-      console.error("Template error:", error);
-      toast.error("Failed to generate template");
+      console.error('Template error:', error);
+      toast.error('Failed to generate template');
     }
   }, []);
 
@@ -722,14 +754,14 @@ export function AdminDataTable({
     try {
       let rawData: string[][];
 
-      if (file.name.toLowerCase().endsWith(".csv")) {
+      if (file.name.toLowerCase().endsWith('.csv')) {
         const text = await file.text();
         rawData = text
-          .split("\n")
+          .split('\n')
           .map((line) =>
             line
-              .split(",")
-              .map((cell) => cell.trim().replace(/^["\']|["\']$/g, ""))
+              .split(',')
+              .map((cell) => cell.trim().replace(/^["\']|["\']$/g, '')),
           );
       } else {
         const workbook = new ExcelJS.Workbook();
@@ -738,7 +770,7 @@ export function AdminDataTable({
 
         const worksheet = workbook.worksheets[0];
         if (!worksheet) {
-          throw new Error("No worksheet found in file");
+          throw new Error('No worksheet found in file');
         }
 
         const rows: any[][] = [];
@@ -749,8 +781,8 @@ export function AdminDataTable({
 
         rawData = rows.map((row) =>
           row.map((cell) =>
-            cell !== null && cell !== undefined ? String(cell).trim() : ""
-          )
+            cell !== null && cell !== undefined ? String(cell).trim() : '',
+          ),
         );
       }
 
@@ -762,9 +794,9 @@ export function AdminDataTable({
 
         const isHeaderRow = EXPECTED_HEADERS.every((header, index) => {
           const cellValue =
-            typeof row[index] === "string" || typeof row[index] === "number"
+            typeof row[index] === 'string' || typeof row[index] === 'number'
               ? String(row[index]).trim().toLowerCase()
-              : "";
+              : '';
           return cellValue === header.toLowerCase();
         });
 
@@ -779,7 +811,7 @@ export function AdminDataTable({
       }
 
       const headers = rawData[headerRowIndex].map(
-        (h) => h?.toString().trim() || ""
+        (h) => h?.toString().trim() || '',
       );
       const dataRowsRaw = rawData
         .slice(headerRowIndex + 1)
@@ -790,8 +822,8 @@ export function AdminDataTable({
               (cell) =>
                 cell !== null &&
                 cell !== undefined &&
-                cell.toString().trim() !== ""
-            )
+                cell.toString().trim() !== '',
+            ),
         );
 
       const formattedData: CsvRow[] = dataRowsRaw.map((row) => {
@@ -800,37 +832,37 @@ export function AdminDataTable({
           rowData[header] =
             row[index] !== null && row[index] !== undefined
               ? String(row[index]).trim()
-              : "";
+              : '';
         });
         return rowData as CsvRow;
       });
 
       const requiredFields = [
-        "Full Name",
-        "Email",
-        "Department",
-        "Work Type",
-        "Status",
+        'Full Name',
+        'Email',
+        'Department',
+        'Work Type',
+        'Status',
       ];
 
       const validFormattedData = formattedData.filter((row): row is CsvRow =>
         requiredFields.every(
-          (field) => row[field] && row[field].toString().trim() !== ""
-        )
+          (field) => row[field] && row[field].toString().trim() !== '',
+        ),
       );
 
       if (validFormattedData.length === 0) {
         throw new Error(
-          "No valid data rows found in file. Please check that there are rows with all required information below the header."
+          'No valid data rows found in file. Please check that there are rows with all required information below the header.',
         );
       }
 
       return validFormattedData;
     } catch (error) {
       throw new Error(
-        error instanceof Error && error.message.includes("No valid data")
+        error instanceof Error && error.message.includes('No valid data')
           ? error.message
-          : "Error parsing file. Please make sure you are using a valid file and template format."
+          : 'Error parsing file. Please make sure you are using a valid file and template format.',
       );
     }
   }, []);
@@ -842,41 +874,41 @@ export function AdminDataTable({
         if (data.length > 0) {
           setPreviewData(data.slice(0, MAX_PREVIEW_ROWS));
           setIsValidFile(true);
-          toast.success("File loaded successfully");
+          toast.success('File loaded successfully');
         } else {
           setIsValidFile(false);
           setPreviewData([]);
           toast.error(
-            "Could not find header row. Please make sure the file is using the template format."
+            'Could not find header row. Please make sure the file is using the template format.',
           );
         }
       } catch (error) {
         setIsValidFile(false);
         setPreviewData([]);
         toast.error(
-          error instanceof Error && error.message.includes("parsing file")
+          error instanceof Error && error.message.includes('parsing file')
             ? error.message
-            : "Error reading file. Please ensure it is a valid Excel or CSV file."
+            : 'Error reading file. Please ensure it is a valid Excel or CSV file.',
         );
       }
     },
-    [readFile]
+    [readFile],
   );
 
   const validateFile = useCallback((file: File): boolean => {
-    const extension = file.name.toLowerCase().split(".").pop();
-    const validExtensions = ["xlsx", "xls", "csv"];
+    const extension = file.name.toLowerCase().split('.').pop();
+    const validExtensions = ['xlsx', 'xls', 'csv'];
 
-    if (!validExtensions.includes(extension || "")) {
+    if (!validExtensions.includes(extension || '')) {
       toast.error(
-        "Invalid file type. Please upload an Excel (.xlsx, .xls) or CSV file."
+        'Invalid file type. Please upload an Excel (.xlsx, .xls) or CSV file.',
       );
       return false;
     }
 
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error("File size too large. Maximum size is 5MB.");
+      toast.error('File size too large. Maximum size is 5MB.');
       return false;
     }
 
@@ -897,15 +929,15 @@ export function AdminDataTable({
         }
       }
     },
-    [validateFile, handleFilePreview]
+    [validateFile, handleFilePreview],
   );
 
   const handleImport = useCallback(async () => {
     if (!selectedFile || !isValidFile || previewData.length === 0) {
-      if (!selectedFile) toast.error("Please select a file first.");
-      else if (!isValidFile) toast.error("Selected file is not valid.");
+      if (!selectedFile) toast.error('Please select a file first.');
+      else if (!isValidFile) toast.error('Selected file is not valid.');
       else if (previewData.length === 0)
-        toast.error("No valid data rows found in the file preview.");
+        toast.error('No valid data rows found in the file preview.');
       return;
     }
 
@@ -914,7 +946,7 @@ export function AdminDataTable({
       setImportProgress({
         current: 0,
         total: previewData.length,
-        status: "Importing users...",
+        status: 'Importing users...',
       });
 
       const result = await importUsersMutation.mutateAsync(previewData);
@@ -937,12 +969,12 @@ export function AdminDataTable({
       if (errors && errors.length > 0) {
         toast.error(`Import finished with ${errors.length} errors.`);
       } else if (skipped && skipped > 0) {
-        toast(`Import finished. ${skipped} users skipped.`, { icon: "⚠️" });
+        toast(`Import finished. ${skipped} users skipped.`, { icon: '⚠️' });
       } else if (imported && imported > 0) {
         toast.success(`Successfully imported ${imported} users.`);
       } else {
-        toast("Import process finished with no users imported.", {
-          icon: "ℹ️",
+        toast('Import process finished with no users imported.', {
+          icon: 'ℹ️',
         });
       }
 
@@ -955,15 +987,15 @@ export function AdminDataTable({
       const errorResponse = error?.response?.data;
       const errorMessage =
         errorResponse?.error ||
-        (error instanceof Error ? error.message : "Failed to import users");
+        (error instanceof Error ? error.message : 'Failed to import users');
       const importErrors = errorResponse?.errors || [
-        { email: "N/A", message: errorMessage },
+        { email: 'N/A', message: errorMessage },
       ];
 
       setImportProgress({
         current: 0,
         total: previewData.length,
-        status: "Import failed",
+        status: 'Import failed',
         error: errorMessage,
         hasError: true,
       });
@@ -983,14 +1015,14 @@ export function AdminDataTable({
   const columns = useMemo<ColumnDef<User>[]>(
     () => [
       {
-        accessorKey: "name",
-        header: "Name",
+        accessorKey: 'name',
+        header: 'Name',
         cell: ({ row }) => {
           const { id, name } = row.original;
           const imageUrl = imageMap[id];
-          console.log("🖼️ Row:", id, "→", imageUrl);
+          console.log('🖼️ Row:', id, '→', imageUrl);
           return (
-            <div className="flex items-center gap-2">
+            <div className='flex items-center gap-2'>
               <Avatar>
                 <AvatarImage src={imageUrl} alt={name} />
                 <AvatarFallback>{getInitials(name)}</AvatarFallback>
@@ -1001,55 +1033,55 @@ export function AdminDataTable({
         },
       },
       {
-        accessorKey: "email",
+        accessorKey: 'email',
         header: ({ column }) => (
           <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            variant='ghost'
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
             Email
-            <ArrowUpDown className="ml-2 h-4 w-4" />
+            <ArrowUpDown className='ml-2 h-4 w-4' />
           </Button>
         ),
         sortingFn: (rowA, rowB) => {
-          const emailA = (rowA.original.email || "").toLowerCase();
-          const emailB = (rowB.original.email || "").toLowerCase();
+          const emailA = (rowA.original.email || '').toLowerCase();
+          const emailB = (rowB.original.email || '').toLowerCase();
           return emailA.localeCompare(emailB);
         },
       },
       {
-        accessorKey: "department",
+        accessorKey: 'department',
         header: ({ column }) => (
           <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            variant='ghost'
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
             Department
-            <ArrowUpDown className="ml-2 h-4 w-4" />
+            <ArrowUpDown className='ml-2 h-4 w-4' />
           </Button>
         ),
       },
       {
-        accessorKey: "workType",
+        accessorKey: 'workType',
         header: ({ column }) => (
           <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            variant='ghost'
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
             Work Type
-            <ArrowUpDown className="ml-2 h-4 w-4" />
+            <ArrowUpDown className='ml-2 h-4 w-4' />
           </Button>
         ),
         cell: ({ row }) => formatEnumValue(row.original.workType),
       },
       {
-        accessorKey: "roles",
-        header: "Roles",
+        accessorKey: 'roles',
+        header: 'Roles',
         cell: ({ row }) => {
           const userRoles = row.original.roles || [];
           const isCurrentUser = row.original.id === session?.user?.id;
           const currentUserHasAdmin = session?.user?.roles?.includes(
-            Role.ADMIN
+            Role.ADMIN,
           );
 
           // Check if current user is temp admin and if target user is ADMIN/ACADEMIC_HEAD
@@ -1068,7 +1100,7 @@ export function AdminDataTable({
               role === Role.ADMIN &&
               !checked
             ) {
-              toast.error("You cannot remove your own Admin role");
+              toast.error('You cannot remove your own Admin role');
               return;
             }
 
@@ -1079,7 +1111,7 @@ export function AdminDataTable({
               checked
             ) {
               toast.error(
-                "Temporary admins cannot assign Admin or Academic Head roles"
+                'Temporary admins cannot assign Admin or Academic Head roles',
               );
               return;
             }
@@ -1093,7 +1125,7 @@ export function AdminDataTable({
               (role === Role.ADMIN || role === Role.ACADEMIC_HEAD)
             ) {
               toast.error(
-                "Temporary admins cannot modify Admin or Academic Head roles"
+                'Temporary admins cannot modify Admin or Academic Head roles',
               );
               return;
             }
@@ -1101,11 +1133,11 @@ export function AdminDataTable({
             // Prevent removing ADMIN role if it's the last admin
             if (role === Role.ADMIN && !checked) {
               const adminCount = tableData.filter((user) =>
-                user.roles?.includes(Role.ADMIN)
+                user.roles?.includes(Role.ADMIN),
               ).length;
               if (adminCount <= 1) {
                 toast.error(
-                  "Cannot remove Admin role. At least one Admin must exist in the system."
+                  'Cannot remove Admin role. At least one Admin must exist in the system.',
                 );
                 return;
               }
@@ -1114,11 +1146,11 @@ export function AdminDataTable({
             // Prevent removing ACADEMIC_HEAD role if it's the last academic head
             if (role === Role.ACADEMIC_HEAD && !checked) {
               const academicHeadCount = tableData.filter((user) =>
-                user.roles?.includes(Role.ACADEMIC_HEAD)
+                user.roles?.includes(Role.ACADEMIC_HEAD),
               ).length;
               if (academicHeadCount <= 1) {
                 toast.error(
-                  "Cannot remove Academic Head role. At least one Academic Head must exist in the system."
+                  'Cannot remove Academic Head role. At least one Academic Head must exist in the system.',
                 );
                 return;
               }
@@ -1132,7 +1164,7 @@ export function AdminDataTable({
                 userRoles.includes(Role.ACADEMIC_HEAD)
               ) {
                 toast.error(
-                  "A user cannot have both Admin and Academic Head roles. Please remove Academic Head role first."
+                  'A user cannot have both Admin and Academic Head roles. Please remove Academic Head role first.',
                 );
                 return;
               }
@@ -1141,7 +1173,7 @@ export function AdminDataTable({
                 userRoles.includes(Role.ADMIN)
               ) {
                 toast.error(
-                  "A user cannot have both Admin and Academic Head roles. Please remove Admin role first."
+                  'A user cannot have both Admin and Academic Head roles. Please remove Admin role first.',
                 );
                 return;
               }
@@ -1149,7 +1181,7 @@ export function AdminDataTable({
             } else {
               // Ensure at least one role remains
               if (userRoles.length === 1) {
-                toast.error("User must have at least one role");
+                toast.error('User must have at least one role');
                 return;
               }
               newRoles = userRoles.filter((r) => r !== role);
@@ -1160,17 +1192,17 @@ export function AdminDataTable({
 
           const displayText =
             userRoles.length === 0
-              ? "No roles"
+              ? 'No roles'
               : userRoles.length === 1
-              ? formatEnumValue(userRoles[0])
-              : userRoles.map(formatEnumValue).join(", ");
+                ? formatEnumValue(userRoles[0])
+                : userRoles.map(formatEnumValue).join(', ');
 
           return (
             <Popover>
               <PopoverTrigger asChild>
                 <Button
-                  variant="outline"
-                  className="w-[180px] justify-start"
+                  variant='outline'
+                  className='w-[180px] justify-start'
                   disabled={
                     isRoleUpdating[row.original.id] ||
                     isDisabledForTempAdmin ||
@@ -1178,28 +1210,28 @@ export function AdminDataTable({
                   }
                 >
                   {isRoleUpdating[row.original.id] ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
+                    <div className='flex items-center gap-2'>
+                      <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]' />
                       <span>Updating...</span>
                     </div>
                   ) : (
                     <>
-                      <span className="truncate">{displayText}</span>
-                      <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                      <span className='truncate'>{displayText}</span>
+                      <ChevronDown className='ml-auto h-4 w-4 opacity-50' />
                     </>
                   )}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[200px] p-2" align="start">
-                <div className="space-y-2">
+              <PopoverContent className='w-[200px] p-2' align='start'>
+                <div className='space-y-2'>
                   {[
-                    { value: Role.FACULTY, label: "Faculty" },
-                    { value: Role.ADMIN, label: "Admin" },
-                    { value: Role.ACADEMIC_HEAD, label: "Academic Head" },
+                    { value: Role.FACULTY, label: 'Faculty' },
+                    { value: Role.ADMIN, label: 'Admin' },
+                    { value: Role.ACADEMIC_HEAD, label: 'Academic Head' },
                   ]
                     .filter(
                       (role) =>
-                        !isCurrentUserTempAdmin || role.value === Role.FACULTY
+                        !isCurrentUserTempAdmin || role.value === Role.FACULTY,
                     )
                     .map((role) => {
                       const isChecked = userRoles.includes(role.value);
@@ -1220,14 +1252,14 @@ export function AdminDataTable({
                         role.value === Role.ADMIN &&
                         isChecked &&
                         tableData.filter((user) =>
-                          user.roles?.includes(Role.ADMIN)
+                          user.roles?.includes(Role.ADMIN),
                         ).length <= 1;
                       // Prevent removing last academic head
                       const isLastAcademicHead =
                         role.value === Role.ACADEMIC_HEAD &&
                         isChecked &&
                         tableData.filter((user) =>
-                          user.roles?.includes(Role.ACADEMIC_HEAD)
+                          user.roles?.includes(Role.ACADEMIC_HEAD),
                         ).length <= 1;
                       // Prevent checking ADMIN if user has ACADEMIC_HEAD, and vice versa
                       const isMutuallyExclusive =
@@ -1243,27 +1275,27 @@ export function AdminDataTable({
                         isMutuallyExclusive;
 
                       // Determine tooltip message based on why it's disabled
-                      let tooltipMessage = "";
+                      let tooltipMessage = '';
                       if (isMutuallyExclusive) {
                         if (role.value === Role.ADMIN) {
                           tooltipMessage =
-                            "Cannot assign Admin role while user has Academic Head role. Please remove Academic Head role first.";
+                            'Cannot assign Admin role while user has Academic Head role. Please remove Academic Head role first.';
                         } else {
                           tooltipMessage =
-                            "Cannot assign Academic Head role while user has Admin role. Please remove Admin role first.";
+                            'Cannot assign Academic Head role while user has Admin role. Please remove Admin role first.';
                         }
                       } else if (isLastAdmin) {
                         tooltipMessage =
-                          "Cannot remove Admin role. At least one Admin must exist in the system.";
+                          'Cannot remove Admin role. At least one Admin must exist in the system.';
                       } else if (isLastAcademicHead) {
                         tooltipMessage =
-                          "Cannot remove Academic Head role. At least one Academic Head must exist in the system.";
+                          'Cannot remove Academic Head role. At least one Academic Head must exist in the system.';
                       } else if (isDisabledForSelf) {
                         tooltipMessage =
-                          "You cannot remove your own Admin role";
+                          'You cannot remove your own Admin role';
                       } else if (isDisabledForTemp) {
                         tooltipMessage =
-                          "Temporary admins cannot modify Admin or Academic Head roles";
+                          'Temporary admins cannot modify Admin or Academic Head roles';
                       }
 
                       const checkboxElement = (
@@ -1274,19 +1306,19 @@ export function AdminDataTable({
                             handleRoleToggle(role.value, checked as boolean)
                           }
                           disabled={isDisabled}
-                          className="data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]"
+                          className='data-[state=checked]:bg-[#124A69] data-[state=checked]:border-[#124A69] border-[#124A69]'
                         />
                       );
 
                       return (
                         <div
                           key={role.value}
-                          className="flex items-center space-x-2 p-2 rounded hover:bg-gray-50"
+                          className='flex items-center space-x-2 p-2 rounded hover:bg-gray-50'
                         >
                           {isDisabled && tooltipMessage ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="cursor-not-allowed">
+                                <div className='cursor-not-allowed'>
                                   {checkboxElement}
                                 </div>
                               </TooltipTrigger>
@@ -1299,7 +1331,7 @@ export function AdminDataTable({
                           )}
                           <label
                             htmlFor={`role-${row.original.id}-${role.value}`}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                            className='text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1'
                           >
                             {role.label}
                           </label>
@@ -1313,12 +1345,12 @@ export function AdminDataTable({
         },
       },
       {
-        accessorKey: "status",
-        header: "Status",
+        accessorKey: 'status',
+        header: 'Status',
         cell: ({ row }) => {
           const isCurrentUser = row.original.id === session?.user?.id;
           const currentUserHasAdmin = session?.user?.roles?.includes(
-            Role.ADMIN
+            Role.ADMIN,
           );
           // Prevent self-archiving for admins
           const isSelfWithAdmin = isCurrentUser && currentUserHasAdmin;
@@ -1326,26 +1358,26 @@ export function AdminDataTable({
           // Check if user is the last academic head
           const isLastAcademicHead =
             row.original.roles?.includes(Role.ACADEMIC_HEAD) &&
-            row.original.status === "ACTIVE" &&
+            row.original.status === 'ACTIVE' &&
             tableData.filter(
               (user) =>
                 user.roles?.includes(Role.ACADEMIC_HEAD) &&
-                user.status === "ACTIVE" &&
-                user.id !== row.original.id
+                user.status === 'ACTIVE' &&
+                user.id !== row.original.id,
             ).length < 1;
 
           const isStatusDisabled =
             isStatusUpdating[row.original.id] ||
-            (isSelfWithAdmin && row.original.status === "ACTIVE") ||
-            (isLastAcademicHead && row.original.status === "ACTIVE");
+            (isSelfWithAdmin && row.original.status === 'ACTIVE') ||
+            (isLastAcademicHead && row.original.status === 'ACTIVE');
 
           // Determine tooltip message
-          let statusTooltipMessage = "";
-          if (isLastAcademicHead && row.original.status === "ACTIVE") {
+          let statusTooltipMessage = '';
+          if (isLastAcademicHead && row.original.status === 'ACTIVE') {
             statusTooltipMessage =
-              "Cannot archive user. At least one active Academic Head must exist in the system.";
-          } else if (isSelfWithAdmin && row.original.status === "ACTIVE") {
-            statusTooltipMessage = "You cannot archive yourself";
+              'Cannot archive user. At least one active Academic Head must exist in the system.';
+          } else if (isSelfWithAdmin && row.original.status === 'ACTIVE') {
+            statusTooltipMessage = 'You cannot archive yourself';
           }
 
           const selectElement = (
@@ -1353,14 +1385,14 @@ export function AdminDataTable({
               value={row.original.status}
               onValueChange={(value: UserStatus) => {
                 // Prevent self-archiving for admins
-                if (isSelfWithAdmin && value === "ARCHIVED") {
-                  toast.error("You cannot archive yourself");
+                if (isSelfWithAdmin && value === 'ARCHIVED') {
+                  toast.error('You cannot archive yourself');
                   return;
                 }
                 // Prevent archiving last academic head
-                if (isLastAcademicHead && value === "ARCHIVED") {
+                if (isLastAcademicHead && value === 'ARCHIVED') {
                   toast.error(
-                    "Cannot archive user. At least one active Academic Head must exist in the system."
+                    'Cannot archive user. At least one active Academic Head must exist in the system.',
                   );
                   return;
                 }
@@ -1368,41 +1400,41 @@ export function AdminDataTable({
               }}
               disabled={isStatusDisabled}
             >
-              <SelectTrigger className="w-[130px]">
+              <SelectTrigger className='w-[130px]'>
                 <SelectValue>
                   {isStatusUpdating[row.original.id] ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]" />
+                    <div className='flex items-center gap-2'>
+                      <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-[#124A69]' />
                       <span>Updating...</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <div className='flex items-center gap-2'>
                       <div
                         className={`h-2 w-2 rounded-full ${
-                          row.original.status === "ACTIVE"
-                            ? "bg-green-500"
-                            : "bg-gray-500"
+                          row.original.status === 'ACTIVE'
+                            ? 'bg-green-500'
+                            : 'bg-gray-500'
                         }`}
                       />
                       <span>
-                        {row.original.status === "ACTIVE"
-                          ? "Active"
-                          : "Archived"}
+                        {row.original.status === 'ACTIVE'
+                          ? 'Active'
+                          : 'Archived'}
                       </span>
                     </div>
                   )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ACTIVE">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                <SelectItem value='ACTIVE'>
+                  <div className='flex items-center gap-2'>
+                    <div className='h-2 w-2 rounded-full bg-green-500' />
                     <span>Active</span>
                   </div>
                 </SelectItem>
-                <SelectItem value="ARCHIVED">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-gray-500" />
+                <SelectItem value='ARCHIVED'>
+                  <div className='flex items-center gap-2'>
+                    <div className='h-2 w-2 rounded-full bg-gray-500' />
                     <span>Archived</span>
                   </div>
                 </SelectItem>
@@ -1415,7 +1447,7 @@ export function AdminDataTable({
               {isStatusDisabled && statusTooltipMessage ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="cursor-not-allowed inline-block">
+                    <div className='cursor-not-allowed inline-block'>
                       {selectElement}
                     </div>
                   </TooltipTrigger>
@@ -1431,17 +1463,17 @@ export function AdminDataTable({
         },
       },
       {
-        id: "actions",
+        id: 'actions',
         enableHiding: false,
         cell: ({ row }) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal className="h-4 w-4" />
+              <Button variant='ghost' className='h-8 w-8 p-0'>
+                <span className='sr-only'>Open menu</span>
+                <MoreHorizontal className='h-4 w-4' />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align='end'>
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               {/* Hide Edit User for current user (self-protection) and ADMIN/ACADEMIC_HEAD when current user is temp admin */}
               {row.original.id !== session?.user?.id &&
@@ -1451,10 +1483,10 @@ export function AdminDataTable({
                     row.original.roles?.includes(Role.ACADEMIC_HEAD))
                 ) && (
                   <DropdownMenuItem
-                    className="flex items-center gap-2"
+                    className='flex items-center gap-2'
                     onClick={() => setEditingUser(row.original)}
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className='h-4 w-4' />
                     Edit User
                   </DropdownMenuItem>
                 )}
@@ -1463,7 +1495,7 @@ export function AdminDataTable({
                 session?.user?.roles?.includes(Role.ADMIN) &&
                 !session?.user?.roles?.includes(Role.FACULTY) && (
                   <DropdownMenuItem
-                    className="flex items-center gap-2"
+                    className='flex items-center gap-2'
                     onClick={() => {
                       setRowRequestUser(row.original);
                       setShowRowRequestDialog(true);
@@ -1472,13 +1504,13 @@ export function AdminDataTable({
                       Array.isArray(facultyRequests) &&
                       facultyRequests.filter(
                         (r: any) =>
-                          r.status === "PENDING" &&
+                          r.status === 'PENDING' &&
                           (r.adminId === row.original.id ||
-                            r.admin?.id === row.original.id)
+                            r.admin?.id === row.original.id),
                       ).length > 0
                     }
                   >
-                    <ShieldCheck className="h-4 w-4" />
+                    <ShieldCheck className='h-4 w-4' />
                     Request Faculty Role
                   </DropdownMenuItem>
                 )}
@@ -1498,7 +1530,7 @@ export function AdminDataTable({
       session?.user?.id,
       session?.user?.roles,
       tableData,
-    ]
+    ],
   );
 
   const table = useReactTable({
@@ -1532,120 +1564,120 @@ export function AdminDataTable({
       // Filter data based on export filters
       let filteredData = [...tableData];
 
-      if (exportFilters.department !== "all") {
+      if (exportFilters.department !== 'all') {
         filteredData = filteredData.filter(
-          (user) => user.department === exportFilters.department
+          (user) => user.department === exportFilters.department,
         );
       }
 
-      if (exportFilters.status !== "all") {
+      if (exportFilters.status !== 'all') {
         filteredData = filteredData.filter(
-          (user) => user.status === exportFilters.status
+          (user) => user.status === exportFilters.status,
         );
       }
 
-      if (exportFilters.workType !== "all") {
+      if (exportFilters.workType !== 'all') {
         filteredData = filteredData.filter(
-          (user) => user.workType === exportFilters.workType
+          (user) => user.workType === exportFilters.workType,
         );
       }
 
-      if (exportFilters.role !== "all") {
+      if (exportFilters.role !== 'all') {
         filteredData = filteredData.filter((user) =>
-          user.roles?.includes(exportFilters.role as Role)
+          user.roles?.includes(exportFilters.role as Role),
         );
       }
 
       if (filteredData.length === 0) {
-        toast.error("No users match the selected filters");
+        toast.error('No users match the selected filters');
         return;
       }
 
       // Log export operation
       try {
-        await fetch("/api/users/export", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        await fetch('/api/users/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             count: filteredData.length,
             filters: exportFilters,
           }),
         });
       } catch (error) {
-        console.error("Error logging export:", error);
+        console.error('Error logging export:', error);
         // Continue with export even if logging fails
       }
 
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Users");
+      const worksheet = workbook.addWorksheet('Users');
 
       // Title row
-      worksheet.mergeCells("A1:G1");
-      const titleRow = worksheet.getCell("A1");
-      titleRow.value = "USER MANAGEMENT DATA";
-      titleRow.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+      worksheet.mergeCells('A1:G1');
+      const titleRow = worksheet.getCell('A1');
+      titleRow.value = 'USER MANAGEMENT DATA';
+      titleRow.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
       titleRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF124A69' },
       };
-      titleRow.alignment = { vertical: "middle", horizontal: "center" };
+      titleRow.alignment = { vertical: 'middle', horizontal: 'center' };
       worksheet.getRow(1).height = 30;
 
       // Date row
-      worksheet.mergeCells("A2:G2");
-      const dateRow = worksheet.getCell("A2");
+      worksheet.mergeCells('A2:G2');
+      const dateRow = worksheet.getCell('A2');
       dateRow.value = `Date: ${new Date().toLocaleDateString()}`;
       dateRow.font = { italic: true, size: 11 };
-      dateRow.alignment = { vertical: "middle", horizontal: "center" };
+      dateRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
       worksheet.addRow([]);
 
       // Header row
       const headerRow = worksheet.addRow(EXPECTED_HEADERS);
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF124A69" },
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF124A69' },
       };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       headerRow.height = 25;
 
       headerRow.eachCell((cell) => {
         cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
         };
       });
 
       // Data rows
       filteredData.forEach((user: User) => {
         const row = worksheet.addRow([
-          user.name || "",
-          user.email || "",
-          user.department || "",
+          user.name || '',
+          user.email || '',
+          user.department || '',
           formatEnumValue(user.workType),
           formatEnumValue(user.status),
         ]);
 
         row.eachCell((cell) => {
           cell.border = {
-            top: { style: "thin", color: { argb: "FFD3D3D3" } },
-            left: { style: "thin", color: { argb: "FFD3D3D3" } },
-            bottom: { style: "thin", color: { argb: "FFD3D3D3" } },
-            right: { style: "thin", color: { argb: "FFD3D3D3" } },
+            top: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+            left: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+            bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+            right: { style: 'thin', color: { argb: 'FFD3D3D3' } },
           };
-          cell.alignment = { vertical: "middle" };
+          cell.alignment = { vertical: 'middle' };
         });
 
         if (row.number % 2 === 0) {
           row.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: "FFF9FAFB" },
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF9FAFB' },
           };
         }
       });
@@ -1661,58 +1693,58 @@ export function AdminDataTable({
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const filename = `user_data_${
-        new Date().toISOString().split("T")[0]
+        new Date().toISOString().split('T')[0]
       }.xlsx`;
       saveAs(blob, filename);
 
       toast.success(`Successfully exported ${filteredData.length} users`);
       setShowExportDialog(false);
       setExportFilters({
-        department: "all",
-        status: "all",
-        workType: "all",
-        role: "all",
+        department: 'all',
+        status: 'all',
+        workType: 'all',
+        role: 'all',
       });
     } catch (error) {
-      console.error("Export error:", error);
-      toast.error("Failed to export data");
+      console.error('Export error:', error);
+      toast.error('Failed to export data');
     }
   }, [tableData, exportFilters]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative w-full sm:w-[300px]">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+    <div className='space-y-4'>
+      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'>
+        <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+          <div className='relative w-full sm:w-[300px]'>
+            <Search className='absolute left-2 top-2.5 h-4 w-4 text-muted-foreground' />
             <Input
-              placeholder="Search users..."
+              placeholder='Search users...'
               value={
-                (table.getColumn("email")?.getFilterValue() as string) ?? ""
+                (table.getColumn('email')?.getFilterValue() as string) ?? ''
               }
               onChange={(event) =>
-                table.getColumn("email")?.setFilterValue(event.target.value)
+                table.getColumn('email')?.setFilterValue(event.target.value)
               }
-              className="pl-8 w-full"
+              className='pl-8 w-full'
             />
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-full sm:w-auto">
-                Columns <ChevronDown className="ml-2 h-4 w-4" />
+              <Button variant='outline' className='w-full sm:w-auto'>
+                Columns <ChevronDown className='ml-2 h-4 w-4' />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align='end'>
               {table
                 .getAllColumns()
                 .filter((column) => column.getCanHide())
                 .map((column) => (
                   <DropdownMenuCheckboxItem
                     key={column.id}
-                    className="capitalize"
+                    className='capitalize'
                     checked={column.getIsVisible()}
                     onCheckedChange={(value) =>
                       column.toggleVisibility(!!value)
@@ -1725,49 +1757,49 @@ export function AdminDataTable({
           </DropdownMenu>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
           <Button
-            variant="outline"
+            variant='outline'
             onClick={() => setShowImportPreview(true)}
-            title="Import Users"
-            className="justify-center lg:justify-start px-3"
+            title='Import Users'
+            className='justify-center lg:justify-start px-3'
           >
-            <Download className="h-4 w-4 lg:mr-2" />
-            <span className="hidden lg:inline">Import</span>
+            <Download className='h-4 w-4 lg:mr-2' />
+            <span className='hidden lg:inline'>Import</span>
           </Button>
           <Button
-            variant="outline"
+            variant='outline'
             onClick={() => setShowExportDialog(true)}
-            title="Export Users"
-            className="justify-center lg:justify-start px-3"
+            title='Export Users'
+            className='justify-center lg:justify-start px-3'
           >
-            <Upload className="h-4 w-4 lg:mr-2" />
-            <span className="hidden lg:inline">Export</span>
+            <Upload className='h-4 w-4 lg:mr-2' />
+            <span className='hidden lg:inline'>Export</span>
           </Button>
           <div>
-            <UserSheet mode="add" onSuccess={refreshTableData} />
+            <UserSheet mode='add' onSuccess={refreshTableData} />
           </div>
         </div>
       </div>
 
       {/* Table and Pagination Container */}
-      <div className="flex flex-col" style={{ height: "calc(100vh - 320px)" }}>
+      <div className='flex flex-col' style={{ height: 'calc(100vh - 320px)' }}>
         {/* Table container with controlled height */}
-        <div className="flex-1 rounded-md border overflow-auto min-h-0">
+        <div className='flex-1 rounded-md border overflow-auto min-h-0'>
           <Table>
-            <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
+            <TableHeader className='sticky top-0 bg-white z-10 shadow-sm'>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <TableHead
                       key={header.id}
-                      className="whitespace-normal md:whitespace-nowrap"
+                      className='whitespace-normal md:whitespace-nowrap'
                     >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
                   ))}
@@ -1777,9 +1809,9 @@ export function AdminDataTable({
             <TableBody>
               {isRefreshing || isLoadingUsers ? (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="h-24">
-                    <div className="flex justify-center items-center">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#124A69]" />
+                  <TableCell colSpan={columns.length} className='h-24'>
+                    <div className='flex justify-center items-center'>
+                      <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-[#124A69]' />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -1787,10 +1819,10 @@ export function AdminDataTable({
                 table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="break-words">
+                      <TableCell key={cell.id} className='break-words'>
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext()
+                          cell.getContext(),
                         )}
                       </TableCell>
                     ))}
@@ -1800,7 +1832,7 @@ export function AdminDataTable({
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
-                    className="h-24 text-center"
+                    className='h-24 text-center'
                   >
                     No users found.
                   </TableCell>
@@ -1811,8 +1843,8 @@ export function AdminDataTable({
         </div>
 
         {/* Pagination - fixed at bottom */}
-        <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-between sm:justify-end w-full mt-4 gap-3 py-2 bg-white border-t">
-          <span className="text-sm text-gray-600 order-2 sm:order-1 sm:mr-4 w-100">
+        <div className='flex-shrink-0 flex flex-col sm:flex-row items-center justify-between sm:justify-end w-full mt-4 gap-3 py-2 bg-white border-t'>
+          <span className='text-sm text-gray-600 order-2 sm:order-1 sm:mr-4 w-100'>
             {table.getState().pagination.pageIndex *
               table.getState().pagination.pageSize +
               1}
@@ -1820,19 +1852,19 @@ export function AdminDataTable({
             {Math.min(
               (table.getState().pagination.pageIndex + 1) *
                 table.getState().pagination.pageSize,
-              table.getFilteredRowModel().rows.length
-            )}{" "}
+              table.getFilteredRowModel().rows.length,
+            )}{' '}
             of {table.getFilteredRowModel().rows.length} users
           </span>
-          <Pagination className="order-1 sm:order-2 flex justify-end">
-            <PaginationContent className="flex-wrap justify-center gap-1">
+          <Pagination className='order-1 sm:order-2 flex justify-end'>
+            <PaginationContent className='flex-wrap justify-center gap-1'>
               <PaginationItem>
                 <PaginationPrevious
                   onClick={() => table.previousPage()}
                   className={
                     !table.getCanPreviousPage()
-                      ? "pointer-events-none opacity-50"
-                      : "cursor-pointer"
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
                   }
                 />
               </PaginationItem>
@@ -1843,8 +1875,8 @@ export function AdminDataTable({
                     isActive={table.getState().pagination.pageIndex === i}
                     className={`cursor-pointer ${
                       table.getState().pagination.pageIndex === i
-                        ? "bg-[#124A69] text-white hover:bg-[#0d3a56]"
-                        : ""
+                        ? 'bg-[#124A69] text-white hover:bg-[#0d3a56]'
+                        : ''
                     }`}
                   >
                     {i + 1}
@@ -1856,8 +1888,8 @@ export function AdminDataTable({
                   onClick={() => table.nextPage()}
                   className={
                     !table.getCanNextPage()
-                      ? "pointer-events-none opacity-50"
-                      : "cursor-pointer"
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
                   }
                 />
               </PaginationItem>
@@ -1868,7 +1900,7 @@ export function AdminDataTable({
 
       {editingUser && (
         <UserSheet
-          mode="edit"
+          mode='edit'
           user={editingUser}
           onSuccess={refreshTableData}
           onSave={async (userId, data) => {
@@ -1880,7 +1912,7 @@ export function AdminDataTable({
               });
               await refetchUsers();
             } else {
-              throw new Error(result.error || "Failed to update user");
+              throw new Error(result.error || 'Failed to update user');
             }
           }}
           onClose={() => setEditingUser(null)}
@@ -1888,31 +1920,31 @@ export function AdminDataTable({
       )}
 
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
-        <DialogContent className="w-[95vw] sm:w-[550px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="space-y-3">
-            <DialogTitle className="text-2xl font-bold text-[#124A69] flex items-center gap-2">
-              <Download className="h-6 w-6" />
+        <DialogContent className='w-[95vw] sm:w-[550px] max-h-[90vh] overflow-y-auto'>
+          <DialogHeader className='space-y-3'>
+            <DialogTitle className='text-2xl font-bold text-[#124A69] flex items-center gap-2'>
+              <Download className='h-6 w-6' />
               Export Users to Excel
             </DialogTitle>
-            <DialogDescription className="text-base">
+            <DialogDescription className='text-base'>
               Apply filters below to export specific users, or leave all filters
               set to "All" to export everyone.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-6">
+          <div className='space-y-6 py-6'>
             {/* Filters Section */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+            <div className='space-y-4'>
+              <h3 className='text-sm font-semibold text-gray-700 uppercase tracking-wide'>
                 Filter Options
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
                 {/* Department Filter */}
-                <div className="space-y-2">
+                <div className='space-y-2'>
                   <Label
-                    htmlFor="export-department"
-                    className="text-sm font-medium text-gray-700"
+                    htmlFor='export-department'
+                    className='text-sm font-medium text-gray-700'
                   >
                     Department
                   </Label>
@@ -1926,17 +1958,17 @@ export function AdminDataTable({
                     }
                   >
                     <SelectTrigger
-                      id="export-department"
-                      className="w-full bg-white"
+                      id='export-department'
+                      className='w-full bg-white'
                     >
-                      <SelectValue placeholder="Select department" />
+                      <SelectValue placeholder='Select department' />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">
-                        <span className="font-medium">All Departments</span>
+                      <SelectItem value='all'>
+                        <span className='font-medium'>All Departments</span>
                       </SelectItem>
                       {Array.from(
-                        new Set(tableData.map((user) => user.department))
+                        new Set(tableData.map((user) => user.department)),
                       )
                         .sort()
                         .map((dept) => (
@@ -1949,10 +1981,10 @@ export function AdminDataTable({
                 </div>
 
                 {/* Status Filter */}
-                <div className="space-y-2">
+                <div className='space-y-2'>
                   <Label
-                    htmlFor="export-status"
-                    className="text-sm font-medium text-gray-700"
+                    htmlFor='export-status'
+                    className='text-sm font-medium text-gray-700'
                   >
                     Status
                   </Label>
@@ -1963,24 +1995,24 @@ export function AdminDataTable({
                     }
                   >
                     <SelectTrigger
-                      id="export-status"
-                      className="w-full bg-white"
+                      id='export-status'
+                      className='w-full bg-white'
                     >
-                      <SelectValue placeholder="Select status" />
+                      <SelectValue placeholder='Select status' />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">
-                        <span className="font-medium">All Statuses</span>
+                      <SelectItem value='all'>
+                        <span className='font-medium'>All Statuses</span>
                       </SelectItem>
-                      <SelectItem value="ACTIVE">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                      <SelectItem value='ACTIVE'>
+                        <div className='flex items-center gap-2'>
+                          <div className='h-2 w-2 rounded-full bg-green-500' />
                           Active
                         </div>
                       </SelectItem>
-                      <SelectItem value="ARCHIVED">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full bg-gray-500" />
+                      <SelectItem value='ARCHIVED'>
+                        <div className='flex items-center gap-2'>
+                          <div className='h-2 w-2 rounded-full bg-gray-500' />
                           Archived
                         </div>
                       </SelectItem>
@@ -1989,10 +2021,10 @@ export function AdminDataTable({
                 </div>
 
                 {/* Work Type Filter */}
-                <div className="space-y-2">
+                <div className='space-y-2'>
                   <Label
-                    htmlFor="export-worktype"
-                    className="text-sm font-medium text-gray-700"
+                    htmlFor='export-worktype'
+                    className='text-sm font-medium text-gray-700'
                   >
                     Work Type
                   </Label>
@@ -2003,26 +2035,26 @@ export function AdminDataTable({
                     }
                   >
                     <SelectTrigger
-                      id="export-worktype"
-                      className="w-full bg-white"
+                      id='export-worktype'
+                      className='w-full bg-white'
                     >
-                      <SelectValue placeholder="Select work type" />
+                      <SelectValue placeholder='Select work type' />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">
-                        <span className="font-medium">All Work Types</span>
+                      <SelectItem value='all'>
+                        <span className='font-medium'>All Work Types</span>
                       </SelectItem>
-                      <SelectItem value="FULL_TIME">Full Time</SelectItem>
-                      <SelectItem value="PART_TIME">Part Time</SelectItem>
+                      <SelectItem value='FULL_TIME'>Full Time</SelectItem>
+                      <SelectItem value='PART_TIME'>Part Time</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {/* Role Filter */}
-                <div className="space-y-2">
+                <div className='space-y-2'>
                   <Label
-                    htmlFor="export-role"
-                    className="text-sm font-medium text-gray-700"
+                    htmlFor='export-role'
+                    className='text-sm font-medium text-gray-700'
                   >
                     Role
                   </Label>
@@ -2032,16 +2064,16 @@ export function AdminDataTable({
                       setExportFilters((prev) => ({ ...prev, role: value }))
                     }
                   >
-                    <SelectTrigger id="export-role" className="w-full bg-white">
-                      <SelectValue placeholder="Select role" />
+                    <SelectTrigger id='export-role' className='w-full bg-white'>
+                      <SelectValue placeholder='Select role' />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">
-                        <span className="font-medium">All Roles</span>
+                      <SelectItem value='all'>
+                        <span className='font-medium'>All Roles</span>
                       </SelectItem>
-                      <SelectItem value="FACULTY">Faculty</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
-                      <SelectItem value="ACADEMIC_HEAD">
+                      <SelectItem value='FACULTY'>Faculty</SelectItem>
+                      <SelectItem value='ADMIN'>Admin</SelectItem>
+                      <SelectItem value='ACADEMIC_HEAD'>
                         Academic Head
                       </SelectItem>
                     </SelectContent>
@@ -2051,73 +2083,73 @@ export function AdminDataTable({
             </div>
 
             {/* Summary Section */}
-            <div className="border-t pt-4">
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
-                      <Upload className="h-4 w-4 text-white" />
+            <div className='border-t pt-4'>
+              <div className='bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 shadow-sm'>
+                <div className='flex items-start gap-3'>
+                  <div className='flex-shrink-0 mt-0.5'>
+                    <div className='h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center'>
+                      <Upload className='h-4 w-4 text-white' />
                     </div>
                   </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                  <div className='flex-1'>
+                    <h4 className='text-sm font-semibold text-blue-900 mb-1'>
                       Export Summary
                     </h4>
-                    <p className="text-2xl font-bold text-blue-700">
+                    <p className='text-2xl font-bold text-blue-700'>
                       {(() => {
                         let filtered = [...tableData];
 
-                        if (exportFilters.department !== "all") {
+                        if (exportFilters.department !== 'all') {
                           filtered = filtered.filter(
-                            (u) => u.department === exportFilters.department
+                            (u) => u.department === exportFilters.department,
                           );
                         }
-                        if (exportFilters.status !== "all") {
+                        if (exportFilters.status !== 'all') {
                           filtered = filtered.filter(
-                            (u) => u.status === exportFilters.status
+                            (u) => u.status === exportFilters.status,
                           );
                         }
-                        if (exportFilters.workType !== "all") {
+                        if (exportFilters.workType !== 'all') {
                           filtered = filtered.filter(
-                            (u) => u.workType === exportFilters.workType
+                            (u) => u.workType === exportFilters.workType,
                           );
                         }
-                        if (exportFilters.role !== "all") {
+                        if (exportFilters.role !== 'all') {
                           filtered = filtered.filter((u) =>
-                            u.roles?.includes(exportFilters.role as Role)
+                            u.roles?.includes(exportFilters.role as Role),
                           );
                         }
 
                         return filtered.length;
-                      })()}{" "}
-                      <span className="text-lg font-medium">
+                      })()}{' '}
+                      <span className='text-lg font-medium'>
                         {(() => {
                           let filtered = [...tableData];
-                          if (exportFilters.department !== "all") {
+                          if (exportFilters.department !== 'all') {
                             filtered = filtered.filter(
-                              (u) => u.department === exportFilters.department
+                              (u) => u.department === exportFilters.department,
                             );
                           }
-                          if (exportFilters.status !== "all") {
+                          if (exportFilters.status !== 'all') {
                             filtered = filtered.filter(
-                              (u) => u.status === exportFilters.status
+                              (u) => u.status === exportFilters.status,
                             );
                           }
-                          if (exportFilters.workType !== "all") {
+                          if (exportFilters.workType !== 'all') {
                             filtered = filtered.filter(
-                              (u) => u.workType === exportFilters.workType
+                              (u) => u.workType === exportFilters.workType,
                             );
                           }
-                          if (exportFilters.role !== "all") {
+                          if (exportFilters.role !== 'all') {
                             filtered = filtered.filter((u) =>
-                              u.roles?.includes(exportFilters.role as Role)
+                              u.roles?.includes(exportFilters.role as Role),
                             );
                           }
-                          return filtered.length === 1 ? "user" : "users";
+                          return filtered.length === 1 ? 'user' : 'users';
                         })()}
                       </span>
                     </p>
-                    <p className="text-sm text-blue-700 mt-1">
+                    <p className='text-sm text-blue-700 mt-1'>
                       will be exported to Excel
                     </p>
                   </div>
@@ -2126,42 +2158,42 @@ export function AdminDataTable({
             </div>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row justify-between items-center gap-3 pt-4 border-t">
+          <div className='flex flex-col-reverse sm:flex-row justify-between items-center gap-3 pt-4 border-t'>
             <Button
-              variant="ghost"
+              variant='ghost'
               onClick={() => {
                 setExportFilters({
-                  department: "all",
-                  status: "all",
-                  workType: "all",
-                  role: "all",
+                  department: 'all',
+                  status: 'all',
+                  workType: 'all',
+                  role: 'all',
                 });
               }}
-              className="text-sm text-gray-600 hover:text-gray-900 w-full sm:w-auto"
+              className='text-sm text-gray-600 hover:text-gray-900 w-full sm:w-auto'
             >
               Reset Filters
             </Button>
-            <div className="flex gap-3 w-full sm:w-auto">
+            <div className='flex gap-3 w-full sm:w-auto'>
               <Button
-                variant="outline"
+                variant='outline'
                 onClick={() => {
                   setShowExportDialog(false);
                   setExportFilters({
-                    department: "all",
-                    status: "all",
-                    workType: "all",
-                    role: "all",
+                    department: 'all',
+                    status: 'all',
+                    workType: 'all',
+                    role: 'all',
                   });
                 }}
-                className="flex-1 sm:flex-none"
+                className='flex-1 sm:flex-none'
               >
                 Cancel
               </Button>
               <Button
-                className="bg-[#124A69] hover:bg-[#0D3A54] text-white flex items-center gap-2 flex-1 sm:flex-none"
+                className='bg-[#124A69] hover:bg-[#0D3A54] text-white flex items-center gap-2 flex-1 sm:flex-none'
                 onClick={handleExport}
               >
-                <Download className="h-4 w-4" />
+                <Download className='h-4 w-4' />
                 <span>Export</span>
               </Button>
             </div>
@@ -2172,80 +2204,80 @@ export function AdminDataTable({
         <DialogContent
           className={`p-4 sm:p-6 h-auto w-[95vw] sm:w-[90vw] ${
             previewData.length > 0
-              ? "md:w-[85vw] lg:w-[65vw]"
-              : "md:w-[60vw] lg:w-[40vw]"
+              ? 'md:w-[85vw] lg:w-[65vw]'
+              : 'md:w-[60vw] lg:w-[40vw]'
           } max-w-[1400px]`}
         >
-          <DialogHeader className="w-full">
-            <DialogTitle className="text-lg sm:text-xl font-semibold text-[#124A69]">
+          <DialogHeader className='w-full'>
+            <DialogTitle className='text-lg sm:text-xl font-semibold text-[#124A69]'>
               Import Users
             </DialogTitle>
-            <DialogDescription className="text-sm">
+            <DialogDescription className='text-sm'>
               Please upload a file following the template format below:
             </DialogDescription>
           </DialogHeader>
-          <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-            <div className="bg-blue-50 border-l-4 border-blue-400 p-3 sm:p-4 rounded">
-              <p className="text-xs sm:text-sm text-blue-800">
+          <div className='mt-4 sm:mt-6 space-y-4 sm:space-y-6'>
+            <div className='bg-blue-50 border-l-4 border-blue-400 p-3 sm:p-4 rounded'>
+              <p className='text-xs sm:text-sm text-blue-800'>
                 <strong>Note:</strong> Imported users are automatically assigned
                 the Faculty role. Roles can be changed later in the user
                 management table.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+            <div className='flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4'>
               <input
-                type="file"
+                type='file'
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
+                accept='.xlsx,.xls,.csv'
+                className='hidden'
               />
               <Button
-                variant="outline"
+                variant='outline'
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center justify-center sm:justify-start gap-2 bg-white hover:bg-gray-50 w-full sm:w-auto"
+                className='flex items-center justify-center sm:justify-start gap-2 bg-white hover:bg-gray-50 w-full sm:w-auto'
               >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Choose File</span>
+                <Upload className='h-4 w-4' />
+                <span className='hidden sm:inline'>Choose File</span>
               </Button>
               {selectedFile && (
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <span className="text-xs sm:text-sm text-gray-600 truncate max-w-[200px] sm:max-w-none">
+                <div className='flex items-center gap-2 w-full sm:w-auto'>
+                  <span className='text-xs sm:text-sm text-gray-600 truncate max-w-[200px] sm:max-w-none'>
                     {selectedFile.name}
                   </span>
                   <Badge
-                    variant={isValidFile ? "default" : "destructive"}
+                    variant={isValidFile ? 'default' : 'destructive'}
                     className={
                       isValidFile
-                        ? "bg-[#124A69] text-white hover:bg-[#0D3A54]"
-                        : ""
+                        ? 'bg-[#124A69] text-white hover:bg-[#0D3A54]'
+                        : ''
                     }
                   >
-                    {isValidFile ? "Valid" : "Invalid"}
+                    {isValidFile ? 'Valid' : 'Invalid'}
                   </Badge>
                 </div>
               )}
             </div>
 
             {previewData.length > 0 ? (
-              <div className="border rounded-lg w-full overflow-hidden">
-                <div className="bg-gray-50 p-3 sm:p-4 border-b">
-                  <h3 className="text-sm sm:text-base font-medium text-gray-700">
+              <div className='border rounded-lg w-full overflow-hidden'>
+                <div className='bg-gray-50 p-3 sm:p-4 border-b'>
+                  <h3 className='text-sm sm:text-base font-medium text-gray-700'>
                     Preview Import Data
                   </h3>
-                  <p className="text-xs sm:text-sm text-gray-500">
-                    Showing {previewData.length}{" "}
-                    {previewData.length === 1 ? "row" : "rows"} from import file
+                  <p className='text-xs sm:text-sm text-gray-500'>
+                    Showing {previewData.length}{' '}
+                    {previewData.length === 1 ? 'row' : 'rows'} from import file
                   </p>
                 </div>
-                <div className="max-h-[250px] sm:max-h-[350px] overflow-auto">
-                  <table className="w-full border-collapse min-w-[600px]">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
+                <div className='max-h-[250px] sm:max-h-[350px] overflow-auto'>
+                  <table className='w-full border-collapse min-w-[600px]'>
+                    <thead className='bg-gray-50 sticky top-0 z-10'>
                       <tr>
                         {EXPECTED_HEADERS.map((header) => (
                           <th
                             key={header}
-                            className="px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500 whitespace-nowrap"
+                            className='px-2 sm:px-4 py-2 text-left text-xs sm:text-sm font-medium text-gray-500 whitespace-nowrap'
                           >
                             {header}
                           </th>
@@ -2254,21 +2286,21 @@ export function AdminDataTable({
                     </thead>
                     <tbody>
                       {previewData.map((row, index) => (
-                        <tr key={index} className="border-t hover:bg-gray-50">
-                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                            {row["Full Name"]}
+                        <tr key={index} className='border-t hover:bg-gray-50'>
+                          <td className='px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900'>
+                            {row['Full Name']}
                           </td>
-                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                            {row["Email"]}
+                          <td className='px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900'>
+                            {row['Email']}
                           </td>
-                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                            {row["Department"]}
+                          <td className='px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900'>
+                            {row['Department']}
                           </td>
-                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                            {row["Work Type"]}
+                          <td className='px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900'>
+                            {row['Work Type']}
                           </td>
-                          <td className="px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900">
-                            {row["Status"]}
+                          <td className='px-2 sm:px-4 py-2 text-xs sm:text-sm text-gray-900'>
+                            {row['Status']}
                           </td>
                         </tr>
                       ))}
@@ -2277,16 +2309,16 @@ export function AdminDataTable({
                 </div>
               </div>
             ) : (
-              <div className="text-center p-4 sm:p-6 border rounded-lg bg-gray-50">
-                <p className="text-xs sm:text-sm text-gray-500">
+              <div className='text-center p-4 sm:p-6 border rounded-lg bg-gray-50'>
+                <p className='text-xs sm:text-sm text-gray-500'>
                   No preview available. Please select a file to import.
                 </p>
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
+            <div className='flex flex-col sm:flex-row justify-end gap-2 sm:gap-4'>
               <Button
-                variant="outline"
+                variant='outline'
                 onClick={() => {
                   setShowImportPreview(false);
                   setSelectedFile(null);
@@ -2295,21 +2327,21 @@ export function AdminDataTable({
                   setImportProgress(null);
                 }}
                 disabled={!!importProgress}
-                className="w-full sm:w-auto text-sm"
+                className='w-full sm:w-auto text-sm'
               >
                 Cancel
               </Button>
               <Button
-                variant="outline"
+                variant='outline'
                 onClick={handleImportTemplate}
-                className="bg-white hover:bg-gray-50 w-full sm:w-auto text-sm flex items-center justify-center sm:justify-start gap-2"
+                className='bg-white hover:bg-gray-50 w-full sm:w-auto text-sm flex items-center justify-center sm:justify-start gap-2'
                 disabled={!!importProgress}
               >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Template</span>
+                <Download className='h-4 w-4' />
+                <span className='hidden sm:inline'>Template</span>
               </Button>
               <Button
-                className="bg-[#124A69] hover:bg-[#0D3A54] text-white w-full sm:w-auto text-sm flex items-center justify-center sm:justify-start gap-2"
+                className='bg-[#124A69] hover:bg-[#0D3A54] text-white w-full sm:w-auto text-sm flex items-center justify-center sm:justify-start gap-2'
                 onClick={handleImport}
                 disabled={
                   !selectedFile ||
@@ -2318,9 +2350,9 @@ export function AdminDataTable({
                   importUsersMutation.isPending
                 }
               >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">
-                  {importUsersMutation.isPending ? "Importing..." : "Import"}
+                <Upload className='h-4 w-4' />
+                <span className='hidden sm:inline'>
+                  {importUsersMutation.isPending ? 'Importing...' : 'Import'}
                 </span>
               </Button>
             </div>
@@ -2328,54 +2360,54 @@ export function AdminDataTable({
         </DialogContent>
       </Dialog>
       <Dialog open={showImportStatus} onOpenChange={setShowImportStatus}>
-        <DialogContent className="w-[40vw] p-4 sm:p-6">
+        <DialogContent className='w-[40vw] p-4 sm:p-6'>
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-[#124A69]">
+            <DialogTitle className='text-xl font-semibold text-[#124A69]'>
               Import Status
             </DialogTitle>
             <DialogDescription>
               {importProgress
-                ? "Import in progress..."
-                : "Summary of the import process"}
+                ? 'Import in progress...'
+                : 'Summary of the import process'}
             </DialogDescription>
           </DialogHeader>
 
           {importProgress ? (
-            <div className="mt-6 space-y-6">
-              <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border">
+            <div className='mt-6 space-y-6'>
+              <div className='flex items-center gap-4 p-4 bg-gray-50 rounded-lg border'>
                 {importProgress.hasError ? (
                   <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-red-500"
+                    xmlns='http://www.w3.org/2000/svg'
+                    width='24'
+                    height='24'
+                    viewBox='0 0 24 24'
+                    fill='none'
+                    stroke='currentColor'
+                    strokeWidth='2'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    className='text-red-500'
                   >
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    <circle cx='12' cy='12' r='10'></circle>
+                    <line x1='12' y1='8' x2='12' y2='12'></line>
+                    <line x1='12' y1='16' x2='12.01' y2='16'></line>
                   </svg>
                 ) : (
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#124A69]" />
+                  <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-[#124A69]' />
                 )}
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">
+                <div className='flex-1'>
+                  <p className='text-sm font-medium text-gray-700'>
                     {importProgress.status}
                   </p>
                   {importProgress.error && (
-                    <p className="mt-2 text-sm text-red-600">
+                    <p className='mt-2 text-sm text-red-600'>
                       {importProgress.error}
                     </p>
                   )}
                   {importProgress.total > 0 && !importProgress.hasError && (
-                    <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5">
+                    <div className='mt-2 w-full bg-gray-200 rounded-full h-2.5'>
                       <div
-                        className="bg-[#124A69] h-2.5 rounded-full transition-all duration-300"
+                        className='bg-[#124A69] h-2.5 rounded-full transition-all duration-300'
                         style={{
                           width: `${
                             (importProgress.current / importProgress.total) *
@@ -2388,9 +2420,9 @@ export function AdminDataTable({
                 </div>
               </div>
               {importProgress.hasError && (
-                <div className="flex justify-end">
+                <div className='flex justify-end'>
                   <Button
-                    variant="outline"
+                    variant='outline'
                     onClick={() => {
                       setShowImportStatus(false);
                       setImportProgress(null);
@@ -2403,38 +2435,38 @@ export function AdminDataTable({
             </div>
           ) : (
             importStatus && (
-              <div className="mt-6 space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <h3 className="text-sm font-medium text-green-800">
+              <div className='mt-6 space-y-6'>
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-4'>
+                  <div className='bg-green-50 p-4 rounded-lg border border-green-200'>
+                    <h3 className='text-sm font-medium text-green-800'>
                       Successfully Imported
                     </h3>
-                    <p className="text-2xl font-semibold text-green-600">
+                    <p className='text-2xl font-semibold text-green-600'>
                       {
                         importStatus.detailedFeedback.filter(
-                          (f) => f.status === "imported"
+                          (f) => f.status === 'imported',
                         ).length
                       }
                     </p>
                   </div>
-                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                    <h3 className="text-sm font-medium text-amber-800">
+                  <div className='bg-amber-50 p-4 rounded-lg border border-amber-200'>
+                    <h3 className='text-sm font-medium text-amber-800'>
                       Skipped
                     </h3>
-                    <p className="text-2xl font-semibold text-amber-600">
+                    <p className='text-2xl font-semibold text-amber-600'>
                       {
                         importStatus.detailedFeedback.filter(
-                          (f) => f.status === "skipped"
+                          (f) => f.status === 'skipped',
                         ).length
                       }
                     </p>
                   </div>
-                  <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                    <h3 className="text-sm font-medium text-red-800">Errors</h3>
-                    <p className="text-2xl font-semibold text-red-600">
+                  <div className='bg-red-50 p-4 rounded-lg border border-red-200'>
+                    <h3 className='text-sm font-medium text-red-800'>Errors</h3>
+                    <p className='text-2xl font-semibold text-red-600'>
                       {
                         importStatus.detailedFeedback.filter(
-                          (f) => f.status === "error"
+                          (f) => f.status === 'error',
                         ).length
                       }
                     </p>
@@ -2442,29 +2474,29 @@ export function AdminDataTable({
                 </div>
 
                 {importStatus.detailedFeedback?.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden max-w-full">
-                    <div className="bg-gray-50 p-4 border-b">
-                      <h3 className="font-medium text-gray-700">
+                  <div className='border rounded-lg overflow-hidden max-w-full'>
+                    <div className='bg-gray-50 p-4 border-b'>
+                      <h3 className='font-medium text-gray-700'>
                         Detailed Import Feedback
                       </h3>
-                      <p className="text-sm text-gray-500">
+                      <p className='text-sm text-gray-500'>
                         Status of each row processed during import.
                       </p>
                     </div>
-                    <div className="max-h-[300px] overflow-auto overflow-x-auto">
-                      <table className="w-full border-collapse">
-                        <thead className="bg-gray-50 sticky top-0">
+                    <div className='max-h-[300px] overflow-auto overflow-x-auto'>
+                      <table className='w-full border-collapse'>
+                        <thead className='bg-gray-50 sticky top-0'>
                           <tr>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
+                            <th className='px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap'>
                               Row
                             </th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
+                            <th className='px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap'>
                               Email
                             </th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
+                            <th className='px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap'>
                               Status
                             </th>
-                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap">
+                            <th className='px-4 py-2 text-left text-sm font-medium text-gray-500 whitespace-normal md:whitespace-nowrap'>
                               Message
                             </th>
                           </tr>
@@ -2474,27 +2506,27 @@ export function AdminDataTable({
                             (feedback, index) => (
                               <tr
                                 key={index}
-                                className="border-t hover:bg-gray-50"
+                                className='border-t hover:bg-gray-50'
                               >
-                                <td className="px-4 py-2 text-sm text-gray-900">
+                                <td className='px-4 py-2 text-sm text-gray-900'>
                                   {feedback.row}
                                 </td>
-                                <td className="px-4 py-2 text-sm text-gray-900">
+                                <td className='px-4 py-2 text-sm text-gray-900'>
                                   {feedback.email}
                                 </td>
-                                <td className="px-4 py-2 text-sm font-medium">
+                                <td className='px-4 py-2 text-sm font-medium'>
                                   <Badge
                                     variant={
-                                      feedback.status === "imported"
-                                        ? "default"
-                                        : feedback.status === "skipped"
-                                        ? "secondary"
-                                        : "destructive"
+                                      feedback.status === 'imported'
+                                        ? 'default'
+                                        : feedback.status === 'skipped'
+                                          ? 'secondary'
+                                          : 'destructive'
                                     }
                                     className={
-                                      feedback.status === "imported"
-                                        ? "bg-green-500 text-white"
-                                        : ""
+                                      feedback.status === 'imported'
+                                        ? 'bg-green-500 text-white'
+                                        : ''
                                     }
                                   >
                                     {feedback.status.charAt(0).toUpperCase() +
@@ -2503,15 +2535,15 @@ export function AdminDataTable({
                                 </td>
                                 <td
                                   className={`px-4 py-2 text-sm ${
-                                    feedback.status === "error"
-                                      ? "text-red-600"
-                                      : "text-gray-900"
+                                    feedback.status === 'error'
+                                      ? 'text-red-600'
+                                      : 'text-gray-900'
                                   }`}
                                 >
-                                  {feedback.message || "-"}
+                                  {feedback.message || '-'}
                                 </td>
                               </tr>
-                            )
+                            ),
                           )}
                         </tbody>
                       </table>
@@ -2519,9 +2551,9 @@ export function AdminDataTable({
                   </div>
                 )}
 
-                <div className="flex justify-end gap-4">
+                <div className='flex justify-end gap-4'>
                   <Button
-                    variant="outline"
+                    variant='outline'
                     onClick={() => {
                       setShowImportStatus(false);
                       setShowImportPreview(false);
@@ -2534,7 +2566,7 @@ export function AdminDataTable({
                     Close
                   </Button>
                   <Button
-                    className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+                    className='bg-[#124A69] hover:bg-[#0D3A54] text-white'
                     onClick={() => {
                       setShowImportStatus(false);
                       setShowImportPreview(true);
@@ -2551,22 +2583,22 @@ export function AdminDataTable({
 
       {/* Promotion Dialog */}
       <Dialog open={showPromoteDialog} onOpenChange={setShowPromoteDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className='sm:max-w-[500px]'>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-[#124A69]">
-              <ShieldCheck className="w-5 h-5" />
+            <DialogTitle className='flex items-center gap-2 text-[#124A69]'>
+              <ShieldCheck className='w-5 h-5' />
               Promote to Permanent Admin
             </DialogTitle>
             <DialogDescription>
               Enter the secret code that was emailed to the Academic Head who
-              activated the break-glass override for{" "}
+              activated the break-glass override for{' '}
               <strong>{userToPromote?.name}</strong>.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 dark:border-blue-600 p-3 rounded">
-              <p className="text-sm text-gray-700 dark:text-gray-300">
+          <div className='space-y-4 py-4'>
+            <div className='bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 dark:border-blue-600 p-3 rounded'>
+              <p className='text-sm text-gray-700 dark:text-gray-300'>
                 <strong>Note:</strong> This action will permanently promote the
                 temporary admin to a permanent Admin role. The secret code was
                 sent to the Academic Head's email when the break-glass override
@@ -2574,31 +2606,31 @@ export function AdminDataTable({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="promotionCode">
-                Secret Code <span className="text-red-500">*</span>
+            <div className='space-y-2'>
+              <Label htmlFor='promotionCode'>
+                Secret Code <span className='text-red-500'>*</span>
               </Label>
               <Input
-                id="promotionCode"
-                type="text"
-                placeholder="Enter the 32-character secret code"
+                id='promotionCode'
+                type='text'
+                placeholder='Enter the 32-character secret code'
                 value={promotionCode}
                 onChange={(e) => setPromotionCode(e.target.value)}
-                className="font-mono"
+                className='font-mono'
                 maxLength={32}
               />
-              <p className="text-xs text-gray-500">
+              <p className='text-xs text-gray-500'>
                 The code should be 32 characters long and was sent via email.
               </p>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className='flex justify-end gap-3'>
             <Button
-              variant="outline"
+              variant='outline'
               onClick={() => {
                 setShowPromoteDialog(false);
-                setPromotionCode("");
+                setPromotionCode('');
                 setUserToPromote(null);
               }}
               disabled={promoteUserMutation.isPending}
@@ -2606,18 +2638,18 @@ export function AdminDataTable({
               Cancel
             </Button>
             <Button
-              className="bg-[#124A69] hover:bg-[#0D3A54] text-white"
+              className='bg-[#124A69] hover:bg-[#0D3A54] text-white'
               onClick={handlePromote}
               disabled={promoteUserMutation.isPending || !promotionCode.trim()}
             >
               {promoteUserMutation.isPending ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2' />
                   Promoting...
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  <ShieldCheck className='w-4 h-4 mr-2' />
                   Promote
                 </>
               )}
@@ -2630,9 +2662,9 @@ export function AdminDataTable({
         open={showRowRequestDialog}
         onOpenChange={setShowRowRequestDialog}
       >
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className='sm:max-w-[480px]'>
           <DialogHeader>
-            <DialogTitle className="text-[#124A69]">
+            <DialogTitle className='text-[#124A69]'>
               Request Faculty Role
             </DialogTitle>
             <DialogDescription>
@@ -2641,26 +2673,26 @@ export function AdminDataTable({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="rowExpiresAt">Expires At</Label>
+          <div className='space-y-4 py-2'>
+            <div className='space-y-2'>
+              <Label htmlFor='rowExpiresAt'>Expires At</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
-                    variant="outline"
+                    variant='outline'
                     className={
-                      "w-full justify-start text-left font-normal" +
-                      (rowRequestExpiresAt ? "" : " text-muted-foreground")
+                      'w-full justify-start text-left font-normal' +
+                      (rowRequestExpiresAt ? '' : ' text-muted-foreground')
                     }
                   >
                     {rowRequestExpiresAt
                       ? new Date(rowRequestExpiresAt).toLocaleString()
-                      : "Pick expiration date"}
+                      : 'Pick expiration date'}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent className='w-auto p-0' align='start'>
                   <Calendar
-                    mode="single"
+                    mode='single'
                     selected={
                       rowRequestExpiresAt
                         ? new Date(rowRequestExpiresAt)
@@ -2681,32 +2713,32 @@ export function AdminDataTable({
               </Popover>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="rowRequestNote">Note (optional)</Label>
+            <div className='space-y-2'>
+              <Label htmlFor='rowRequestNote'>Note (optional)</Label>
               <Input
-                id="rowRequestNote"
-                type="text"
+                id='rowRequestNote'
+                type='text'
                 value={rowRequestNote}
                 onChange={(e) => setRowRequestNote(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className='flex justify-end gap-3'>
             <Button
-              variant="outline"
+              variant='outline'
               onClick={() => setShowRowRequestDialog(false)}
             >
               Cancel
             </Button>
             <Button
-              className="bg-[#124A69] text-white"
+              className='bg-[#124A69] text-white'
               onClick={handleCreateRowRequest}
               disabled={createFacultyRequest.isPending}
             >
               {createFacultyRequest.isPending
-                ? "Submitting..."
-                : "Submit Request"}
+                ? 'Submitting...'
+                : 'Submit Request'}
             </Button>
           </div>
         </DialogContent>

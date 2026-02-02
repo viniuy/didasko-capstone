@@ -1,130 +1,124 @@
-import { Prisma } from "@prisma/client";
-import { logAction } from "./audit";
+import { Prisma } from '@prisma/client';
+import { logAction } from './audit';
 
 /**
  * Models that should be audited
  */
-const AUDITED_MODELS = ["User", "Course", "Attendance"] as const;
+const AUDITED_MODELS = ['User', 'Course', 'Attendance'] as const;
 
 /**
  * Models that should be skipped (to prevent recursion)
  */
-const SKIP_MODELS = ["AuditLog", "BreakGlassSession"] as const;
+const SKIP_MODELS = ['AuditLog', 'BreakGlassSession'] as const;
 
 /**
  * Maps Prisma model names to module names for audit logs
  */
 const MODEL_TO_MODULE: Record<string, string> = {
-  User: "User Management",
-  Course: "Course Management",
-  Attendance: "Attendance",
-  Enrollment: "Enrollment",
+  User: 'User Management',
+  Course: 'Course Management',
+  Attendance: 'Attendance',
+  Enrollment: 'Enrollment',
 };
 
 /**
- * Sets up audit middleware for Prisma client.
- * This middleware automatically logs create, update, and delete operations.
+ * Creates audit extension for Prisma client (Prisma 6+).
+ * This extension automatically logs create, update, and delete operations.
  *
- * Note: userId and IP must be added by API wrapper (middleware doesn't have access to session)
- *
- * Note: $use is deprecated in Prisma 5+ and removed in Prisma 6+.
- * This function will gracefully fail if $use is not available.
- * Manual logging via API wrapper is the recommended approach.
+ * Note: userId and IP must be added by API wrapper (extension doesn't have access to session)
  */
-export function setupAuditMiddleware(prisma: any): void {
-  // Check if $use is available (deprecated in Prisma 5+, removed in Prisma 6+)
-  if (typeof prisma.$use !== "function") {
-    console.warn(
-      "[Audit Middleware] Prisma $use middleware is not available. " +
-        "Automatic logging via middleware is disabled. " +
-        "Manual logging via API wrapper will still work."
-    );
-    return;
-  }
-
-  try {
-    prisma.$use(async (params: any, next: any) => {
-      const { model, action, args } = params;
-
-      // Skip logging for audit-related models to prevent recursion
-      if (SKIP_MODELS.includes(model as any)) {
-        return next(params);
-      }
-
-      // Only log operations on audited models
-      if (!AUDITED_MODELS.includes(model as any)) {
-        return next(params);
-      }
-
-      // Only log create, update, delete, deleteMany, updateMany
-      const auditableActions = [
-        "create",
-        "update",
-        "delete",
-        "deleteMany",
-        "updateMany",
-      ];
-      if (!auditableActions.includes(action)) {
-        return next(params);
-      }
-
-      let before: any = null;
-      let after: any = null;
-
-      // For update/delete operations, fetch the "before" state
-      if (action === "update" || action === "delete") {
-        try {
-          const where = args.where;
-          if (where) {
-            const beforeRecord = await (prisma as any)[model].findUnique({
-              where,
-            });
-            before = beforeRecord;
+export const auditExtension = Prisma.defineExtension((client) => {
+  return client.$extends({
+    name: 'auditExtension',
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }: any) {
+          // Skip logging for audit-related models to prevent recursion
+          if (SKIP_MODELS.includes(model as any)) {
+            return query(args);
           }
-        } catch (error) {
-          console.error(
-            `[Audit Middleware] Failed to fetch before state for ${model}.${action}:`,
-            error
-          );
-        }
-      }
 
-      // For updateMany/deleteMany, we don't fetch before state (too expensive)
-      if (action === "updateMany" || action === "deleteMany") {
-        // Log the count of affected records instead
-        before = { _count: "multiple" };
-      }
+          // Only log operations on audited models
+          if (!AUDITED_MODELS.includes(model as any)) {
+            return query(args);
+          }
 
-      // Execute the operation
-      const result = await next(params);
+          // Only log create, update, delete, deleteMany, updateMany
+          const auditableActions = [
+            'create',
+            'update',
+            'delete',
+            'deleteMany',
+            'updateMany',
+          ];
+          if (!auditableActions.includes(operation)) {
+            return query(args);
+          }
 
-      // Determine the "after" state
-      if (action === "create") {
-        after = result;
-      } else if (action === "update") {
-        after = result;
-      } else if (action === "delete") {
-        after = null;
-      } else if (action === "updateMany" || action === "deleteMany") {
-        after = { _count: result.count || 0 };
-      }
+          let before: any = null;
+          let after: any = null;
 
-      // Build action name
-      const actionName = `${model.toUpperCase()}_${action.toUpperCase()}`;
-      const moduleName = MODEL_TO_MODULE[model] || model;
+          // For update/delete operations, fetch the "before" state
+          if (operation === 'update' || operation === 'delete') {
+            try {
+              const where = args.where;
+              if (where) {
+                const beforeRecord = await (client as any)[model].findUnique({
+                  where,
+                });
+                before = beforeRecord;
+              }
+            } catch (error) {
+              console.error(
+                `[Audit Extension] Failed to fetch before state for ${model}.${operation}:`,
+                error,
+              );
+            }
+          }
 
-      // Log the action (without userId/IP - these will be added by API wrapper)
-      await logAction({
-        action: actionName,
-        module: moduleName,
-        before,
-        after,
-      });
+          // For updateMany/deleteMany, we don't fetch before state (too expensive)
+          if (operation === 'updateMany' || operation === 'deleteMany') {
+            // Log the count of affected records instead
+            before = { _count: 'multiple' };
+          }
 
-      return result;
-    });
-  } catch (error) {
-    console.error("[Audit Middleware] Failed to setup middleware:", error);
-    // Don't throw - allow app to continue without middleware
-  }
-}
+          // Execute the operation
+          const result = await query(args);
+
+          // Capture the "after" state
+          if (operation === 'create') {
+            after = result;
+          } else if (operation === 'update') {
+            after = result;
+          } else if (operation === 'delete') {
+            after = null;
+          } else if (operation === 'updateMany' || operation === 'deleteMany') {
+            after = { _count: result.count || 0 };
+          }
+
+          // Build action name
+          const actionName = `${model.toUpperCase()}_${operation.toUpperCase()}`;
+          const moduleName = MODEL_TO_MODULE[model] || model;
+
+          // Log the action (without userId/IP - these will be added by API wrapper)
+          try {
+            await logAction({
+              action: actionName,
+              module: moduleName,
+              before,
+              after,
+            });
+          } catch (error) {
+            console.error(
+              `[Audit Extension] Failed to log action for ${model}.${operation}:`,
+              error,
+            );
+            // Don't throw - allow operation to succeed even if logging fails
+          }
+
+          return result;
+        },
+      },
+    },
+  });
+});

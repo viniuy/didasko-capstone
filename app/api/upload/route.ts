@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
-import { createClient } from "@supabase/supabase-js";
-import { UploadResponse } from "@/shared/types/upload";
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth-options';
+import { createClient } from '@supabase/supabase-js';
+import { UploadResponse } from '@/shared/types/upload';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const fetchCache = "force-no-store";
+export const fetchCache = 'force-no-store';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export async function POST(request: Request) {
@@ -18,31 +18,31 @@ export async function POST(request: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: { "Cache-Control": "no-store" } }
+        { error: 'Unauthorized' },
+        { status: 401, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 
     const formData = await request.formData();
-    const file = formData.get("image") as File;
+    const file = formData.get('image') as File;
 
     if (!file) {
       return NextResponse.json(
-        { error: "No file provided" },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
+        { error: 'No file provided' },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 
-    if (!file.type.startsWith("image/")) {
+    if (!file.type.startsWith('image/')) {
       return NextResponse.json(
-        { error: "Invalid file type" },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
+        { error: 'Invalid file type' },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 
-    const ext = file.name.split(".").pop() || "jpg";
+    const ext = file.name.split('.').pop() || 'jpg';
     const filename = `${session.user.id}.${ext}`;
-    const bucket = supabase.storage.from("user-images");
+    const bucket = supabase.storage.from('user-images');
 
     // Remove existing images before uploading new one
     await bucket.remove([
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     ]);
 
     const { error: uploadError } = await bucket.upload(filename, file, {
-      cacheControl: "0",
+      cacheControl: '0',
       upsert: true,
       contentType: file.type,
     });
@@ -63,13 +63,13 @@ export async function POST(request: Request) {
     const response: UploadResponse = { imageUrl: data.publicUrl };
 
     return NextResponse.json(response, {
-      headers: { "Cache-Control": "no-store" },
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    console.error("Error uploading image:", error);
+    console.error('Error uploading image:', error);
     return NextResponse.json(
-      { error: "Failed to upload image" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
+      { error: 'Failed to upload image' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } },
     );
   }
 }
@@ -79,8 +79,8 @@ export async function DELETE(request: Request) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: { "Cache-Control": "no-store" } }
+        { error: 'Unauthorized' },
+        { status: 401, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 
@@ -88,12 +88,12 @@ export async function DELETE(request: Request) {
 
     if (!imageUrl) {
       return NextResponse.json(
-        { error: "No image URL provided" },
-        { status: 400, headers: { "Cache-Control": "no-store" } }
+        { error: 'No image URL provided' },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 
-    const bucket = supabase.storage.from("user-images");
+    const bucket = supabase.storage.from('user-images');
 
     // Remove all possible image formats for the user
     await bucket.remove([
@@ -105,14 +105,14 @@ export async function DELETE(request: Request) {
     ]);
 
     return NextResponse.json(
-      { message: "Image deleted successfully" },
-      { headers: { "Cache-Control": "no-store" } }
+      { message: 'Image deleted successfully' },
+      { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
-    console.error("Error deleting image:", error);
+    console.error('Error deleting image:', error);
     return NextResponse.json(
-      { error: "Failed to delete image" },
-      { status: 500, headers: { "Cache-Control": "no-store" } }
+      { error: 'Failed to delete image' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } },
     );
   }
 }
